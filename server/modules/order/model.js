@@ -16,7 +16,7 @@ import { getDatabase, generateId } from '../../config/database.js'
  * - Draft（草稿）: 状态为草稿的订单
  * - Void（已作废）: 已作废的订单
  */
-export function getBills(params = {}) {
+export async function getBills(params = {}) {
   const db = getDatabase()
   const { 
     type,
@@ -118,7 +118,7 @@ export function getBills(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 排序和分页
   const allowedSortFields = ['created_at', 'bill_number', 'eta', 'etd', 'updated_at']
@@ -128,11 +128,11 @@ export function getBills(params = {}) {
   query += ` ORDER BY ${safeSortField} ${safeSortOrder} LIMIT ? OFFSET ?`
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertBillToCamelCase),
-    total: totalResult.total,
+    total: totalResult?.total || 0,
     page,
     pageSize
   }
@@ -141,9 +141,9 @@ export function getBills(params = {}) {
 /**
  * 根据ID获取提单
  */
-export function getBillById(id) {
+export async function getBillById(id) {
   const db = getDatabase()
-  const bill = db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
   return bill ? convertBillToCamelCase(bill) : null
 }
 

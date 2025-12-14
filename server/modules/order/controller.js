@@ -56,7 +56,7 @@ export async function getBills(req, res) {
       search, page, pageSize, sortField, sortOrder 
     } = req.query
     
-    const result = model.getBills({
+    const result = await model.getBills({
       type,
       status,
       shipStatus,
