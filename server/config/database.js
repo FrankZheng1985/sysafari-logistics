@@ -1,9 +1,14 @@
 /**
  * 数据库配置模块
- * 统一管理数据库连接和初始化
+ * 支持 SQLite（本地开发）和 PostgreSQL（生产环境）
+ * 
+ * 使用方法：
+ * - 本地开发：默认使用 SQLite
+ * - 生产环境：设置 DATABASE_URL 环境变量后自动使用 PostgreSQL
  */
 
 import Database from 'better-sqlite3'
+import pg from 'pg'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -11,41 +16,224 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 确保数据目录存在
+// 判断使用哪种数据库
+const USE_POSTGRES = !!process.env.DATABASE_URL
+
+// 确保数据目录存在（SQLite 用）
 const dataDir = path.join(__dirname, '../data')
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true })
 }
 
-// 数据库文件路径
+// 数据库文件路径（SQLite）
 export const DB_PATH = path.join(dataDir, 'orders.db')
 
-// 创建数据库连接
-let db = null
+// SQLite 实例
+let sqliteDb = null
+
+// PostgreSQL 连接池
+let pgPool = null
+
+/**
+ * 将 SQLite 风格的 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
+ */
+function convertPlaceholders(sql) {
+  let index = 0
+  return sql.replace(/\?/g, () => `$${++index}`)
+}
+
+/**
+ * 将 SQLite 的 datetime('now', 'localtime') 转换为 PostgreSQL 的 NOW()
+ */
+function convertDateTimeFunctions(sql) {
+  return sql
+    .replace(/datetime\s*\(\s*'now'\s*,\s*'localtime'\s*\)/gi, 'NOW()')
+    .replace(/datetime\s*\(\s*'now'\s*\)/gi, 'NOW()')
+    .replace(/CURRENT_TIMESTAMP/gi, 'NOW()')
+}
+
+/**
+ * PostgreSQL Statement 包装类
+ * 模拟 better-sqlite3 的同步 API，但内部使用 Promise
+ */
+class PgStatement {
+  constructor(pool, sql) {
+    this.pool = pool
+    this.originalSql = sql
+    this.pgSql = convertDateTimeFunctions(convertPlaceholders(sql))
+  }
+  
+  run(...params) {
+    // 返回 Promise，调用者需要 await
+    return this.pool.query(this.pgSql, params)
+      .then(result => ({
+        changes: result.rowCount,
+        lastInsertRowid: result.rows[0]?.id || null
+      }))
+      .catch(err => {
+        // 忽略 "already exists" 错误（用于 ALTER TABLE）
+        if (err.message.includes('already exists') || 
+            err.message.includes('duplicate column')) {
+          return { changes: 0 }
+        }
+        console.error('❌ PG run error:', err.message)
+        console.error('   SQL:', this.pgSql)
+        throw err
+      })
+  }
+  
+  get(...params) {
+    return this.pool.query(this.pgSql, params)
+      .then(result => result.rows[0])
+      .catch(err => {
+        console.error('❌ PG get error:', err.message)
+        throw err
+      })
+  }
+  
+  all(...params) {
+    return this.pool.query(this.pgSql, params)
+      .then(result => result.rows)
+      .catch(err => {
+        console.error('❌ PG all error:', err.message)
+        throw err
+      })
+  }
+}
+
+/**
+ * PostgreSQL 数据库适配器
+ * 提供与 better-sqlite3 兼容的 API
+ */
+class PostgresDatabase {
+  constructor(pool) {
+    this.pool = pool
+    this.isPostgres = true
+  }
+  
+  prepare(sql) {
+    return new PgStatement(this.pool, sql)
+  }
+  
+  exec(sql) {
+    // PostgreSQL 不需要执行初始化表结构（已通过迁移脚本创建）
+    // 仅在本地开发时有效
+    return Promise.resolve({ changes: 0 })
+  }
+  
+  pragma(pragma) {
+    // PostgreSQL 不支持 PRAGMA，忽略
+    return null
+  }
+  
+  transaction(fn) {
+    // 返回一个异步函数
+    return async (...args) => {
+      const client = await this.pool.connect()
+      try {
+        await client.query('BEGIN')
+        const txDb = new PostgresTransactionDb(client)
+        const result = await fn.call(txDb, ...args)
+        await client.query('COMMIT')
+        return result
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
+      }
+    }
+  }
+  
+  close() {
+    return this.pool.end()
+  }
+}
+
+/**
+ * PostgreSQL 事务数据库适配器
+ */
+class PostgresTransactionDb {
+  constructor(client) {
+    this.client = client
+    this.isPostgres = true
+  }
+  
+  prepare(sql) {
+    const pgSql = convertDateTimeFunctions(convertPlaceholders(sql))
+    return {
+      run: async (...params) => {
+        const result = await this.client.query(pgSql, params)
+        return { changes: result.rowCount }
+      },
+      get: async (...params) => {
+        const result = await this.client.query(pgSql, params)
+        return result.rows[0]
+      },
+      all: async (...params) => {
+        const result = await this.client.query(pgSql, params)
+        return result.rows
+      }
+    }
+  }
+}
 
 /**
  * 获取数据库实例（单例模式）
+ * 根据环境变量自动选择 SQLite 或 PostgreSQL
  */
 export function getDatabase() {
-  if (!db) {
-    db = new Database(DB_PATH)
-    // 启用外键约束
-    db.pragma('foreign_keys = ON')
-    // 启用WAL模式提升性能
-    db.pragma('journal_mode = WAL')
-    console.log('📦 数据库连接已建立:', DB_PATH)
+  if (USE_POSTGRES) {
+    // PostgreSQL 模式
+    if (!pgPool) {
+      pgPool = new pg.Pool({
+        connectionString: process.env.DATABASE_URL,
+        // Render PostgreSQL 强制要求 SSL
+        ssl: { rejectUnauthorized: false },
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      })
+      
+      pgPool.on('error', (err) => {
+        console.error('❌ PostgreSQL 连接池错误:', err.message)
+      })
+      
+      console.log('🌐 PostgreSQL 数据库连接已建立 (Render)')
+    }
+    return new PostgresDatabase(pgPool)
+  } else {
+    // SQLite 模式
+    if (!sqliteDb) {
+      sqliteDb = new Database(DB_PATH)
+      sqliteDb.pragma('foreign_keys = ON')
+      sqliteDb.pragma('journal_mode = WAL')
+      sqliteDb.isPostgres = false
+      console.log('💾 SQLite 数据库连接已建立:', DB_PATH)
+    }
+    return sqliteDb
   }
-  return db
+}
+
+/**
+ * 检查是否使用 PostgreSQL
+ */
+export function isUsingPostgres() {
+  return USE_POSTGRES
 }
 
 /**
  * 关闭数据库连接
  */
 export function closeDatabase() {
-  if (db) {
-    db.close()
-    db = null
-    console.log('📦 数据库连接已关闭')
+  if (USE_POSTGRES && pgPool) {
+    pgPool.end()
+    pgPool = null
+    console.log('🌐 PostgreSQL 连接池已关闭')
+  } else if (sqliteDb) {
+    sqliteDb.close()
+    sqliteDb = null
+    console.log('💾 SQLite 数据库连接已关闭')
   }
 }
 
@@ -55,18 +243,45 @@ export function closeDatabase() {
  */
 export function transaction(callback) {
   const database = getDatabase()
+  if (USE_POSTGRES) {
+    return database.transaction(callback)()
+  }
   return database.transaction(callback)()
 }
 
 /**
  * 生成UUID
  */
-export function generateId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+export function generateId(prefix = '') {
+  const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     const r = Math.random() * 16 | 0
     const v = c === 'x' ? r : (r & 0x3 | 0x8)
     return v.toString(16)
   })
+  return prefix ? `${prefix}-${uuid}` : uuid
+}
+
+/**
+ * 测试数据库连接
+ */
+export async function testConnection() {
+  if (USE_POSTGRES) {
+    // 确保连接池已初始化
+    getDatabase()
+    try {
+      const client = await pgPool.connect()
+      const result = await client.query('SELECT current_database() as db')
+      console.log('✅ PostgreSQL 连接测试成功:', result.rows[0].db)
+      client.release()
+      return true
+    } catch (error) {
+      console.error('❌ PostgreSQL 连接测试失败:', error.message)
+      return false
+    }
+  } else {
+    console.log('✅ SQLite 连接测试成功')
+    return true
+  }
 }
 
 export default {
@@ -74,5 +289,8 @@ export default {
   closeDatabase,
   transaction,
   generateId,
-  DB_PATH
+  testConnection,
+  isUsingPostgres,
+  DB_PATH,
+  USE_POSTGRES
 }

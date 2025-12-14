@@ -9,6 +9,8 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync, unlinkSync } from '
 import zlib from 'zlib'
 import crypto from 'crypto'
 import { createRequire } from 'module'
+// 导入数据库配置模块
+import { getDatabase, isUsingPostgres, testConnection } from './config/database.js'
 // 导入模块路由
 import clearanceRoutes from './modules/clearance/routes.js'
 import crmRoutes from './modules/crm/routes.js'
@@ -72,9 +74,13 @@ app.use('/api', orderRoutes)
 app.use('/api', systemRoutes)
 app.use('/api', tmsRoutes)
 
-// 数据库连接
+// 数据库连接（支持 SQLite 和 PostgreSQL）
+const USE_POSTGRES = isUsingPostgres()
 const dbPath = join(__dirname, 'data', 'orders.db')
-const db = new Database(dbPath)
+// 统一使用 getDatabase() 获取数据库实例
+// - 本地开发：返回 SQLite (better-sqlite3) 实例
+// - 生产环境：返回 PostgreSQL 适配器实例
+const db = getDatabase()
 
 // 初始化数据库表
 function initDatabase() {
@@ -686,6 +692,13 @@ function initDatabase() {
   // 为现有表添加 parent_port_code 字段（如果不存在）
   try {
     db.exec(`ALTER TABLE ports_of_loading ADD COLUMN parent_port_code TEXT`)
+  } catch (err) {
+    // 字段已存在，忽略错误
+  }
+
+  // 为现有表添加 sort_order 字段（如果不存在）
+  try {
+    db.exec(`ALTER TABLE ports_of_loading ADD COLUMN sort_order INTEGER DEFAULT 0`)
   } catch (err) {
     // 字段已存在，忽略错误
   }
@@ -2651,8 +2664,12 @@ function getSequenceInfo(businessType) {
   }
 }
 
-// 初始化数据库
-initDatabase()
+// 初始化数据库（PostgreSQL 模式下跳过，表已通过迁移脚本创建）
+if (!USE_POSTGRES) {
+  initDatabase()
+} else {
+  console.log('🌐 PostgreSQL 模式：跳过本地数据库初始化（表已存在）')
+}
 
 // 记录操作日志
 function logOperation(billId, operationType, operationName, oldValue, newValue, operator = 'admin', remark = '') {
@@ -10791,17 +10808,32 @@ app.delete('/api/service-providers/:id', (req, res) => {
 
 
 // 启动服务器
-app.listen(PORT, () => {
-  console.log(`服务器运行在 http://localhost:${PORT}`)
-  console.log(`API 地址: http://localhost:${PORT}/api`)
-  
-  // 确保上传目录存在
-  const uploadDir = join(__dirname, 'uploads')
-  try {
-    const { mkdirSync } = require('fs')
-    mkdirSync(uploadDir, { recursive: true })
-  } catch (err) {
-    // 目录已存在，忽略错误
+async function startServer() {
+  // PostgreSQL 模式下测试连接
+  if (USE_POSTGRES) {
+    console.log('🌐 正在连接 PostgreSQL 数据库...')
+    const connected = await testConnection()
+    if (!connected) {
+      console.error('❌ 无法连接到 PostgreSQL 数据库，服务器启动失败')
+      process.exit(1)
+    }
   }
-})
+  
+  app.listen(PORT, () => {
+    console.log(`服务器运行在 http://localhost:${PORT}`)
+    console.log(`API 地址: http://localhost:${PORT}/api`)
+    console.log(`数据库模式: ${USE_POSTGRES ? 'PostgreSQL (Render)' : 'SQLite (本地)'}`)
+    
+    // 确保上传目录存在
+    const uploadDir = join(__dirname, 'uploads')
+    try {
+      const { mkdirSync } = require('fs')
+      mkdirSync(uploadDir, { recursive: true })
+    } catch (err) {
+      // 目录已存在，忽略错误
+    }
+  })
+}
+
+startServer()
 
