@@ -26,3 +26,12 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Database files (SQLite)
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Backups (contain sensitive data)
+backups/
