@@ -1,0 +1,37 @@
+{
+  "name": "sysafari-logistics-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sysafari Logistics Management System - Backend Server",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js",
+    "init-db": "node scripts/init-db.js",
+    "init-shipping": "node scripts/init-shipping-companies.js",
+    "init-chinese-ports": "node scripts/init-chinese-ports.js",
+    "init-european-ports": "node scripts/init-european-ports.js",
+    "init-countries": "node scripts/init-countries.js",
+    "init-airports": "node scripts/init-airports.js",
+    "init-ports-with-terminals": "node scripts/init-chinese-ports-with-terminals.js",
+    "init-railway-stations": "node scripts/init-chinese-railway-stations.js",
+    "init-truck-ports": "node scripts/init-truck-ports.js",
+    "init-hs-codes": "node scripts/init-hs-codes.js",
+    "import-taric": "node scripts/import-taric-excel.js",
+    "check-sources": "node scripts/check-alternative-sources.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.2.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21"
+  }
+}
