@@ -190,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithRedirect()
   }, [loginWithRedirect])
 
-  // 测试账号登录
+  // 用户名+密码登录（本地开发/测试账号）
   const testLogin = useCallback(async (username: string, password: string): Promise<{ success: boolean; message: string }> => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -204,16 +204,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json()
 
       if (data.errCode === 200 && data.data) {
-        const { user, permissions, token, isTestMode } = data.data
+        const { user, permissions, token } = data.data
 
-        // 只允许测试用户使用测试登录
-        if (user.userType !== 'test') {
+        // 判断是否是测试用户
+        const isTestUser = user.userType === 'test'
+        
+        // 本地开发环境允许所有用户登录，生产环境只允许测试用户
+        const isDev = import.meta.env.DEV
+        if (!isDev && !isTestUser) {
           return { success: false, message: '此账号不是测试账号，请使用正式登录' }
         }
 
-        // 保存测试模式数据
-        const testData = { user, permissions, token, isTestMode: true }
-        localStorage.setItem(TEST_MODE_KEY, JSON.stringify(testData))
+        // 保存登录数据
+        const loginData = { user, permissions, token, isTestMode: isTestUser }
+        localStorage.setItem(TEST_MODE_KEY, JSON.stringify(loginData))
 
         setState({
           user,
@@ -221,7 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           token,
           isAuthenticated: true,
           isLoading: false,
-          isTestMode: true,
+          isTestMode: isTestUser,
         })
 
         return { success: true, message: '登录成功' }
@@ -229,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, message: data.msg || '登录失败' }
       }
     } catch (error: any) {
-      console.error('测试登录失败:', error)
+      console.error('登录失败:', error)
       return { success: false, message: error.message || '登录失败，请稍后重试' }
     }
   }, [])

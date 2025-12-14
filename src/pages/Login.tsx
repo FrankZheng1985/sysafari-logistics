@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
-import { LogIn, Shield, User, Lock, FlaskConical } from 'lucide-react'
+import { LogIn, Shield, User, Lock, FlaskConical, Monitor } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+// 是否是开发环境
+const isDev = import.meta.env.DEV
+
 export default function Login() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
-  const [showTestLogin, setShowTestLogin] = useState(false)
-  const [testUsername, setTestUsername] = useState('')
-  const [testPassword, setTestPassword] = useState('')
+  const [showLocalLogin, setShowLocalLogin] = useState(isDev) // 开发环境默认显示本地登录
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
@@ -28,18 +31,18 @@ export default function Login() {
   }, [])
 
   // 正式登录（Auth0）
-  const handleLogin = () => {
+  const handleAuth0Login = () => {
     login()
   }
 
-  // 测试账号登录
-  const handleTestLogin = async (e: React.FormEvent) => {
+  // 用户名+密码登录
+  const handleLocalLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
     try {
-      const result = await testLogin(testUsername, testPassword)
+      const result = await testLogin(username, password)
       if (result.success) {
         navigate('/', { replace: true })
       } else {
@@ -54,13 +57,13 @@ export default function Login() {
 
   // 快速填充测试账号
   const fillDemoAdmin = () => {
-    setTestUsername('demo_admin')
-    setTestPassword('demo123')
+    setUsername('demo_admin')
+    setPassword('demo123')
   }
 
   const fillDemoOperator = () => {
-    setTestUsername('demo_operator')
-    setTestPassword('demo123')
+    setUsername('demo_operator')
+    setPassword('demo123')
   }
 
   // 显示加载状态
@@ -93,13 +96,19 @@ export default function Login() {
           )}
           <h1 className="text-3xl font-bold text-gray-900 mb-2">BP Logistics</h1>
           <p className="text-gray-600">物流管理系统</p>
+          {isDev && (
+            <span className="inline-flex items-center gap-1 mt-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+              <Monitor className="w-3 h-3" />
+              开发环境
+            </span>
+          )}
         </div>
 
         {/* 登录卡片 */}
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          {!showTestLogin ? (
+          {!showLocalLogin ? (
             <>
-              {/* 正式登录入口 */}
+              {/* Auth0 登录入口 */}
               <div className="text-center mb-6">
                 <Shield className="w-12 h-12 text-primary-600 mx-auto mb-4" />
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">安全登录</h2>
@@ -109,7 +118,7 @@ export default function Login() {
               </div>
 
               <button
-                onClick={handleLogin}
+                onClick={handleAuth0Login}
                 className="w-full flex items-center justify-center gap-3 bg-primary-600 text-white py-4 rounded-lg font-medium hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors"
               >
                 <LogIn className="w-5 h-5" />
@@ -123,9 +132,9 @@ export default function Login() {
                 <div className="flex-1 border-t border-gray-200"></div>
               </div>
 
-              {/* 测试登录入口 */}
+              {/* 测试/本地登录入口 */}
               <button
-                onClick={() => setShowTestLogin(true)}
+                onClick={() => setShowLocalLogin(true)}
                 className="w-full flex items-center justify-center gap-3 bg-orange-100 text-orange-700 py-3 rounded-lg font-medium hover:bg-orange-200 transition-colors"
               >
                 <FlaskConical className="w-5 h-5" />
@@ -138,34 +147,48 @@ export default function Login() {
             </>
           ) : (
             <>
-              {/* 测试登录表单 */}
+              {/* 本地/测试登录表单 */}
               <div className="text-center mb-6">
-                <FlaskConical className="w-12 h-12 text-orange-500 mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">测试账号登录</h2>
-                <p className="text-gray-500 text-sm">
-                  使用测试账号体验系统功能
-                </p>
+                {isDev ? (
+                  <>
+                    <Monitor className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-semibold text-gray-900 mb-2">本地登录</h2>
+                    <p className="text-gray-500 text-sm">
+                      使用系统账号登录（开发环境）
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <FlaskConical className="w-12 h-12 text-orange-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-semibold text-gray-900 mb-2">测试账号登录</h2>
+                    <p className="text-gray-500 text-sm">
+                      使用测试账号体验系统功能
+                    </p>
+                  </>
+                )}
               </div>
 
-              {/* 快速选择 */}
-              <div className="flex gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={fillDemoAdmin}
-                  className="flex-1 py-2 px-3 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                >
-                  管理员演示
-                </button>
-                <button
-                  type="button"
-                  onClick={fillDemoOperator}
-                  className="flex-1 py-2 px-3 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                >
-                  操作员演示
-                </button>
-              </div>
+              {/* 快速选择演示账号（仅生产环境显示） */}
+              {!isDev && (
+                <div className="flex gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={fillDemoAdmin}
+                    className="flex-1 py-2 px-3 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  >
+                    管理员演示
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fillDemoOperator}
+                    className="flex-1 py-2 px-3 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                  >
+                    操作员演示
+                  </button>
+                </div>
+              )}
 
-              <form onSubmit={handleTestLogin} className="space-y-4">
+              <form onSubmit={handleLocalLogin} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
                   <div className="relative">
@@ -174,11 +197,11 @@ export default function Login() {
                     </div>
                     <input
                       type="text"
-                      value={testUsername}
-                      onChange={(e) => setTestUsername(e.target.value)}
-                      placeholder="输入测试用户名"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder={isDev ? "输入用户名" : "输入测试用户名"}
                       required
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${isDev ? 'focus:ring-blue-500 focus:border-blue-500' : 'focus:ring-orange-500 focus:border-orange-500'}`}
                     />
                   </div>
                 </div>
@@ -191,11 +214,11 @@ export default function Login() {
                     </div>
                     <input
                       type="password"
-                      value={testPassword}
-                      onChange={(e) => setTestPassword(e.target.value)}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="输入密码"
                       required
-                      className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className={`block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${isDev ? 'focus:ring-blue-500 focus:border-blue-500' : 'focus:ring-orange-500 focus:border-orange-500'}`}
                     />
                   </div>
                 </div>
@@ -209,7 +232,7 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white py-3 rounded-lg font-medium hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className={`w-full flex items-center justify-center gap-2 text-white py-3 rounded-lg font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${isDev ? 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-500' : 'bg-orange-500 hover:bg-orange-600 focus:ring-orange-500'}`}
                 >
                   {loading ? (
                     <>
@@ -219,21 +242,36 @@ export default function Login() {
                   ) : (
                     <>
                       <LogIn className="w-5 h-5" />
-                      <span>测试登录</span>
+                      <span>{isDev ? '登录' : '测试登录'}</span>
                     </>
                   )}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowTestLogin(false)
-                    setError('')
-                  }}
-                  className="w-full py-2 text-gray-500 hover:text-gray-700"
-                >
-                  返回正式登录
-                </button>
+                {!isDev && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLocalLogin(false)
+                      setError('')
+                    }}
+                    className="w-full py-2 text-gray-500 hover:text-gray-700"
+                  >
+                    返回正式登录
+                  </button>
+                )}
+
+                {isDev && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLocalLogin(false)
+                      setError('')
+                    }}
+                    className="w-full py-2 text-gray-500 hover:text-gray-700 text-sm"
+                  >
+                    使用 Auth0 登录
+                  </button>
+                )}
               </form>
             </>
           )}
