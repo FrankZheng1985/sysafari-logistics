@@ -4,6 +4,7 @@
 
 import express from 'express'
 import * as controller from './controller.js'
+import { authenticate } from '../../middleware/auth.js'
 
 const router = express.Router()
 
@@ -15,13 +16,13 @@ router.post('/auth/login', controller.login)
 // 获取当前用户信息
 router.get('/auth/me', controller.getCurrentUser)
 
-// Auth0 用户信息（新增）
-router.get('/auth/profile', controller.getAuth0Profile)
+// Auth0 用户信息（需要认证）
+router.get('/auth/profile', authenticate, controller.getAuth0Profile)
 
-// Auth0 用户绑定管理
-router.get('/auth/pending-users', controller.getPendingAuth0Users)
-router.post('/auth/bind-user', controller.bindAuth0User)
-router.post('/auth/create-and-bind', controller.createAndBindUser)
+// Auth0 用户绑定管理（需要认证）
+router.get('/auth/pending-users', authenticate, controller.getPendingAuth0Users)
+router.post('/auth/bind-user', authenticate, controller.bindAuth0User)
+router.post('/auth/create-and-bind', authenticate, controller.createAndBindUser)
 
 // 修改当前用户密码
 router.put('/auth/change-password', (req, res) => {
