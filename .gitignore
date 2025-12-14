@@ -35,3 +35,6 @@ server/data/
 
 # Backups (contain sensitive data)
 backups/
+
+# Logs directory
+logs/
