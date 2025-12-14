@@ -3,8 +3,29 @@
  * 物流管理系统 API 接口
  */
 
+import { isTestMode, mockAPI, createWriteBlockedResponse } from '../services/mockDataService'
+
 // API 基础地址配置
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
+
+// 测试模式本地存储键
+const TEST_MODE_KEY = 'bp_logistics_test_mode'
+
+/**
+ * 检查是否为测试模式
+ */
+function checkTestMode(): boolean {
+  if (typeof window === 'undefined') return false
+  const testData = localStorage.getItem(TEST_MODE_KEY)
+  return !!testData
+}
+
+/**
+ * 测试模式下显示提示
+ */
+function showTestModeWarning(action: string): void {
+  console.warn(`🧪 测试模式: ${action} 操作被拦截，数据不会被保存`)
+}
 
 /**
  * 通用 API 请求函数
@@ -160,6 +181,11 @@ export async function getUserList(params?: {
   role?: string
   status?: string
 }): Promise<ApiResponse<PaginatedResponse<User>>> {
+  // 测试模式：返回模拟数据
+  if (checkTestMode()) {
+    return mockAPI.getUsers() as any
+  }
+
   const queryParams = new URLSearchParams()
   if (params?.page) queryParams.append('page', params.page.toString())
   if (params?.pageSize) queryParams.append('pageSize', params.pageSize.toString())
@@ -189,6 +215,12 @@ export async function getUserById(id: string): Promise<ApiResponse<User>> {
  * 请求体: CreateUserRequest
  */
 export async function createUser(data: CreateUserRequest): Promise<ApiResponse<User>> {
+  // 测试模式：阻止写操作
+  if (checkTestMode()) {
+    showTestModeWarning('创建用户')
+    return createWriteBlockedResponse() as any
+  }
+
   return request<ApiResponse<User>>('/api/users', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -504,6 +536,11 @@ export interface BillStats {
  * 接口地址: GET /api/bills
  */
 export async function getBillsList(params?: GetBillsParams): Promise<ApiResponse<PaginatedResponse<BillOfLading> & { stats?: BillStats }>> {
+  // 测试模式：返回模拟数据
+  if (checkTestMode()) {
+    return mockAPI.getBills(params) as any
+  }
+
   try {
     // 构建查询参数，过滤掉 undefined 和空字符串
     const queryParams = new URLSearchParams()
@@ -717,6 +754,12 @@ export async function getBillOperationLogs(id: string): Promise<ApiResponse<Oper
  * 接口地址: POST /api/bills
  */
 export async function createBill(data: Partial<BillOfLading>): Promise<ApiResponse<BillOfLading>> {
+  // 测试模式：阻止写操作
+  if (checkTestMode()) {
+    showTestModeWarning('创建提单')
+    return createWriteBlockedResponse() as any
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}/api/bills`, {
       method: 'POST',
@@ -746,6 +789,12 @@ export async function createBill(data: Partial<BillOfLading>): Promise<ApiRespon
  * 接口地址: PUT /api/bills/:id
  */
 export async function updateBill(id: string, data: Partial<BillOfLading>): Promise<ApiResponse<BillOfLading>> {
+  // 测试模式：阻止写操作
+  if (checkTestMode()) {
+    showTestModeWarning('更新提单')
+    return createWriteBlockedResponse() as any
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}/api/bills/${id}`, {
       method: 'PUT',
@@ -774,6 +823,12 @@ export async function updateBill(id: string, data: Partial<BillOfLading>): Promi
  * 接口地址: DELETE /api/bills/:id
  */
 export async function deleteBill(id: string): Promise<ApiResponse<void>> {
+  // 测试模式：阻止写操作
+  if (checkTestMode()) {
+    showTestModeWarning('删除提单')
+    return createWriteBlockedResponse() as any
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}/api/bills/${id}`, {
       method: 'DELETE',
@@ -3696,6 +3751,11 @@ export async function getCustomers(params?: {
   page?: number
   pageSize?: number 
 }): Promise<ApiResponse<{ list: Customer[]; total: number; page: number; pageSize: number }>> {
+  // 测试模式：返回模拟数据
+  if (checkTestMode()) {
+    return mockAPI.getCustomers(params) as any
+  }
+
   try {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.append('search', params.search)
@@ -3821,6 +3881,11 @@ export async function getFees(params?: {
   page?: number
   pageSize?: number 
 }): Promise<ApiResponse<{ list: Fee[]; total: number; page: number; pageSize: number }>> {
+  // 测试模式：返回模拟数据
+  if (checkTestMode()) {
+    return mockAPI.getFees(params) as any
+  }
+
   try {
     const searchParams = new URLSearchParams()
     if (params?.billId) searchParams.append('billId', params.billId)
@@ -3850,6 +3915,12 @@ export async function getFees(params?: {
  * 创建费用
  */
 export async function createFee(data: Omit<Fee, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<{ id: string }>> {
+  // 测试模式：阻止写操作
+  if (checkTestMode()) {
+    showTestModeWarning('创建费用')
+    return createWriteBlockedResponse() as any
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}/api/fees`, {
       method: 'POST',
