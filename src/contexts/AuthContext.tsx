@@ -209,11 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 判断是否是测试用户
         const isTestUser = user.userType === 'test'
         
-        // 本地开发环境允许所有用户登录，生产环境只允许测试用户
-        const isDev = import.meta.env.DEV
-        if (!isDev && !isTestUser) {
-          return { success: false, message: '此账号不是测试账号，请使用正式登录' }
-        }
+        // 所有环境都允许用密码登录（测试用户使用模拟数据，普通用户使用真实数据）
 
         // 保存登录数据
         const loginData = { user, permissions, token, isTestMode: isTestUser }
