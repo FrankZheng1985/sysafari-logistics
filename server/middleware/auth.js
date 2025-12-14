@@ -64,14 +64,16 @@ export function authenticate(req, res, next) {
         SELECT u.*, r.role_name 
         FROM users u 
         LEFT JOIN roles r ON u.role = r.role_code
-        WHERE u.auth0_id = ? AND u.status = 'active'
+        WHERE u.auth0_id = $1 AND u.status = 'active'
       `).get(auth0Id)
+
+      console.log('Auth0 ID:', auth0Id, '查询结果:', userResult ? '找到用户' : '未找到')
 
       if (userResult) {
         // 获取用户权限
         const permissionsResult = await db.prepare(`
           SELECT permission_code FROM role_permissions 
-          WHERE role_code = ?
+          WHERE role_code = $1
         `).all(userResult.role)
 
         const permissions = Array.isArray(permissionsResult) 
