@@ -2,8 +2,10 @@
  * 系统管理模块 - 控制器
  */
 
+import crypto from 'crypto'
 import { success, successWithPagination, badRequest, notFound, conflict, unauthorized, forbidden, serverError } from '../../utils/response.js'
 import { validatePassword } from '../../utils/validator.js'
+import { getDatabase } from '../../config/database.js'
 import * as model from './model.js'
 
 // ==================== 用户管理 ====================
@@ -404,7 +406,6 @@ export async function getAuth0Profile(req, res) {
       
       try {
         // 生成随机密码（因为使用 Auth0 登录，不需要密码）
-        const crypto = await import('crypto')
         const randomPassword = crypto.randomBytes(32).toString('hex')
         
         // 创建管理员用户
