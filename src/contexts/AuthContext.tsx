@@ -12,10 +12,12 @@ interface AuthState {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  isTestMode: boolean
 }
 
 interface AuthContextType extends AuthState {
   login: () => void
+  testLogin: (username: string, password: string) => Promise<{ success: boolean; message: string }>
   logout: () => void
   getAccessToken: () => Promise<string | null>
   hasPermission: (permission: string) => boolean
@@ -28,8 +30,9 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// 本地存储键（用于缓存用户权限）
+// 本地存储键
 const USER_CACHE_KEY = 'bp_logistics_user_cache'
+const TEST_MODE_KEY = 'bp_logistics_test_mode'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const {
@@ -47,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     token: null,
     isAuthenticated: false,
     isLoading: true,
+    isTestMode: false,
   })
 
   // 从后端获取用户信息和权限
@@ -71,23 +75,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // 检查是否有测试模式缓存
+  useEffect(() => {
+    const testModeData = localStorage.getItem(TEST_MODE_KEY)
+    if (testModeData) {
+      try {
+        const data = JSON.parse(testModeData)
+        setState({
+          user: data.user,
+          permissions: data.permissions || [],
+          token: data.token,
+          isAuthenticated: true,
+          isLoading: false,
+          isTestMode: true,
+        })
+        return
+      } catch (e) {
+        localStorage.removeItem(TEST_MODE_KEY)
+      }
+    }
+  }, [])
+
   // 当 Auth0 认证状态改变时，同步用户信息
   useEffect(() => {
     const syncUser = async () => {
+      // 如果是测试模式，跳过 Auth0 同步
+      if (state.isTestMode) {
+        return
+      }
+
       if (auth0IsLoading) {
         return
       }
 
       if (!auth0IsAuthenticated || !auth0User) {
-        // 未登录，清除状态
-        localStorage.removeItem(USER_CACHE_KEY)
-        setState({
-          user: null,
-          permissions: [],
-          token: null,
-          isAuthenticated: false,
-          isLoading: false,
-        })
+        // 未登录，清除状态（但不清除测试模式）
+        if (!state.isTestMode) {
+          localStorage.removeItem(USER_CACHE_KEY)
+          setState(prev => ({
+            ...prev,
+            user: null,
+            permissions: [],
+            token: null,
+            isAuthenticated: false,
+            isLoading: false,
+          }))
+        }
         return
       }
 
@@ -108,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             token: accessToken,
             isAuthenticated: true,
             isLoading: false,
+            isTestMode: false,
           })
         } else {
           // 后端没有该用户，使用 Auth0 基本信息
@@ -116,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             username: auth0User.email || auth0User.nickname || '',
             name: auth0User.name || auth0User.nickname || '用户',
             email: auth0User.email || '',
-            role: 'operator', // 默认角色
+            role: 'operator',
             status: 'active',
           }
 
@@ -126,11 +160,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             token: accessToken,
             isAuthenticated: true,
             isLoading: false,
+            isTestMode: false,
           })
         }
       } catch (error) {
         console.error('同步用户信息失败:', error)
-        // 尝试使用缓存
         const cached = localStorage.getItem(USER_CACHE_KEY)
         if (cached) {
           const userProfile = JSON.parse(cached)
@@ -140,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             token: null,
             isAuthenticated: true,
             isLoading: false,
+            isTestMode: false,
           })
         } else {
           setState(prev => ({ ...prev, isLoading: false }))
@@ -148,25 +183,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     syncUser()
-  }, [auth0IsAuthenticated, auth0IsLoading, auth0User, getAccessTokenSilently, fetchUserProfile])
+  }, [auth0IsAuthenticated, auth0IsLoading, auth0User, getAccessTokenSilently, fetchUserProfile, state.isTestMode])
 
-  // 登录（跳转到 Auth0）
+  // 正式登录（跳转到 Auth0）
   const login = useCallback(() => {
     loginWithRedirect()
   }, [loginWithRedirect])
 
+  // 测试账号登录
+  const testLogin = useCallback(async (username: string, password: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      })
+
+      const data = await response.json()
+
+      if (data.errCode === 200 && data.data) {
+        const { user, permissions, token, isTestMode } = data.data
+
+        // 只允许测试用户使用测试登录
+        if (user.userType !== 'test') {
+          return { success: false, message: '此账号不是测试账号，请使用正式登录' }
+        }
+
+        // 保存测试模式数据
+        const testData = { user, permissions, token, isTestMode: true }
+        localStorage.setItem(TEST_MODE_KEY, JSON.stringify(testData))
+
+        setState({
+          user,
+          permissions: permissions || [],
+          token,
+          isAuthenticated: true,
+          isLoading: false,
+          isTestMode: true,
+        })
+
+        return { success: true, message: '登录成功' }
+      } else {
+        return { success: false, message: data.msg || '登录失败' }
+      }
+    } catch (error: any) {
+      console.error('测试登录失败:', error)
+      return { success: false, message: error.message || '登录失败，请稍后重试' }
+    }
+  }, [])
+
   // 登出
   const logout = useCallback(() => {
     localStorage.removeItem(USER_CACHE_KEY)
-    auth0Logout({
-      logoutParams: {
-        returnTo: window.location.origin,
-      },
-    })
-  }, [auth0Logout])
+    localStorage.removeItem(TEST_MODE_KEY)
+    
+    if (state.isTestMode) {
+      // 测试模式直接清除状态
+      setState({
+        user: null,
+        permissions: [],
+        token: null,
+        isAuthenticated: false,
+        isLoading: false,
+        isTestMode: false,
+      })
+    } else {
+      // 正式模式退出 Auth0
+      auth0Logout({
+        logoutParams: {
+          returnTo: window.location.origin,
+        },
+      })
+    }
+  }, [auth0Logout, state.isTestMode])
 
   // 获取 Access Token（用于 API 调用）
   const getAccessToken = useCallback(async (): Promise<string | null> => {
+    if (state.isTestMode) {
+      return state.token
+    }
     try {
       const token = await getAccessTokenSilently()
       return token
@@ -174,13 +271,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('获取 Access Token 失败:', error)
       return null
     }
-  }, [getAccessTokenSilently])
+  }, [getAccessTokenSilently, state.isTestMode, state.token])
 
   // 检查是否有某个权限
   const hasPermission = useCallback((permission: string): boolean => {
-    // 管理员拥有所有权限
     if (state.user?.role === 'admin') return true
-    // 安全检查：确保 permissions 数组存在
     if (!state.permissions || !Array.isArray(state.permissions)) return false
     return state.permissions.includes(permission)
   }, [state.user?.role, state.permissions])
@@ -203,21 +298,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // 检查是否可以查看订单
   const canViewBill = useCallback((_billId?: string, operatorId?: string): boolean => {
-    // 管理员和经理可以查看所有订单
     if (state.user?.role === 'admin' || state.user?.role === 'manager') {
       return true
     }
-    
-    // 如果有 bill:view_all 权限，可以查看所有订单
     if (hasPermission('bill:view_all')) {
       return true
     }
-    
-    // 否则只能查看分配给自己的订单
     if (operatorId && state.user?.id === operatorId) {
       return hasPermission('bill:view')
     }
-    
     return false
   }, [state.user?.role, state.user?.id, hasPermission])
 
@@ -236,6 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         ...state,
         login,
+        testLogin,
         logout,
         getAccessToken,
         hasPermission,
@@ -261,30 +351,21 @@ export function useAuth() {
 
 // 权限常量
 export const PERMISSIONS = {
-  // 订单管理
   BILL_VIEW: 'bill:view',
   BILL_VIEW_ALL: 'bill:view_all',
   BILL_CREATE: 'bill:create',
   BILL_EDIT: 'bill:edit',
   BILL_DELETE: 'bill:delete',
-  
-  // CMR管理
   CMR_VIEW: 'cmr:view',
   CMR_OPERATE: 'cmr:operate',
-  
-  // 查验管理
   INSPECTION_VIEW: 'inspection:view',
   INSPECTION_OPERATE: 'inspection:operate',
-  
-  // CRM客户管理
   CRM_VIEW: 'crm:view',
   CRM_MANAGE: 'crm:manage',
   CRM_CUSTOMER_VIEW: 'crm:customer:view',
   CRM_CUSTOMER_MANAGE: 'crm:customer:manage',
   CRM_OPPORTUNITY_VIEW: 'crm:opportunity:view',
   CRM_OPPORTUNITY_MANAGE: 'crm:opportunity:manage',
-  
-  // 财务管理
   FINANCE_VIEW: 'finance:view',
   FINANCE_MANAGE: 'finance:manage',
   FINANCE_INVOICE_VIEW: 'finance:invoice:view',
@@ -292,16 +373,12 @@ export const PERMISSIONS = {
   FINANCE_PAYMENT_VIEW: 'finance:payment:view',
   FINANCE_PAYMENT_MANAGE: 'finance:payment:manage',
   FINANCE_REPORT_VIEW: 'finance:report:view',
-  
-  // 工具
   TOOL_INQUIRY: 'tool:inquiry',
   TOOL_TARIFF: 'tool:tariff',
   TOOL_CATEGORY: 'tool:category',
   TOOL_ADDRESS: 'tool:address',
   TOOL_COMMODITY: 'tool:commodity',
   TOOL_PAYMENT: 'tool:payment',
-  
-  // 系统设置
   SYSTEM_USER: 'system:user',
   SYSTEM_MENU: 'system:menu',
   SYSTEM_BASIC_DATA: 'system:basic_data',

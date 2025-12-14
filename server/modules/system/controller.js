@@ -308,12 +308,24 @@ export async function login(req, res) {
       loginResult: 'success'
     })
     
-    // 返回用户信息（简化版token，实际项目应使用JWT）
-    const { passwordHash, ...safeUser } = user
+    // 返回用户信息
+    const { passwordHash, password_hash, ...safeUser } = user
+    
+    // 获取用户权限
+    const permissions = model.getRolePermissions(user.role)
+    const permissionCodes = permissions.map(p => p.permissionCode || p.permission_code)
+    
+    // 判断是否是测试用户
+    const isTestUser = user.user_type === 'test'
     
     return success(res, {
-      user: safeUser,
-      token: String(user.id) // 简化token
+      user: {
+        ...safeUser,
+        userType: user.user_type || 'normal'
+      },
+      permissions: permissionCodes,
+      isTestMode: isTestUser,
+      token: String(user.id)
     }, '登录成功')
   } catch (error) {
     console.error('登录失败:', error)
