@@ -18,6 +18,11 @@ router.get('/auth/me', controller.getCurrentUser)
 // Auth0 用户信息（新增）
 router.get('/auth/profile', controller.getAuth0Profile)
 
+// Auth0 用户绑定管理
+router.get('/auth/pending-users', controller.getPendingAuth0Users)
+router.post('/auth/bind-user', controller.bindAuth0User)
+router.post('/auth/create-and-bind', controller.createAndBindUser)
+
 // 修改当前用户密码
 router.put('/auth/change-password', (req, res) => {
   // 使用当前登录用户ID

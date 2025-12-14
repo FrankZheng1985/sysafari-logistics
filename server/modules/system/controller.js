@@ -380,7 +380,28 @@ export async function getAuth0Profile(req, res) {
       })
     }
 
-    // 用户不在本地数据库中，返回基本信息
+    // 用户不在本地数据库中，记录到待绑定表
+    try {
+      const db = getDatabase()
+      await db.prepare(`
+        INSERT INTO auth0_pending_users (auth0_id, email, name, picture, last_login_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (auth0_id) DO UPDATE SET
+          email = EXCLUDED.email,
+          name = EXCLUDED.name,
+          picture = EXCLUDED.picture,
+          last_login_at = NOW()
+      `).run(
+        req.user.auth0Id,
+        req.user.email || '',
+        req.user.name || '新用户',
+        req.user.picture || ''
+      )
+    } catch (dbError) {
+      console.error('记录待绑定用户失败:', dbError)
+    }
+
+    // 返回基本信息
     return success(res, {
       user: {
         id: null,
@@ -398,6 +419,120 @@ export async function getAuth0Profile(req, res) {
   } catch (error) {
     console.error('获取 Auth0 用户信息失败:', error)
     return serverError(res, '获取用户信息失败')
+  }
+}
+
+/**
+ * 获取待绑定的 Auth0 用户列表
+ */
+export async function getPendingAuth0Users(req, res) {
+  try {
+    const db = getDatabase()
+    const users = await db.prepare(`
+      SELECT 
+        p.id,
+        p.auth0_id,
+        p.email,
+        p.name,
+        p.picture,
+        p.first_login_at,
+        p.last_login_at,
+        p.is_bound,
+        p.bound_user_id,
+        u.username as bound_username,
+        u.name as bound_name
+      FROM auth0_pending_users p
+      LEFT JOIN users u ON p.bound_user_id = u.id
+      ORDER BY p.last_login_at DESC
+    `).all()
+
+    return success(res, users)
+  } catch (error) {
+    console.error('获取待绑定用户列表失败:', error)
+    return serverError(res, '获取待绑定用户列表失败')
+  }
+}
+
+/**
+ * 绑定 Auth0 用户到系统用户
+ */
+export async function bindAuth0User(req, res) {
+  try {
+    const { auth0Id, userId } = req.body
+
+    if (!auth0Id || !userId) {
+      return badRequest(res, 'auth0Id 和 userId 为必填项')
+    }
+
+    const db = getDatabase()
+
+    // 检查系统用户是否存在
+    const user = await db.prepare('SELECT id, username, name FROM users WHERE id = $1').get(userId)
+    if (!user) {
+      return notFound(res, '系统用户不存在')
+    }
+
+    // 检查该 Auth0 ID 是否已绑定其他用户
+    const existingBind = await db.prepare('SELECT id, username FROM users WHERE auth0_id = $1').get(auth0Id)
+    if (existingBind) {
+      return badRequest(res, `该 Auth0 账号已绑定到用户: ${existingBind.username}`)
+    }
+
+    // 更新系统用户的 auth0_id
+    await db.prepare('UPDATE users SET auth0_id = $1 WHERE id = $2').run(auth0Id, userId)
+
+    // 更新待绑定表
+    await db.prepare(`
+      UPDATE auth0_pending_users 
+      SET is_bound = TRUE, bound_user_id = $1 
+      WHERE auth0_id = $2
+    `).run(userId, auth0Id)
+
+    return success(res, { message: '绑定成功', user })
+  } catch (error) {
+    console.error('绑定用户失败:', error)
+    return serverError(res, '绑定用户失败')
+  }
+}
+
+/**
+ * 创建新用户并绑定 Auth0
+ */
+export async function createAndBindUser(req, res) {
+  try {
+    const { auth0Id, username, name, email, role } = req.body
+
+    if (!auth0Id || !username || !name || !role) {
+      return badRequest(res, '缺少必填字段')
+    }
+
+    const db = getDatabase()
+
+    // 检查用户名是否已存在
+    const existing = await db.prepare('SELECT id FROM users WHERE username = $1').get(username)
+    if (existing) {
+      return badRequest(res, '用户名已存在')
+    }
+
+    // 创建用户（密码设为随机值，因为使用 Auth0 登录）
+    const randomPassword = Math.random().toString(36).slice(-12)
+    const result = await db.prepare(`
+      INSERT INTO users (username, name, email, role, password_hash, auth0_id, status, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW())
+      RETURNING id, username, name, email, role
+    `).get(username, name, email || '', role, randomPassword, auth0Id)
+
+    // 更新待绑定表
+    await db.prepare(`
+      UPDATE auth0_pending_users 
+      SET is_bound = TRUE, bound_user_id = $1 
+      WHERE auth0_id = $2
+    `).run(result.id, auth0Id)
+
+    return success(res, { message: '创建并绑定成功', user: result })
+  } catch (error) {
+    console.error('创建并绑定用户失败:', error)
+    return serverError(res, '创建并绑定用户失败')
   }
 }
 

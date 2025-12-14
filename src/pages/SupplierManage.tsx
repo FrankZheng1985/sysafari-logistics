@@ -694,9 +694,11 @@ export default function SupplierManage() {
           data={suppliers}
           loading={loading}
           rowKey="id"
-          selectable
-          selectedKeys={selectedIds}
-          onSelectionChange={setSelectedIds}
+          rowSelection={{
+            type: 'checkbox',
+            selectedRowKeys: selectedIds,
+            onChange: (keys) => setSelectedIds(keys),
+          }}
           pagination={{
             current: page,
             pageSize: pageSize,

@@ -62,6 +62,7 @@ import ToolsDashboard from './pages/ToolsDashboard'
 import SystemManageDashboard from './pages/SystemManageDashboard'
 import ActivityLogs from './pages/ActivityLogs'
 import ApprovalList from './pages/ApprovalList'
+import Auth0UserBinding from './pages/Auth0UserBinding'
 import SupplierDashboard from './pages/SupplierDashboard'
 import SupplierManage from './pages/SupplierManage'
 import { initMenuSettings } from './utils/menuSettings'
@@ -124,6 +125,7 @@ function AppRoutes() {
         <Route path="/system/menu-settings" element={<MenuSettings />} />
         <Route path="/system/user-manage" element={<UserManage />} />
         <Route path="/system/user-manage/permissions" element={<RolePermissions />} />
+        <Route path="/system/user-binding" element={<Auth0UserBinding />} />
         <Route path="/system/security-settings" element={<SecuritySettings />} />
         <Route path="/system/security-settings/logs" element={<SecuritySettings />} />
         <Route path="/system/activity-logs" element={<ActivityLogs />} />
