@@ -1,6 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import { login as loginApi, type User, type LoginResponse } from '../utils/api'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useAuth0 } from '@auth0/auth0-react'
+import { type User } from '../utils/api'
+
+// API 基础地址
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api'
 
 interface AuthState {
   user: User | null
@@ -11,8 +15,9 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (username: string, password: string) => Promise<{ success: boolean; message: string }>
+  login: () => void
   logout: () => void
+  getAccessToken: () => Promise<string | null>
   hasPermission: (permission: string) => boolean
   hasAnyPermission: (permissions: string[]) => boolean
   hasAllPermissions: (permissions: string[]) => boolean
@@ -23,10 +28,19 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-// 本地存储键
-const STORAGE_KEY = 'bp_logistics_auth'
+// 本地存储键（用于缓存用户权限）
+const USER_CACHE_KEY = 'bp_logistics_user_cache'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const {
+    user: auth0User,
+    isAuthenticated: auth0IsAuthenticated,
+    isLoading: auth0IsLoading,
+    loginWithRedirect,
+    logout: auth0Logout,
+    getAccessTokenSilently,
+  } = useAuth0()
+
   const [state, setState] = useState<AuthState>({
     user: null,
     permissions: [],
@@ -35,103 +49,160 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
   })
 
-  // 初始化时从本地存储加载认证信息
+  // 从后端获取用户信息和权限
+  const fetchUserProfile = useCallback(async (accessToken: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.errCode === 200 && data.data) {
+          return data.data
+        }
+      }
+      return null
+    } catch (error) {
+      console.error('获取用户信息失败:', error)
+      return null
+    }
+  }, [])
+
+  // 当 Auth0 认证状态改变时，同步用户信息
   useEffect(() => {
-    const loadAuth = () => {
+    const syncUser = async () => {
+      if (auth0IsLoading) {
+        return
+      }
+
+      if (!auth0IsAuthenticated || !auth0User) {
+        // 未登录，清除状态
+        localStorage.removeItem(USER_CACHE_KEY)
+        setState({
+          user: null,
+          permissions: [],
+          token: null,
+          isAuthenticated: false,
+          isLoading: false,
+        })
+        return
+      }
+
       try {
-        const storedAuth = localStorage.getItem(STORAGE_KEY)
-        if (storedAuth) {
-          const parsedAuth = JSON.parse(storedAuth) as LoginResponse
+        // 获取 Access Token
+        const accessToken = await getAccessTokenSilently()
+
+        // 从后端获取用户信息和权限
+        const userProfile = await fetchUserProfile(accessToken)
+
+        if (userProfile) {
+          // 缓存用户信息
+          localStorage.setItem(USER_CACHE_KEY, JSON.stringify(userProfile))
+
           setState({
-            user: parsedAuth.user,
-            permissions: parsedAuth.permissions,
-            token: parsedAuth.token,
+            user: userProfile.user,
+            permissions: userProfile.permissions || [],
+            token: accessToken,
+            isAuthenticated: true,
+            isLoading: false,
+          })
+        } else {
+          // 后端没有该用户，使用 Auth0 基本信息
+          const basicUser: User = {
+            id: auth0User.sub || '',
+            username: auth0User.email || auth0User.nickname || '',
+            name: auth0User.name || auth0User.nickname || '用户',
+            email: auth0User.email || '',
+            role: 'operator', // 默认角色
+            status: 'active',
+          }
+
+          setState({
+            user: basicUser,
+            permissions: [],
+            token: accessToken,
+            isAuthenticated: true,
+            isLoading: false,
+          })
+        }
+      } catch (error) {
+        console.error('同步用户信息失败:', error)
+        // 尝试使用缓存
+        const cached = localStorage.getItem(USER_CACHE_KEY)
+        if (cached) {
+          const userProfile = JSON.parse(cached)
+          setState({
+            user: userProfile.user,
+            permissions: userProfile.permissions || [],
+            token: null,
             isAuthenticated: true,
             isLoading: false,
           })
         } else {
           setState(prev => ({ ...prev, isLoading: false }))
         }
-      } catch (error) {
-        console.error('Failed to load auth from storage:', error)
-        localStorage.removeItem(STORAGE_KEY)
-        setState(prev => ({ ...prev, isLoading: false }))
       }
     }
 
-    loadAuth()
-  }, [])
+    syncUser()
+  }, [auth0IsAuthenticated, auth0IsLoading, auth0User, getAccessTokenSilently, fetchUserProfile])
 
-  // 登录
-  const login = async (username: string, password: string): Promise<{ success: boolean; message: string }> => {
-    try {
-      const response = await loginApi({ username, password })
-      
-      if (response.errCode === 200 && response.data) {
-        const { user, permissions, token } = response.data
-        
-        // 保存到本地存储
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(response.data))
-        
-        setState({
-          user,
-          permissions,
-          token,
-          isAuthenticated: true,
-          isLoading: false,
-        })
-        
-        return { success: true, message: '登录成功' }
-      } else {
-        return { success: false, message: response.msg || '登录失败' }
-      }
-    } catch (error: any) {
-      console.error('Login failed:', error)
-      return { success: false, message: error.message || '登录失败，请稍后重试' }
-    }
-  }
+  // 登录（跳转到 Auth0）
+  const login = useCallback(() => {
+    loginWithRedirect()
+  }, [loginWithRedirect])
 
   // 登出
-  const logout = () => {
-    localStorage.removeItem(STORAGE_KEY)
-    setState({
-      user: null,
-      permissions: [],
-      token: null,
-      isAuthenticated: false,
-      isLoading: false,
+  const logout = useCallback(() => {
+    localStorage.removeItem(USER_CACHE_KEY)
+    auth0Logout({
+      logoutParams: {
+        returnTo: window.location.origin,
+      },
     })
-  }
+  }, [auth0Logout])
+
+  // 获取 Access Token（用于 API 调用）
+  const getAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const token = await getAccessTokenSilently()
+      return token
+    } catch (error) {
+      console.error('获取 Access Token 失败:', error)
+      return null
+    }
+  }, [getAccessTokenSilently])
 
   // 检查是否有某个权限
-  const hasPermission = (permission: string): boolean => {
+  const hasPermission = useCallback((permission: string): boolean => {
     // 管理员拥有所有权限
     if (state.user?.role === 'admin') return true
     // 安全检查：确保 permissions 数组存在
     if (!state.permissions || !Array.isArray(state.permissions)) return false
     return state.permissions.includes(permission)
-  }
+  }, [state.user?.role, state.permissions])
 
   // 检查是否有任意一个权限
-  const hasAnyPermission = (permissions: string[]): boolean => {
+  const hasAnyPermission = useCallback((permissions: string[]): boolean => {
     if (state.user?.role === 'admin') return true
-    // 安全检查：确保 permissions 数组存在
     if (!state.permissions || !Array.isArray(state.permissions)) return false
     if (!permissions || !Array.isArray(permissions)) return false
     return permissions.some(p => state.permissions.includes(p))
-  }
+  }, [state.user?.role, state.permissions])
 
   // 检查是否有所有权限
-  const hasAllPermissions = (permissions: string[]): boolean => {
+  const hasAllPermissions = useCallback((permissions: string[]): boolean => {
     if (state.user?.role === 'admin') return true
-    // 安全检查：确保 permissions 数组存在
     if (!state.permissions || !Array.isArray(state.permissions)) return false
     if (!permissions || !Array.isArray(permissions)) return false
     return permissions.every(p => state.permissions.includes(p))
-  }
+  }, [state.user?.role, state.permissions])
 
   // 检查是否可以查看订单
-  const canViewBill = (_billId?: string, operatorId?: string): boolean => {
+  const canViewBill = useCallback((_billId?: string, operatorId?: string): boolean => {
     // 管理员和经理可以查看所有订单
     if (state.user?.role === 'admin' || state.user?.role === 'manager') {
       return true
@@ -148,17 +219,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     return false
-  }
+  }, [state.user?.role, state.user?.id, hasPermission])
 
   // 是否是管理员
-  const isAdmin = (): boolean => {
+  const isAdmin = useCallback((): boolean => {
     return state.user?.role === 'admin'
-  }
+  }, [state.user?.role])
 
   // 是否是经理
-  const isManager = (): boolean => {
+  const isManager = useCallback((): boolean => {
     return state.user?.role === 'manager' || state.user?.role === 'admin'
-  }
+  }, [state.user?.role])
 
   return (
     <AuthContext.Provider
@@ -166,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...state,
         login,
         logout,
+        getAccessToken,
         hasPermission,
         hasAnyPermission,
         hasAllPermissions,
@@ -239,4 +311,3 @@ export const PERMISSIONS = {
 } as const
 
 export default AuthContext
-

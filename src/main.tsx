@@ -1,7 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Auth0Provider } from '@auth0/auth0-react'
 import App from './App.tsx'
 import './index.css'
+
+// Auth0 配置
+const auth0Config = {
+  domain: import.meta.env.VITE_AUTH0_DOMAIN || 'dev-w345wcc1mgybuopm.us.auth0.com',
+  clientId: import.meta.env.VITE_AUTH0_CLIENT_ID || '0TdUViaJp2mJFBaGCKn5h27NsjqkSnhI',
+  audience: import.meta.env.VITE_AUTH0_AUDIENCE || 'https://sysafari-logistics-api',
+}
 
 // 添加全局错误处理
 window.addEventListener('error', (event) => {
@@ -76,9 +84,19 @@ try {
 
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
+      <Auth0Provider
+        domain={auth0Config.domain}
+        clientId={auth0Config.clientId}
+        authorizationParams={{
+          redirect_uri: window.location.origin,
+          audience: auth0Config.audience,
+        }}
+        cacheLocation="localstorage"
+      >
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </Auth0Provider>
     </React.StrictMode>,
   )
 } catch (error) {

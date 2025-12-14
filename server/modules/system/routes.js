@@ -9,11 +9,14 @@ const router = express.Router()
 
 // ==================== 认证相关路由 ====================
 
-// 用户登录
+// 用户登录（传统方式，保留兼容）
 router.post('/auth/login', controller.login)
 
 // 获取当前用户信息
 router.get('/auth/me', controller.getCurrentUser)
+
+// Auth0 用户信息（新增）
+router.get('/auth/profile', controller.getAuth0Profile)
 
 // 修改当前用户密码
 router.put('/auth/change-password', (req, res) => {

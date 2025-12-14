@@ -350,6 +350,57 @@ export async function getCurrentUser(req, res) {
   }
 }
 
+/**
+ * Auth0 用户信息接口
+ * 前端通过 Auth0 登录后调用此接口获取本地用户信息和权限
+ */
+export async function getAuth0Profile(req, res) {
+  try {
+    // req.user 由 Auth0 中间件设置
+    if (!req.user) {
+      return unauthorized(res, '未认证')
+    }
+
+    // 如果用户已在本地数据库中
+    if (req.user.id) {
+      const permissions = req.user.permissions || []
+      
+      return success(res, {
+        user: {
+          id: req.user.id,
+          auth0Id: req.user.auth0Id,
+          username: req.user.username,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role,
+          roleName: req.user.roleName,
+          status: 'active'
+        },
+        permissions: permissions
+      })
+    }
+
+    // 用户不在本地数据库中，返回基本信息
+    return success(res, {
+      user: {
+        id: null,
+        auth0Id: req.user.auth0Id,
+        username: req.user.username || req.user.email,
+        name: req.user.name || '新用户',
+        email: req.user.email || '',
+        role: 'operator',
+        roleName: '操作员',
+        status: 'pending'
+      },
+      permissions: [],
+      message: '用户尚未在系统中注册，请联系管理员'
+    })
+  } catch (error) {
+    console.error('获取 Auth0 用户信息失败:', error)
+    return serverError(res, '获取用户信息失败')
+  }
+}
+
 // ==================== 角色管理 ====================
 
 /**
