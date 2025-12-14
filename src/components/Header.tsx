@@ -7,7 +7,7 @@ import { changePassword } from '../utils/api'
 
 export default function Header() {
   const navigate = useNavigate()
-  const { user: currentUser, logout, isAdmin, isManager } = useAuth()
+  const { user: currentUser, logout, isAdmin, isManager, isTestMode } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -98,16 +98,23 @@ export default function Header() {
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-900">{currentUser?.name || '用户'}</div>
                   <div className="text-xs text-gray-500">{displayName}</div>
-                  {roleName && (
-                    <span className={`inline-block mt-1 px-2 py-0.5 text-xs rounded ${
-                      currentUser?.role === 'admin' ? 'bg-red-100 text-red-700' :
-                      currentUser?.role === 'manager' ? 'bg-blue-100 text-blue-700' :
-                      currentUser?.role === 'operator' ? 'bg-green-100 text-green-700' :
-                      'bg-gray-100 text-gray-700'
+                  <div className="flex items-center gap-1 mt-1 flex-wrap">
+                    {roleName && (
+                      <span className={`inline-block px-2 py-0.5 text-xs rounded ${
+                        currentUser?.role === 'admin' ? 'bg-red-100 text-red-700' :
+                        currentUser?.role === 'manager' ? 'bg-blue-100 text-blue-700' :
+                        currentUser?.role === 'operator' ? 'bg-green-100 text-green-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {roleName}
+                      </span>
+                    )}
+                    <span className={`inline-block px-2 py-0.5 text-xs rounded ${
+                      isTestMode ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
                     }`}>
-                      {roleName}
+                      {isTestMode ? '测试账号' : '正式账号'}
                     </span>
-                  )}
+                  </div>
                 </div>
               </div>
             </div>
