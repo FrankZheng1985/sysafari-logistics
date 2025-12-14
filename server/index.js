@@ -2174,6 +2174,38 @@ function initDatabase() {
     )
   `)
 
+  // ==================== Auth0 集成相关 ====================
+  
+  // 给 users 表添加 auth0_id 字段（用于绑定 Auth0 账号）
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN auth0_id TEXT UNIQUE`)
+  } catch (e) { /* 字段已存在 */ }
+  
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_auth0_id ON users(auth0_id)`)
+  } catch (e) { /* 索引已存在 */ }
+  
+  // Auth0 待绑定用户表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auth0_pending_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      auth0_id TEXT UNIQUE NOT NULL,
+      email TEXT,
+      name TEXT,
+      picture TEXT,
+      first_login_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_login_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      is_bound INTEGER DEFAULT 0,
+      bound_user_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_auth0_pending_auth0_id ON auth0_pending_users(auth0_id)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_auth0_pending_is_bound ON auth0_pending_users(is_bound)`)
+  } catch (e) { /* 索引已存在 */ }
+
   // ==================== CRM客户关系管理表 ====================
 
   // 客户表

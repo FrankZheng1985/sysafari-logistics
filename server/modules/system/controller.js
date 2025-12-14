@@ -392,9 +392,70 @@ export async function getAuth0Profile(req, res) {
       })
     }
 
-    // 用户不在本地数据库中，记录到待绑定表
+    // 用户不在本地数据库中
+    const db = getDatabase()
+    
+    // 检查是否是第一个用户（系统初始化）
+    const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get()
+    
+    if (userCount && userCount.count === 0) {
+      // 系统中没有用户，自动创建管理员账号并绑定
+      console.log('🚀 系统初始化：为第一个 Auth0 用户创建管理员账号')
+      
+      try {
+        // 生成随机密码（因为使用 Auth0 登录，不需要密码）
+        const crypto = await import('crypto')
+        const randomPassword = crypto.randomBytes(32).toString('hex')
+        
+        // 创建管理员用户
+        const username = req.user.email?.split('@')[0] || 'admin'
+        const result = await db.prepare(`
+          INSERT INTO users (username, name, email, role, password_hash, auth0_id, status, created_at, updated_at)
+          VALUES ($1, $2, $3, 'admin', $4, $5, 'active', NOW(), NOW())
+          RETURNING id
+        `).get(
+          username,
+          req.user.name || '系统管理员',
+          req.user.email || '',
+          randomPassword,
+          req.user.auth0Id
+        )
+        
+        if (result && result.id) {
+          console.log('✅ 管理员账号创建成功, ID:', result.id)
+          
+          // 获取管理员权限
+          const permissions = await db.prepare(`
+            SELECT permission_code
+            FROM role_permissions
+            WHERE role_code = 'admin'
+          `).all()
+          
+          const permissionCodes = permissions.map(p => p.permission_code)
+          
+          return success(res, {
+            user: {
+              id: result.id,
+              auth0Id: req.user.auth0Id,
+              username: username,
+              name: req.user.name || '系统管理员',
+              email: req.user.email || '',
+              role: 'admin',
+              roleName: '管理员',
+              status: 'active'
+            },
+            permissions: permissionCodes,
+            message: '🎉 欢迎！已自动为您创建管理员账号'
+          })
+        }
+      } catch (createError) {
+        console.error('自动创建管理员失败:', createError)
+        // 继续执行后续逻辑（记录到待绑定表）
+      }
+    }
+
+    // 不是第一个用户，记录到待绑定表
     try {
-      const db = getDatabase()
       await db.prepare(`
         INSERT INTO auth0_pending_users (auth0_id, email, name, picture, last_login_at)
         VALUES ($1, $2, $3, $4, NOW())

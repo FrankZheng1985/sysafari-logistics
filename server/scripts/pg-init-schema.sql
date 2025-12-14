@@ -1108,9 +1108,32 @@ CREATE INDEX IF NOT EXISTS idx_clearance_doc_items_doc_id ON clearance_document_
 CREATE INDEX IF NOT EXISTS idx_void_applications_bill_id ON void_applications(bill_id);
 CREATE INDEX IF NOT EXISTS idx_void_applications_status ON void_applications(status);
 
+-- ==================== Auth0 集成相关 ====================
+
+-- 给 users 表添加 auth0_id 字段（用于绑定 Auth0 账号）
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth0_id TEXT UNIQUE;
+CREATE INDEX IF NOT EXISTS idx_users_auth0_id ON users(auth0_id);
+
+-- Auth0 待绑定用户表（通过 Auth0 登录但未绑定系统用户的账号）
+CREATE TABLE IF NOT EXISTS auth0_pending_users (
+    id SERIAL PRIMARY KEY,
+    auth0_id TEXT UNIQUE NOT NULL,
+    email TEXT,
+    name TEXT,
+    picture TEXT,
+    first_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_bound BOOLEAN DEFAULT FALSE,
+    bound_user_id INTEGER REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth0_pending_auth0_id ON auth0_pending_users(auth0_id);
+CREATE INDEX IF NOT EXISTS idx_auth0_pending_is_bound ON auth0_pending_users(is_bound);
+
 -- 完成提示
 DO $$
 BEGIN
     RAISE NOTICE '✅ PostgreSQL 数据库表结构初始化完成！';
-    RAISE NOTICE '📊 共创建 52 个数据表';
+    RAISE NOTICE '📊 共创建 53 个数据表';
 END $$;
