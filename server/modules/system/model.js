@@ -397,9 +397,9 @@ export function getPermissions() {
 /**
  * 获取角色权限
  */
-export function getRolePermissions(roleCode) {
+export async function getRolePermissions(roleCode) {
   const db = getDatabase()
-  const permissions = db.prepare(`
+  const permissions = await db.prepare(`
     SELECT p.* FROM permissions p
     INNER JOIN role_permissions rp ON p.permission_code = rp.permission_code
     WHERE rp.role_code = ?

@@ -319,7 +319,7 @@ export async function login(req, res) {
     const { passwordHash, password_hash, ...safeUser } = user
     
     // 获取用户权限
-    const permissions = model.getRolePermissions(user.role)
+    const permissions = await model.getRolePermissions(user.role)
     const permissionCodes = permissions.map(p => p.permissionCode || p.permission_code)
     
     // 判断是否是测试用户
@@ -357,7 +357,7 @@ export async function getCurrentUser(req, res) {
     const { passwordHash, ...safeUser } = user
     
     // 获取用户权限
-    const permissions = model.getRolePermissions(user.role)
+    const permissions = await model.getRolePermissions(user.role)
     
     return success(res, {
       ...safeUser,
@@ -642,7 +642,7 @@ export async function getRoleByCode(req, res) {
     }
     
     // 获取角色权限
-    const permissions = model.getRolePermissions(role.roleCode)
+    const permissions = await model.getRolePermissions(role.roleCode)
     
     return success(res, {
       ...role,
@@ -766,7 +766,7 @@ export async function getRolePermissions(req, res) {
       return notFound(res, '角色不存在')
     }
     
-    const permissions = model.getRolePermissions(roleCode)
+    const permissions = await model.getRolePermissions(roleCode)
     return success(res, permissions)
   } catch (error) {
     console.error('获取角色权限失败:', error)

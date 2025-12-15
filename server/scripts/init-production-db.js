@@ -55,9 +55,9 @@ function createPool(connectionString) {
   })
 }
 
-// 生成密码哈希
+// 生成密码哈希（与 system/model.js 保持一致）
 function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex')
+  return crypto.createHash('sha256').update(password + 'sysafari_salt').digest('hex')
 }
 
 // 从源数据库复制表结构到目标数据库
@@ -217,7 +217,7 @@ async function updateSequences(pool) {
   }
 }
 
-// 创建管理员账号
+// 创建或更新管理员账号
 async function createAdminUser(pool) {
   const adminPassword = hashPassword('admin123')
   
@@ -228,7 +228,12 @@ async function createAdminUser(pool) {
     )
     
     if (existing.rows.length > 0) {
-      console.log('   ⏭️  管理员账号已存在')
+      // 更新管理员密码（确保使用正确的 salt）
+      await pool.query(
+        `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE username = 'admin'`,
+        [adminPassword]
+      )
+      console.log('   ✅ 管理员密码已更新 (密码: admin123)')
       return
     }
     
