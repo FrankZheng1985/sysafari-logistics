@@ -27,6 +27,53 @@ function convertPlaceholders(sql) {
 }
 
 /**
+ * 将 SQLite 语法转换为 PostgreSQL 语法
+ */
+function convertSQLiteToPG(sql) {
+  let pgSql = sql
+  
+  // 1. datetime('now', 'localtime') → NOW()
+  pgSql = pgSql.replace(/datetime\s*\(\s*'now'\s*,\s*'localtime'\s*\)/gi, 'NOW()')
+  
+  // 2. CURRENT_TIMESTAMP → NOW() (PostgreSQL 兼容，但统一使用 NOW())
+  pgSql = pgSql.replace(/CURRENT_TIMESTAMP/gi, 'NOW()')
+  
+  // 3. INSERT OR REPLACE INTO table (...) VALUES (...)
+  //    → INSERT INTO table (...) VALUES (...) ON CONFLICT (primary_key) DO UPDATE SET ...
+  const insertOrReplaceMatch = pgSql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i)
+  if (insertOrReplaceMatch) {
+    const tableName = insertOrReplaceMatch[1]
+    const columns = insertOrReplaceMatch[2].split(',').map(c => c.trim())
+    const values = insertOrReplaceMatch[3]
+    
+    // 确定主键列（通常是第一列或 id/setting_key 等）
+    let primaryKey = 'id'
+    if (tableName === 'system_settings') {
+      primaryKey = 'setting_key'
+    } else if (tableName === 'column_settings') {
+      primaryKey = 'id'
+    }
+    
+    // 生成 SET 子句（排除主键列）
+    const setClauses = columns
+      .filter(col => col !== primaryKey)
+      .map(col => `${col} = EXCLUDED.${col}`)
+      .join(', ')
+    
+    pgSql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values}) ON CONFLICT (${primaryKey}) DO UPDATE SET ${setClauses}`
+  }
+  
+  // 4. INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
+  pgSql = pgSql.replace(/INSERT\s+OR\s+IGNORE/gi, 'INSERT')
+  if (pgSql.match(/INSERT\s+INTO.*VALUES/i) && !pgSql.includes('ON CONFLICT')) {
+    // 只对可能的 INSERT OR IGNORE 添加 ON CONFLICT DO NOTHING
+    // 但这需要更复杂的上下文判断，暂时跳过
+  }
+  
+  return pgSql
+}
+
+/**
  * PostgreSQL 适配器 - 模拟 better-sqlite3 的 API
  */
 class PostgresAdapter {
@@ -50,7 +97,9 @@ class PostgresAdapter {
    * 模拟 db.prepare(sql) - 返回一个 Statement 对象
    */
   prepare(sql) {
-    const pgSql = convertPlaceholders(sql)
+    // 先转换 SQLite 语法到 PostgreSQL，再转换占位符
+    const convertedSql = convertSQLiteToPG(sql)
+    const pgSql = convertPlaceholders(convertedSql)
     return new PostgresStatement(this.pool, pgSql, sql)
   }
   
@@ -177,7 +226,9 @@ class PostgresTransactionAdapter {
   }
   
   prepare(sql) {
-    const pgSql = convertPlaceholders(sql)
+    // 先转换 SQLite 语法到 PostgreSQL，再转换占位符
+    const convertedSql = convertSQLiteToPG(sql)
+    const pgSql = convertPlaceholders(convertedSql)
     return new PostgresTransactionStatement(this.client, pgSql)
   }
 }

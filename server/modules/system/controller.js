@@ -15,12 +15,13 @@ import * as model from './model.js'
  */
 export async function getUsers(req, res) {
   try {
-    const { role, status, search, page, pageSize } = req.query
+    const { role, status, search, userType, page, pageSize } = req.query
     
     const result = await model.getUsers({
       role,
       status,
       search,
+      userType,  // 用户类型过滤（'test' = 演示用户，'normal' = 正式用户）
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20
     })

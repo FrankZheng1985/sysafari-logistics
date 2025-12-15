@@ -13,7 +13,7 @@ import crypto from 'crypto'
  */
 export async function getUsers(params = {}) {
   const db = getDatabase()
-  const { role, status, search, page = 1, pageSize = 20 } = params
+  const { role, status, search, userType, page = 1, pageSize = 20 } = params
   
   let query = `
     SELECT u.*, r.role_name
@@ -37,6 +37,12 @@ export async function getUsers(params = {}) {
     query += ' AND (u.username LIKE ? OR u.name LIKE ? OR u.email LIKE ?)'
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern, searchPattern)
+  }
+  
+  // 根据用户类型过滤（演示环境只显示演示用户）
+  if (userType) {
+    query += ' AND u.user_type = ?'
+    queryParams.push(userType)
   }
   
   // 获取总数

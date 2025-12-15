@@ -181,7 +181,7 @@ export async function changePassword(
  * @returns 用户列表
  * 
  * 接口地址: GET /api/users
- * 请求参数: { page?: number, pageSize?: number, search?: string, role?: string, status?: string }
+ * 请求参数: { page?: number, pageSize?: number, search?: string, role?: string, status?: string, userType?: string }
  */
 export async function getUserList(params?: {
   page?: number
@@ -189,6 +189,7 @@ export async function getUserList(params?: {
   search?: string
   role?: string
   status?: string
+  userType?: string  // 用户类型过滤：'test' = 演示用户，'normal' = 正式用户
 }): Promise<ApiResponse<PaginatedResponse<User>>> {
   // 测试模式：返回模拟数据
   if (checkTestMode()) {
@@ -201,6 +202,7 @@ export async function getUserList(params?: {
   if (params?.search) queryParams.append('search', params.search)
   if (params?.role) queryParams.append('role', params.role)
   if (params?.status) queryParams.append('status', params.status)
+  if (params?.userType) queryParams.append('userType', params.userType)
   
   const queryString = queryParams.toString()
   return request<ApiResponse<PaginatedResponse<User>>>(`/api/users${queryString ? `?${queryString}` : ''}`)

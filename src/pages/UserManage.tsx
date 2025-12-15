@@ -1,8 +1,9 @@
 import { User, Plus, Edit2, Trash2, Key, Loader2, Search, X } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
+import { isDemoEnvironment } from '../components/Layout'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner
 import { 
   getUserList, 
@@ -304,6 +305,9 @@ export default function UserManage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 })
   
+  // 检测是否是演示环境
+  const isDemo = useMemo(() => isDemoEnvironment(), [])
+  
   // Modal states
   const [modalVisible, setModalVisible] = useState(false)
   const [editingUser, setEditingUser] = useState<UserType | null>(null)
@@ -317,6 +321,8 @@ export default function UserManage() {
         search: searchText || undefined,
         role: filterRole || undefined,
         status: filterStatus || undefined,
+        // 演示环境只显示演示用户
+        userType: isDemo ? 'test' : undefined,
       })
       if (response.errCode === 200 && response.data) {
         setUsers(response.data.list)
