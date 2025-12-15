@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // 检查是否有测试模式缓存
+  // 检查是否有登录缓存（包括测试模式和正式模式）
   useEffect(() => {
     const testModeData = localStorage.getItem(TEST_MODE_KEY)
     if (testModeData) {
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           token: data.token,
           isAuthenticated: true,
           isLoading: false,
-          isTestMode: true,
+          isTestMode: data.isTestMode === true,  // 根据存储的值判断
         })
         return
       } catch (e) {
