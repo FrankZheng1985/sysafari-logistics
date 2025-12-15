@@ -99,8 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 当 Auth0 认证状态改变时，同步用户信息
   useEffect(() => {
     const syncUser = async () => {
-      // 如果是测试模式，跳过 Auth0 同步
-      if (state.isTestMode) {
+      // 检查是否是密码登录（TEST_MODE_KEY 存储的是密码登录的数据，包括测试账号和正式账号）
+      const hasPasswordLogin = localStorage.getItem(TEST_MODE_KEY)
+      if (hasPasswordLogin) {
+        // 密码登录用户，跳过 Auth0 同步
         return
       }
 
@@ -109,18 +111,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!auth0IsAuthenticated || !auth0User) {
-        // 未登录，清除状态（但不清除测试模式）
-        if (!state.isTestMode) {
-          localStorage.removeItem(USER_CACHE_KEY)
-          setState(prev => ({
-            ...prev,
-            user: null,
-            permissions: [],
-            token: null,
-            isAuthenticated: false,
-            isLoading: false,
-          }))
-        }
+        // 未登录且不是密码登录，清除状态
+        localStorage.removeItem(USER_CACHE_KEY)
+        setState(prev => ({
+          ...prev,
+          user: null,
+          permissions: [],
+          token: null,
+          isAuthenticated: false,
+          isLoading: false,
+        }))
         return
       }
 
