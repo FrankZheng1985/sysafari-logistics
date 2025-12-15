@@ -6,6 +6,9 @@ import { useAuth } from '../contexts/AuthContext'
 // 是否是开发环境
 const isDev = import.meta.env.DEV
 
+// 是否是演示环境（只在演示环境显示演示账号按钮）
+const isDemo = typeof window !== 'undefined' && window.location.hostname.includes('demo.')
+
 export default function Login() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [showLocalLogin, setShowLocalLogin] = useState(isDev) // 开发环境默认显示本地登录
@@ -168,23 +171,25 @@ export default function Login() {
                 )}
               </div>
 
-              {/* 快速选择演示账号（所有环境都显示） */}
-              <div className="flex gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={fillDemoAdmin}
-                  className="flex-1 py-2 px-3 text-sm bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 border border-orange-200"
-                >
-                  🧪 演示管理员
-                </button>
-                <button
-                  type="button"
-                  onClick={fillDemoOperator}
-                  className="flex-1 py-2 px-3 text-sm bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 border border-orange-200"
-                >
-                  🧪 演示操作员
-                </button>
-              </div>
+              {/* 快速选择演示账号（仅演示环境显示） */}
+              {isDemo && (
+                <div className="flex gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={fillDemoAdmin}
+                    className="flex-1 py-2 px-3 text-sm bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 border border-orange-200"
+                  >
+                    🧪 演示管理员
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fillDemoOperator}
+                    className="flex-1 py-2 px-3 text-sm bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 border border-orange-200"
+                  >
+                    🧪 演示操作员
+                  </button>
+                </div>
+              )}
 
               <form onSubmit={handleLocalLogin} className="space-y-4">
                 <div>
