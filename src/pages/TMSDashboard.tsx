@@ -246,20 +246,36 @@ export default function TMSDashboard() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">准时送达率</span>
               <div className="flex items-center gap-1">
-                <span className="font-bold text-green-600">95.2%</span>
-                <ArrowUpRight className="w-3 h-3 text-green-500" />
+                {stats && (stats.delivered || 0) > 0 ? (
+                  <>
+                    <span className="font-bold text-green-600">
+                      {(((stats.delivered || 0) / ((stats.delivered || 0) + (stats.exception || 0) || 1)) * 100).toFixed(1)}%
+                    </span>
+                    <ArrowUpRight className="w-3 h-3 text-green-500" />
+                  </>
+                ) : (
+                  <span className="text-sm text-gray-400">暂无数据</span>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">异常处理率</span>
               <div className="flex items-center gap-1">
-                <span className="font-bold text-blue-600">88.5%</span>
-                <ArrowUpRight className="w-3 h-3 text-green-500" />
+                {stats && ((stats.exception || 0) + (stats.closed || 0)) > 0 ? (
+                  <>
+                    <span className="font-bold text-blue-600">
+                      {(((stats.closed || 0) / ((stats.exception || 0) + (stats.closed || 0) || 1)) * 100).toFixed(1)}%
+                    </span>
+                    <ArrowUpRight className="w-3 h-3 text-green-500" />
+                  </>
+                ) : (
+                  <span className="text-sm text-gray-400">暂无数据</span>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">平均派送时长</span>
-              <span className="font-bold text-gray-900">2.3天</span>
+              <span className="text-sm text-gray-600">总派送订单</span>
+              <span className="font-bold text-gray-900">{(stats?.delivering || 0) + (stats?.delivered || 0)}</span>
             </div>
           </div>
         </div>

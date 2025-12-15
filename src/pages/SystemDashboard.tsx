@@ -90,8 +90,8 @@ export default function SystemDashboard() {
     setLoading(true)
     try {
       // 并行获取各模块数据
-      const [billsRes, cmrRes, financeRes, customerRes, opportunityRes, feedbackRes] = await Promise.all([
-        fetch('/api/bills?pageSize=1').then(r => r.json()).catch(() => ({ data: { total: 0 } })),
+      const [billStatsRes, cmrRes, financeRes, customerRes, opportunityRes, feedbackRes] = await Promise.all([
+        fetch('/api/bills/stats').then(r => r.json()).catch(() => ({ data: {} })),
         fetch('/api/cmr/stats').then(r => r.json()).catch(() => ({ data: {} })),
         fetch('/api/finance/overview').then(r => r.json()).catch(() => ({ data: {} })),
         fetch('/api/customers/stats').then(r => r.json()).catch(() => ({ data: { total: 0 } })),
@@ -99,19 +99,30 @@ export default function SystemDashboard() {
         fetch('/api/feedbacks/stats').then(r => r.json()).catch(() => ({ data: { byStatus: { open: 0, processing: 0 } } }))
       ])
 
+      // 从 /api/bills/stats 获取真实统计数据
+      const billStats = billStatsRes.data || {}
+      // 订单状态分布：
+      // - 待处理: 未到港 + 未清关
+      // - 进行中: 已到港(未清关) + 查验中 + 派送中
+      // - 已完成: 已送达
+      const pending = (billStats.notArrived || 0) + (billStats.notCleared || 0)
+      const inProgress = (billStats.inspecting || 0) + (billStats.delivering || 0)
+      const completed = billStats.delivered || 0
+      const total = billStats.total || billStats.active || 0
+
       // 构建统计数据
       const dashboardStats: DashboardStats = {
         orders: {
-          total: billsRes.data?.total || 0,
-          pending: 12,
-          inProgress: 8,
-          completed: billsRes.data?.total ? billsRes.data.total - 20 : 0,
-          trend: 15.5
+          total: total,
+          pending: pending,
+          inProgress: inProgress,
+          completed: completed,
+          trend: 0 // 趋势需要历史数据计算，暂时设为0
         },
         tms: {
-          pending: cmrRes.data?.pending || 0,
+          pending: cmrRes.data?.undelivered || cmrRes.data?.pending || 0,
           delivering: cmrRes.data?.delivering || 0,
-          delivered: cmrRes.data?.delivered || 0,
+          delivered: cmrRes.data?.archived || cmrRes.data?.delivered || 0,
           exception: cmrRes.data?.exception || 0
         },
         crm: {
@@ -130,14 +141,8 @@ export default function SystemDashboard() {
 
       setStats(dashboardStats)
 
-      // 模拟最近活动
-      setRecentActivities([
-        { id: '1', type: 'order', action: '新建提单', description: 'BL2025120020 已创建', time: '10分钟前', user: 'admin' },
-        { id: '2', type: 'tms', action: '开始派送', description: 'BL2025120019 已开始派送', time: '25分钟前', user: 'admin' },
-        { id: '3', type: 'crm', action: '新增客户', description: '添加客户 ABC Trading Ltd', time: '1小时前', user: 'admin' },
-        { id: '4', type: 'finance', action: '收款确认', description: '收到客户付款 ¥15,000', time: '2小时前', user: 'admin' },
-        { id: '5', type: 'order', action: '清关完成', description: 'BL2025120015 已清关放行', time: '3小时前', user: 'admin' },
-      ])
+      // 清空最近活动（需要从数据库获取真实操作日志，暂时置空）
+      setRecentActivities([])
 
     } catch (error) {
       console.error('获取仪表盘数据失败:', error)
