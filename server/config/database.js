@@ -43,6 +43,58 @@ let sqliteDb = null
 let pgPool = null
 
 /**
+ * SQLite Statement 包装类 - 将同步 API 包装成 Promise
+ */
+class SqliteStatementWrapper {
+  constructor(stmt) {
+    this.stmt = stmt
+  }
+  
+  run(...params) {
+    return Promise.resolve(this.stmt.run(...params))
+  }
+  
+  get(...params) {
+    return Promise.resolve(this.stmt.get(...params))
+  }
+  
+  all(...params) {
+    return Promise.resolve(this.stmt.all(...params))
+  }
+}
+
+/**
+ * SQLite 数据库包装类 - 与 PostgreSQL 适配器 API 一致
+ */
+class SqliteDatabaseWrapper {
+  constructor(db) {
+    this.db = db
+    this.isPostgres = false
+  }
+  
+  prepare(sql) {
+    return new SqliteStatementWrapper(this.db.prepare(sql))
+  }
+  
+  exec(sql) {
+    this.db.exec(sql)
+    return Promise.resolve()
+  }
+  
+  pragma(pragma) {
+    return this.db.pragma(pragma)
+  }
+  
+  transaction(fn) {
+    return this.db.transaction(fn)
+  }
+  
+  close() {
+    this.db.close()
+  }
+}
+
+/**
  * 将 SQLite 风格的 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
  */
 function convertPlaceholders(sql) {
@@ -221,12 +273,12 @@ export function getDatabase() {
     }
     return new PostgresDatabase(pgPool)
   } else {
-    // SQLite 模式
+    // SQLite 模式 - 使用包装类提供与 PostgreSQL 一致的 Promise API
     if (!sqliteDb) {
-      sqliteDb = new Database(DB_PATH)
-      sqliteDb.pragma('foreign_keys = ON')
-      sqliteDb.pragma('journal_mode = WAL')
-      sqliteDb.isPostgres = false
+      const rawDb = new Database(DB_PATH)
+      rawDb.pragma('foreign_keys = ON')
+      rawDb.pragma('journal_mode = WAL')
+      sqliteDb = new SqliteDatabaseWrapper(rawDb)
       console.log('💾 SQLite 数据库连接已建立:', DB_PATH)
     }
     return sqliteDb

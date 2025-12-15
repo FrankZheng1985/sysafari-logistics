@@ -5964,7 +5964,7 @@ app.delete('/api/air-ports/:id', (req, res) => {
 // ==================== 国家管理 API ====================
 
 // 获取国家列表
-app.get('/api/countries', (req, res) => {
+app.get('/api/countries', async (req, res) => {
   try {
     const { continent, status, search } = req.query
     let query = 'SELECT * FROM countries WHERE 1=1'
@@ -5988,7 +5988,7 @@ app.get('/api/countries', (req, res) => {
 
     query += ' ORDER BY continent, country_name_cn'
 
-    const data = db.prepare(query).all(...params)
+    const data = await db.prepare(query).all(...params)
     
     res.json({
       errCode: 200,
