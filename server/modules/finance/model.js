@@ -208,7 +208,7 @@ export async function createInvoice(data) {
   const id = generateId()
   
   // 生成发票号
-  const invoiceNumber = generateInvoiceNumber(data.invoiceType)
+  const invoiceNumber = await generateInvoiceNumber(data.invoiceType)
   
   const result = await db.prepare(`
     INSERT INTO invoices (
@@ -475,7 +475,7 @@ export async function createPayment(data) {
   const id = generateId()
   
   // 生成付款单号
-  const paymentNumber = generatePaymentNumber(data.paymentType)
+  const paymentNumber = await generatePaymentNumber(data.paymentType)
   
   const result = await db.prepare(`
     INSERT INTO payments (
@@ -982,7 +982,7 @@ export async function getCustomerFeeReport(params = {}) {
 /**
  * 生成发票号
  */
-function generateInvoiceNumber(type) {
+async function generateInvoiceNumber(type) {
   const db = getDatabase()
   const prefix = type === 'sales' ? 'INV' : 'PINV'
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -1006,7 +1006,7 @@ function generateInvoiceNumber(type) {
 /**
  * 生成付款单号
  */
-function generatePaymentNumber(type) {
+async function generatePaymentNumber(type) {
   const db = getDatabase()
   const prefix = type === 'income' ? 'REC' : 'PAY'
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')

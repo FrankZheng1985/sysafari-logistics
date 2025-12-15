@@ -1001,7 +1001,7 @@ export async function getQuotationById(id) {
 /**
  * 生成报价单号
  */
-function generateQuoteNumber() {
+async function generateQuoteNumber() {
   const db = getDatabase()
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
@@ -1026,7 +1026,7 @@ function generateQuoteNumber() {
 export async function createQuotation(data) {
   const db = getDatabase()
   const id = generateId()
-  const quoteNumber = generateQuoteNumber()
+  const quoteNumber = await generateQuoteNumber()
   
   await db.prepare(`
     INSERT INTO quotations (
@@ -1181,7 +1181,7 @@ export async function getContractById(id) {
 /**
  * 生成合同编号
  */
-function generateContractNumber() {
+async function generateContractNumber() {
   const db = getDatabase()
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
@@ -1206,7 +1206,7 @@ function generateContractNumber() {
 export async function createContract(data) {
   const db = getDatabase()
   const id = generateId()
-  const contractNumber = generateContractNumber()
+  const contractNumber = await generateContractNumber()
   
   await db.prepare(`
     INSERT INTO contracts (
@@ -1404,7 +1404,7 @@ export async function getFeedbackById(id) {
 /**
  * 生成反馈单号
  */
-function generateFeedbackNumber() {
+async function generateFeedbackNumber() {
   const db = getDatabase()
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
@@ -1429,7 +1429,7 @@ function generateFeedbackNumber() {
 export async function createFeedback(data) {
   const db = getDatabase()
   const id = generateId()
-  const feedbackNumber = generateFeedbackNumber()
+  const feedbackNumber = await generateFeedbackNumber()
   
   await db.prepare(`
     INSERT INTO customer_feedbacks (
