@@ -258,7 +258,6 @@ export async function login(req, res) {
     }
     
     const user = await model.getUserByUsername(username)
-    console.log('登录 - 用户查询结果:', user ? `找到用户 ${user.username}, status=${user.status}` : '用户不存在')
     
     if (!user) {
       model.addLoginLog({
@@ -284,10 +283,6 @@ export async function login(req, res) {
     }
     
     // 验证密码
-    console.log('登录 - 验证密码:', {
-      inputPasswordHash: model.hashPassword(password).substring(0, 20) + '...',
-      storedPasswordHash: user.passwordHash ? user.passwordHash.substring(0, 20) + '...' : '未找到'
-    })
     if (!model.verifyPassword(user, password)) {
       model.incrementLoginAttempts(username, req.ip, '密码错误')
       

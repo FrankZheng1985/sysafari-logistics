@@ -8210,10 +8210,6 @@ app.post('/api/auth/login', async (req, res) => {
     // 查询用户 (使用 await 支持 PostgreSQL)
     const user = await db.prepare('SELECT * FROM users WHERE username = ?').get(username)
     
-    // 调试日志
-    console.log('登录请求 - 用户名:', username)
-    console.log('登录请求 - 查询结果:', user ? `找到用户 id=${user.id}, status=${user.status}` : '未找到用户')
-    
     if (!user) {
       return res.status(401).json({
         errCode: 401,
@@ -8222,7 +8218,6 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (user.status !== 'active') {
-      console.log('登录失败 - 账号状态:', user.status, '类型:', typeof user.status)
       return res.status(403).json({
         errCode: 403,
         msg: '账号已被禁用，请联系管理员',
