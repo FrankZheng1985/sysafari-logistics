@@ -13,11 +13,20 @@ const TEST_MODE_KEY = 'bp_logistics_test_mode'
 
 /**
  * 检查是否为测试模式
+ * 只有当用户以测试账号（user_type='test'）登录时才返回 true
  */
 function checkTestMode(): boolean {
   if (typeof window === 'undefined') return false
   const testData = localStorage.getItem(TEST_MODE_KEY)
-  return !!testData
+  if (!testData) return false
+  
+  try {
+    const data = JSON.parse(testData)
+    // 只有 isTestMode 为 true 时才是测试模式
+    return data.isTestMode === true
+  } catch {
+    return false
+  }
 }
 
 /**
