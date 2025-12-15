@@ -16,8 +16,16 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// 双数据库架构：根据环境选择数据库
+// 生产环境 (NODE_ENV=production): 使用 DATABASE_URL_PROD (新的生产数据库)
+// 开发环境 (NODE_ENV=development): 使用 DATABASE_URL_TEST (现有测试数据库)
+// 兼容旧配置: 如果设置了 DATABASE_URL，优先使用它
+const isProduction = process.env.NODE_ENV === 'production'
+const DATABASE_URL = process.env.DATABASE_URL || 
+  (isProduction ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL_TEST)
+
 // 判断使用哪种数据库
-const USE_POSTGRES = !!process.env.DATABASE_URL
+const USE_POSTGRES = !!DATABASE_URL
 
 // 确保数据目录存在（SQLite 用）
 const dataDir = path.join(__dirname, '../data')
@@ -43,12 +51,21 @@ function convertPlaceholders(sql) {
 }
 
 /**
- * 将 SQLite 的 datetime('now', 'localtime') 转换为 PostgreSQL 的 NOW()
+ * 将 SQLite 的 datetime 函数转换为 PostgreSQL 语法
  */
 function convertDateTimeFunctions(sql) {
   return sql
+    // datetime('now', '-' || ? || ' minutes') → NOW() - (? || ' minutes')::INTERVAL
+    .replace(/datetime\s*\(\s*'now'\s*,\s*'-'\s*\|\|\s*\?\s*\|\|\s*'\s*minutes'\s*\)/gi, 
+      "NOW() - (? || ' minutes')::INTERVAL")
+    // datetime('now', '-1 minutes') → NOW() - INTERVAL '1 minutes'
+    .replace(/datetime\s*\(\s*'now'\s*,\s*'-(\d+)\s*minutes'\s*\)/gi, 
+      "NOW() - INTERVAL '$1 minutes'")
+    // datetime('now', 'localtime') → NOW()
     .replace(/datetime\s*\(\s*'now'\s*,\s*'localtime'\s*\)/gi, 'NOW()')
+    // datetime('now') → NOW()
     .replace(/datetime\s*\(\s*'now'\s*\)/gi, 'NOW()')
+    // CURRENT_TIMESTAMP → NOW()
     .replace(/CURRENT_TIMESTAMP/gi, 'NOW()')
 }
 
@@ -187,7 +204,7 @@ export function getDatabase() {
     // PostgreSQL 模式
     if (!pgPool) {
       pgPool = new pg.Pool({
-        connectionString: process.env.DATABASE_URL,
+        connectionString: DATABASE_URL,
         // Render PostgreSQL 强制要求 SSL
         ssl: { rejectUnauthorized: false },
         max: 20,
@@ -199,7 +216,8 @@ export function getDatabase() {
         console.error('❌ PostgreSQL 连接池错误:', err.message)
       })
       
-      console.log('🌐 PostgreSQL 数据库连接已建立 (Render)')
+      const dbType = isProduction ? '生产' : '测试'
+      console.log(`🌐 PostgreSQL 数据库连接已建立 (${dbType}环境)`)
     }
     return new PostgresDatabase(pgPool)
   } else {
