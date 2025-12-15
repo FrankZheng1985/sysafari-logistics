@@ -278,7 +278,7 @@ export async function updateInvoice(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE invoices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -550,7 +550,7 @@ export async function updatePayment(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE payments SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -766,7 +766,7 @@ export async function updateFee(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE fees SET ${fields.join(', ')} WHERE id = ?`).run(...values)

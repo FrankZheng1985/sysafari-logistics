@@ -342,7 +342,7 @@ export async function updateCMRDetail(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -694,7 +694,7 @@ export async function updateServiceProvider(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE service_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values)

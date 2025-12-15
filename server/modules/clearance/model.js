@@ -133,7 +133,7 @@ export async function getClearanceStats(params = {}) {
   const byType = await db.prepare(`
     SELECT document_type, document_type_name, COUNT(*) as count
     FROM clearance_documents ${whereClause}
-    GROUP BY document_type
+    GROUP BY document_type, document_type_name
     ORDER BY count DESC
   `).all(...queryParams)
   
@@ -402,7 +402,7 @@ export async function updateClearanceDocument(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = db.prepare(`UPDATE clearance_documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)

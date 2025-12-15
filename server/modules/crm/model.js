@@ -304,7 +304,7 @@ export async function updateCustomer(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -454,7 +454,7 @@ export async function updateContact(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_contacts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -587,7 +587,7 @@ export async function updateFollowUp(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_follow_ups SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -901,7 +901,7 @@ export async function updateOpportunity(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE sales_opportunities SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1099,7 +1099,7 @@ export async function updateQuotation(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE quotations SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1270,7 +1270,7 @@ export async function updateContract(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE contracts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1489,7 +1489,7 @@ export async function updateFeedback(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_feedbacks SET ${fields.join(', ')} WHERE id = ?`).run(...values)

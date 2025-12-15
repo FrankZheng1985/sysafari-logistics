@@ -10,29 +10,31 @@ import * as model from './model.js'
  * 生成下一个提单序号
  * 格式: BP + 年份后两位 + 5位序号, 如 BP2500001
  */
-function generateNextBillNumber() {
+async function generateNextBillNumber() {
   const db = getDatabase()
   
   // 获取当前年份后两位
   const now = new Date()
   const year = String(now.getFullYear()).slice(-2)
   
-  // 原子性地获取并更新序列号
-  const result = db.transaction(() => {
+  // 原子性地获取并更新序列号（使用异步事务）
+  const transactionFn = db.transaction(async function() {
     // 获取当前序列号
-    const row = db.prepare(
+    const row = await this.prepare(
       "SELECT current_seq FROM order_sequences WHERE business_type = 'bill'"
     ).get()
     
     const nextSeq = (row?.current_seq || 0) + 1
     
     // 更新序列号
-    db.prepare(
-      "UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = 'bill'"
+    await this.prepare(
+      "UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'bill'"
     ).run(nextSeq)
     
     return nextSeq
-  })()
+  })
+  
+  const result = await transactionFn()
   
   // 格式化序列号: BP + 年份后两位 + 5位序号（补零）
   const seqStr = String(result).padStart(5, '0')
@@ -105,7 +107,7 @@ export async function createBill(req, res) {
     // 自动生成提单序号（如果没有提供）
     let billNumber = req.body.billNumber
     if (!billNumber) {
-      billNumber = generateNextBillNumber()
+      billNumber = await generateNextBillNumber()
     } else {
       // 如果提供了提单号，检查是否已存在
       const existing = await model.getBillByNumber(billNumber)

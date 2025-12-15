@@ -270,7 +270,7 @@ export async function updateBill(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -395,7 +395,7 @@ export async function updateBillCustomsStatus(id, customsStatus) {
  */
 export async function updateBillInspection(id, inspectionData) {
   const db = getDatabase()
-  const fields = ['inspection = ?', 'updated_at = datetime("now", "localtime")']
+  const fields = ['inspection = ?', "updated_at = datetime('now', 'localtime')"]
   const values = [inspectionData.inspection]
   
   if (inspectionData.inspectionDetail !== undefined) {
@@ -444,7 +444,7 @@ export async function updateBillInspection(id, inspectionData) {
  */
 export async function updateBillDelivery(id, deliveryData) {
   const db = getDatabase()
-  const fields = ['delivery_status = ?', 'updated_at = datetime("now", "localtime")']
+  const fields = ['delivery_status = ?', "updated_at = datetime('now', 'localtime')"]
   const values = [deliveryData.deliveryStatus]
   
   // CMR详细字段 - 前端发送的字段名带 "cmr" 前缀

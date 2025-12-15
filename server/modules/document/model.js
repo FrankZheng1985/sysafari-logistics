@@ -248,7 +248,7 @@ export async function updateDocument(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -454,7 +454,7 @@ export async function updateTemplate(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE document_templates SET ${fields.join(', ')} WHERE id = ?`).run(...values)

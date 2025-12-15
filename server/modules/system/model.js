@@ -156,7 +156,7 @@ export async function updateUser(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -349,7 +349,7 @@ export async function updateRole(roleCode, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(roleCode)
   
   const result = await db.prepare(`UPDATE roles SET ${fields.join(', ')} WHERE role_code = ?`).run(...values)

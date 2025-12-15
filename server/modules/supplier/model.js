@@ -295,7 +295,7 @@ export async function updateSupplier(id, data) {
   if (fields.length === 0) return false
   
   // 更新时间
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = datetime('now', 'localtime')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE suppliers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
