@@ -354,7 +354,7 @@ export async function updateRolePermissions(
   return request<ApiResponse<void>>(`/api/roles/${roleCode}/permissions`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ permissions })
+    body: JSON.stringify({ permissionCodes: permissions })  // 后端期望 permissionCodes
   })
 }
 
