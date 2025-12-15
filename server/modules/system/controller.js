@@ -258,6 +258,7 @@ export async function login(req, res) {
     }
     
     const user = await model.getUserByUsername(username)
+    console.log('登录 - 用户查询结果:', user ? `找到用户 ${user.username}, status=${user.status}` : '用户不存在')
     
     if (!user) {
       model.addLoginLog({
