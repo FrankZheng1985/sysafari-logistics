@@ -415,16 +415,14 @@ export async function getRolePermissions(roleCode) {
 export async function updateRolePermissions(roleCode, permissionCodes) {
   const db = getDatabase()
   
-  db.transaction(() => {
-    // 删除现有权限
-    await db.prepare('DELETE FROM role_permissions WHERE role_code = ?').run(roleCode)
-    
-    // 添加新权限
-    const insertStmt = db.prepare('INSERT INTO role_permissions (role_code, permission_code) VALUES (?, ?)')
-    for (const permCode of permissionCodes) {
-      insertStmt.run(roleCode, permCode)
-    }
-  })()
+  // 删除现有权限
+  await db.prepare('DELETE FROM role_permissions WHERE role_code = ?').run(roleCode)
+  
+  // 添加新权限
+  const insertStmt = await db.prepare('INSERT INTO role_permissions (role_code, permission_code) VALUES (?, ?)')
+  for (const permCode of permissionCodes) {
+    await insertStmt.run(roleCode, permCode)
+  }
   
   return true
 }
@@ -505,12 +503,10 @@ export async function updateSystemSettings(settings) {
       updated_at = datetime('now', 'localtime')
   `)
   
-  db.transaction(() => {
-    Object.entries(settings).forEach(([key, value]) => {
-      const strValue = typeof value === 'object' ? JSON.stringify(value) : String(value)
-      upsertStmt.run(key, strValue)
-    })
-  })()
+  for (const [key, value] of Object.entries(settings)) {
+    const strValue = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    await upsertStmt.run(key, strValue)
+  }
   
   return true
 }
@@ -543,17 +539,15 @@ export async function getSecuritySettings() {
 export async function updateSecuritySettings(settings) {
   const db = getDatabase()
   
-  const updateStmt = db.prepare(`
+  const updateStmt = await db.prepare(`
     UPDATE security_settings 
     SET setting_value = ?, updated_at = datetime('now', 'localtime')
     WHERE setting_key = ?
   `)
   
-  db.transaction(() => {
-    Object.entries(settings).forEach(([key, value]) => {
-      updateStmt.run(String(value), key)
-    })
-  })()
+  for (const [key, value] of Object.entries(settings)) {
+    await updateStmt.run(String(value), key)
+  }
   
   return true
 }
@@ -792,28 +786,26 @@ export async function saveSystemSetting(key, value, type, description) {
 export async function saveSystemSettingsBatch(settings) {
   const db = getDatabase()
   
-  const upsertStmt = db.prepare(`
+  const upsertStmt = await db.prepare(`
     INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
     VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
   `)
   
-  db.transaction(() => {
-    settings.forEach(({ key, value, type, description }) => {
-      let stringValue = value
-      let settingType = type || 'string'
-      if (typeof value === 'object') {
-        stringValue = JSON.stringify(value)
-        settingType = 'json'
-      } else if (typeof value === 'boolean') {
-        stringValue = value.toString()
-        settingType = 'boolean'
-      } else if (typeof value === 'number') {
-        stringValue = value.toString()
-        settingType = 'number'
-      }
-      upsertStmt.run(key, stringValue, settingType, description || '')
-    })
-  })()
+  for (const { key, value, type, description } of settings) {
+    let stringValue = value
+    let settingType = type || 'string'
+    if (typeof value === 'object') {
+      stringValue = JSON.stringify(value)
+      settingType = 'json'
+    } else if (typeof value === 'boolean') {
+      stringValue = value.toString()
+      settingType = 'boolean'
+    } else if (typeof value === 'number') {
+      stringValue = value.toString()
+      settingType = 'number'
+    }
+    await upsertStmt.run(key, stringValue, settingType, description || '')
+  }
 }
 
 export default {
