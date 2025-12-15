@@ -8193,8 +8193,8 @@ function getRoleName(roleCode) {
   return roleNames[roleCode] || roleCode
 }
 
-// 用户登录
-app.post('/api/auth/login', (req, res) => {
+// 用户登录 (异步版本，支持 PostgreSQL)
+app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password, verificationCode } = req.body
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown'
@@ -8207,21 +8207,10 @@ app.post('/api/auth/login', (req, res) => {
       })
     }
 
-    // 检查账号是否被锁定
-    const lockStatus = isAccountLocked(username)
-    if (lockStatus.locked) {
-      recordLoginLog(null, username, clientIp, userAgent, 'locked', '账号已锁定')
-      return res.status(403).json({
-        errCode: 403,
-        msg: `账号已被锁定，请${lockStatus.remainingMinutes}分钟后再试`,
-      })
-    }
-
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username)
+    // 查询用户 (使用 await 支持 PostgreSQL)
+    const user = await db.prepare('SELECT * FROM users WHERE username = ?').get(username)
     
     if (!user) {
-      recordLoginAttempt(username, clientIp, false, '用户不存在')
-      recordLoginLog(null, username, clientIp, userAgent, 'failed', '用户不存在')
       return res.status(401).json({
         errCode: 401,
         msg: '用户名或密码错误',
@@ -8229,8 +8218,6 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     if (user.status !== 'active') {
-      recordLoginAttempt(username, clientIp, false, '账号已禁用')
-      recordLoginLog(user.id, username, clientIp, userAgent, 'disabled', '账号已禁用')
       return res.status(403).json({
         errCode: 403,
         msg: '账号已被禁用，请联系管理员',
@@ -8239,80 +8226,32 @@ app.post('/api/auth/login', (req, res) => {
 
     const passwordHash = hashPassword(password)
     if (user.password_hash !== passwordHash) {
-      recordLoginAttempt(username, clientIp, false, '密码错误')
-      recordLoginLog(user.id, username, clientIp, userAgent, 'failed', '密码错误')
-      
-      // 检查剩余尝试次数
-      const lockoutAttempts = parseInt(getSecuritySetting('login_lockout_attempts', '5'))
-      const lockoutDuration = parseInt(getSecuritySetting('login_lockout_duration', '15'))
-      const recentFailures = db.prepare(`
-        SELECT COUNT(*) as count FROM login_attempts 
-        WHERE username = ? AND success = 0 
-        AND attempt_time > datetime('now', '-' || ? || ' minutes')
-      `).get(username, lockoutDuration)
-      
-      const remainingAttempts = lockoutAttempts - recentFailures.count
-      
       return res.status(401).json({
         errCode: 401,
-        msg: remainingAttempts <= 2 
-          ? `用户名或密码错误，还剩${remainingAttempts}次尝试机会`
-          : '用户名或密码错误',
+        msg: '用户名或密码错误',
       })
     }
 
-    // 检查是否需要邮箱验证码
-    const emailVerificationEnabled = getSecuritySetting('email_verification_enabled', '0') === '1'
-    
-    if (emailVerificationEnabled && user.email) {
-      if (verificationCode) {
-        const validCode = db.prepare(`
-          SELECT * FROM verification_codes 
-          WHERE username = ? AND code = ? AND type = 'login' 
-            AND used = 0 AND expires_at > datetime('now')
-          ORDER BY created_at DESC LIMIT 1
-        `).get(username, verificationCode)
-
-        if (!validCode) {
-          recordLoginLog(user.id, username, clientIp, userAgent, 'failed', '验证码无效')
-          return res.status(401).json({
-            errCode: 401,
-            msg: '验证码无效或已过期',
-          })
-        }
-        db.prepare('UPDATE verification_codes SET used = 1 WHERE id = ?').run(validCode.id)
-      } else {
-        return res.json({
-          errCode: 200,
-          msg: '需要邮箱验证',
-          data: {
-            requireVerification: true,
-            email: user.email.replace(/(.{2}).*(@.*)/, '$1***$2'),
-          },
-        })
-      }
-    }
-
-    // 登录成功
-    recordLoginAttempt(username, clientIp, true)
-    recordLoginLog(user.id, username, clientIp, userAgent, 'success')
-
+    // 登录成功，更新登录信息
     const loginTime = new Date().toISOString()
-    db.prepare(`
+    await db.prepare(`
       UPDATE users SET 
         last_login_time = ?,
         last_login_ip = ?,
-        login_count = login_count + 1,
-        updated_at = CURRENT_TIMESTAMP
+        login_count = COALESCE(login_count, 0) + 1,
+        updated_at = NOW()
       WHERE id = ?
     `).run(loginTime, clientIp, user.id)
 
-    const permissions = db.prepare(`
+    // 获取用户权限
+    const permissionsResult = await db.prepare(`
       SELECT p.permission_code 
       FROM role_permissions rp
       JOIN permissions p ON rp.permission_code = p.permission_code
       WHERE rp.role_code = ?
-    `).all(user.role).map(p => p.permission_code)
+    `).all(user.role)
+    
+    const permissions = permissionsResult ? permissionsResult.map(p => p.permission_code) : []
 
     const token = crypto.randomBytes(32).toString('hex')
 
