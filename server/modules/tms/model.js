@@ -100,7 +100,7 @@ export async function getCMRList(params = {}) {
   const list = await db.prepare(query).all(...queryParams)
   
   // 获取各状态统计（遵循流转规则）
-  const stats = getCMRStats()
+  const stats = await getCMRStats()
   
   return {
     list: list.map(convertCMRToCamelCase),
@@ -152,10 +152,10 @@ export async function getCMRStats() {
   `).get()
   
   return {
-    undelivered: stats.undelivered || 0,
-    delivering: stats.delivering || 0,
-    exception: stats.exception || 0,
-    archived: stats.archived || 0
+    undelivered: Number(stats.undelivered || 0),
+    delivering: Number(stats.delivering || 0),
+    exception: Number(stats.exception || 0),
+    archived: Number(stats.archived || 0)
   }
 }
 
@@ -768,7 +768,7 @@ export async function getTMSLogs(billId) {
 
 // ==================== 数据转换函数 ====================
 
-export async function convertCMRToCamelCase(row) {
+export function convertCMRToCamelCase(row) {
   if (!row) return null
   
   // 解析异常记录
@@ -822,7 +822,7 @@ export async function convertCMRToCamelCase(row) {
   }
 }
 
-export async function convertServiceProviderToCamelCase(row) {
+export function convertServiceProviderToCamelCase(row) {
   return {
     id: String(row.id),
     providerCode: row.provider_code,

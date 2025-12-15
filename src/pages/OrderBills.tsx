@@ -379,6 +379,34 @@ export default function OrderBills() {
   // 提单页面的列定义
   const billColumns: Column<BillOfLading>[] = [
     {
+      key: 'status',
+      label: '状态',
+      filters: [
+        { text: '船未到港', value: '船未到港' },
+        { text: '已到港', value: '已到港' },
+        { text: '清关中', value: '清关中' },
+        { text: '清关放行', value: '清关放行' },
+        { text: '查验中', value: '查验中' },
+        { text: '派送中', value: '派送中' },
+        { text: '已送达', value: '已送达' },
+        { text: '已作废', value: '已作废' },
+      ],
+      onFilter: (value, record) => {
+        if (value === '已作废') return record.isVoid === true
+        const currentStatus = getSmartStatus(record)
+        return currentStatus.text === value
+      },
+      render: (item: BillOfLading) => {
+        const status = getSmartStatus(item)
+        return (
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color} ${item.isVoid ? 'line-through' : ''}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`}></span>
+            {status.text}
+          </span>
+        )
+      },
+    },
+    {
       key: 'billNumber',
       label: '序号',
       sorter: true,
@@ -508,34 +536,6 @@ export default function OrderBills() {
           <div className={`text-xs ${textMuted}`}>{item.createTime || '-'}</div>
         </div>
       ),
-    },
-    {
-      key: 'status',
-      label: '状态',
-      filters: [
-        { text: '船未到港', value: '船未到港' },
-        { text: '已到港', value: '已到港' },
-        { text: '清关中', value: '清关中' },
-        { text: '清关放行', value: '清关放行' },
-        { text: '查验中', value: '查验中' },
-        { text: '派送中', value: '派送中' },
-        { text: '已送达', value: '已送达' },
-        { text: '已作废', value: '已作废' },
-      ],
-      onFilter: (value, record) => {
-        if (value === '已作废') return record.isVoid === true
-        const currentStatus = getSmartStatus(record)
-        return currentStatus.text === value
-      },
-      render: (item: BillOfLading) => {
-        const status = getSmartStatus(item)
-        return (
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color} ${item.isVoid ? 'line-through' : ''}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`}></span>
-            {status.text}
-          </span>
-        )
-      },
     },
     {
       key: 'actions',

@@ -859,14 +859,14 @@ export async function deleteBill(id: string): Promise<ApiResponse<void>> {
  * 
  * 接口地址: PUT /api/bills/:id/void
  */
-export async function voidBill(id: string, voidReason?: string): Promise<ApiResponse<BillOfLading>> {
+export async function voidBill(id: string, reason?: string): Promise<ApiResponse<BillOfLading>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/bills/${id}/void`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ voidReason }),
+      body: JSON.stringify({ reason }),
     })
     
     if (!response.ok) {

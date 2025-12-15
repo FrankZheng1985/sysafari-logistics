@@ -19,10 +19,9 @@
     "init-hs-codes": "node scripts/init-hs-codes.js",
     "import-taric": "node scripts/import-taric-excel.js",
     "check-sources": "node scripts/check-alternative-sources.js",
-    "migrate-to-pg": "node scripts/migrate-to-pg.js"
+    "init-production-db": "node scripts/init-production-db.js"
   },
   "dependencies": {
-    "better-sqlite3": "^9.2.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
@@ -35,7 +34,6 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.8",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/pg": "^8.10.9"

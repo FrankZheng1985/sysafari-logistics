@@ -164,29 +164,30 @@ export async function getInvoiceStats(params = {}) {
     WHERE invoice_type = 'purchase' ${dateFilter}
   `).get(...queryParams)
   
+  // 确保数值类型正确（PostgreSQL返回字符串）
   return {
     sales: {
-      totalCount: salesStats.total_count || 0,
-      totalAmount: salesStats.total_amount || 0,
-      paidAmount: salesStats.paid_amount || 0,
-      unpaidAmount: salesStats.unpaid_amount || 0,
-      pendingCount: salesStats.pending_count || 0,
-      paidCount: salesStats.paid_count || 0,
-      overdueCount: salesStats.overdue_count || 0
+      totalCount: Number(salesStats.total_count || 0),
+      totalAmount: Number(salesStats.total_amount || 0),
+      paidAmount: Number(salesStats.paid_amount || 0),
+      unpaidAmount: Number(salesStats.unpaid_amount || 0),
+      pendingCount: Number(salesStats.pending_count || 0),
+      paidCount: Number(salesStats.paid_count || 0),
+      overdueCount: Number(salesStats.overdue_count || 0)
     },
     purchase: {
-      totalCount: purchaseStats.total_count || 0,
-      totalAmount: purchaseStats.total_amount || 0,
-      paidAmount: purchaseStats.paid_amount || 0,
-      unpaidAmount: purchaseStats.unpaid_amount || 0,
-      pendingCount: purchaseStats.pending_count || 0,
-      paidCount: purchaseStats.paid_count || 0,
-      overdueCount: purchaseStats.overdue_count || 0
+      totalCount: Number(purchaseStats.total_count || 0),
+      totalAmount: Number(purchaseStats.total_amount || 0),
+      paidAmount: Number(purchaseStats.paid_amount || 0),
+      unpaidAmount: Number(purchaseStats.unpaid_amount || 0),
+      pendingCount: Number(purchaseStats.pending_count || 0),
+      paidCount: Number(purchaseStats.paid_count || 0),
+      overdueCount: Number(purchaseStats.overdue_count || 0)
     },
     balance: {
-      receivable: salesStats.unpaid_amount || 0,
-      payable: purchaseStats.unpaid_amount || 0,
-      net: (salesStats.unpaid_amount || 0) - (purchaseStats.unpaid_amount || 0)
+      receivable: Number(salesStats.unpaid_amount || 0),
+      payable: Number(purchaseStats.unpaid_amount || 0),
+      net: Number(salesStats.unpaid_amount || 0) - Number(purchaseStats.unpaid_amount || 0)
     }
   }
 }
@@ -427,34 +428,35 @@ export async function getPaymentStats(params = {}) {
     queryParams.push(endDate)
   }
   
-  // 收款统计
+  // 收款统计 (支持 income 和 receipt 两种类型)
   const incomeStats = await db.prepare(`
     SELECT 
       COUNT(*) as count,
       COALESCE(SUM(amount), 0) as total
     FROM payments 
-    WHERE payment_type = 'income' AND status = 'completed' ${dateFilter}
+    WHERE payment_type IN ('income', 'receipt') AND status IN ('completed', 'confirmed') ${dateFilter}
   `).get(...queryParams)
   
-  // 付款统计
+  // 付款统计 (支持 expense 和 payment 两种类型)
   const expenseStats = await db.prepare(`
     SELECT 
       COUNT(*) as count,
       COALESCE(SUM(amount), 0) as total
     FROM payments 
-    WHERE payment_type = 'expense' AND status = 'completed' ${dateFilter}
+    WHERE payment_type IN ('expense', 'payment') AND status IN ('completed', 'confirmed') ${dateFilter}
   `).get(...queryParams)
   
+  // 确保数值类型正确（PostgreSQL返回字符串）
   return {
     income: {
-      count: incomeStats.count || 0,
-      total: incomeStats.total || 0
+      count: Number(incomeStats.count || 0),
+      total: Number(incomeStats.total || 0)
     },
     expense: {
-      count: expenseStats.count || 0,
-      total: expenseStats.total || 0
+      count: Number(expenseStats.count || 0),
+      total: Number(expenseStats.total || 0)
     },
-    netCashFlow: (incomeStats.total || 0) - (expenseStats.total || 0)
+    netCashFlow: Number(incomeStats.total || 0) - Number(expenseStats.total || 0)
   }
 }
 
@@ -680,13 +682,14 @@ export async function getFeeStats(params = {}) {
     GROUP BY category
   `).all(...queryParams)
   
-  const totalAmount = stats.reduce((sum, s) => sum + s.total, 0)
+  // 确保数值类型正确（PostgreSQL返回字符串）
+  const totalAmount = stats.reduce((sum, s) => sum + Number(s.total || 0), 0)
   
   return {
     byCategory: stats.map(s => ({
       category: s.category,
-      count: s.count,
-      total: s.total
+      count: Number(s.count || 0),
+      total: Number(s.total || 0)
     })),
     totalAmount
   }

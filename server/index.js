@@ -1,6 +1,5 @@
 import express from 'express'
 import cors from 'cors'
-import Database from 'better-sqlite3'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import dotenv from 'dotenv'
@@ -74,12 +73,9 @@ app.use('/api', orderRoutes)
 app.use('/api', systemRoutes)
 app.use('/api', tmsRoutes)
 
-// 数据库连接（支持 SQLite 和 PostgreSQL）
+// 数据库连接（PostgreSQL）
 const USE_POSTGRES = isUsingPostgres()
-const dbPath = join(__dirname, 'data', 'orders.db')
 // 统一使用 getDatabase() 获取数据库实例
-// - 本地开发：返回 SQLite (better-sqlite3) 实例
-// - 生产环境：返回 PostgreSQL 适配器实例
 const db = getDatabase()
 
 // 初始化数据库表
@@ -4161,14 +4157,79 @@ app.put('/api/bills/:id/customs-status', (req, res) => {
   }
 })
 
+// 获取最近活动（系统概览用）
+app.get('/api/recent-activities', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10
+    
+    // 获取最近的操作日志
+    const activities = await db.prepare(`
+      SELECT 
+        ol.id,
+        ol.bill_id,
+        ol.operation_type,
+        ol.operation_name,
+        ol.old_value,
+        ol.new_value,
+        ol.operator,
+        ol.operation_time,
+        ol.module,
+        b.bill_number
+      FROM operation_logs ol
+      LEFT JOIN bills_of_lading b ON ol.bill_id = b.id
+      ORDER BY ol.operation_time DESC
+      LIMIT ?
+    `).all(limit)
+    
+    // 转换为前端需要的格式
+    const formattedActivities = activities.map(a => {
+      const time = a.operation_time ? new Date(a.operation_time) : new Date()
+      const now = new Date()
+      const diffMs = now.getTime() - time.getTime()
+      const diffMins = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMins / 60)
+      const diffDays = Math.floor(diffHours / 24)
+      
+      let timeStr = ''
+      if (diffMins < 1) timeStr = '刚刚'
+      else if (diffMins < 60) timeStr = `${diffMins}分钟前`
+      else if (diffHours < 24) timeStr = `${diffHours}小时前`
+      else if (diffDays < 7) timeStr = `${diffDays}天前`
+      else timeStr = time.toLocaleDateString('zh-CN')
+      
+      return {
+        id: String(a.id),
+        type: a.module || a.operation_type || 'order',
+        action: a.operation_name || '操作',
+        description: a.bill_number ? `提单 ${a.bill_number}` : `订单 ${a.bill_id}`,
+        time: timeStr,
+        operator: a.operator || '系统'
+      }
+    })
+    
+    res.json({
+      errCode: 200,
+      msg: 'success',
+      data: formattedActivities
+    })
+  } catch (error) {
+    console.error('获取最近活动失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: '获取最近活动失败',
+      error: error.message
+    })
+  }
+})
+
 // 标记提单为已完成
-app.put('/api/bills/:id/complete', (req, res) => {
+app.put('/api/bills/:id/complete', async (req, res) => {
   try {
     const { id } = req.params
     const { completeNote } = req.body
     
     // 检查提单是否存在
-    const existing = db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
     if (!existing) {
       return res.status(404).json({
         errCode: 404,
@@ -4188,15 +4249,15 @@ app.put('/api/bills/:id/complete', (req, res) => {
     const now = new Date().toISOString()
     
     // 更新状态为已完成
-    db.prepare(`
+    await db.prepare(`
       UPDATE bills_of_lading 
       SET status = ?, complete_time = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run('已完成', now, id)
     
-    logOperation(id, 'complete', '标记完成', oldStatus, '已完成', 'admin', completeNote)
+    await logOperation(id, 'complete', '标记完成', oldStatus, '已完成', 'admin', completeNote)
     
-    const updated = db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
+    const updated = await db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
     
     res.json({
       errCode: 200,
@@ -10838,7 +10899,11 @@ async function startServer() {
   app.listen(PORT, () => {
     console.log(`服务器运行在 http://localhost:${PORT}`)
     console.log(`API 地址: http://localhost:${PORT}/api`)
-    console.log(`数据库模式: ${USE_POSTGRES ? 'PostgreSQL (Render)' : 'SQLite (本地)'}`)
+    // 根据连接地址判断是本地还是远程数据库
+    const dbUrl = process.env.DATABASE_URL || ''
+    const isLocalDb = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')
+    const dbMode = isLocalDb ? 'PostgreSQL (本地)' : 'PostgreSQL (Render 远程)'
+    console.log(`数据库模式: ${dbMode}`)
     
     // 确保上传目录存在
     const uploadDir = join(__dirname, 'uploads')

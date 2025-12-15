@@ -801,10 +801,10 @@ export async function getOpportunityStats() {
       SUM(CASE WHEN stage = 'qualification' THEN 1 ELSE 0 END) as qualification,
       SUM(CASE WHEN stage = 'proposal' THEN 1 ELSE 0 END) as proposal,
       SUM(CASE WHEN stage = 'negotiation' THEN 1 ELSE 0 END) as negotiation,
-      SUM(CASE WHEN stage = 'closed_won' THEN 1 ELSE 0 END) as closed_won,
-      SUM(CASE WHEN stage = 'closed_lost' THEN 1 ELSE 0 END) as closed_lost,
-      COALESCE(SUM(CASE WHEN stage NOT IN ('closed_won', 'closed_lost') THEN expected_amount ELSE 0 END), 0) as pipeline_value,
-      COALESCE(SUM(CASE WHEN stage = 'closed_won' THEN expected_amount ELSE 0 END), 0) as won_value
+      SUM(CASE WHEN stage IN ('closed_won', 'won') THEN 1 ELSE 0 END) as closed_won,
+      SUM(CASE WHEN stage IN ('closed_lost', 'lost') THEN 1 ELSE 0 END) as closed_lost,
+      COALESCE(SUM(CASE WHEN stage NOT IN ('closed_won', 'closed_lost', 'won', 'lost') THEN expected_amount ELSE 0 END), 0) as pipeline_value,
+      COALESCE(SUM(CASE WHEN stage IN ('closed_won', 'won') THEN expected_amount ELSE 0 END), 0) as won_value
     FROM sales_opportunities
   `).get()
   

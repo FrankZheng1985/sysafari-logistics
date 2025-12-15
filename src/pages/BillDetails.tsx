@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat } from 'lucide-react'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 // DataTable available if needed
 import Timeline, { TimelineItem } from '../components/Timeline'
 import FeeModal from '../components/FeeModal'
-import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, type OperationLog, type DestinationPortItem, type BillFile } from '../utils/api'
+import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData } from '../utils/api'
 import { getBillById as getBillByIdFromMock } from '../data/mockOrders'
 
 interface Declaration {
@@ -132,6 +132,12 @@ export default function BillDetails() {
   const [showFeeModal, setShowFeeModal] = useState(false)
   const [billFees, setBillFees] = useState<any[]>([])
   const [feesLoading, setFeesLoading] = useState(false)
+  
+  // 预计提货时间模态窗口状态
+  const [showPickupTimeModal, setShowPickupTimeModal] = useState(false)
+  const [pickupEstimatedTime, setPickupEstimatedTime] = useState('')
+  const [pickupNote, setPickupNote] = useState('')
+  const [pickupSubmitting, setPickupSubmitting] = useState(false)
   
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -607,12 +613,16 @@ export default function BillDetails() {
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-xs text-gray-500">提单号:</span>
+                  <span className="text-xs text-gray-500">序号:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.billNumber}</span>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-500">集装箱号:</span>
+                  <span className="text-xs text-gray-500">提单号:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.containerNumber}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">集装箱号:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.actualContainerNo || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">船名航次:</span>
@@ -1426,6 +1436,22 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="派送操作" icon={<Truck className="w-4 h-4" />} iconColor="text-blue-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2">
+                        {/* 预计提货时间按钮 */}
+                        <button
+                          onClick={() => {
+                            // 初始化值（如果已有数据则显示）
+                            setPickupEstimatedTime(billDetail.cmrEstimatedPickupTime || '')
+                            setPickupNote('')
+                            setShowPickupTimeModal(true)
+                          }}
+                          className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 flex items-center gap-1"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          预计提货时间
+                          {billDetail.cmrEstimatedPickupTime && (
+                            <span className="ml-1 text-amber-500">✓</span>
+                          )}
+                        </button>
                         {billDetail.deliveryStatus === '未派送' && (
                           <button
                             onClick={async () => {
@@ -1870,17 +1896,21 @@ export default function BillDetails() {
               <div className="space-y-4">
                 <div>
                   <label htmlFor="arrival-date-input" className="block text-sm font-medium text-gray-700 mb-2">
+                    <Calendar className="w-4 h-4 inline mr-1" />
                     实际到港日期 <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    id="arrival-date-input"
-                    type="date"
-                    value={actualArrivalDate}
-                    onChange={(e) => setActualArrivalDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-gray-900"
-                    title="选择实际到港日期"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      id="arrival-date-input"
+                      type="date"
+                      value={actualArrivalDate}
+                      onChange={(e) => setActualArrivalDate(e.target.value)}
+                      className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-gray-900"
+                      title="选择实际到港日期"
+                      required
+                    />
+                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1926,6 +1956,118 @@ export default function BillDetails() {
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
               >
                 {arrivalSubmitting ? '提交中...' : '确认到港'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 预计提货时间模态窗口 */}
+      {showPickupTimeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-semibold text-gray-900">预计提货时间</h3>
+              </div>
+              <button
+                onClick={() => setShowPickupTimeModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Clock className="w-3 h-3 inline mr-1" />
+                  预计提货时间 <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="datetime-local"
+                    value={pickupEstimatedTime}
+                    onChange={(e) => setPickupEstimatedTime(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                  />
+                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>
+                <textarea
+                  value={pickupNote}
+                  onChange={(e) => setPickupNote(e.target.value)}
+                  placeholder="可选填写备注信息..."
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white resize-none"
+                />
+              </div>
+              
+              {/* 已有预计提货时间提示 */}
+              {billDetail?.cmrEstimatedPickupTime && (
+                <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
+                  <p className="text-xs text-amber-700">
+                    <span className="font-medium">当前设置：</span>
+                    {new Date(billDetail.cmrEstimatedPickupTime).toLocaleString('zh-CN')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowPickupTimeModal(false)}
+                className="px-3 py-1.5 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  if (!pickupEstimatedTime) {
+                    alert('请选择预计提货时间')
+                    return
+                  }
+                  setPickupSubmitting(true)
+                  try {
+                    const cmrDetail: CMRDetailData = {
+                      estimatedPickupTime: pickupEstimatedTime,
+                      pickupNote: pickupNote || undefined,
+                    }
+                    // 保持当前派送状态不变，只更新 CMR 详情
+                    const response = await updateBillDelivery(
+                      String(billDetail.id),
+                      billDetail.deliveryStatus || '未派送',
+                      undefined,
+                      cmrDetail
+                    )
+                    if (response.errCode === 200) {
+                      setBillDetail({ 
+                        ...billDetail, 
+                        cmrEstimatedPickupTime: pickupEstimatedTime 
+                      })
+                      loadOperationLogs()
+                      setShowPickupTimeModal(false)
+                      alert('预计提货时间已保存')
+                    } else {
+                      alert(`操作失败: ${response.msg}`)
+                    }
+                  } catch (error) {
+                    console.error('操作失败:', error)
+                    alert('操作失败，请稍后重试')
+                  } finally {
+                    setPickupSubmitting(false)
+                  }
+                }}
+                disabled={!pickupEstimatedTime || pickupSubmitting}
+                className="px-3 py-1.5 text-xs text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {pickupSubmitting ? '保存中...' : '保存'}
               </button>
             </div>
           </div>

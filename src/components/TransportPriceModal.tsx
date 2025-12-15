@@ -195,6 +195,8 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
           <button
             onClick={onClose}
             className="p-1 hover:bg-gray-100 rounded transition-colors"
+            title="关闭"
+            aria-label="关闭"
           >
             <X className="w-4 h-4 text-gray-500" />
           </button>
@@ -230,6 +232,7 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
                   value={formData.transportType || '卡车'}
                   onChange={(e) => setFormData({ ...formData, transportType: e.target.value })}
                   className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                  aria-label="运输方式"
                 >
                   {transportTypes.map(type => (
                     <option key={type} value={type}>{type}</option>
@@ -242,6 +245,7 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
                   value={formData.currency || 'EUR'}
                   onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                   className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                  aria-label="计价币种"
                 >
                   {currencyOptions.map(cur => (
                     <option key={cur} value={cur}>{cur}</option>
@@ -371,6 +375,8 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
                   value={formData.validFrom || ''}
                   onChange={(e) => setFormData({ ...formData, validFrom: e.target.value })}
                   className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                  title="生效日期"
+                  aria-label="生效日期"
                 />
               </div>
               <div>
@@ -380,6 +386,8 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
                   value={formData.validTo || ''}
                   onChange={(e) => setFormData({ ...formData, validTo: e.target.value })}
                   className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                  title="失效日期"
+                  aria-label="失效日期"
                 />
               </div>
               <div className="col-span-2">
@@ -406,6 +414,8 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
               className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                 formData.isActive ? 'bg-primary-600' : 'bg-gray-300'
               }`}
+              title={formData.isActive ? '点击禁用' : '点击启用'}
+              aria-label={formData.isActive ? '禁用此价格' : '启用此价格'}
             >
               <span
                 className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${

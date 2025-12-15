@@ -1,22 +1,34 @@
 /**
  * 数据库适配器层
- * 提供与 better-sqlite3 兼容的 API，底层支持 SQLite 和 PostgreSQL
+ * 使用 PostgreSQL 作为唯一数据库
  * 
  * 使用方法：
- * - 本地开发：使用 SQLite（默认）
- * - 生产环境：设置 DATABASE_URL 环境变量后自动使用 PostgreSQL
+ * - 本地开发：设置 DATABASE_URL 连接本地 PostgreSQL
+ * - 生产环境：设置 DATABASE_URL 环境变量连接 Render PostgreSQL
  */
 
 import pg from 'pg'
-import Database from 'better-sqlite3'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import dotenv from 'dotenv'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// 判断使用哪种数据库
-const USE_POSTGRES = !!process.env.DATABASE_URL
+// 加载环境变量
+dotenv.config({ path: join(__dirname, '../.env') })
+
+// 获取数据库连接字符串
+const isProduction = process.env.NODE_ENV === 'production'
+const DATABASE_URL = process.env.DATABASE_URL || 
+  (isProduction ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL_TEST)
+
+// 检查数据库连接配置
+if (!DATABASE_URL) {
+  console.error('❌ 错误: 未配置数据库连接字符串')
+  console.error('   请在 .env 文件中设置 DATABASE_URL 或 DATABASE_URL_TEST')
+  process.exit(1)
+}
 
 /**
  * 将 SQLite 风格的 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
@@ -32,8 +44,8 @@ function convertPlaceholders(sql) {
 function convertSQLiteToPG(sql) {
   let pgSql = sql
   
-  // 1. datetime('now', 'localtime') → NOW()
-  pgSql = pgSql.replace(/datetime\s*\(\s*'now'\s*,\s*'localtime'\s*\)/gi, 'NOW()')
+  // 1. datetime('now', 'localtime') 或 datetime("now", "localtime") → NOW()
+  pgSql = pgSql.replace(/datetime\s*\(\s*['"]now['"]\s*,\s*['"]localtime['"]\s*\)/gi, 'NOW()')
   
   // 2. CURRENT_TIMESTAMP → NOW() (PostgreSQL 兼容，但统一使用 NOW())
   pgSql = pgSql.replace(/CURRENT_TIMESTAMP/gi, 'NOW()')
@@ -65,10 +77,6 @@ function convertSQLiteToPG(sql) {
   
   // 4. INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
   pgSql = pgSql.replace(/INSERT\s+OR\s+IGNORE/gi, 'INSERT')
-  if (pgSql.match(/INSERT\s+INTO.*VALUES/i) && !pgSql.includes('ON CONFLICT')) {
-    // 只对可能的 INSERT OR IGNORE 添加 ON CONFLICT DO NOTHING
-    // 但这需要更复杂的上下文判断，暂时跳过
-  }
   
   return pgSql
 }
@@ -78,13 +86,20 @@ function convertSQLiteToPG(sql) {
  */
 class PostgresAdapter {
   constructor() {
+    // 判断是否需要 SSL（本地连接不需要，Render 连接需要）
+    const isLocalhost = DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
+    const needSSL = !isLocalhost && (DATABASE_URL.includes('sslmode=require') || isProduction)
+    
     this.pool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      connectionString: DATABASE_URL,
+      ssl: needSSL ? { rejectUnauthorized: false } : false,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
     })
+    
+    // 标记为 PostgreSQL 数据库
+    this.isPostgres = true
     
     this.pool.on('error', (err) => {
       console.error('❌ PostgreSQL 连接池错误:', err.message)
@@ -107,9 +122,24 @@ class PostgresAdapter {
    * 模拟 db.exec(sql) - 执行多条 SQL（不返回结果）
    */
   exec(sql) {
-    // PostgreSQL 不需要初始化表结构（已通过迁移脚本创建）
-    // 这里只处理可能的 ALTER TABLE 等操作
-    return { changes: 0 }
+    return this._execAsync(sql)
+  }
+  
+  async _execAsync(sql) {
+    try {
+      const result = await this.pool.query(sql)
+      return { changes: result.rowCount || 0 }
+    } catch (error) {
+      // 忽略 "column already exists" 等错误
+      if (error.message.includes('already exists') || 
+          error.message.includes('duplicate column') ||
+          error.code === '42701') { // PostgreSQL 的 "column already exists" 错误码
+        return { changes: 0 }
+      }
+      console.error('❌ PostgreSQL exec 错误:', error.message)
+      // 不抛出错误，让迁移继续进行
+      return { changes: 0 }
+    }
   }
   
   /**
@@ -156,10 +186,7 @@ class PostgresStatement {
    * 模拟 stmt.run(...params) - 执行 INSERT/UPDATE/DELETE
    */
   run(...params) {
-    // 同步转异步的包装 - 使用 Promise 阻塞
-    // 注意：这在生产环境中可能不是最佳实践，但可以保持 API 兼容性
-    const result = this._runAsync(params)
-    return result
+    return this._runAsync(params)
   }
   
   async _runAsync(params) {
@@ -256,47 +283,15 @@ class PostgresTransactionStatement {
 }
 
 /**
- * SQLite 适配器 - 直接使用 better-sqlite3
- */
-class SQLiteAdapter {
-  constructor(dbPath) {
-    this.db = new Database(dbPath)
-    console.log('📦 SQLite 数据库适配器已初始化:', dbPath)
-  }
-  
-  prepare(sql) {
-    return this.db.prepare(sql)
-  }
-  
-  exec(sql) {
-    return this.db.exec(sql)
-  }
-  
-  transaction(fn) {
-    return this.db.transaction(fn)
-  }
-  
-  close() {
-    return this.db.close()
-  }
-}
-
-/**
  * 创建数据库实例
  */
 function createDatabase() {
-  if (USE_POSTGRES) {
-    console.log('🌐 使用 PostgreSQL 数据库 (Render)')
-    return new PostgresAdapter()
-  } else {
-    const dbPath = join(__dirname, '../data/orders.db')
-    console.log('💾 使用 SQLite 数据库 (本地)')
-    return new SQLiteAdapter(dbPath)
-  }
+  console.log('🌐 使用 PostgreSQL 数据库')
+  return new PostgresAdapter()
 }
 
 // 导出数据库实例
 export const db = createDatabase()
-export const isPostgres = USE_POSTGRES
+export const isPostgres = true
 
 export default db

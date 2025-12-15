@@ -407,7 +407,9 @@ export default function CMRManage() {
                 className="text-green-600 hover:text-green-700 hover:underline text-xs flex items-center gap-0.5"
               >
                 <CheckCircle className="w-3 h-3" />
-                继续派送
+                {/* 根据步骤显示不同的按钮文字 */}
+                {item.cmrUnloadingCompleteTime ? '完成派送' : 
+                 item.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
               </button>
             )}
             {isException && (

@@ -241,6 +241,7 @@ export async function updateBill(id, data) {
     description: 'description',
     etd: 'etd',
     eta: 'eta',
+    ata: 'ata',
     actualArrivalDate: 'actual_arrival_date',
     status: 'status',
     shipStatus: 'ship_status',
@@ -356,15 +357,22 @@ export async function updateBillShipStatus(id, shipStatus, actualArrivalDate = n
  */
 export async function updateBillDocSwapStatus(id, docSwapStatus) {
   const db = getDatabase()
-  const result = await db.prepare(`
+  
+  // PostgreSQL 需要将 NOW() 转换为 TEXT 类型以匹配 doc_swap_time 列
+  const isPostgres = db.isPostgres
+  const nowExpr = isPostgres ? "TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS')" : "datetime('now', 'localtime')"
+  const updatedAtExpr = isPostgres ? "NOW()" : "datetime('now', 'localtime')"
+  
+  const sql = `
     UPDATE bills_of_lading 
     SET doc_swap_status = ?,
-        doc_swap_time = CASE WHEN ? = '已换单' THEN datetime('now', 'localtime') ELSE doc_swap_time END,
-        updated_at = datetime('now', 'localtime')
+        doc_swap_time = CASE WHEN ? = '已换单' THEN ${nowExpr} ELSE doc_swap_time END,
+        updated_at = ${updatedAtExpr}
     WHERE id = ?
-  `).run(docSwapStatus, docSwapStatus, id)
+  `
   
-  return result.changes > 0
+  const result = await db.prepare(sql).run(docSwapStatus, docSwapStatus, id)
+  return result && result.changes > 0
 }
 
 /**
@@ -439,26 +447,27 @@ export async function updateBillDelivery(id, deliveryData) {
   const fields = ['delivery_status = ?', 'updated_at = datetime("now", "localtime")']
   const values = [deliveryData.deliveryStatus]
   
-  // CMR详细字段
+  // CMR详细字段 - 前端发送的字段名带 "cmr" 前缀
   const cmrFields = {
-    estimatedPickupTime: 'cmr_estimated_pickup_time',
-    serviceProvider: 'cmr_service_provider',
-    deliveryAddress: 'cmr_delivery_address',
-    estimatedArrivalTime: 'cmr_estimated_arrival_time',
-    actualArrivalTime: 'cmr_actual_arrival_time',
-    unloadingCompleteTime: 'cmr_unloading_complete_time',
-    confirmedTime: 'cmr_confirmed_time',
-    hasException: 'cmr_has_exception',
-    exceptionNote: 'cmr_exception_note',
-    exceptionTime: 'cmr_exception_time',
-    exceptionStatus: 'cmr_exception_status',
-    exceptionRecords: 'cmr_exception_records'
+    cmrEstimatedPickupTime: 'cmr_estimated_pickup_time',
+    cmrServiceProvider: 'cmr_service_provider',
+    cmrDeliveryAddress: 'cmr_delivery_address',
+    cmrEstimatedArrivalTime: 'cmr_estimated_arrival_time',
+    cmrActualArrivalTime: 'cmr_actual_arrival_time',
+    cmrUnloadingCompleteTime: 'cmr_unloading_complete_time',
+    cmrConfirmedTime: 'cmr_confirmed_time',
+    cmrHasException: 'cmr_has_exception',
+    cmrExceptionNote: 'cmr_exception_note',
+    cmrExceptionTime: 'cmr_exception_time',
+    cmrExceptionStatus: 'cmr_exception_status',
+    cmrExceptionRecords: 'cmr_exception_records',
+    cmrNotes: 'cmr_notes'
   }
   
   Object.entries(cmrFields).forEach(([jsField, dbField]) => {
     if (deliveryData[jsField] !== undefined) {
       fields.push(`${dbField} = ?`)
-      const value = jsField === 'exceptionRecords' && typeof deliveryData[jsField] !== 'string'
+      const value = jsField === 'cmrExceptionRecords' && typeof deliveryData[jsField] !== 'string'
         ? JSON.stringify(deliveryData[jsField])
         : deliveryData[jsField]
       values.push(value)
@@ -745,6 +754,7 @@ export function convertBillToCamelCase(row) {
     description: row.description,
     etd: row.etd,
     eta: row.eta,
+    ata: row.ata,
     actualArrivalDate: row.actual_arrival_date,
     status: row.status,
     shipStatus: row.ship_status,
@@ -783,12 +793,14 @@ export function convertBillToCamelCase(row) {
     customerId: row.customer_id,
     customerName: row.customer_name,
     customerCode: row.customer_code,
+    // 创建者信息
+    creator: row.creator,
     createTime: row.created_at,
     updateTime: row.updated_at
   }
 }
 
-export async function convertOperationLogToCamelCase(row) {
+export function convertOperationLogToCamelCase(row) {
   return {
     id: String(row.id),
     billId: row.bill_id,
@@ -804,7 +816,7 @@ export async function convertOperationLogToCamelCase(row) {
   }
 }
 
-export async function convertBillFileToCamelCase(row) {
+export function convertBillFileToCamelCase(row) {
   return {
     id: String(row.id),
     billId: row.bill_id,
@@ -827,15 +839,19 @@ export async function checkBillHasOperations(billId) {
   const db = getDatabase()
   
   // 检查操作日志（排除创建操作）
-  const logsCount = await db.prepare(`
+  const logsResult = await db.prepare(`
     SELECT COUNT(*) as count FROM operation_logs 
     WHERE bill_id = ? AND operation_type != 'create'
-  `).get(billId)?.count || 0
+  `).get(billId)
+  const logsCount = Number(logsResult?.count || 0)
   
   // 检查费用记录
-  const feesCount = await db.prepare(`
+  const feesResult = await db.prepare(`
     SELECT COUNT(*) as count FROM fees WHERE bill_id = ?
-  `).get(billId)?.count || 0
+  `).get(billId)
+  const feesCount = Number(feesResult?.count || 0)
+  
+  console.log(`检查提单 ${billId} 操作记录: 日志=${logsCount}, 费用=${feesCount}`)
   
   return {
     hasOperations: logsCount > 0 || feesCount > 0,

@@ -103,12 +103,13 @@ export default function SystemDashboard() {
       const billStats = billStatsRes.data || {}
       // 订单状态分布：
       // - 待处理: 未到港 + 未清关
-      // - 进行中: 已到港(未清关) + 查验中 + 派送中
+      // - 进行中: 查验中 + 派送中
       // - 已完成: 已送达
-      const pending = (billStats.notArrived || 0) + (billStats.notCleared || 0)
-      const inProgress = (billStats.inspecting || 0) + (billStats.delivering || 0)
-      const completed = billStats.delivered || 0
-      const total = billStats.total || billStats.active || 0
+      // 使用 Number() 确保转换为数字，避免字符串拼接问题
+      const pending = Number(billStats.notArrived || billStats.notarrived || 0) + Number(billStats.notCleared || billStats.notcleared || 0)
+      const inProgress = Number(billStats.inspecting || 0) + Number(billStats.delivering || 0)
+      const completed = Number(billStats.delivered || 0)
+      const total = Number(billStats.total || billStats.active || 0)
 
       // 构建统计数据
       const dashboardStats: DashboardStats = {
@@ -120,29 +121,40 @@ export default function SystemDashboard() {
           trend: 0 // 趋势需要历史数据计算，暂时设为0
         },
         tms: {
-          pending: cmrRes.data?.undelivered || cmrRes.data?.pending || 0,
-          delivering: cmrRes.data?.delivering || 0,
-          delivered: cmrRes.data?.archived || cmrRes.data?.delivered || 0,
-          exception: cmrRes.data?.exception || 0
+          // 使用 Number() 确保转换为数字，避免字符串拼接问题
+          pending: Number(cmrRes.data?.undelivered || cmrRes.data?.pending || 0),
+          delivering: Number(cmrRes.data?.delivering || 0),
+          delivered: Number(cmrRes.data?.archived || cmrRes.data?.delivered || 0),
+          exception: Number(cmrRes.data?.exception || 0)
         },
         crm: {
-          customers: customerRes.data?.totalCount || customerRes.data?.total || 0,
-          opportunities: opportunityRes.data?.totalCount || opportunityRes.data?.total || 0,
-          wonAmount: opportunityRes.data?.wonAmount || opportunityRes.data?.wonValue || 0,
-          pendingFeedbacks: (feedbackRes.data?.pendingCount || feedbackRes.data?.byStatus?.open || 0) + (feedbackRes.data?.processingCount || feedbackRes.data?.byStatus?.processing || 0)
+          // 使用 Number() 确保转换为数字
+          customers: Number(customerRes.data?.totalCount || customerRes.data?.total || 0),
+          opportunities: Number(opportunityRes.data?.totalCount || opportunityRes.data?.total || 0),
+          wonAmount: Number(opportunityRes.data?.wonAmount || opportunityRes.data?.wonValue || 0),
+          pendingFeedbacks: Number(feedbackRes.data?.pendingCount || feedbackRes.data?.byStatus?.open || 0) + Number(feedbackRes.data?.processingCount || feedbackRes.data?.byStatus?.processing || 0)
         },
         finance: {
-          receivable: financeRes.data?.summary?.receivable || 0,
-          payable: financeRes.data?.summary?.payable || 0,
-          netCashFlow: financeRes.data?.summary?.netCashFlow || 0,
-          totalFees: financeRes.data?.summary?.totalFees || 0
+          // 使用 Number() 确保转换为数字
+          receivable: Number(financeRes.data?.summary?.receivable || 0),
+          payable: Number(financeRes.data?.summary?.payable || 0),
+          netCashFlow: Number(financeRes.data?.summary?.netCashFlow || 0),
+          totalFees: Number(financeRes.data?.summary?.totalFees || 0)
         }
       }
 
       setStats(dashboardStats)
 
-      // 清空最近活动（需要从数据库获取真实操作日志，暂时置空）
-      setRecentActivities([])
+      // 获取最近活动
+      try {
+        const activitiesRes = await fetch('/api/recent-activities?limit=5').then(r => r.json())
+        if (activitiesRes.errCode === 200 && activitiesRes.data) {
+          setRecentActivities(activitiesRes.data)
+        }
+      } catch (err) {
+        console.error('获取最近活动失败:', err)
+        setRecentActivities([])
+      }
 
     } catch (error) {
       console.error('获取仪表盘数据失败:', error)
@@ -227,7 +239,7 @@ export default function SystemDashboard() {
               <Package className="w-6 h-6" />
             </div>
           </div>
-          {stats?.orders.trend && stats.orders.trend > 0 && (
+          {stats?.orders.trend !== undefined && stats.orders.trend > 0 && (
             <div className="mt-3 flex items-center gap-1 text-xs text-blue-100">
               <ArrowUpRight className="w-3 h-3" />
               较上周增长 {stats.orders.trend}%
@@ -260,7 +272,7 @@ export default function SystemDashboard() {
               <Truck className="w-6 h-6" />
             </div>
           </div>
-          {stats?.tms.exception && stats.tms.exception > 0 && (
+          {stats?.tms.exception !== undefined && stats.tms.exception > 0 && (
             <div className="mt-3 flex items-center gap-1 text-xs text-yellow-200">
               <AlertTriangle className="w-3 h-3" />
               {stats.tms.exception} 个异常订单需处理
@@ -293,7 +305,7 @@ export default function SystemDashboard() {
               <Users className="w-6 h-6" />
             </div>
           </div>
-          {stats?.crm.pendingFeedbacks && stats.crm.pendingFeedbacks > 0 && (
+          {stats?.crm.pendingFeedbacks !== undefined && stats.crm.pendingFeedbacks > 0 && (
             <div className="mt-3 flex items-center gap-1 text-xs text-purple-100">
               <Clock className="w-3 h-3" />
               {stats.crm.pendingFeedbacks} 个待处理反馈

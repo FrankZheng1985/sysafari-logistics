@@ -318,7 +318,10 @@ export default function CMRBillDetails() {
               className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 flex items-center gap-1"
             >
               <Truck className="w-3 h-3" />
-              派送操作
+              {/* 根据步骤显示不同的按钮文字 */}
+              {billDetail.deliveryStatus === '未派送' ? '开始派送' :
+               billDetail.cmrUnloadingCompleteTime ? '完成派送' :
+               billDetail.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
             </button>
           )}
         </div>
