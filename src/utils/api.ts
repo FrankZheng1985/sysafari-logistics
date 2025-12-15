@@ -191,10 +191,7 @@ export async function getUserList(params?: {
   status?: string
   userType?: string  // 用户类型过滤：'test' = 演示用户，'normal' = 正式用户
 }): Promise<ApiResponse<PaginatedResponse<User>>> {
-  // 测试模式：返回模拟数据
-  if (checkTestMode()) {
-    return mockAPI.getUsers() as any
-  }
+  // 演示环境：使用真实 API 获取测试数据库中的数据
 
   const queryParams = new URLSearchParams()
   if (params?.page) queryParams.append('page', params.page.toString())
@@ -547,10 +544,8 @@ export interface BillStats {
  * 接口地址: GET /api/bills
  */
 export async function getBillsList(params?: GetBillsParams): Promise<ApiResponse<PaginatedResponse<BillOfLading> & { stats?: BillStats }>> {
-  // 测试模式：返回模拟数据
-  if (checkTestMode()) {
-    return mockAPI.getBills(params) as any
-  }
+  // 演示环境：使用真实 API 获取测试数据库中的数据
+  // 只阻止写操作，读操作正常使用 API
 
   try {
     // 构建查询参数，过滤掉 undefined 和空字符串
@@ -3762,10 +3757,7 @@ export async function getCustomers(params?: {
   page?: number
   pageSize?: number 
 }): Promise<ApiResponse<{ list: Customer[]; total: number; page: number; pageSize: number }>> {
-  // 测试模式：返回模拟数据
-  if (checkTestMode()) {
-    return mockAPI.getCustomers(params) as any
-  }
+  // 演示环境：使用真实 API 获取测试数据库中的数据
 
   try {
     const searchParams = new URLSearchParams()
@@ -3892,10 +3884,7 @@ export async function getFees(params?: {
   page?: number
   pageSize?: number 
 }): Promise<ApiResponse<{ list: Fee[]; total: number; page: number; pageSize: number }>> {
-  // 测试模式：返回模拟数据
-  if (checkTestMode()) {
-    return mockAPI.getFees(params) as any
-  }
+  // 演示环境：使用真实 API 获取测试数据库中的数据
 
   try {
     const searchParams = new URLSearchParams()
