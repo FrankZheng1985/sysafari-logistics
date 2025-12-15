@@ -122,6 +122,51 @@ function convertDateTimeFunctions(sql) {
 }
 
 /**
+ * 将 SQLite 的 INSERT OR REPLACE 转换为 PostgreSQL 的 INSERT ON CONFLICT
+ */
+function convertInsertOrReplace(sql) {
+  // 匹配 INSERT OR REPLACE INTO table (...) VALUES (...)
+  const match = sql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i)
+  if (!match) return sql
+  
+  const tableName = match[1]
+  const columns = match[2].split(',').map(c => c.trim())
+  const values = match[3]
+  
+  // 确定主键/唯一键列
+  let conflictColumn = 'id'
+  if (tableName === 'system_settings') {
+    conflictColumn = 'setting_key'
+  } else if (tableName === 'column_settings') {
+    conflictColumn = 'id'
+  } else if (tableName === 'role_permissions') {
+    conflictColumn = 'role_code, permission_code'
+  }
+  
+  // 生成 SET 子句（排除主键列）
+  const conflictColumns = conflictColumn.split(',').map(c => c.trim())
+  const setClauses = columns
+    .filter(col => !conflictColumns.includes(col))
+    .map(col => `${col} = EXCLUDED.${col}`)
+    .join(', ')
+  
+  // 如果没有可更新的列，使用 DO NOTHING
+  const doClause = setClauses ? `DO UPDATE SET ${setClauses}` : 'DO NOTHING'
+  
+  return `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values}) ON CONFLICT (${conflictColumn}) ${doClause}`
+}
+
+/**
+ * 转换 SQLite SQL 为 PostgreSQL 兼容语法
+ */
+function convertSQLiteToPostgres(sql) {
+  let pgSql = sql
+  pgSql = convertDateTimeFunctions(pgSql)
+  pgSql = convertInsertOrReplace(pgSql)
+  return pgSql
+}
+
+/**
  * PostgreSQL Statement 包装类
  * 模拟 better-sqlite3 的同步 API，但内部使用 Promise
  */
@@ -129,7 +174,8 @@ class PgStatement {
   constructor(pool, sql) {
     this.pool = pool
     this.originalSql = sql
-    this.pgSql = convertDateTimeFunctions(convertPlaceholders(sql))
+    // 先转换 SQLite 语法，再转换占位符
+    this.pgSql = convertPlaceholders(convertSQLiteToPostgres(sql))
   }
   
   run(...params) {
@@ -229,7 +275,8 @@ class PostgresTransactionDb {
   }
   
   prepare(sql) {
-    const pgSql = convertDateTimeFunctions(convertPlaceholders(sql))
+    // 先转换 SQLite 语法，再转换占位符
+    const pgSql = convertPlaceholders(convertSQLiteToPostgres(sql))
     return {
       run: async (...params) => {
         const result = await this.client.query(pgSql, params)
