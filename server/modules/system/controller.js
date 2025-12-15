@@ -319,12 +319,12 @@ export async function login(req, res) {
     const permissionCodes = permissions.map(p => p.permissionCode || p.permission_code)
     
     // 判断是否是测试用户
-    const isTestUser = user.user_type === 'test'
+    const isTestUser = user.userType === 'test'
     
     return success(res, {
       user: {
         ...safeUser,
-        userType: user.user_type || 'normal'
+        userType: user.userType
       },
       permissions: permissionCodes,
       isTestMode: isTestUser,

@@ -677,7 +677,8 @@ export function convertUserToCamelCase(row) {
     lastLoginIp: row.last_login_ip,
     loginCount: row.login_count,
     createTime: row.created_at,
-    updateTime: row.updated_at
+    updateTime: row.updated_at,
+    userType: row.user_type || 'normal'  // 用户类型：test=演示用户, normal=正式用户
   }
 }
 
