@@ -125,9 +125,20 @@ function convertDateTimeFunctions(sql) {
  * 将 SQLite 的 INSERT OR REPLACE 转换为 PostgreSQL 的 INSERT ON CONFLICT
  */
 function convertInsertOrReplace(sql) {
+  // 先检查是否包含 INSERT OR REPLACE
+  if (!/INSERT\s+OR\s+REPLACE/i.test(sql)) {
+    return sql
+  }
+  
+  // 规范化 SQL：移除多余空白、换行
+  const normalizedSql = sql.replace(/\s+/g, ' ').trim()
+  
   // 匹配 INSERT OR REPLACE INTO table (...) VALUES (...)
-  const match = sql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i)
-  if (!match) return sql
+  const match = normalizedSql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i)
+  if (!match) {
+    console.warn('⚠️ INSERT OR REPLACE 无法解析:', normalizedSql.substring(0, 100))
+    return sql
+  }
   
   const tableName = match[1]
   const columns = match[2].split(',').map(c => c.trim())
@@ -153,7 +164,9 @@ function convertInsertOrReplace(sql) {
   // 如果没有可更新的列，使用 DO NOTHING
   const doClause = setClauses ? `DO UPDATE SET ${setClauses}` : 'DO NOTHING'
   
-  return `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values}) ON CONFLICT (${conflictColumn}) ${doClause}`
+  const result = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values}) ON CONFLICT (${conflictColumn}) ${doClause}`
+  console.log('✅ SQL 转换成功:', result.substring(0, 80) + '...')
+  return result
 }
 
 /**
