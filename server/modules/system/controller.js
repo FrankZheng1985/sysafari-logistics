@@ -246,7 +246,7 @@ export async function login(req, res) {
     }
     
     // 检查用户是否被锁定
-    if (model.isUserLocked(username)) {
+    if (await model.isUserLocked(username)) {
       model.addLoginLog({
         username,
         loginIp: req.ip,
@@ -257,7 +257,7 @@ export async function login(req, res) {
       return forbidden(res, '账号已被锁定，请15分钟后重试')
     }
     
-    const user = model.getUserByUsername(username)
+    const user = await model.getUserByUsername(username)
     
     if (!user) {
       model.addLoginLog({

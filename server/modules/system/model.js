@@ -75,9 +75,9 @@ export function getUserById(id) {
 /**
  * 根据用户名获取用户
  */
-export function getUserByUsername(username) {
+export async function getUserByUsername(username) {
   const db = getDatabase()
-  const user = db.prepare(`
+  const user = await db.prepare(`
     SELECT u.*, r.role_name
     FROM users u
     LEFT JOIN roles r ON u.role = r.role_code
@@ -234,11 +234,11 @@ export function incrementLoginAttempts(username, ip = '', reason = '') {
 /**
  * 获取最近登录失败次数
  */
-export function getRecentFailedAttempts(username, minutes = 15) {
+export async function getRecentFailedAttempts(username, minutes = 15) {
   const db = getDatabase()
   
   try {
-    const result = db.prepare(`
+    const result = await db.prepare(`
       SELECT COUNT(*) as count FROM login_attempts 
       WHERE username = ? AND success = 0 
       AND attempt_time > datetime('now', '-${minutes} minutes')
@@ -253,8 +253,8 @@ export function getRecentFailedAttempts(username, minutes = 15) {
 /**
  * 检查用户是否被锁定（基于最近失败次数）
  */
-export function isUserLocked(username, maxAttempts = 5, lockoutMinutes = 15) {
-  const failedCount = getRecentFailedAttempts(username, lockoutMinutes)
+export async function isUserLocked(username, maxAttempts = 5, lockoutMinutes = 15) {
+  const failedCount = await getRecentFailedAttempts(username, lockoutMinutes)
   return failedCount >= maxAttempts
 }
 
