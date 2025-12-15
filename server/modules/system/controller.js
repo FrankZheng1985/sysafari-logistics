@@ -284,6 +284,10 @@ export async function login(req, res) {
     }
     
     // 验证密码
+    console.log('登录 - 验证密码:', {
+      inputPasswordHash: model.hashPassword(password).substring(0, 20) + '...',
+      storedPasswordHash: user.passwordHash ? user.passwordHash.substring(0, 20) + '...' : '未找到'
+    })
     if (!model.verifyPassword(user, password)) {
       model.incrementLoginAttempts(username, req.ip, '密码错误')
       
