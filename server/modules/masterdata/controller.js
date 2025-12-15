@@ -36,7 +36,7 @@ export async function getCountryContinents(req, res) {
   try {
     const db = getDatabase()
     const continents = await db.prepare(
-      'SELECT DISTINCT continent FROM countries WHERE continent IS NOT NULL AND continent != "" ORDER BY continent'
+      "SELECT DISTINCT continent FROM countries WHERE continent IS NOT NULL AND continent != '' ORDER BY continent"
     ).all().map(r => r.continent)
     
     return success(res, continents)
