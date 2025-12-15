@@ -122,6 +122,26 @@ function convertDateTimeFunctions(sql) {
 }
 
 /**
+ * 提取括号内的内容（支持嵌套括号）
+ */
+function extractParenthesesContent(str, startIndex) {
+  let depth = 0
+  let start = -1
+  for (let i = startIndex; i < str.length; i++) {
+    if (str[i] === '(') {
+      if (depth === 0) start = i + 1
+      depth++
+    } else if (str[i] === ')') {
+      depth--
+      if (depth === 0) {
+        return { content: str.substring(start, i), endIndex: i }
+      }
+    }
+  }
+  return null
+}
+
+/**
  * 将 SQLite 的 INSERT OR REPLACE 转换为 PostgreSQL 的 INSERT ON CONFLICT
  */
 function convertInsertOrReplace(sql) {
@@ -133,16 +153,36 @@ function convertInsertOrReplace(sql) {
   // 规范化 SQL：移除多余空白、换行
   const normalizedSql = sql.replace(/\s+/g, ' ').trim()
   
-  // 匹配 INSERT OR REPLACE INTO table (...) VALUES (...)
-  const match = normalizedSql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i)
-  if (!match) {
-    console.warn('⚠️ INSERT OR REPLACE 无法解析:', normalizedSql.substring(0, 100))
+  // 提取表名
+  const tableMatch = normalizedSql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)/i)
+  if (!tableMatch) {
+    console.warn('⚠️ INSERT OR REPLACE 无法解析表名:', normalizedSql.substring(0, 100))
     return sql
   }
+  const tableName = tableMatch[1]
   
-  const tableName = match[1]
-  const columns = match[2].split(',').map(c => c.trim())
-  const values = match[3]
+  // 找到第一个括号（列名列表）
+  const firstParenIndex = normalizedSql.indexOf('(', tableMatch.index + tableMatch[0].length)
+  const columnsResult = extractParenthesesContent(normalizedSql, firstParenIndex)
+  if (!columnsResult) {
+    console.warn('⚠️ INSERT OR REPLACE 无法解析列名:', normalizedSql.substring(0, 100))
+    return sql
+  }
+  const columns = columnsResult.content.split(',').map(c => c.trim())
+  
+  // 找到 VALUES 后的括号（值列表）
+  const valuesIndex = normalizedSql.toUpperCase().indexOf('VALUES', columnsResult.endIndex)
+  if (valuesIndex === -1) {
+    console.warn('⚠️ INSERT OR REPLACE 无法找到 VALUES:', normalizedSql.substring(0, 100))
+    return sql
+  }
+  const valuesParenIndex = normalizedSql.indexOf('(', valuesIndex)
+  const valuesResult = extractParenthesesContent(normalizedSql, valuesParenIndex)
+  if (!valuesResult) {
+    console.warn('⚠️ INSERT OR REPLACE 无法解析值列表:', normalizedSql.substring(0, 100))
+    return sql
+  }
+  const values = valuesResult.content
   
   // 确定主键/唯一键列
   let conflictColumn = 'id'
@@ -165,7 +205,6 @@ function convertInsertOrReplace(sql) {
   const doClause = setClauses ? `DO UPDATE SET ${setClauses}` : 'DO NOTHING'
   
   const result = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values}) ON CONFLICT (${conflictColumn}) ${doClause}`
-  console.log('✅ SQL 转换成功:', result.substring(0, 80) + '...')
   return result
 }
 
