@@ -14,7 +14,7 @@ export async function getCustomers(req, res) {
   try {
     const { type, level, status, search, countryCode, assignedTo, page, pageSize } = req.query
     
-    const result = model.getCustomers({
+    const result = await model.getCustomers({
       type,
       level,
       status,
@@ -41,7 +41,7 @@ export async function getCustomers(req, res) {
  */
 export async function getCustomerStats(req, res) {
   try {
-    const stats = model.getCustomerStats()
+    const stats = await model.getCustomerStats()
     return success(res, stats)
   } catch (error) {
     console.error('获取客户统计失败:', error)
@@ -54,14 +54,14 @@ export async function getCustomerStats(req, res) {
  */
 export async function getCustomerById(req, res) {
   try {
-    const customer = model.getCustomerById(req.params.id)
+    const customer = await model.getCustomerById(req.params.id)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
     
     // 获取关联数据
-    const contacts = model.getContacts(customer.id)
-    const orderStats = model.getCustomerOrderStats(customer.id)
+    const contacts = await model.getContacts(customer.id)
+    const orderStats = await model.getCustomerOrderStats(customer.id)
     
     return success(res, {
       ...customer,
@@ -86,13 +86,13 @@ export async function createCustomer(req, res) {
     }
     
     // 检查客户代码是否已存在
-    const existing = model.getCustomerByCode(customerCode)
+    const existing = await model.getCustomerByCode(customerCode)
     if (existing) {
       return conflict(res, '客户代码已存在')
     }
     
-    const result = model.createCustomer(req.body)
-    const newCustomer = model.getCustomerById(result.id)
+    const result = await model.createCustomer(req.body)
+    const newCustomer = await model.getCustomerById(result.id)
     
     return success(res, newCustomer, '创建成功')
   } catch (error) {
@@ -108,17 +108,17 @@ export async function updateCustomer(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getCustomerById(id)
+    const existing = await model.getCustomerById(id)
     if (!existing) {
       return notFound(res, '客户不存在')
     }
     
-    const updated = model.updateCustomer(id, req.body)
+    const updated = await model.updateCustomer(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedCustomer = model.getCustomerById(id)
+    const updatedCustomer = await model.getCustomerById(id)
     return success(res, updatedCustomer, '更新成功')
   } catch (error) {
     console.error('更新客户失败:', error)
@@ -133,7 +133,7 @@ export async function deleteCustomer(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getCustomerById(id)
+    const existing = await model.getCustomerById(id)
     if (!existing) {
       return notFound(res, '客户不存在')
     }
@@ -158,12 +158,12 @@ export async function updateCustomerStatus(req, res) {
       return badRequest(res, '状态值无效')
     }
     
-    const existing = model.getCustomerById(id)
+    const existing = await model.getCustomerById(id)
     if (!existing) {
       return notFound(res, '客户不存在')
     }
     
-    model.updateCustomerStatus(id, status)
+    await model.updateCustomerStatus(id, status)
     return success(res, null, '状态更新成功')
   } catch (error) {
     console.error('更新客户状态失败:', error)
@@ -183,13 +183,13 @@ export async function assignCustomer(req, res) {
       return badRequest(res, '分配人ID为必填项')
     }
     
-    const existing = model.getCustomerById(id)
+    const existing = await model.getCustomerById(id)
     if (!existing) {
       return notFound(res, '客户不存在')
     }
     
-    model.assignCustomer(id, assignedTo, assignedName || '')
-    const updatedCustomer = model.getCustomerById(id)
+    await model.assignCustomer(id, assignedTo, assignedName || '')
+    const updatedCustomer = await model.getCustomerById(id)
     
     return success(res, updatedCustomer, '分配成功')
   } catch (error) {
@@ -207,12 +207,12 @@ export async function getContacts(req, res) {
   try {
     const { customerId } = req.params
     
-    const customer = model.getCustomerById(customerId)
+    const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
     
-    const contacts = model.getContacts(customerId)
+    const contacts = await model.getContacts(customerId)
     return success(res, contacts)
   } catch (error) {
     console.error('获取联系人列表失败:', error)
@@ -225,7 +225,7 @@ export async function getContacts(req, res) {
  */
 export async function getContactById(req, res) {
   try {
-    const contact = model.getContactById(req.params.contactId)
+    const contact = await model.getContactById(req.params.contactId)
     if (!contact) {
       return notFound(res, '联系人不存在')
     }
@@ -248,16 +248,16 @@ export async function createContact(req, res) {
       return badRequest(res, '联系人姓名为必填项')
     }
     
-    const customer = model.getCustomerById(customerId)
+    const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
     
-    const result = model.createContact({
+    const result = await model.createContact({
       ...req.body,
       customerId
     })
-    const newContact = model.getContactById(result.id)
+    const newContact = await model.getContactById(result.id)
     
     return success(res, newContact, '创建成功')
   } catch (error) {
@@ -273,17 +273,17 @@ export async function updateContact(req, res) {
   try {
     const { contactId } = req.params
     
-    const existing = model.getContactById(contactId)
+    const existing = await model.getContactById(contactId)
     if (!existing) {
       return notFound(res, '联系人不存在')
     }
     
-    const updated = model.updateContact(contactId, req.body)
+    const updated = await model.updateContact(contactId, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedContact = model.getContactById(contactId)
+    const updatedContact = await model.getContactById(contactId)
     return success(res, updatedContact, '更新成功')
   } catch (error) {
     console.error('更新联系人失败:', error)
@@ -298,7 +298,7 @@ export async function deleteContact(req, res) {
   try {
     const { contactId } = req.params
     
-    const existing = model.getContactById(contactId)
+    const existing = await model.getContactById(contactId)
     if (!existing) {
       return notFound(res, '联系人不存在')
     }
@@ -320,7 +320,7 @@ export async function getFollowUps(req, res) {
   try {
     const { customerId, type, operatorId, startDate, endDate, page, pageSize } = req.query
     
-    const result = model.getFollowUps({
+    const result = await model.getFollowUps({
       customerId,
       type,
       operatorId: operatorId ? parseInt(operatorId) : undefined,
@@ -349,12 +349,12 @@ export async function getCustomerFollowUps(req, res) {
     const { customerId } = req.params
     const { page, pageSize } = req.query
     
-    const customer = model.getCustomerById(customerId)
+    const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
     
-    const result = model.getFollowUps({
+    const result = await model.getFollowUps({
       customerId,
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20
@@ -383,12 +383,12 @@ export async function createFollowUp(req, res) {
       return badRequest(res, '跟进内容为必填项')
     }
     
-    const customer = model.getCustomerById(customerId)
+    const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
     
-    const result = model.createFollowUp({
+    const result = await model.createFollowUp({
       ...req.body,
       customerId,
       operatorId: req.user?.id,
@@ -409,10 +409,10 @@ export async function updateFollowUp(req, res) {
   try {
     const { followUpId } = req.params
     
-    const result = model.getFollowUps({ page: 1, pageSize: 1 })
+    const result = await model.getFollowUps({ page: 1, pageSize: 1 })
     // 简单检查记录是否存在
     
-    const updated = model.updateFollowUp(followUpId, req.body)
+    const updated = await model.updateFollowUp(followUpId, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段或记录不存在')
     }
@@ -431,7 +431,7 @@ export async function deleteFollowUp(req, res) {
   try {
     const { followUpId } = req.params
     
-    const deleted = model.deleteFollowUp(followUpId)
+    const deleted = await model.deleteFollowUp(followUpId)
     if (!deleted) {
       return notFound(res, '跟进记录不存在')
     }
@@ -452,12 +452,12 @@ export async function getCustomerOrderStats(req, res) {
   try {
     const { customerId } = req.params
     
-    const customer = model.getCustomerById(customerId)
+    const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
     
-    const stats = model.getCustomerOrderStats(customerId)
+    const stats = await model.getCustomerOrderStats(customerId)
     return success(res, stats)
   } catch (error) {
     console.error('获取客户订单统计失败:', error)
@@ -473,12 +473,12 @@ export async function getCustomerOrders(req, res) {
     const { customerId } = req.params
     const { page, pageSize, search, status } = req.query
     
-    const customer = model.getCustomerById(customerId)
+    const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
     
-    const result = model.getCustomerOrders(customerId, {
+    const result = await model.getCustomerOrders(customerId, {
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 10,
       search: search || '',
@@ -505,7 +505,7 @@ export async function getOpportunities(req, res) {
   try {
     const { customerId, stage, assignedTo, startDate, endDate, search, page, pageSize } = req.query
     
-    const result = model.getOpportunities({
+    const result = await model.getOpportunities({
       customerId,
       stage,
       assignedTo: assignedTo ? parseInt(assignedTo) : undefined,
@@ -532,7 +532,7 @@ export async function getOpportunities(req, res) {
  */
 export async function getOpportunityStats(req, res) {
   try {
-    const stats = model.getOpportunityStats()
+    const stats = await model.getOpportunityStats()
     return success(res, stats)
   } catch (error) {
     console.error('获取销售机会统计失败:', error)
@@ -545,7 +545,7 @@ export async function getOpportunityStats(req, res) {
  */
 export async function getOpportunityById(req, res) {
   try {
-    const opportunity = model.getOpportunityById(req.params.id)
+    const opportunity = await model.getOpportunityById(req.params.id)
     if (!opportunity) {
       return notFound(res, '销售机会不存在')
     }
@@ -567,12 +567,12 @@ export async function createOpportunity(req, res) {
       return badRequest(res, '机会名称为必填项')
     }
     
-    const result = model.createOpportunity({
+    const result = await model.createOpportunity({
       ...req.body,
       assignedTo: req.body.assignedTo || req.user?.id,
       assignedName: req.body.assignedName || req.user?.name || ''
     })
-    const newOpportunity = model.getOpportunityById(result.id)
+    const newOpportunity = await model.getOpportunityById(result.id)
     
     return success(res, newOpportunity, '创建成功')
   } catch (error) {
@@ -588,17 +588,17 @@ export async function updateOpportunity(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getOpportunityById(id)
+    const existing = await model.getOpportunityById(id)
     if (!existing) {
       return notFound(res, '销售机会不存在')
     }
     
-    const updated = model.updateOpportunity(id, req.body)
+    const updated = await model.updateOpportunity(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedOpportunity = model.getOpportunityById(id)
+    const updatedOpportunity = await model.getOpportunityById(id)
     return success(res, updatedOpportunity, '更新成功')
   } catch (error) {
     console.error('更新销售机会失败:', error)
@@ -619,13 +619,13 @@ export async function updateOpportunityStage(req, res) {
       return badRequest(res, '无效的阶段值')
     }
     
-    const existing = model.getOpportunityById(id)
+    const existing = await model.getOpportunityById(id)
     if (!existing) {
       return notFound(res, '销售机会不存在')
     }
     
-    model.updateOpportunityStage(id, stage, lostReason || '')
-    const updated = model.getOpportunityById(id)
+    await model.updateOpportunityStage(id, stage, lostReason || '')
+    const updated = await model.getOpportunityById(id)
     
     return success(res, updated, '阶段更新成功')
   } catch (error) {
@@ -641,7 +641,7 @@ export async function deleteOpportunity(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getOpportunityById(id)
+    const existing = await model.getOpportunityById(id)
     if (!existing) {
       return notFound(res, '销售机会不存在')
     }
@@ -663,7 +663,7 @@ export async function getQuotations(req, res) {
   try {
     const { customerId, opportunityId, status, startDate, endDate, search, page, pageSize } = req.query
     
-    const result = model.getQuotations({
+    const result = await model.getQuotations({
       customerId,
       opportunityId,
       status,
@@ -690,7 +690,7 @@ export async function getQuotations(req, res) {
  */
 export async function getQuotationById(req, res) {
   try {
-    const quotation = model.getQuotationById(req.params.id)
+    const quotation = await model.getQuotationById(req.params.id)
     if (!quotation) {
       return notFound(res, '报价不存在')
     }
@@ -712,12 +712,12 @@ export async function createQuotation(req, res) {
       return badRequest(res, '客户信息为必填项')
     }
     
-    const result = model.createQuotation({
+    const result = await model.createQuotation({
       ...req.body,
       createdBy: req.user?.id,
       createdByName: req.user?.name || '系统'
     })
-    const newQuotation = model.getQuotationById(result.id)
+    const newQuotation = await model.getQuotationById(result.id)
     
     return success(res, newQuotation, '创建成功')
   } catch (error) {
@@ -733,7 +733,7 @@ export async function updateQuotation(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getQuotationById(id)
+    const existing = await model.getQuotationById(id)
     if (!existing) {
       return notFound(res, '报价不存在')
     }
@@ -743,12 +743,12 @@ export async function updateQuotation(req, res) {
       return badRequest(res, '已发送的报价不能修改明细')
     }
     
-    const updated = model.updateQuotation(id, req.body)
+    const updated = await model.updateQuotation(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedQuotation = model.getQuotationById(id)
+    const updatedQuotation = await model.getQuotationById(id)
     return success(res, updatedQuotation, '更新成功')
   } catch (error) {
     console.error('更新报价失败:', error)
@@ -763,7 +763,7 @@ export async function deleteQuotation(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getQuotationById(id)
+    const existing = await model.getQuotationById(id)
     if (!existing) {
       return notFound(res, '报价不存在')
     }
@@ -790,7 +790,7 @@ export async function getContracts(req, res) {
   try {
     const { customerId, status, startDate, endDate, search, page, pageSize } = req.query
     
-    const result = model.getContracts({
+    const result = await model.getContracts({
       customerId,
       status,
       startDate,
@@ -816,7 +816,7 @@ export async function getContracts(req, res) {
  */
 export async function getContractById(req, res) {
   try {
-    const contract = model.getContractById(req.params.id)
+    const contract = await model.getContractById(req.params.id)
     if (!contract) {
       return notFound(res, '合同不存在')
     }
@@ -842,12 +842,12 @@ export async function createContract(req, res) {
       return badRequest(res, '客户信息为必填项')
     }
     
-    const result = model.createContract({
+    const result = await model.createContract({
       ...req.body,
       createdBy: req.user?.id,
       createdByName: req.user?.name || '系统'
     })
-    const newContract = model.getContractById(result.id)
+    const newContract = await model.getContractById(result.id)
     
     return success(res, newContract, '创建成功')
   } catch (error) {
@@ -863,17 +863,17 @@ export async function updateContract(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getContractById(id)
+    const existing = await model.getContractById(id)
     if (!existing) {
       return notFound(res, '合同不存在')
     }
     
-    const updated = model.updateContract(id, req.body)
+    const updated = await model.updateContract(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedContract = model.getContractById(id)
+    const updatedContract = await model.getContractById(id)
     return success(res, updatedContract, '更新成功')
   } catch (error) {
     console.error('更新合同失败:', error)
@@ -888,7 +888,7 @@ export async function deleteContract(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getContractById(id)
+    const existing = await model.getContractById(id)
     if (!existing) {
       return notFound(res, '合同不存在')
     }
@@ -915,7 +915,7 @@ export async function getFeedbacks(req, res) {
   try {
     const { customerId, type, status, priority, assignedTo, startDate, endDate, search, page, pageSize } = req.query
     
-    const result = model.getFeedbacks({
+    const result = await model.getFeedbacks({
       customerId,
       type,
       status,
@@ -944,7 +944,7 @@ export async function getFeedbacks(req, res) {
  */
 export async function getFeedbackStats(req, res) {
   try {
-    const stats = model.getFeedbackStats()
+    const stats = await model.getFeedbackStats()
     return success(res, stats)
   } catch (error) {
     console.error('获取反馈统计失败:', error)
@@ -957,7 +957,7 @@ export async function getFeedbackStats(req, res) {
  */
 export async function getFeedbackById(req, res) {
   try {
-    const feedback = model.getFeedbackById(req.params.id)
+    const feedback = await model.getFeedbackById(req.params.id)
     if (!feedback) {
       return notFound(res, '反馈不存在')
     }
@@ -979,12 +979,12 @@ export async function createFeedback(req, res) {
       return badRequest(res, '主题和内容为必填项')
     }
     
-    const result = model.createFeedback({
+    const result = await model.createFeedback({
       ...req.body,
       assignedTo: req.body.assignedTo || req.user?.id,
       assignedName: req.body.assignedName || req.user?.name || ''
     })
-    const newFeedback = model.getFeedbackById(result.id)
+    const newFeedback = await model.getFeedbackById(result.id)
     
     return success(res, newFeedback, '创建成功')
   } catch (error) {
@@ -1000,17 +1000,17 @@ export async function updateFeedback(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getFeedbackById(id)
+    const existing = await model.getFeedbackById(id)
     if (!existing) {
       return notFound(res, '反馈不存在')
     }
     
-    const updated = model.updateFeedback(id, req.body)
+    const updated = await model.updateFeedback(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedFeedback = model.getFeedbackById(id)
+    const updatedFeedback = await model.getFeedbackById(id)
     return success(res, updatedFeedback, '更新成功')
   } catch (error) {
     console.error('更新反馈失败:', error)
@@ -1030,13 +1030,13 @@ export async function resolveFeedback(req, res) {
       return badRequest(res, '解决方案为必填项')
     }
     
-    const existing = model.getFeedbackById(id)
+    const existing = await model.getFeedbackById(id)
     if (!existing) {
       return notFound(res, '反馈不存在')
     }
     
-    model.resolveFeedback(id, resolution)
-    const updated = model.getFeedbackById(id)
+    await model.resolveFeedback(id, resolution)
+    const updated = await model.getFeedbackById(id)
     
     return success(res, updated, '反馈已解决')
   } catch (error) {
@@ -1052,7 +1052,7 @@ export async function deleteFeedback(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getFeedbackById(id)
+    const existing = await model.getFeedbackById(id)
     if (!existing) {
       return notFound(res, '反馈不存在')
     }
@@ -1074,7 +1074,7 @@ export async function getCustomerValueAnalysis(req, res) {
   try {
     const { customerId } = req.params
     
-    const analysis = model.getCustomerValueAnalysis(customerId)
+    const analysis = await model.getCustomerValueAnalysis(customerId)
     if (!analysis) {
       return notFound(res, '客户不存在')
     }
@@ -1091,7 +1091,7 @@ export async function getCustomerValueAnalysis(req, res) {
  */
 export async function getSalesFunnel(req, res) {
   try {
-    const funnel = model.getSalesFunnel()
+    const funnel = await model.getSalesFunnel()
     return success(res, funnel)
   } catch (error) {
     console.error('获取销售漏斗数据失败:', error)
@@ -1105,7 +1105,7 @@ export async function getSalesFunnel(req, res) {
 export async function getCustomerActivityRanking(req, res) {
   try {
     const { limit } = req.query
-    const ranking = model.getCustomerActivityRanking(parseInt(limit) || 10)
+    const ranking = await model.getCustomerActivityRanking(parseInt(limit) || 10)
     return success(res, ranking)
   } catch (error) {
     console.error('获取客户活跃度排行失败:', error)

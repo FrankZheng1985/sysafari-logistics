@@ -11,7 +11,7 @@ import { generateId } from '../../utils/id.js'
 /**
  * 获取单证类型列表
  */
-export function getDocumentTypes(params = {}) {
+export async function getDocumentTypes(params = {}) {
   const db = getDatabase()
   const { status = 'active' } = params
   
@@ -25,7 +25,7 @@ export function getDocumentTypes(params = {}) {
   
   query += ' ORDER BY sort_order ASC'
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return list.map(row => ({
     id: row.id,
@@ -44,7 +44,7 @@ export function getDocumentTypes(params = {}) {
 /**
  * 获取清关单证列表
  */
-export function getClearanceDocuments(params = {}) {
+export async function getClearanceDocuments(params = {}) {
   const db = getDatabase()
   const { 
     billId, billNumber, documentType, status, 
@@ -98,13 +98,13 @@ export function getClearanceDocuments(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertToCamelCase),
@@ -117,7 +117,7 @@ export function getClearanceDocuments(params = {}) {
 /**
  * 获取清关单证统计
  */
-export function getClearanceStats(params = {}) {
+export async function getClearanceStats(params = {}) {
   const db = getDatabase()
   const { billId } = params
   
@@ -130,7 +130,7 @@ export function getClearanceStats(params = {}) {
   }
   
   // 按单证类型统计
-  const byType = db.prepare(`
+  const byType = await db.prepare(`
     SELECT document_type, document_type_name, COUNT(*) as count
     FROM clearance_documents ${whereClause}
     GROUP BY document_type
@@ -138,21 +138,21 @@ export function getClearanceStats(params = {}) {
   `).all(...queryParams)
   
   // 按状态统计
-  const byStatus = db.prepare(`
+  const byStatus = await db.prepare(`
     SELECT status, COUNT(*) as count
     FROM clearance_documents ${whereClause}
     GROUP BY status
   `).all(...queryParams)
   
   // 按审核状态统计
-  const byReviewStatus = db.prepare(`
+  const byReviewStatus = await db.prepare(`
     SELECT review_status, COUNT(*) as count
     FROM clearance_documents ${whereClause}
     GROUP BY review_status
   `).all(...queryParams)
   
   // 总计
-  const total = db.prepare(`
+  const total = await db.prepare(`
     SELECT COUNT(*) as count, COALESCE(SUM(total_value), 0) as total_value
     FROM clearance_documents ${whereClause}
   `).get(...queryParams)
@@ -181,13 +181,13 @@ export function getClearanceStats(params = {}) {
 /**
  * 根据ID获取清关单证
  */
-export function getClearanceDocumentById(id) {
+export async function getClearanceDocumentById(id) {
   const db = getDatabase()
-  const doc = db.prepare('SELECT * FROM clearance_documents WHERE id = ?').get(id)
+  const doc = await db.prepare('SELECT * FROM clearance_documents WHERE id = ?').get(id)
   if (!doc) return null
   
   // 获取明细
-  const items = db.prepare('SELECT * FROM clearance_document_items WHERE document_id = ? ORDER BY item_no').all(id)
+  const items = await db.prepare('SELECT * FROM clearance_document_items WHERE document_id = ? ORDER BY item_no').all(id)
   
   const result = convertToCamelCase(doc)
   result.items = items.map(item => ({
@@ -212,9 +212,9 @@ export function getClearanceDocumentById(id) {
 /**
  * 根据订单获取清关单证
  */
-export function getClearanceDocumentsByBill(billId) {
+export async function getClearanceDocumentsByBill(billId) {
   const db = getDatabase()
-  const docs = db.prepare(`
+  const docs = await db.prepare(`
     SELECT * FROM clearance_documents 
     WHERE bill_id = ?
     ORDER BY document_type, created_at DESC
@@ -226,14 +226,14 @@ export function getClearanceDocumentsByBill(billId) {
 /**
  * 生成单证编号
  */
-export function generateDocumentNo(documentType) {
+export async function generateDocumentNo(documentType) {
   const db = getDatabase()
   const today = new Date()
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
   const prefix = documentType || 'DOC'
   
   // 获取当日最大序号
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT MAX(CAST(SUBSTR(document_no, -4) AS INTEGER)) as max_seq
     FROM clearance_documents
     WHERE document_no LIKE ?
@@ -246,12 +246,12 @@ export function generateDocumentNo(documentType) {
 /**
  * 创建清关单证
  */
-export function createClearanceDocument(data) {
+export async function createClearanceDocument(data) {
   const db = getDatabase()
   const id = generateId()
   const documentNo = data.documentNo || generateDocumentNo(data.documentType)
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO clearance_documents (
       id, document_no, bill_id, bill_number, document_type, document_type_name,
       shipper_name, shipper_address, shipper_contact,
@@ -309,7 +309,7 @@ export function createClearanceDocument(data) {
   
   // 插入明细
   if (data.items && data.items.length > 0) {
-    const insertItem = db.prepare(`
+    const insertItem = await db.prepare(`
       INSERT INTO clearance_document_items (
         id, document_id, item_no, description, hs_code,
         quantity, quantity_unit, unit_price, total_price,
@@ -336,7 +336,7 @@ export function createClearanceDocument(data) {
 /**
  * 更新清关单证
  */
-export function updateClearanceDocument(id, data) {
+export async function updateClearanceDocument(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -409,10 +409,10 @@ export function updateClearanceDocument(id, data) {
   
   // 更新明细（先删除再插入）
   if (data.items !== undefined) {
-    db.prepare('DELETE FROM clearance_document_items WHERE document_id = ?').run(id)
+    await db.prepare('DELETE FROM clearance_document_items WHERE document_id = ?').run(id)
     
     if (data.items.length > 0) {
-      const insertItem = db.prepare(`
+      const insertItem = await db.prepare(`
         INSERT INTO clearance_document_items (
           id, document_id, item_no, description, hs_code,
           quantity, quantity_unit, unit_price, total_price,
@@ -440,21 +440,21 @@ export function updateClearanceDocument(id, data) {
 /**
  * 删除清关单证
  */
-export function deleteClearanceDocument(id) {
+export async function deleteClearanceDocument(id) {
   const db = getDatabase()
   
   // 删除明细
-  db.prepare('DELETE FROM clearance_document_items WHERE document_id = ?').run(id)
+  await db.prepare('DELETE FROM clearance_document_items WHERE document_id = ?').run(id)
   
   // 删除主记录
-  const result = db.prepare('DELETE FROM clearance_documents WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM clearance_documents WHERE id = ?').run(id)
   return result.changes > 0
 }
 
 /**
  * 审核清关单证
  */
-export function reviewClearanceDocument(id, reviewStatus, reviewNote, reviewer) {
+export async function reviewClearanceDocument(id, reviewStatus, reviewNote, reviewer) {
   const db = getDatabase()
   const result = db.prepare(`
     UPDATE clearance_documents 
@@ -467,9 +467,9 @@ export function reviewClearanceDocument(id, reviewStatus, reviewNote, reviewer) 
 /**
  * 更新清关单证状态
  */
-export function updateClearanceDocumentStatus(id, status) {
+export async function updateClearanceDocumentStatus(id, status) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE clearance_documents 
     SET status = ?, updated_at = datetime('now', 'localtime')
     WHERE id = ?

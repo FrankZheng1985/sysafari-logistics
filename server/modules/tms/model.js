@@ -41,7 +41,7 @@ export const EXCEPTION_STATUS = {
  * - exception（订单异常）: 派送状态为订单异常或异常关闭
  * - archived（已归档）: 派送状态为已送达或已完成
  */
-export function getCMRList(params = {}) {
+export async function getCMRList(params = {}) {
   const db = getDatabase()
   const { type = 'undelivered', search, page = 1, pageSize = 20 } = params
   
@@ -91,13 +91,13 @@ export function getCMRList(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页和排序
   query += ' ORDER BY order_seq DESC, updated_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   // 获取各状态统计（遵循流转规则）
   const stats = getCMRStats()
@@ -120,10 +120,10 @@ export function getCMRList(params = {}) {
  * - exception: 订单异常 + 异常关闭
  * - archived: 已送达 + 已完成
  */
-export function getCMRStats() {
+export async function getCMRStats() {
   const db = getDatabase()
   
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       SUM(CASE 
         WHEN ship_status = '已到港' 
@@ -162,9 +162,9 @@ export function getCMRStats() {
 /**
  * 根据ID获取CMR详情
  */
-export function getCMRById(id) {
+export async function getCMRById(id) {
   const db = getDatabase()
-  const bill = db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
   return bill ? convertCMRToCamelCase(bill) : null
 }
 
@@ -173,10 +173,10 @@ export function getCMRById(id) {
 /**
  * 开始派送（Step 1: 预计提货时间）
  */
-export function startDelivery(id, data) {
+export async function startDelivery(id, data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET delivery_status = '派送中',
         cmr_estimated_pickup_time = ?,
@@ -196,10 +196,10 @@ export function startDelivery(id, data) {
 /**
  * 更新目的地信息（Step 2: 预计到达目的地）
  */
-export function updateDestination(id, data) {
+export async function updateDestination(id, data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET cmr_delivery_address = ?,
         cmr_estimated_arrival_time = ?,
@@ -218,10 +218,10 @@ export function updateDestination(id, data) {
 /**
  * 记录派送时间（Step 3: 实际派送时间）
  */
-export function recordDeliveryTime(id, data) {
+export async function recordDeliveryTime(id, data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET cmr_actual_arrival_time = ?,
         cmr_current_step = 3,
@@ -238,10 +238,10 @@ export function recordDeliveryTime(id, data) {
 /**
  * 卸货完成（Step 4: 卸货完成时间）
  */
-export function completeUnloading(id, data) {
+export async function completeUnloading(id, data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET cmr_unloading_complete_time = ?,
         cmr_current_step = 4,
@@ -258,10 +258,10 @@ export function completeUnloading(id, data) {
 /**
  * 确认送达（Step 5: 最终确认）
  */
-export function confirmDelivery(id, data) {
+export async function confirmDelivery(id, data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET delivery_status = '已送达',
         cmr_confirmed_time = ?,
@@ -279,7 +279,7 @@ export function confirmDelivery(id, data) {
 /**
  * 更新CMR详细信息（一次性更新多个步骤）
  */
-export function updateCMRDetail(id, data) {
+export async function updateCMRDetail(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -345,7 +345,7 @@ export function updateCMRDetail(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
@@ -354,11 +354,11 @@ export function updateCMRDetail(id, data) {
 /**
  * 标记异常
  */
-export function markException(id, data) {
+export async function markException(id, data) {
   const db = getDatabase()
   
   // 获取现有的异常记录
-  const bill = db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
   let records = []
   
   if (bill && bill.cmr_exception_records) {
@@ -379,7 +379,7 @@ export function markException(id, data) {
     step: data.currentStep || null
   })
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET delivery_status = '订单异常',
         cmr_has_exception = 1,
@@ -401,11 +401,11 @@ export function markException(id, data) {
 /**
  * 处理异常 - 继续跟进
  */
-export function followUpException(id, data) {
+export async function followUpException(id, data) {
   const db = getDatabase()
   
   // 获取现有记录
-  const bill = db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
   let records = []
   
   if (bill && bill.cmr_exception_records) {
@@ -425,7 +425,7 @@ export function followUpException(id, data) {
     time: new Date().toISOString()
   })
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET cmr_exception_status = 'following',
         cmr_exception_records = ?,
@@ -442,11 +442,11 @@ export function followUpException(id, data) {
 /**
  * 处理异常 - 解决并继续派送
  */
-export function resolveAndContinue(id, data) {
+export async function resolveAndContinue(id, data) {
   const db = getDatabase()
   
   // 获取现有记录
-  const bill = db.prepare('SELECT cmr_exception_records, cmr_current_step FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT cmr_exception_records, cmr_current_step FROM bills_of_lading WHERE id = ?').get(id)
   let records = []
   
   if (bill && bill.cmr_exception_records) {
@@ -466,7 +466,7 @@ export function resolveAndContinue(id, data) {
     time: new Date().toISOString()
   })
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET delivery_status = '派送中',
         cmr_has_exception = 0,
@@ -485,11 +485,11 @@ export function resolveAndContinue(id, data) {
 /**
  * 处理异常 - 标记已解决（不继续派送）
  */
-export function markResolved(id, data) {
+export async function markResolved(id, data) {
   const db = getDatabase()
   
   // 获取现有记录
-  const bill = db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
   let records = []
   
   if (bill && bill.cmr_exception_records) {
@@ -509,7 +509,7 @@ export function markResolved(id, data) {
     time: new Date().toISOString()
   })
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET cmr_exception_status = 'resolved',
         cmr_exception_records = ?,
@@ -526,11 +526,11 @@ export function markResolved(id, data) {
 /**
  * 处理异常 - 关闭订单
  */
-export function closeOrder(id, data) {
+export async function closeOrder(id, data) {
   const db = getDatabase()
   
   // 获取现有记录
-  const bill = db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
   let records = []
   
   if (bill && bill.cmr_exception_records) {
@@ -550,7 +550,7 @@ export function closeOrder(id, data) {
     time: new Date().toISOString()
   })
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET delivery_status = '异常关闭',
         cmr_exception_status = 'closed',
@@ -568,9 +568,9 @@ export function closeOrder(id, data) {
 /**
  * 获取异常历史记录
  */
-export function getExceptionHistory(id) {
+export async function getExceptionHistory(id) {
   const db = getDatabase()
-  const bill = db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
+  const bill = await db.prepare('SELECT cmr_exception_records FROM bills_of_lading WHERE id = ?').get(id)
   
   if (!bill || !bill.cmr_exception_records) {
     return []
@@ -588,7 +588,7 @@ export function getExceptionHistory(id) {
 /**
  * 获取服务商列表
  */
-export function getServiceProviders(params = {}) {
+export async function getServiceProviders(params = {}) {
   const db = getDatabase()
   const { type, status = 'active', search, page = 1, pageSize = 20 } = params
   
@@ -613,13 +613,13 @@ export function getServiceProviders(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY provider_name LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertServiceProviderToCamelCase),
@@ -632,19 +632,19 @@ export function getServiceProviders(params = {}) {
 /**
  * 根据ID获取服务商
  */
-export function getServiceProviderById(id) {
+export async function getServiceProviderById(id) {
   const db = getDatabase()
-  const provider = db.prepare('SELECT * FROM service_providers WHERE id = ?').get(id)
+  const provider = await db.prepare('SELECT * FROM service_providers WHERE id = ?').get(id)
   return provider ? convertServiceProviderToCamelCase(provider) : null
 }
 
 /**
  * 创建服务商
  */
-export function createServiceProvider(data) {
+export async function createServiceProvider(data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO service_providers (
       provider_code, provider_name, service_type, contact_person,
       contact_phone, contact_email, address, description, status,
@@ -668,7 +668,7 @@ export function createServiceProvider(data) {
 /**
  * 更新服务商
  */
-export function updateServiceProvider(id, data) {
+export async function updateServiceProvider(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -697,16 +697,16 @@ export function updateServiceProvider(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE service_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE service_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除服务商
  */
-export function deleteServiceProvider(id) {
+export async function deleteServiceProvider(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM service_providers WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM service_providers WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -715,11 +715,11 @@ export function deleteServiceProvider(id) {
 /**
  * 记录TMS操作日志
  */
-export function addTMSLog(data) {
+export async function addTMSLog(data) {
   const db = getDatabase()
   
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO operation_logs (
         bill_id, operation_type, operation_name,
         old_value, new_value, remark,
@@ -744,9 +744,9 @@ export function addTMSLog(data) {
 /**
  * 获取TMS操作日志
  */
-export function getTMSLogs(billId) {
+export async function getTMSLogs(billId) {
   const db = getDatabase()
-  const logs = db.prepare(`
+  const logs = await db.prepare(`
     SELECT * FROM operation_logs 
     WHERE bill_id = ? AND module = 'tms'
     ORDER BY operation_time DESC
@@ -768,7 +768,7 @@ export function getTMSLogs(billId) {
 
 // ==================== 数据转换函数 ====================
 
-export function convertCMRToCamelCase(row) {
+export async function convertCMRToCamelCase(row) {
   if (!row) return null
   
   // 解析异常记录
@@ -822,7 +822,7 @@ export function convertCMRToCamelCase(row) {
   }
 }
 
-export function convertServiceProviderToCamelCase(row) {
+export async function convertServiceProviderToCamelCase(row) {
   return {
     id: String(row.id),
     providerCode: row.provider_code,

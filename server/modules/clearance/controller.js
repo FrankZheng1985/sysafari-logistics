@@ -12,7 +12,7 @@ import * as model from './model.js'
  */
 export async function getDocumentTypes(req, res) {
   try {
-    const types = model.getDocumentTypes(req.query)
+    const types = await model.getDocumentTypes(req.query)
     return success(res, types)
   } catch (error) {
     console.error('获取单证类型列表失败:', error)
@@ -28,7 +28,7 @@ export async function getDocumentTypes(req, res) {
 export async function getClearanceDocuments(req, res) {
   try {
     const { page, pageSize, ...filters } = req.query
-    const result = model.getClearanceDocuments({
+    const result = await model.getClearanceDocuments({
       ...filters,
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20
@@ -49,7 +49,7 @@ export async function getClearanceDocuments(req, res) {
  */
 export async function getClearanceStats(req, res) {
   try {
-    const stats = model.getClearanceStats(req.query)
+    const stats = await model.getClearanceStats(req.query)
     return success(res, stats)
   } catch (error) {
     console.error('获取清关单证统计失败:', error)
@@ -63,7 +63,7 @@ export async function getClearanceStats(req, res) {
 export async function getClearanceDocumentById(req, res) {
   try {
     const { id } = req.params
-    const doc = model.getClearanceDocumentById(id)
+    const doc = await model.getClearanceDocumentById(id)
     if (!doc) {
       return notFound(res, '单证不存在')
     }
@@ -80,7 +80,7 @@ export async function getClearanceDocumentById(req, res) {
 export async function getClearanceDocumentsByBill(req, res) {
   try {
     const { billId } = req.params
-    const docs = model.getClearanceDocumentsByBill(billId)
+    const docs = await model.getClearanceDocumentsByBill(billId)
     return success(res, docs)
   } catch (error) {
     console.error('获取订单清关单证失败:', error)
@@ -104,7 +104,7 @@ export async function createClearanceDocument(req, res) {
     data.createdBy = req.user?.id || null
     data.createdByName = req.user?.name || ''
     
-    const result = model.createClearanceDocument(data)
+    const result = await model.createClearanceDocument(data)
     return success(res, result, '创建成功')
   } catch (error) {
     console.error('创建清关单证失败:', error)
@@ -121,12 +121,12 @@ export async function updateClearanceDocument(req, res) {
     const data = req.body
     
     // 检查单证是否存在
-    const existing = model.getClearanceDocumentById(id)
+    const existing = await model.getClearanceDocumentById(id)
     if (!existing) {
       return notFound(res, '单证不存在')
     }
     
-    const result = model.updateClearanceDocument(id, data)
+    const result = await model.updateClearanceDocument(id, data)
     if (result) {
       return success(res, { id }, '更新成功')
     } else {
@@ -146,12 +146,12 @@ export async function deleteClearanceDocument(req, res) {
     const { id } = req.params
     
     // 检查单证是否存在
-    const existing = model.getClearanceDocumentById(id)
+    const existing = await model.getClearanceDocumentById(id)
     if (!existing) {
       return notFound(res, '单证不存在')
     }
     
-    const result = model.deleteClearanceDocument(id)
+    const result = await model.deleteClearanceDocument(id)
     if (result) {
       return success(res, null, '删除成功')
     } else {
@@ -176,13 +176,13 @@ export async function reviewClearanceDocument(req, res) {
     }
     
     // 检查单证是否存在
-    const existing = model.getClearanceDocumentById(id)
+    const existing = await model.getClearanceDocumentById(id)
     if (!existing) {
       return notFound(res, '单证不存在')
     }
     
     const reviewer = req.user?.name || ''
-    const result = model.reviewClearanceDocument(id, reviewStatus, reviewNote, reviewer)
+    const result = await model.reviewClearanceDocument(id, reviewStatus, reviewNote, reviewer)
     if (result) {
       return success(res, { id, reviewStatus }, '审核完成')
     } else {
@@ -208,12 +208,12 @@ export async function updateClearanceDocumentStatus(req, res) {
     }
     
     // 检查单证是否存在
-    const existing = model.getClearanceDocumentById(id)
+    const existing = await model.getClearanceDocumentById(id)
     if (!existing) {
       return notFound(res, '单证不存在')
     }
     
-    const result = model.updateClearanceDocumentStatus(id, status)
+    const result = await model.updateClearanceDocumentStatus(id, status)
     if (result) {
       return success(res, { id, status }, '状态更新成功')
     } else {

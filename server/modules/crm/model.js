@@ -87,7 +87,7 @@ export const FEEDBACK_PRIORITY = {
 /**
  * 获取客户列表
  */
-export function getCustomers(params = {}) {
+export async function getCustomers(params = {}) {
   const db = getDatabase()
   const { 
     type, level, status = 'active', search, 
@@ -138,13 +138,13 @@ export function getCustomers(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertCustomerToCamelCase),
@@ -157,10 +157,10 @@ export function getCustomers(params = {}) {
 /**
  * 获取客户统计
  */
-export function getCustomerStats() {
+export async function getCustomerStats() {
   const db = getDatabase()
   
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total,
       SUM(CASE WHEN customer_level = 'vip' THEN 1 ELSE 0 END) as vip,
@@ -196,29 +196,29 @@ export function getCustomerStats() {
 /**
  * 根据ID获取客户
  */
-export function getCustomerById(id) {
+export async function getCustomerById(id) {
   const db = getDatabase()
-  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(id)
+  const customer = await db.prepare('SELECT * FROM customers WHERE id = ?').get(id)
   return customer ? convertCustomerToCamelCase(customer) : null
 }
 
 /**
  * 根据客户代码获取客户
  */
-export function getCustomerByCode(code) {
+export async function getCustomerByCode(code) {
   const db = getDatabase()
-  const customer = db.prepare('SELECT * FROM customers WHERE customer_code = ?').get(code)
+  const customer = await db.prepare('SELECT * FROM customers WHERE customer_code = ?').get(code)
   return customer ? convertCustomerToCamelCase(customer) : null
 }
 
 /**
  * 创建客户
  */
-export function createCustomer(data) {
+export async function createCustomer(data) {
   const db = getDatabase()
   const id = generateId()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO customers (
       id, customer_code, customer_name, company_name, customer_type,
       customer_level, country_code, province, city, address, postal_code,
@@ -260,7 +260,7 @@ export function createCustomer(data) {
 /**
  * 更新客户
  */
-export function updateCustomer(id, data) {
+export async function updateCustomer(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -307,25 +307,25 @@ export function updateCustomer(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除客户
  */
-export function deleteCustomer(id) {
+export async function deleteCustomer(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM customers WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM customers WHERE id = ?').run(id)
   return result.changes > 0
 }
 
 /**
  * 更新客户状态
  */
-export function updateCustomerStatus(id, status) {
+export async function updateCustomerStatus(id, status) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE customers SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?
   `).run(status, id)
   return result.changes > 0
@@ -334,9 +334,9 @@ export function updateCustomerStatus(id, status) {
 /**
  * 分配客户给业务员
  */
-export function assignCustomer(id, assignedTo, assignedName) {
+export async function assignCustomer(id, assignedTo, assignedName) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE customers 
     SET assigned_to = ?, assigned_name = ?, updated_at = datetime('now', 'localtime') 
     WHERE id = ?
@@ -349,9 +349,9 @@ export function assignCustomer(id, assignedTo, assignedName) {
 /**
  * 获取客户联系人列表
  */
-export function getContacts(customerId) {
+export async function getContacts(customerId) {
   const db = getDatabase()
-  const contacts = db.prepare(`
+  const contacts = await db.prepare(`
     SELECT * FROM customer_contacts WHERE customer_id = ? ORDER BY is_primary DESC, created_at DESC
   `).all(customerId)
   
@@ -361,25 +361,25 @@ export function getContacts(customerId) {
 /**
  * 获取联系人详情
  */
-export function getContactById(id) {
+export async function getContactById(id) {
   const db = getDatabase()
-  const contact = db.prepare('SELECT * FROM customer_contacts WHERE id = ?').get(id)
+  const contact = await db.prepare('SELECT * FROM customer_contacts WHERE id = ?').get(id)
   return contact ? convertContactToCamelCase(contact) : null
 }
 
 /**
  * 创建联系人
  */
-export function createContact(data) {
+export async function createContact(data) {
   const db = getDatabase()
   const id = generateId()
   
   // 如果是主要联系人，先取消其他主要联系人
   if (data.isPrimary) {
-    db.prepare('UPDATE customer_contacts SET is_primary = 0 WHERE customer_id = ?').run(data.customerId)
+    await db.prepare('UPDATE customer_contacts SET is_primary = 0 WHERE customer_id = ?').run(data.customerId)
   }
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO customer_contacts (
       id, customer_id, contact_name, position, department,
       phone, mobile, email, wechat, qq,
@@ -409,7 +409,7 @@ export function createContact(data) {
 /**
  * 更新联系人
  */
-export function updateContact(id, data) {
+export async function updateContact(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -440,7 +440,7 @@ export function updateContact(id, data) {
     if (data.isPrimary) {
       const contact = getContactById(id)
       if (contact) {
-        db.prepare('UPDATE customer_contacts SET is_primary = 0 WHERE customer_id = ?').run(contact.customerId)
+        await db.prepare('UPDATE customer_contacts SET is_primary = 0 WHERE customer_id = ?').run(contact.customerId)
       }
     }
     fields.push('is_primary = ?')
@@ -457,16 +457,16 @@ export function updateContact(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE customer_contacts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE customer_contacts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除联系人
  */
-export function deleteContact(id) {
+export async function deleteContact(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM customer_contacts WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM customer_contacts WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -475,7 +475,7 @@ export function deleteContact(id) {
 /**
  * 获取跟进记录列表
  */
-export function getFollowUps(params = {}) {
+export async function getFollowUps(params = {}) {
   const db = getDatabase()
   const { customerId, type, operatorId, startDate, endDate, page = 1, pageSize = 20 } = params
   
@@ -509,13 +509,13 @@ export function getFollowUps(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY follow_up_time DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertFollowUpToCamelCase),
@@ -528,11 +528,11 @@ export function getFollowUps(params = {}) {
 /**
  * 创建跟进记录
  */
-export function createFollowUp(data) {
+export async function createFollowUp(data) {
   const db = getDatabase()
   const id = generateId()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO customer_follow_ups (
       id, customer_id, contact_id, follow_up_type, follow_up_time,
       content, result, next_follow_up_time, next_action,
@@ -554,7 +554,7 @@ export function createFollowUp(data) {
   )
   
   // 更新客户最后跟进时间
-  db.prepare(`
+  await db.prepare(`
     UPDATE customers SET last_follow_up_time = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?
   `).run(data.customerId)
   
@@ -564,7 +564,7 @@ export function createFollowUp(data) {
 /**
  * 更新跟进记录
  */
-export function updateFollowUp(id, data) {
+export async function updateFollowUp(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -590,16 +590,16 @@ export function updateFollowUp(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE customer_follow_ups SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE customer_follow_ups SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除跟进记录
  */
-export function deleteFollowUp(id) {
+export async function deleteFollowUp(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM customer_follow_ups WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM customer_follow_ups WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -608,7 +608,7 @@ export function deleteFollowUp(id) {
 /**
  * 获取客户订单统计
  */
-export function getCustomerOrderStats(customerId) {
+export async function getCustomerOrderStats(customerId) {
   const db = getDatabase()
   
   // 根据客户ID关联提单统计
@@ -616,7 +616,7 @@ export function getCustomerOrderStats(customerId) {
   if (!customer) return null
   
   // 统计作为发货人的订单
-  const shipperStats = db.prepare(`
+  const shipperStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_orders,
       SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
@@ -628,7 +628,7 @@ export function getCustomerOrderStats(customerId) {
   `).get(`%${customer.customerName}%`)
   
   // 统计作为收货人的订单
-  const consigneeStats = db.prepare(`
+  const consigneeStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_orders,
       SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
@@ -660,7 +660,7 @@ export function getCustomerOrderStats(customerId) {
 /**
  * 获取客户相关订单列表
  */
-export function getCustomerOrders(customerId, params = {}) {
+export async function getCustomerOrders(customerId, params = {}) {
   const db = getDatabase()
   const { page = 1, pageSize = 10, search, status } = params
   
@@ -694,13 +694,13 @@ export function getCustomerOrders(customerId, params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(row => ({
@@ -734,7 +734,7 @@ export function getCustomerOrders(customerId, params = {}) {
 /**
  * 获取销售机会列表
  */
-export function getOpportunities(params = {}) {
+export async function getOpportunities(params = {}) {
   const db = getDatabase()
   const { customerId, stage, assignedTo, startDate, endDate, search, page = 1, pageSize = 20 } = params
   
@@ -773,12 +773,12 @@ export function getOpportunities(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertOpportunityToCamelCase),
@@ -791,10 +791,10 @@ export function getOpportunities(params = {}) {
 /**
  * 获取销售机会统计
  */
-export function getOpportunityStats() {
+export async function getOpportunityStats() {
   const db = getDatabase()
   
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total,
       SUM(CASE WHEN stage = 'lead' THEN 1 ELSE 0 END) as lead,
@@ -827,20 +827,20 @@ export function getOpportunityStats() {
 /**
  * 根据ID获取销售机会
  */
-export function getOpportunityById(id) {
+export async function getOpportunityById(id) {
   const db = getDatabase()
-  const opportunity = db.prepare('SELECT * FROM sales_opportunities WHERE id = ?').get(id)
+  const opportunity = await db.prepare('SELECT * FROM sales_opportunities WHERE id = ?').get(id)
   return opportunity ? convertOpportunityToCamelCase(opportunity) : null
 }
 
 /**
  * 创建销售机会
  */
-export function createOpportunity(data) {
+export async function createOpportunity(data) {
   const db = getDatabase()
   const id = generateId()
   
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO sales_opportunities (
       id, opportunity_name, customer_id, customer_name, contact_id, contact_name,
       stage, expected_amount, probability, expected_close_date,
@@ -870,7 +870,7 @@ export function createOpportunity(data) {
 /**
  * 更新销售机会
  */
-export function updateOpportunity(id, data) {
+export async function updateOpportunity(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -904,25 +904,25 @@ export function updateOpportunity(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE sales_opportunities SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE sales_opportunities SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除销售机会
  */
-export function deleteOpportunity(id) {
+export async function deleteOpportunity(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM sales_opportunities WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM sales_opportunities WHERE id = ?').run(id)
   return result.changes > 0
 }
 
 /**
  * 更新销售机会阶段
  */
-export function updateOpportunityStage(id, stage, lostReason = '') {
+export async function updateOpportunityStage(id, stage, lostReason = '') {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE sales_opportunities 
     SET stage = ?, lost_reason = ?, updated_at = datetime('now', 'localtime')
     WHERE id = ?
@@ -935,7 +935,7 @@ export function updateOpportunityStage(id, stage, lostReason = '') {
 /**
  * 获取报价列表
  */
-export function getQuotations(params = {}) {
+export async function getQuotations(params = {}) {
   const db = getDatabase()
   const { customerId, opportunityId, status, startDate, endDate, search, page = 1, pageSize = 20 } = params
   
@@ -974,12 +974,12 @@ export function getQuotations(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY quote_date DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertQuotationToCamelCase),
@@ -992,9 +992,9 @@ export function getQuotations(params = {}) {
 /**
  * 根据ID获取报价
  */
-export function getQuotationById(id) {
+export async function getQuotationById(id) {
   const db = getDatabase()
-  const quotation = db.prepare('SELECT * FROM quotations WHERE id = ?').get(id)
+  const quotation = await db.prepare('SELECT * FROM quotations WHERE id = ?').get(id)
   return quotation ? convertQuotationToCamelCase(quotation) : null
 }
 
@@ -1005,7 +1005,7 @@ function generateQuoteNumber() {
   const db = getDatabase()
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT quote_number FROM quotations 
     WHERE quote_number LIKE ? 
     ORDER BY quote_number DESC LIMIT 1
@@ -1023,12 +1023,12 @@ function generateQuoteNumber() {
 /**
  * 创建报价
  */
-export function createQuotation(data) {
+export async function createQuotation(data) {
   const db = getDatabase()
   const id = generateId()
   const quoteNumber = generateQuoteNumber()
   
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO quotations (
       id, quote_number, customer_id, customer_name, opportunity_id,
       contact_id, contact_name, subject, quote_date, valid_until,
@@ -1066,7 +1066,7 @@ export function createQuotation(data) {
 /**
  * 更新报价
  */
-export function updateQuotation(id, data) {
+export async function updateQuotation(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -1102,16 +1102,16 @@ export function updateQuotation(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE quotations SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE quotations SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除报价
  */
-export function deleteQuotation(id) {
+export async function deleteQuotation(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM quotations WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM quotations WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -1120,7 +1120,7 @@ export function deleteQuotation(id) {
 /**
  * 获取合同列表
  */
-export function getContracts(params = {}) {
+export async function getContracts(params = {}) {
   const db = getDatabase()
   const { customerId, status, startDate, endDate, search, page = 1, pageSize = 20 } = params
   
@@ -1154,12 +1154,12 @@ export function getContracts(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertContractToCamelCase),
@@ -1172,9 +1172,9 @@ export function getContracts(params = {}) {
 /**
  * 根据ID获取合同
  */
-export function getContractById(id) {
+export async function getContractById(id) {
   const db = getDatabase()
-  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(id)
+  const contract = await db.prepare('SELECT * FROM contracts WHERE id = ?').get(id)
   return contract ? convertContractToCamelCase(contract) : null
 }
 
@@ -1185,7 +1185,7 @@ function generateContractNumber() {
   const db = getDatabase()
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT contract_number FROM contracts 
     WHERE contract_number LIKE ? 
     ORDER BY contract_number DESC LIMIT 1
@@ -1203,12 +1203,12 @@ function generateContractNumber() {
 /**
  * 创建合同
  */
-export function createContract(data) {
+export async function createContract(data) {
   const db = getDatabase()
   const id = generateId()
   const contractNumber = generateContractNumber()
   
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO contracts (
       id, contract_number, contract_name, customer_id, customer_name,
       quotation_id, opportunity_id, contract_type, contract_amount, currency,
@@ -1243,7 +1243,7 @@ export function createContract(data) {
 /**
  * 更新合同
  */
-export function updateContract(id, data) {
+export async function updateContract(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -1273,16 +1273,16 @@ export function updateContract(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE contracts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE contracts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除合同
  */
-export function deleteContract(id) {
+export async function deleteContract(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM contracts WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM contracts WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -1291,7 +1291,7 @@ export function deleteContract(id) {
 /**
  * 获取客户反馈列表
  */
-export function getFeedbacks(params = {}) {
+export async function getFeedbacks(params = {}) {
   const db = getDatabase()
   const { customerId, type, status, priority, assignedTo, startDate, endDate, search, page = 1, pageSize = 20 } = params
   
@@ -1340,12 +1340,12 @@ export function getFeedbacks(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY CASE priority WHEN "urgent" THEN 1 WHEN "high" THEN 2 WHEN "medium" THEN 3 ELSE 4 END, created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertFeedbackToCamelCase),
@@ -1358,10 +1358,10 @@ export function getFeedbacks(params = {}) {
 /**
  * 获取反馈统计
  */
-export function getFeedbackStats() {
+export async function getFeedbackStats() {
   const db = getDatabase()
   
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total,
       SUM(CASE WHEN feedback_type = 'complaint' THEN 1 ELSE 0 END) as complaint,
@@ -1395,9 +1395,9 @@ export function getFeedbackStats() {
 /**
  * 根据ID获取反馈
  */
-export function getFeedbackById(id) {
+export async function getFeedbackById(id) {
   const db = getDatabase()
-  const feedback = db.prepare('SELECT * FROM customer_feedbacks WHERE id = ?').get(id)
+  const feedback = await db.prepare('SELECT * FROM customer_feedbacks WHERE id = ?').get(id)
   return feedback ? convertFeedbackToCamelCase(feedback) : null
 }
 
@@ -1408,7 +1408,7 @@ function generateFeedbackNumber() {
   const db = getDatabase()
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT feedback_number FROM customer_feedbacks 
     WHERE feedback_number LIKE ? 
     ORDER BY feedback_number DESC LIMIT 1
@@ -1426,12 +1426,12 @@ function generateFeedbackNumber() {
 /**
  * 创建反馈
  */
-export function createFeedback(data) {
+export async function createFeedback(data) {
   const db = getDatabase()
   const id = generateId()
   const feedbackNumber = generateFeedbackNumber()
   
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO customer_feedbacks (
       id, feedback_number, customer_id, customer_name, contact_id, contact_name,
       feedback_type, subject, content, priority, source,
@@ -1463,7 +1463,7 @@ export function createFeedback(data) {
 /**
  * 更新反馈
  */
-export function updateFeedback(id, data) {
+export async function updateFeedback(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -1492,16 +1492,16 @@ export function updateFeedback(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE customer_feedbacks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE customer_feedbacks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 解决反馈
  */
-export function resolveFeedback(id, resolution) {
+export async function resolveFeedback(id, resolution) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE customer_feedbacks 
     SET status = 'resolved', resolution = ?, resolved_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
     WHERE id = ?
@@ -1512,9 +1512,9 @@ export function resolveFeedback(id, resolution) {
 /**
  * 删除反馈
  */
-export function deleteFeedback(id) {
+export async function deleteFeedback(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM customer_feedbacks WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM customer_feedbacks WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -1523,7 +1523,7 @@ export function deleteFeedback(id) {
 /**
  * 获取客户价值分析
  */
-export function getCustomerValueAnalysis(customerId) {
+export async function getCustomerValueAnalysis(customerId) {
   const db = getDatabase()
   
   const customer = getCustomerById(customerId)
@@ -1533,7 +1533,7 @@ export function getCustomerValueAnalysis(customerId) {
   const orderStats = getCustomerOrderStats(customerId)
   
   // 合同统计
-  const contractStats = db.prepare(`
+  const contractStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_contracts,
       COALESCE(SUM(contract_amount), 0) as total_value,
@@ -1542,7 +1542,7 @@ export function getCustomerValueAnalysis(customerId) {
   `).get(customerId)
   
   // 报价统计
-  const quoteStats = db.prepare(`
+  const quoteStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_quotes,
       SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted_quotes,
@@ -1551,7 +1551,7 @@ export function getCustomerValueAnalysis(customerId) {
   `).get(customerId)
   
   // 反馈统计
-  const feedbackStats = db.prepare(`
+  const feedbackStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_feedbacks,
       SUM(CASE WHEN feedback_type = 'complaint' THEN 1 ELSE 0 END) as complaints,
@@ -1560,7 +1560,7 @@ export function getCustomerValueAnalysis(customerId) {
   `).get(customerId)
   
   // 跟进统计
-  const followUpStats = db.prepare(`
+  const followUpStats = await db.prepare(`
     SELECT COUNT(*) as total_follow_ups FROM customer_follow_ups WHERE customer_id = ?
   `).get(customerId)
   
@@ -1600,10 +1600,10 @@ export function getCustomerValueAnalysis(customerId) {
 /**
  * 获取销售漏斗数据
  */
-export function getSalesFunnel() {
+export async function getSalesFunnel() {
   const db = getDatabase()
   
-  const funnel = db.prepare(`
+  const funnel = await db.prepare(`
     SELECT 
       stage,
       COUNT(*) as count,
@@ -1629,10 +1629,10 @@ export function getSalesFunnel() {
 /**
  * 获取客户活跃度排行
  */
-export function getCustomerActivityRanking(limit = 10) {
+export async function getCustomerActivityRanking(limit = 10) {
   const db = getDatabase()
   
-  const ranking = db.prepare(`
+  const ranking = await db.prepare(`
     SELECT 
       c.id,
       c.customer_name,

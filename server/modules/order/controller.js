@@ -86,7 +86,7 @@ export async function getBills(req, res) {
  */
 export async function getBillById(req, res) {
   try {
-    const bill = model.getBillById(req.params.id)
+    const bill = await model.getBillById(req.params.id)
     if (!bill) {
       return notFound(res, '提单不存在')
     }
@@ -108,20 +108,20 @@ export async function createBill(req, res) {
       billNumber = generateNextBillNumber()
     } else {
       // 如果提供了提单号，检查是否已存在
-      const existing = model.getBillByNumber(billNumber)
+      const existing = await model.getBillByNumber(billNumber)
       if (existing) {
         return conflict(res, '提单号已存在')
       }
     }
     
-    const result = model.createBill({
+    const result = await model.createBill({
       ...req.body,
       billNumber, // 使用自动生成或用户提供的提单号
       operator: req.user?.name || '系统'
     })
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: result.id,
       operationType: 'create',
       operationName: '创建提单',
@@ -131,7 +131,7 @@ export async function createBill(req, res) {
       module: 'order'
     })
     
-    const newBill = model.getBillById(result.id)
+    const newBill = await model.getBillById(result.id)
     return success(res, newBill, '创建成功')
   } catch (error) {
     console.error('创建提单失败:', error)
@@ -146,18 +146,18 @@ export async function updateBill(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
-    const updated = model.updateBill(id, req.body)
+    const updated = await model.updateBill(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'update',
       operationName: '更新提单',
@@ -167,7 +167,7 @@ export async function updateBill(req, res) {
       module: 'order'
     })
     
-    const updatedBill = model.getBillById(id)
+    const updatedBill = await model.getBillById(id)
     return success(res, updatedBill, '更新成功')
   } catch (error) {
     console.error('更新提单失败:', error)
@@ -183,7 +183,7 @@ export async function voidBill(req, res) {
     const { id } = req.params
     const { reason } = req.body
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
@@ -192,13 +192,13 @@ export async function voidBill(req, res) {
       return badRequest(res, '提单已作废')
     }
     
-    const voided = model.voidBill(id, reason || '', req.user?.name || '系统')
+    const voided = await model.voidBill(id, reason || '', req.user?.name || '系统')
     if (!voided) {
       return serverError(res, '作废失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'void',
       operationName: '作废提单',
@@ -224,7 +224,7 @@ export async function restoreBill(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
@@ -233,13 +233,13 @@ export async function restoreBill(req, res) {
       return badRequest(res, '提单未作废，无需恢复')
     }
     
-    const restored = model.restoreBill(id)
+    const restored = await model.restoreBill(id)
     if (!restored) {
       return serverError(res, '恢复失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'restore',
       operationName: '恢复提单',
@@ -264,12 +264,12 @@ export async function deleteBill(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
-    const deleted = model.deleteBill(id)
+    const deleted = await model.deleteBill(id)
     if (!deleted) {
       return serverError(res, '删除失败')
     }
@@ -295,20 +295,20 @@ export async function updateShipStatus(req, res) {
       return badRequest(res, '船运状态为必填项')
     }
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
     const oldStatus = existing.shipStatus
-    const updated = model.updateBillShipStatus(id, shipStatus, actualArrivalDate)
+    const updated = await model.updateBillShipStatus(id, shipStatus, actualArrivalDate)
     
     if (!updated) {
       return serverError(res, '更新失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'status_change',
       operationName: '更新船运状态',
@@ -319,7 +319,7 @@ export async function updateShipStatus(req, res) {
       module: 'order'
     })
     
-    const updatedBill = model.getBillById(id)
+    const updatedBill = await model.getBillById(id)
     return success(res, updatedBill, '更新成功')
   } catch (error) {
     console.error('更新船运状态失败:', error)
@@ -339,20 +339,20 @@ export async function updateDocSwapStatus(req, res) {
       return badRequest(res, '换单状态为必填项')
     }
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
     const oldStatus = existing.docSwapStatus
-    const updated = model.updateBillDocSwapStatus(id, docSwapStatus)
+    const updated = await model.updateBillDocSwapStatus(id, docSwapStatus)
     
     if (!updated) {
       return serverError(res, '更新失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'doc_swap',
       operationName: '更新换单状态',
@@ -382,20 +382,20 @@ export async function updateCustomsStatus(req, res) {
       return badRequest(res, '清关状态为必填项')
     }
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
     const oldStatus = existing.customsStatus
-    const updated = model.updateBillCustomsStatus(id, customsStatus)
+    const updated = await model.updateBillCustomsStatus(id, customsStatus)
     
     if (!updated) {
       return serverError(res, '更新失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'status_change',
       operationName: '更新清关状态',
@@ -406,7 +406,7 @@ export async function updateCustomsStatus(req, res) {
       module: 'customs'
     })
     
-    const updatedBill = model.getBillById(id)
+    const updatedBill = await model.getBillById(id)
     return success(res, updatedBill, '更新成功')
   } catch (error) {
     console.error('更新清关状态失败:', error)
@@ -426,20 +426,20 @@ export async function updateInspection(req, res) {
       return badRequest(res, '查验状态为必填项')
     }
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
     const oldStatus = existing.inspection
-    const updated = model.updateBillInspection(id, { inspection, ...rest })
+    const updated = await model.updateBillInspection(id, { inspection, ...rest })
     
     if (!updated) {
       return serverError(res, '更新失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'status_change',
       operationName: '更新查验状态',
@@ -450,7 +450,7 @@ export async function updateInspection(req, res) {
       module: 'inspection'
     })
     
-    const updatedBill = model.getBillById(id)
+    const updatedBill = await model.getBillById(id)
     return success(res, updatedBill, '更新成功')
   } catch (error) {
     console.error('更新查验状态失败:', error)
@@ -470,20 +470,20 @@ export async function updateDelivery(req, res) {
       return badRequest(res, '派送状态为必填项')
     }
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
     const oldStatus = existing.deliveryStatus
-    const updated = model.updateBillDelivery(id, { deliveryStatus, ...rest })
+    const updated = await model.updateBillDelivery(id, { deliveryStatus, ...rest })
     
     if (!updated) {
       return serverError(res, '更新失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'status_change',
       operationName: '更新派送状态',
@@ -494,7 +494,7 @@ export async function updateDelivery(req, res) {
       module: 'delivery'
     })
     
-    const updatedBill = model.getBillById(id)
+    const updatedBill = await model.getBillById(id)
     return success(res, updatedBill, '更新成功')
   } catch (error) {
     console.error('更新派送状态失败:', error)
@@ -512,12 +512,12 @@ export async function getOperationLogs(req, res) {
     const { id } = req.params
     const { module } = req.query
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
-    const logs = model.getOperationLogs(id, module)
+    const logs = await model.getOperationLogs(id, module)
     return success(res, logs)
   } catch (error) {
     console.error('获取操作日志失败:', error)
@@ -534,12 +534,12 @@ export async function getBillFiles(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
-    const files = model.getBillFiles(id)
+    const files = await model.getBillFiles(id)
     return success(res, files)
   } catch (error) {
     console.error('获取文件列表失败:', error)
@@ -554,7 +554,7 @@ export async function deleteBillFile(req, res) {
   try {
     const { id, fileId } = req.params
     
-    const file = model.getBillFileById(fileId)
+    const file = await model.getBillFileById(fileId)
     if (!file) {
       return notFound(res, '文件不存在')
     }
@@ -563,13 +563,13 @@ export async function deleteBillFile(req, res) {
       return badRequest(res, '文件不属于此提单')
     }
     
-    const deleted = model.deleteBillFile(fileId)
+    const deleted = await model.deleteBillFile(fileId)
     if (!deleted) {
       return serverError(res, '删除失败')
     }
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'file_delete',
       operationName: '删除文件',
@@ -593,7 +593,7 @@ export async function deleteBillFile(req, res) {
  */
 export async function getBillStats(req, res) {
   try {
-    const stats = model.getBillStats()
+    const stats = await model.getBillStats()
     return success(res, stats)
   } catch (error) {
     console.error('获取统计数据失败:', error)
@@ -608,7 +608,7 @@ export async function getCMRList(req, res) {
   try {
     const { type = 'undelivered', search, page, pageSize } = req.query
     
-    const result = model.getCMRList(type, {
+    const result = await model.getCMRList(type, {
       search,
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20
@@ -646,7 +646,7 @@ export async function getInspectionList(req, res) {
   try {
     const { type = 'pending', search, page, pageSize } = req.query
     
-    const result = model.getInspectionList(type, {
+    const result = await model.getInspectionList(type, {
       search,
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20
@@ -690,12 +690,12 @@ export async function checkBillOperations(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
     
-    const result = model.checkBillHasOperations(id)
+    const result = await model.checkBillHasOperations(id)
     return success(res, result)
   } catch (error) {
     console.error('检查提单操作记录失败:', error)
@@ -711,7 +711,7 @@ export async function submitVoidApplication(req, res) {
     const { id } = req.params
     const { reason, fees } = req.body
     
-    const existing = model.getBillById(id)
+    const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
     }
@@ -721,7 +721,7 @@ export async function submitVoidApplication(req, res) {
     }
     
     // 创建作废申请
-    const applicationId = model.createVoidApplication({
+    const applicationId = await model.createVoidApplication({
       billId: id,
       reason,
       applicantId: req.user?.id || 'admin',
@@ -730,7 +730,7 @@ export async function submitVoidApplication(req, res) {
     })
     
     // 记录操作日志
-    model.addOperationLog({
+    await model.addOperationLog({
       billId: id,
       operationType: 'void_apply',
       operationName: '提交作废申请',
@@ -755,7 +755,7 @@ export async function getVoidApplications(req, res) {
   try {
     const { status, userId } = req.query
     
-    const applications = model.getVoidApplications({ status, userId })
+    const applications = await model.getVoidApplications({ status, userId })
     return success(res, applications)
   } catch (error) {
     console.error('获取作废申请列表失败:', error)
@@ -770,7 +770,7 @@ export async function getVoidApplicationDetail(req, res) {
   try {
     const { id } = req.params
     
-    const application = model.getVoidApplicationById(id)
+    const application = await model.getVoidApplicationById(id)
     if (!application) {
       return notFound(res, '申请不存在')
     }
@@ -790,7 +790,7 @@ export async function approveVoidApplication(req, res) {
     const { id } = req.params
     const { comment } = req.body
     
-    const result = model.approveVoidApplication(
+    const result = await model.approveVoidApplication(
       id,
       req.user?.id || 'admin',
       req.user?.name || 'Admin',
@@ -820,7 +820,7 @@ export async function rejectVoidApplication(req, res) {
       return badRequest(res, '请填写拒绝原因')
     }
     
-    const result = model.rejectVoidApplication(
+    const result = await model.rejectVoidApplication(
       id,
       req.user?.id || 'admin',
       req.user?.name || 'Admin',
@@ -845,7 +845,7 @@ export async function rejectVoidApplication(req, res) {
  */
 export async function getSystemConfigs(req, res) {
   try {
-    const configs = model.getAllSystemConfigs()
+    const configs = await model.getAllSystemConfigs()
     return success(res, configs)
   } catch (error) {
     console.error('获取系统配置失败:', error)
@@ -864,7 +864,7 @@ export async function updateSystemConfig(req, res) {
       return badRequest(res, '配置键不能为空')
     }
     
-    model.setSystemConfig(key, value, description)
+    await model.setSystemConfig(key, value, description)
     return success(res, null, '配置已更新')
   } catch (error) {
     console.error('更新系统配置失败:', error)

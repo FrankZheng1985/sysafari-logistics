@@ -150,20 +150,20 @@ export async function getBillById(id) {
 /**
  * 根据提单号获取提单
  */
-export function getBillByNumber(billNumber) {
+export async function getBillByNumber(billNumber) {
   const db = getDatabase()
-  const bill = db.prepare('SELECT * FROM bills_of_lading WHERE bill_number = ?').get(billNumber)
+  const bill = await db.prepare('SELECT * FROM bills_of_lading WHERE bill_number = ?').get(billNumber)
   return bill ? convertBillToCamelCase(bill) : null
 }
 
 /**
  * 创建提单
  */
-export function createBill(data) {
+export async function createBill(data) {
   const db = getDatabase()
   const id = generateId()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO bills_of_lading (
       id, bill_number, container_number, vessel, voyage,
       shipper, consignee, notify_party,
@@ -219,7 +219,7 @@ export function createBill(data) {
 /**
  * 更新提单
  */
-export function updateBill(id, data) {
+export async function updateBill(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -272,16 +272,16 @@ export function updateBill(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 作废提单
  */
-export function voidBill(id, reason, operator) {
+export async function voidBill(id, reason, operator) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET is_void = 1, 
         void_reason = ?, 
@@ -296,9 +296,9 @@ export function voidBill(id, reason, operator) {
 /**
  * 恢复提单
  */
-export function restoreBill(id) {
+export async function restoreBill(id) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET is_void = 0, 
         void_reason = NULL, 
@@ -313,9 +313,9 @@ export function restoreBill(id) {
 /**
  * 删除提单（硬删除，谨慎使用）
  */
-export function deleteBill(id) {
+export async function deleteBill(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM bills_of_lading WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM bills_of_lading WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -324,7 +324,7 @@ export function deleteBill(id) {
 /**
  * 更新船运状态
  */
-export function updateBillShipStatus(id, shipStatus, actualArrivalDate = null) {
+export async function updateBillShipStatus(id, shipStatus, actualArrivalDate = null) {
   const db = getDatabase()
   
   let query = `
@@ -347,16 +347,16 @@ export function updateBillShipStatus(id, shipStatus, actualArrivalDate = null) {
   query += ' WHERE id = ?'
   params.push(id)
   
-  const result = db.prepare(query).run(...params)
+  const result = await db.prepare(query).run(...params)
   return result.changes > 0
 }
 
 /**
  * 更新换单状态
  */
-export function updateBillDocSwapStatus(id, docSwapStatus) {
+export async function updateBillDocSwapStatus(id, docSwapStatus) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET doc_swap_status = ?,
         doc_swap_time = CASE WHEN ? = '已换单' THEN datetime('now', 'localtime') ELSE doc_swap_time END,
@@ -370,9 +370,9 @@ export function updateBillDocSwapStatus(id, docSwapStatus) {
 /**
  * 更新清关状态
  */
-export function updateBillCustomsStatus(id, customsStatus) {
+export async function updateBillCustomsStatus(id, customsStatus) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET customs_status = ?,
         updated_at = datetime('now', 'localtime')
@@ -385,7 +385,7 @@ export function updateBillCustomsStatus(id, customsStatus) {
 /**
  * 更新查验状态
  */
-export function updateBillInspection(id, inspectionData) {
+export async function updateBillInspection(id, inspectionData) {
   const db = getDatabase()
   const fields = ['inspection = ?', 'updated_at = datetime("now", "localtime")']
   const values = [inspectionData.inspection]
@@ -427,14 +427,14 @@ export function updateBillInspection(id, inspectionData) {
   
   values.push(id)
   
-  const result = db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 更新派送状态
  */
-export function updateBillDelivery(id, deliveryData) {
+export async function updateBillDelivery(id, deliveryData) {
   const db = getDatabase()
   const fields = ['delivery_status = ?', 'updated_at = datetime("now", "localtime")']
   const values = [deliveryData.deliveryStatus]
@@ -467,7 +467,7 @@ export function updateBillDelivery(id, deliveryData) {
   
   values.push(id)
   
-  const result = db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
@@ -476,7 +476,7 @@ export function updateBillDelivery(id, deliveryData) {
 /**
  * 获取操作日志
  */
-export function getOperationLogs(billId, module = null) {
+export async function getOperationLogs(billId, module = null) {
   const db = getDatabase()
   
   let query = 'SELECT * FROM operation_logs WHERE bill_id = ?'
@@ -489,17 +489,17 @@ export function getOperationLogs(billId, module = null) {
   
   query += ' ORDER BY operation_time DESC'
   
-  const logs = db.prepare(query).all(...params)
+  const logs = await db.prepare(query).all(...params)
   return logs.map(convertOperationLogToCamelCase)
 }
 
 /**
  * 添加操作日志
  */
-export function addOperationLog(data) {
+export async function addOperationLog(data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO operation_logs (
       bill_id, operation_type, operation_name,
       old_value, new_value, remark,
@@ -526,19 +526,19 @@ export function addOperationLog(data) {
 /**
  * 获取提单文件列表
  */
-export function getBillFiles(billId) {
+export async function getBillFiles(billId) {
   const db = getDatabase()
-  const files = db.prepare('SELECT * FROM bill_files WHERE bill_id = ? ORDER BY upload_time DESC').all(billId)
+  const files = await db.prepare('SELECT * FROM bill_files WHERE bill_id = ? ORDER BY upload_time DESC').all(billId)
   return files.map(convertBillFileToCamelCase)
 }
 
 /**
  * 添加提单文件
  */
-export function addBillFile(data) {
+export async function addBillFile(data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO bill_files (
       bill_id, file_name, file_path, file_type,
       original_size, compressed_size, upload_by, upload_time
@@ -559,18 +559,18 @@ export function addBillFile(data) {
 /**
  * 删除提单文件
  */
-export function deleteBillFile(id) {
+export async function deleteBillFile(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM bill_files WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM bill_files WHERE id = ?').run(id)
   return result.changes > 0
 }
 
 /**
  * 根据ID获取文件
  */
-export function getBillFileById(id) {
+export async function getBillFileById(id) {
   const db = getDatabase()
-  const file = db.prepare('SELECT * FROM bill_files WHERE id = ?').get(id)
+  const file = await db.prepare('SELECT * FROM bill_files WHERE id = ?').get(id)
   return file ? convertBillFileToCamelCase(file) : null
 }
 
@@ -579,10 +579,10 @@ export function getBillFileById(id) {
 /**
  * 获取提单统计数据
  */
-export function getBillStats() {
+export async function getBillStats() {
   const db = getDatabase()
   
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total,
       SUM(CASE WHEN is_void = 0 THEN 1 ELSE 0 END) as active,
@@ -610,7 +610,7 @@ export function getBillStats() {
  * - exception（订单异常）: 派送状态为订单异常或异常关闭
  * - archived（已归档）: 派送状态为已送达
  */
-export function getCMRList(type = 'delivering', params = {}) {
+export async function getCMRList(type = 'delivering', params = {}) {
   const db = getDatabase()
   const { search, page = 1, pageSize = 20 } = params
   
@@ -652,13 +652,13 @@ export function getCMRList(type = 'delivering', params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertBillToCamelCase),
@@ -671,7 +671,7 @@ export function getCMRList(type = 'delivering', params = {}) {
 /**
  * 获取查验管理列表
  */
-export function getInspectionList(type = 'pending', params = {}) {
+export async function getInspectionList(type = 'pending', params = {}) {
   const db = getDatabase()
   const { search, page = 1, pageSize = 20 } = params
   
@@ -704,13 +704,13 @@ export function getInspectionList(type = 'pending', params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertBillToCamelCase),
@@ -788,7 +788,7 @@ export function convertBillToCamelCase(row) {
   }
 }
 
-export function convertOperationLogToCamelCase(row) {
+export async function convertOperationLogToCamelCase(row) {
   return {
     id: String(row.id),
     billId: row.bill_id,
@@ -804,7 +804,7 @@ export function convertOperationLogToCamelCase(row) {
   }
 }
 
-export function convertBillFileToCamelCase(row) {
+export async function convertBillFileToCamelCase(row) {
   return {
     id: String(row.id),
     billId: row.bill_id,
@@ -823,17 +823,17 @@ export function convertBillFileToCamelCase(row) {
 /**
  * 检查提单是否有操作记录或费用
  */
-export function checkBillHasOperations(billId) {
+export async function checkBillHasOperations(billId) {
   const db = getDatabase()
   
   // 检查操作日志（排除创建操作）
-  const logsCount = db.prepare(`
+  const logsCount = await db.prepare(`
     SELECT COUNT(*) as count FROM operation_logs 
     WHERE bill_id = ? AND operation_type != 'create'
   `).get(billId)?.count || 0
   
   // 检查费用记录
-  const feesCount = db.prepare(`
+  const feesCount = await db.prepare(`
     SELECT COUNT(*) as count FROM fees WHERE bill_id = ?
   `).get(billId)?.count || 0
   
@@ -847,17 +847,17 @@ export function checkBillHasOperations(billId) {
 /**
  * 创建作废申请
  */
-export function createVoidApplication(data) {
+export async function createVoidApplication(data) {
   const db = getDatabase()
   const id = generateId('va')
   
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO void_applications (id, bill_id, reason, applicant_id, applicant_name, fees_json)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(id, data.billId, data.reason, data.applicantId || 'admin', data.applicantName || 'Admin', data.feesJson || null)
   
   // 更新提单状态为待审批
-  db.prepare(`
+  await db.prepare(`
     UPDATE bills_of_lading SET status = '待审批作废' WHERE id = ?
   `).run(data.billId)
   
@@ -867,7 +867,7 @@ export function createVoidApplication(data) {
 /**
  * 获取作废申请列表
  */
-export function getVoidApplications(params = {}) {
+export async function getVoidApplications(params = {}) {
   const db = getDatabase()
   const { status, userId } = params
   
@@ -895,7 +895,7 @@ export function getVoidApplications(params = {}) {
   
   query += ' ORDER BY va.created_at DESC'
   
-  const applications = db.prepare(query).all(...queryParams)
+  const applications = await db.prepare(query).all(...queryParams)
   
   return applications.map(app => ({
     id: app.id,
@@ -922,9 +922,9 @@ export function getVoidApplications(params = {}) {
 /**
  * 获取单个作废申请详情
  */
-export function getVoidApplicationById(id) {
+export async function getVoidApplicationById(id) {
   const db = getDatabase()
-  const app = db.prepare(`
+  const app = await db.prepare(`
     SELECT va.*, b.bill_number, b.container_number 
     FROM void_applications va
     LEFT JOIN bills_of_lading b ON va.bill_id = b.id
@@ -958,9 +958,9 @@ export function getVoidApplicationById(id) {
 /**
  * 审批通过作废申请
  */
-export function approveVoidApplication(id, approverId, approverName, comment) {
+export async function approveVoidApplication(id, approverId, approverName, comment) {
   const db = getDatabase()
-  const app = db.prepare('SELECT * FROM void_applications WHERE id = ?').get(id)
+  const app = await db.prepare('SELECT * FROM void_applications WHERE id = ?').get(id)
   
   if (!app) return { success: false, message: '申请不存在' }
   
@@ -968,7 +968,7 @@ export function approveVoidApplication(id, approverId, approverName, comment) {
   
   if (app.status === 'pending_supervisor') {
     // 上级审批通过，转到财务审批
-    db.prepare(`
+    await db.prepare(`
       UPDATE void_applications 
       SET status = 'pending_finance', 
           supervisor_id = ?, supervisor_name = ?, 
@@ -980,7 +980,7 @@ export function approveVoidApplication(id, approverId, approverName, comment) {
     
   } else if (app.status === 'pending_finance') {
     // 财务审批通过，正式作废
-    db.prepare(`
+    await db.prepare(`
       UPDATE void_applications 
       SET status = 'approved', 
           finance_id = ?, finance_name = ?, 
@@ -989,7 +989,7 @@ export function approveVoidApplication(id, approverId, approverName, comment) {
     `).run(approverId, approverName, now, comment || '', id)
     
     // 正式作废提单
-    db.prepare(`
+    await db.prepare(`
       UPDATE bills_of_lading 
       SET is_void = 1, void_reason = ?, void_time = ?, status = '已作废'
       WHERE id = ?
@@ -1004,16 +1004,16 @@ export function approveVoidApplication(id, approverId, approverName, comment) {
 /**
  * 拒绝作废申请
  */
-export function rejectVoidApplication(id, rejecterId, rejecterName, comment) {
+export async function rejectVoidApplication(id, rejecterId, rejecterName, comment) {
   const db = getDatabase()
-  const app = db.prepare('SELECT * FROM void_applications WHERE id = ?').get(id)
+  const app = await db.prepare('SELECT * FROM void_applications WHERE id = ?').get(id)
   
   if (!app) return { success: false, message: '申请不存在' }
   
   const now = new Date().toISOString()
   
   if (app.status === 'pending_supervisor') {
-    db.prepare(`
+    await db.prepare(`
       UPDATE void_applications 
       SET status = 'rejected', 
           supervisor_id = ?, supervisor_name = ?, 
@@ -1021,7 +1021,7 @@ export function rejectVoidApplication(id, rejecterId, rejecterName, comment) {
       WHERE id = ?
     `).run(rejecterId, rejecterName, now, comment || '', id)
   } else if (app.status === 'pending_finance') {
-    db.prepare(`
+    await db.prepare(`
       UPDATE void_applications 
       SET status = 'rejected', 
           finance_id = ?, finance_name = ?, 
@@ -1031,7 +1031,7 @@ export function rejectVoidApplication(id, rejecterId, rejecterName, comment) {
   }
   
   // 恢复提单状态
-  db.prepare(`
+  await db.prepare(`
     UPDATE bills_of_lading SET status = '已到港' WHERE id = ?
   `).run(app.bill_id)
   
@@ -1043,18 +1043,18 @@ export function rejectVoidApplication(id, rejecterId, rejecterName, comment) {
 /**
  * 获取系统配置
  */
-export function getSystemConfig(key) {
+export async function getSystemConfig(key) {
   const db = getDatabase()
-  const config = db.prepare('SELECT value FROM system_configs WHERE key = ?').get(key)
+  const config = await db.prepare('SELECT value FROM system_configs WHERE key = ?').get(key)
   return config?.value || null
 }
 
 /**
  * 设置系统配置
  */
-export function setSystemConfig(key, value, description) {
+export async function setSystemConfig(key, value, description) {
   const db = getDatabase()
-  db.prepare(`
+  await db.prepare(`
     INSERT OR REPLACE INTO system_configs (key, value, description, updated_at)
     VALUES (?, ?, COALESCE(?, (SELECT description FROM system_configs WHERE key = ?)), datetime('now', 'localtime'))
   `).run(key, value, description, key)
@@ -1064,9 +1064,9 @@ export function setSystemConfig(key, value, description) {
 /**
  * 获取所有系统配置
  */
-export function getAllSystemConfigs() {
+export async function getAllSystemConfigs() {
   const db = getDatabase()
-  const configs = db.prepare('SELECT * FROM system_configs').all()
+  const configs = await db.prepare('SELECT * FROM system_configs').all()
   return configs.map(c => ({
     key: c.key,
     value: c.value,

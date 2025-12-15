@@ -16,7 +16,7 @@ export async function getDocuments(req, res) {
   try {
     const { type, status, entityType, entityId, uploadedBy, startDate, endDate, search, page, pageSize } = req.query
     
-    const result = model.getDocuments({
+    const result = await model.getDocuments({
       type,
       status,
       entityType,
@@ -46,7 +46,7 @@ export async function getDocuments(req, res) {
 export async function getDocumentStats(req, res) {
   try {
     const { entityType, entityId } = req.query
-    const stats = model.getDocumentStats({ entityType, entityId })
+    const stats = await model.getDocumentStats({ entityType, entityId })
     return success(res, stats)
   } catch (error) {
     console.error('获取文档统计失败:', error)
@@ -59,13 +59,13 @@ export async function getDocumentStats(req, res) {
  */
 export async function getDocumentById(req, res) {
   try {
-    const document = model.getDocumentById(req.params.id)
+    const document = await model.getDocumentById(req.params.id)
     if (!document) {
       return notFound(res, '文档不存在')
     }
     
     // 获取版本历史
-    const versions = model.getDocumentVersions(document.id)
+    const versions = await model.getDocumentVersions(document.id)
     
     return success(res, {
       ...document,
@@ -108,7 +108,7 @@ export async function createDocument(req, res) {
       // 移动文件到目标位置（如果使用multer diskStorage，文件已经在目标位置）
     }
     
-    const result = model.createDocument({
+    const result = await model.createDocument({
       documentName,
       originalName,
       documentType: documentType || 'other',
@@ -124,7 +124,7 @@ export async function createDocument(req, res) {
       uploadedByName: req.user?.name || ''
     })
     
-    const newDocument = model.getDocumentById(result.id)
+    const newDocument = await model.getDocumentById(result.id)
     return success(res, newDocument, '上传成功')
   } catch (error) {
     console.error('创建文档失败:', error)
@@ -139,17 +139,17 @@ export async function updateDocument(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getDocumentById(id)
+    const existing = await model.getDocumentById(id)
     if (!existing) {
       return notFound(res, '文档不存在')
     }
     
-    const updated = model.updateDocument(id, req.body)
+    const updated = await model.updateDocument(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedDocument = model.getDocumentById(id)
+    const updatedDocument = await model.getDocumentById(id)
     return success(res, updatedDocument, '更新成功')
   } catch (error) {
     console.error('更新文档失败:', error)
@@ -164,7 +164,7 @@ export async function deleteDocument(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getDocumentById(id)
+    const existing = await model.getDocumentById(id)
     if (!existing) {
       return notFound(res, '文档不存在')
     }
@@ -189,13 +189,13 @@ export async function updateDocumentStatus(req, res) {
       return badRequest(res, '状态值无效')
     }
     
-    const existing = model.getDocumentById(id)
+    const existing = await model.getDocumentById(id)
     if (!existing) {
       return notFound(res, '文档不存在')
     }
     
-    model.updateDocumentStatus(id, status, reviewNote)
-    const updatedDocument = model.getDocumentById(id)
+    await model.updateDocumentStatus(id, status, reviewNote)
+    const updatedDocument = await model.getDocumentById(id)
     
     return success(res, updatedDocument, '状态更新成功')
   } catch (error) {
@@ -211,7 +211,7 @@ export async function downloadDocument(req, res) {
   try {
     const { id } = req.params
     
-    const document = model.getDocumentById(id)
+    const document = await model.getDocumentById(id)
     if (!document) {
       return notFound(res, '文档不存在')
     }
@@ -248,7 +248,7 @@ export async function getEntityDocuments(req, res) {
   try {
     const { entityType, entityId } = req.params
     
-    const documents = model.getEntityDocuments(entityType, entityId)
+    const documents = await model.getEntityDocuments(entityType, entityId)
     return success(res, documents)
   } catch (error) {
     console.error('获取实体文档失败:', error)
@@ -268,13 +268,13 @@ export async function linkDocumentToEntity(req, res) {
       return badRequest(res, '实体类型和实体ID为必填项')
     }
     
-    const document = model.getDocumentById(id)
+    const document = await model.getDocumentById(id)
     if (!document) {
       return notFound(res, '文档不存在')
     }
     
-    model.linkDocumentToEntity(id, entityType, entityId, entityNumber)
-    const updatedDocument = model.getDocumentById(id)
+    await model.linkDocumentToEntity(id, entityType, entityId, entityNumber)
+    const updatedDocument = await model.getDocumentById(id)
     
     return success(res, updatedDocument, '关联成功')
   } catch (error) {
@@ -290,13 +290,13 @@ export async function unlinkDocumentFromEntity(req, res) {
   try {
     const { id } = req.params
     
-    const document = model.getDocumentById(id)
+    const document = await model.getDocumentById(id)
     if (!document) {
       return notFound(res, '文档不存在')
     }
     
-    model.unlinkDocumentFromEntity(id)
-    const updatedDocument = model.getDocumentById(id)
+    await model.unlinkDocumentFromEntity(id)
+    const updatedDocument = await model.getDocumentById(id)
     
     return success(res, updatedDocument, '解除关联成功')
   } catch (error) {
@@ -314,7 +314,7 @@ export async function getTemplates(req, res) {
   try {
     const { type, status, search, page, pageSize } = req.query
     
-    const result = model.getTemplates({
+    const result = await model.getTemplates({
       type,
       status,
       search,
@@ -338,7 +338,7 @@ export async function getTemplates(req, res) {
  */
 export async function getTemplateById(req, res) {
   try {
-    const template = model.getTemplateById(req.params.id)
+    const template = await model.getTemplateById(req.params.id)
     if (!template) {
       return notFound(res, '模板不存在')
     }
@@ -360,12 +360,12 @@ export async function createTemplate(req, res) {
       return badRequest(res, '模板名称为必填项')
     }
     
-    const result = model.createTemplate({
+    const result = await model.createTemplate({
       ...req.body,
       createdBy: req.user?.id
     })
     
-    const newTemplate = model.getTemplateById(result.id)
+    const newTemplate = await model.getTemplateById(result.id)
     return success(res, newTemplate, '创建成功')
   } catch (error) {
     console.error('创建模板失败:', error)
@@ -380,17 +380,17 @@ export async function updateTemplate(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getTemplateById(id)
+    const existing = await model.getTemplateById(id)
     if (!existing) {
       return notFound(res, '模板不存在')
     }
     
-    const updated = model.updateTemplate(id, req.body)
+    const updated = await model.updateTemplate(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedTemplate = model.getTemplateById(id)
+    const updatedTemplate = await model.getTemplateById(id)
     return success(res, updatedTemplate, '更新成功')
   } catch (error) {
     console.error('更新模板失败:', error)
@@ -405,7 +405,7 @@ export async function deleteTemplate(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getTemplateById(id)
+    const existing = await model.getTemplateById(id)
     if (!existing) {
       return notFound(res, '模板不存在')
     }
@@ -427,12 +427,12 @@ export async function getDocumentVersions(req, res) {
   try {
     const { id } = req.params
     
-    const document = model.getDocumentById(id)
+    const document = await model.getDocumentById(id)
     if (!document) {
       return notFound(res, '文档不存在')
     }
     
-    const versions = model.getDocumentVersions(id)
+    const versions = await model.getDocumentVersions(id)
     return success(res, versions)
   } catch (error) {
     console.error('获取版本历史失败:', error)
@@ -448,7 +448,7 @@ export async function createDocumentVersion(req, res) {
     const { id } = req.params
     const { changeNote } = req.body
     
-    const document = model.getDocumentById(id)
+    const document = await model.getDocumentById(id)
     if (!document) {
       return notFound(res, '文档不存在')
     }
@@ -462,7 +462,7 @@ export async function createDocumentVersion(req, res) {
     const uniqueName = model.generateUniqueFileName(req.file.originalname)
     const filePath = path.join(document.entityType || 'general', uniqueName)
     
-    const result = model.createDocumentVersion({
+    const result = await model.createDocumentVersion({
       documentId: id,
       filePath,
       fileSize: req.file.size,
@@ -471,7 +471,7 @@ export async function createDocumentVersion(req, res) {
       uploadedByName: req.user?.name || ''
     })
     
-    const updatedDocument = model.getDocumentById(id)
+    const updatedDocument = await model.getDocumentById(id)
     return success(res, {
       document: updatedDocument,
       version: result.version

@@ -51,7 +51,7 @@ export const FEE_CATEGORY = {
 /**
  * 获取发票列表
  */
-export function getInvoices(params = {}) {
+export async function getInvoices(params = {}) {
   const db = getDatabase()
   const { 
     type, status, customerId, billId,
@@ -100,13 +100,13 @@ export function getInvoices(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY invoice_date DESC, created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertInvoiceToCamelCase),
@@ -119,7 +119,7 @@ export function getInvoices(params = {}) {
 /**
  * 获取发票统计
  */
-export function getInvoiceStats(params = {}) {
+export async function getInvoiceStats(params = {}) {
   const db = getDatabase()
   const { startDate, endDate } = params
   
@@ -137,7 +137,7 @@ export function getInvoiceStats(params = {}) {
   }
   
   // 销售发票统计
-  const salesStats = db.prepare(`
+  const salesStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_count,
       COALESCE(SUM(total_amount), 0) as total_amount,
@@ -151,7 +151,7 @@ export function getInvoiceStats(params = {}) {
   `).get(...queryParams)
   
   // 采购发票统计
-  const purchaseStats = db.prepare(`
+  const purchaseStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_count,
       COALESCE(SUM(total_amount), 0) as total_amount,
@@ -194,23 +194,23 @@ export function getInvoiceStats(params = {}) {
 /**
  * 根据ID获取发票
  */
-export function getInvoiceById(id) {
+export async function getInvoiceById(id) {
   const db = getDatabase()
-  const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id)
+  const invoice = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(id)
   return invoice ? convertInvoiceToCamelCase(invoice) : null
 }
 
 /**
  * 创建发票
  */
-export function createInvoice(data) {
+export async function createInvoice(data) {
   const db = getDatabase()
   const id = generateId()
   
   // 生成发票号
   const invoiceNumber = generateInvoiceNumber(data.invoiceType)
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO invoices (
       id, invoice_number, invoice_type, invoice_date, due_date,
       customer_id, customer_name, bill_id, bill_number,
@@ -246,7 +246,7 @@ export function createInvoice(data) {
 /**
  * 更新发票
  */
-export function updateInvoice(id, data) {
+export async function updateInvoice(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -280,30 +280,30 @@ export function updateInvoice(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE invoices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE invoices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除发票
  */
-export function deleteInvoice(id) {
+export async function deleteInvoice(id) {
   const db = getDatabase()
   // 先删除关联的付款记录
-  db.prepare('DELETE FROM payments WHERE invoice_id = ?').run(id)
+  await db.prepare('DELETE FROM payments WHERE invoice_id = ?').run(id)
   // 再删除发票
-  const result = db.prepare('DELETE FROM invoices WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM invoices WHERE id = ?').run(id)
   return result.changes > 0
 }
 
 /**
  * 更新发票已付金额
  */
-export function updateInvoicePaidAmount(id) {
+export async function updateInvoicePaidAmount(id) {
   const db = getDatabase()
   
   // 计算总付款金额
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total_paid 
     FROM payments WHERE invoice_id = ? AND status = 'completed'
   `).get(id)
@@ -311,7 +311,7 @@ export function updateInvoicePaidAmount(id) {
   const paidAmount = result.total_paid
   
   // 获取发票总金额
-  const invoice = db.prepare('SELECT total_amount FROM invoices WHERE id = ?').get(id)
+  const invoice = await db.prepare('SELECT total_amount FROM invoices WHERE id = ?').get(id)
   if (!invoice) return false
   
   // 确定状态
@@ -323,7 +323,7 @@ export function updateInvoicePaidAmount(id) {
   }
   
   // 更新发票
-  db.prepare(`
+  await db.prepare(`
     UPDATE invoices 
     SET paid_amount = ?, status = ?, updated_at = datetime('now', 'localtime')
     WHERE id = ?
@@ -337,7 +337,7 @@ export function updateInvoicePaidAmount(id) {
 /**
  * 获取付款记录列表
  */
-export function getPayments(params = {}) {
+export async function getPayments(params = {}) {
   const db = getDatabase()
   const { 
     type, invoiceId, customerId, method,
@@ -391,13 +391,13 @@ export function getPayments(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY payment_date DESC, created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertPaymentToCamelCase),
@@ -410,7 +410,7 @@ export function getPayments(params = {}) {
 /**
  * 获取付款统计
  */
-export function getPaymentStats(params = {}) {
+export async function getPaymentStats(params = {}) {
   const db = getDatabase()
   const { startDate, endDate } = params
   
@@ -428,7 +428,7 @@ export function getPaymentStats(params = {}) {
   }
   
   // 收款统计
-  const incomeStats = db.prepare(`
+  const incomeStats = await db.prepare(`
     SELECT 
       COUNT(*) as count,
       COALESCE(SUM(amount), 0) as total
@@ -437,7 +437,7 @@ export function getPaymentStats(params = {}) {
   `).get(...queryParams)
   
   // 付款统计
-  const expenseStats = db.prepare(`
+  const expenseStats = await db.prepare(`
     SELECT 
       COUNT(*) as count,
       COALESCE(SUM(amount), 0) as total
@@ -461,23 +461,23 @@ export function getPaymentStats(params = {}) {
 /**
  * 根据ID获取付款记录
  */
-export function getPaymentById(id) {
+export async function getPaymentById(id) {
   const db = getDatabase()
-  const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id)
+  const payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(id)
   return payment ? convertPaymentToCamelCase(payment) : null
 }
 
 /**
  * 创建付款记录
  */
-export function createPayment(data) {
+export async function createPayment(data) {
   const db = getDatabase()
   const id = generateId()
   
   // 生成付款单号
   const paymentNumber = generatePaymentNumber(data.paymentType)
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO payments (
       id, payment_number, payment_type, payment_date, payment_method,
       invoice_id, invoice_number, customer_id, customer_name,
@@ -517,7 +517,7 @@ export function createPayment(data) {
 /**
  * 更新付款记录
  */
-export function updatePayment(id, data) {
+export async function updatePayment(id, data) {
   const db = getDatabase()
   
   // 获取原记录
@@ -551,7 +551,7 @@ export function updatePayment(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE payments SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE payments SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   
   // 如果关联发票，更新发票付款金额
   if (original && original.invoiceId) {
@@ -564,13 +564,13 @@ export function updatePayment(id, data) {
 /**
  * 删除付款记录
  */
-export function deletePayment(id) {
+export async function deletePayment(id) {
   const db = getDatabase()
   
   // 获取原记录
   const original = getPaymentById(id)
   
-  const result = db.prepare('DELETE FROM payments WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM payments WHERE id = ?').run(id)
   
   // 如果关联发票，更新发票付款金额
   if (original && original.invoiceId) {
@@ -585,7 +585,7 @@ export function deletePayment(id) {
 /**
  * 获取费用列表
  */
-export function getFees(params = {}) {
+export async function getFees(params = {}) {
   const db = getDatabase()
   const { 
     category, billId, customerId,
@@ -629,13 +629,13 @@ export function getFees(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY fee_date DESC, created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertFeeToCamelCase),
@@ -648,7 +648,7 @@ export function getFees(params = {}) {
 /**
  * 获取费用统计（按类别）
  */
-export function getFeeStats(params = {}) {
+export async function getFeeStats(params = {}) {
   const db = getDatabase()
   const { billId, startDate, endDate } = params
   
@@ -670,7 +670,7 @@ export function getFeeStats(params = {}) {
     queryParams.push(endDate)
   }
   
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       category,
       COUNT(*) as count,
@@ -695,20 +695,20 @@ export function getFeeStats(params = {}) {
 /**
  * 根据ID获取费用
  */
-export function getFeeById(id) {
+export async function getFeeById(id) {
   const db = getDatabase()
-  const fee = db.prepare('SELECT * FROM fees WHERE id = ?').get(id)
+  const fee = await db.prepare('SELECT * FROM fees WHERE id = ?').get(id)
   return fee ? convertFeeToCamelCase(fee) : null
 }
 
 /**
  * 创建费用
  */
-export function createFee(data) {
+export async function createFee(data) {
   const db = getDatabase()
   const id = generateId()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO fees (
       id, bill_id, bill_number, customer_id, customer_name,
       category, fee_name, amount, currency, exchange_rate,
@@ -738,7 +738,7 @@ export function createFee(data) {
 /**
  * 更新费用
  */
-export function updateFee(id, data) {
+export async function updateFee(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -766,16 +766,16 @@ export function updateFee(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE fees SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE fees SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除费用
  */
-export function deleteFee(id) {
+export async function deleteFee(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM fees WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM fees WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -784,19 +784,19 @@ export function deleteFee(id) {
 /**
  * 获取提单费用汇总
  */
-export function getBillFinanceSummary(billId) {
+export async function getBillFinanceSummary(billId) {
   const db = getDatabase()
   
   // 获取费用汇总
   const feeStats = getFeeStats({ billId })
   
   // 获取关联发票
-  const invoices = db.prepare(`
+  const invoices = await db.prepare(`
     SELECT * FROM invoices WHERE bill_id = ?
   `).all(billId).map(convertInvoiceToCamelCase)
   
   // 获取关联付款
-  const payments = db.prepare(`
+  const payments = await db.prepare(`
     SELECT * FROM payments 
     WHERE invoice_id IN (SELECT id FROM invoices WHERE bill_id = ?)
   `).all(billId).map(convertPaymentToCamelCase)
@@ -829,7 +829,7 @@ export function getBillFinanceSummary(billId) {
  * @param {Object} params - 查询参数
  * @returns {Object} 订单费用统计列表
  */
-export function getOrderFeeReport(params = {}) {
+export async function getOrderFeeReport(params = {}) {
   const db = getDatabase()
   const { startDate, endDate, page = 1, pageSize = 20 } = params
   
@@ -847,7 +847,7 @@ export function getOrderFeeReport(params = {}) {
   }
   
   // 获取订单维度的费用汇总
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       f.bill_id,
       f.bill_number,
@@ -871,7 +871,7 @@ export function getOrderFeeReport(params = {}) {
   `).all(...queryParams)
   
   // 获取总计
-  const summaryResult = db.prepare(`
+  const summaryResult = await db.prepare(`
     SELECT 
       COUNT(DISTINCT f.bill_id) as order_count,
       COUNT(*) as fee_count,
@@ -917,7 +917,7 @@ export function getOrderFeeReport(params = {}) {
 /**
  * 获取客户维度的费用统计报表
  */
-export function getCustomerFeeReport(params = {}) {
+export async function getCustomerFeeReport(params = {}) {
   const db = getDatabase()
   const { startDate, endDate, page = 1, pageSize = 20 } = params
   
@@ -935,7 +935,7 @@ export function getCustomerFeeReport(params = {}) {
   }
   
   // 获取客户维度的费用汇总
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       f.customer_id,
       f.customer_name,
@@ -988,7 +988,7 @@ function generateInvoiceNumber(type) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
   // 获取今日最大序号
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT invoice_number FROM invoices 
     WHERE invoice_number LIKE ? 
     ORDER BY invoice_number DESC LIMIT 1
@@ -1012,7 +1012,7 @@ function generatePaymentNumber(type) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   
   // 获取今日最大序号
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT payment_number FROM payments 
     WHERE payment_number LIKE ? 
     ORDER BY payment_number DESC LIMIT 1

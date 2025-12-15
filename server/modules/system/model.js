@@ -11,7 +11,7 @@ import crypto from 'crypto'
 /**
  * 获取用户列表
  */
-export function getUsers(params = {}) {
+export async function getUsers(params = {}) {
   const db = getDatabase()
   const { role, status, search, page = 1, pageSize = 20 } = params
   
@@ -41,13 +41,13 @@ export function getUsers(params = {}) {
   
   // 获取总数
   const countQuery = query.replace(/SELECT u\.\*, r\.role_name/, 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY u.id ASC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertUserToCamelCase),
@@ -60,9 +60,9 @@ export function getUsers(params = {}) {
 /**
  * 根据ID获取用户
  */
-export function getUserById(id) {
+export async function getUserById(id) {
   const db = getDatabase()
-  const user = db.prepare(`
+  const user = await db.prepare(`
     SELECT u.*, r.role_name
     FROM users u
     LEFT JOIN roles r ON u.role = r.role_code
@@ -90,13 +90,13 @@ export async function getUserByUsername(username) {
 /**
  * 创建用户
  */
-export function createUser(data) {
+export async function createUser(data) {
   const db = getDatabase()
   
   // 密码加密
   const passwordHash = hashPassword(data.password)
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO users (
       username, password_hash, name, email, phone,
       avatar, role, status, created_at, updated_at
@@ -118,7 +118,7 @@ export function createUser(data) {
 /**
  * 更新用户
  */
-export function updateUser(id, data) {
+export async function updateUser(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -153,16 +153,16 @@ export function updateUser(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 更新用户状态
  */
-export function updateUserStatus(id, status) {
+export async function updateUserStatus(id, status) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE users SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?
   `).run(status, id)
   
@@ -172,11 +172,11 @@ export function updateUserStatus(id, status) {
 /**
  * 修改密码
  */
-export function changePassword(id, newPassword) {
+export async function changePassword(id, newPassword) {
   const db = getDatabase()
   const passwordHash = hashPassword(newPassword)
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE users SET password_hash = ?, updated_at = datetime('now', 'localtime') WHERE id = ?
   `).run(passwordHash, id)
   
@@ -186,7 +186,7 @@ export function changePassword(id, newPassword) {
 /**
  * 验证密码
  */
-export function verifyPassword(user, password) {
+export async function verifyPassword(user, password) {
   const passwordHash = hashPassword(password)
   return user.passwordHash === passwordHash
 }
@@ -194,18 +194,18 @@ export function verifyPassword(user, password) {
 /**
  * 删除用户
  */
-export function deleteUser(id) {
+export async function deleteUser(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM users WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM users WHERE id = ?').run(id)
   return result.changes > 0
 }
 
 /**
  * 更新登录信息
  */
-export function updateLoginInfo(id, ip) {
+export async function updateLoginInfo(id, ip) {
   const db = getDatabase()
-  db.prepare(`
+  await db.prepare(`
     UPDATE users 
     SET last_login_time = datetime('now', 'localtime'),
         last_login_ip = ?,
@@ -217,12 +217,12 @@ export function updateLoginInfo(id, ip) {
 /**
  * 增加登录失败次数（使用login_attempts表）
  */
-export function incrementLoginAttempts(username, ip = '', reason = '') {
+export async function incrementLoginAttempts(username, ip = '', reason = '') {
   const db = getDatabase()
   
   // 检查login_attempts表是否存在
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO login_attempts (username, ip_address, success, failure_reason)
       VALUES (?, ?, 0, ?)
     `).run(username, ip, reason)
@@ -263,7 +263,7 @@ export async function isUserLocked(username, maxAttempts = 5, lockoutMinutes = 1
 /**
  * 获取角色列表
  */
-export function getRoles(params = {}) {
+export async function getRoles(params = {}) {
   const db = getDatabase()
   const { status, search } = params
   
@@ -283,26 +283,26 @@ export function getRoles(params = {}) {
   
   query += ' ORDER BY id ASC'
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   return list.map(convertRoleToCamelCase)
 }
 
 /**
  * 根据角色代码获取角色
  */
-export function getRoleByCode(roleCode) {
+export async function getRoleByCode(roleCode) {
   const db = getDatabase()
-  const role = db.prepare('SELECT * FROM roles WHERE role_code = ?').get(roleCode)
+  const role = await db.prepare('SELECT * FROM roles WHERE role_code = ?').get(roleCode)
   return role ? convertRoleToCamelCase(role) : null
 }
 
 /**
  * 创建角色
  */
-export function createRole(data) {
+export async function createRole(data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO roles (role_code, role_name, description, color_code, status, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
   `).run(
@@ -319,7 +319,7 @@ export function createRole(data) {
 /**
  * 更新角色
  */
-export function updateRole(roleCode, data) {
+export async function updateRole(roleCode, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -346,14 +346,14 @@ export function updateRole(roleCode, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(roleCode)
   
-  const result = db.prepare(`UPDATE roles SET ${fields.join(', ')} WHERE role_code = ?`).run(...values)
+  const result = await db.prepare(`UPDATE roles SET ${fields.join(', ')} WHERE role_code = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除角色
  */
-export function deleteRole(roleCode) {
+export async function deleteRole(roleCode) {
   const db = getDatabase()
   
   // 检查是否有用户使用此角色
@@ -363,10 +363,10 @@ export function deleteRole(roleCode) {
   }
   
   // 删除角色权限
-  db.prepare('DELETE FROM role_permissions WHERE role_code = ?').run(roleCode)
+  await db.prepare('DELETE FROM role_permissions WHERE role_code = ?').run(roleCode)
   
   // 删除角色
-  const result = db.prepare('DELETE FROM roles WHERE role_code = ?').run(roleCode)
+  const result = await db.prepare('DELETE FROM roles WHERE role_code = ?').run(roleCode)
   return result.changes > 0
 }
 
@@ -375,9 +375,9 @@ export function deleteRole(roleCode) {
 /**
  * 获取所有权限
  */
-export function getPermissions() {
+export async function getPermissions() {
   const db = getDatabase()
-  const permissions = db.prepare('SELECT * FROM permissions ORDER BY module, sort_order').all()
+  const permissions = await db.prepare('SELECT * FROM permissions ORDER BY module, sort_order').all()
   
   // 按模块分组
   const grouped = permissions.reduce((acc, p) => {
@@ -412,12 +412,12 @@ export async function getRolePermissions(roleCode) {
 /**
  * 更新角色权限
  */
-export function updateRolePermissions(roleCode, permissionCodes) {
+export async function updateRolePermissions(roleCode, permissionCodes) {
   const db = getDatabase()
   
   db.transaction(() => {
     // 删除现有权限
-    db.prepare('DELETE FROM role_permissions WHERE role_code = ?').run(roleCode)
+    await db.prepare('DELETE FROM role_permissions WHERE role_code = ?').run(roleCode)
     
     // 添加新权限
     const insertStmt = db.prepare('INSERT INTO role_permissions (role_code, permission_code) VALUES (?, ?)')
@@ -432,16 +432,16 @@ export function updateRolePermissions(roleCode, permissionCodes) {
 /**
  * 检查用户是否有权限
  */
-export function hasPermission(userId, permissionCode) {
+export async function hasPermission(userId, permissionCode) {
   const db = getDatabase()
   
-  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId)
+  const user = await db.prepare('SELECT role FROM users WHERE id = ?').get(userId)
   if (!user) return false
   
   // 管理员有所有权限
   if (user.role === 'admin') return true
   
-  const permission = db.prepare(`
+  const permission = await db.prepare(`
     SELECT 1 FROM role_permissions 
     WHERE role_code = ? AND permission_code = ?
   `).get(user.role, permissionCode)
@@ -454,7 +454,7 @@ export function hasPermission(userId, permissionCode) {
 /**
  * 获取系统设置
  */
-export function getSystemSettings(category = null) {
+export async function getSystemSettings(category = null) {
   const db = getDatabase()
   
   let query = 'SELECT * FROM system_settings WHERE 1=1'
@@ -467,7 +467,7 @@ export function getSystemSettings(category = null) {
   
   query += ' ORDER BY setting_key'
   
-  const settings = db.prepare(query).all(...params)
+  const settings = await db.prepare(query).all(...params)
   
   // 转换为键值对
   const result = {}
@@ -494,10 +494,10 @@ export function getSystemSettings(category = null) {
 /**
  * 更新系统设置
  */
-export function updateSystemSettings(settings) {
+export async function updateSystemSettings(settings) {
   const db = getDatabase()
   
-  const upsertStmt = db.prepare(`
+  const upsertStmt = await db.prepare(`
     INSERT INTO system_settings (setting_key, setting_value, updated_at)
     VALUES (?, ?, datetime('now', 'localtime'))
     ON CONFLICT(setting_key) DO UPDATE SET 
@@ -518,10 +518,10 @@ export function updateSystemSettings(settings) {
 /**
  * 获取安全设置
  */
-export function getSecuritySettings() {
+export async function getSecuritySettings() {
   const db = getDatabase()
   
-  const settings = db.prepare('SELECT * FROM security_settings').all()
+  const settings = await db.prepare('SELECT * FROM security_settings').all()
   
   const result = {}
   settings.forEach(s => {
@@ -540,7 +540,7 @@ export function getSecuritySettings() {
 /**
  * 更新安全设置
  */
-export function updateSecuritySettings(settings) {
+export async function updateSecuritySettings(settings) {
   const db = getDatabase()
   
   const updateStmt = db.prepare(`
@@ -563,11 +563,11 @@ export function updateSecuritySettings(settings) {
 /**
  * 记录登录日志
  */
-export function addLoginLog(data) {
+export async function addLoginLog(data) {
   const db = getDatabase()
   
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO login_logs (
         user_id, username, login_time, ip_address,
         user_agent, status, failure_reason
@@ -588,7 +588,7 @@ export function addLoginLog(data) {
 /**
  * 获取登录日志
  */
-export function getLoginLogs(params = {}) {
+export async function getLoginLogs(params = {}) {
   const db = getDatabase()
   const { userId, username, result, startDate, endDate, page = 1, pageSize = 20 } = params
   
@@ -622,13 +622,13 @@ export function getLoginLogs(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY login_time DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertLoginLogToCamelCase),
@@ -726,7 +726,7 @@ export function convertLoginLogToCamelCase(row) {
 /**
  * 根据key获取系统设置（兼容旧API）
  */
-export function getSystemSettingsByKey(key = null) {
+export async function getSystemSettingsByKey(key = null) {
   const db = getDatabase()
   
   let query = 'SELECT * FROM system_settings'
@@ -737,7 +737,7 @@ export function getSystemSettingsByKey(key = null) {
     params.push(key)
   }
   
-  const settings = db.prepare(query).all(...params)
+  const settings = await db.prepare(query).all(...params)
   
   // 转换为键值对格式
   const settingsMap = {}
@@ -763,7 +763,7 @@ export function getSystemSettingsByKey(key = null) {
 /**
  * 保存单个系统设置（兼容旧API）
  */
-export function saveSystemSetting(key, value, type, description) {
+export async function saveSystemSetting(key, value, type, description) {
   const db = getDatabase()
   
   // 将值转换为字符串存储
@@ -780,7 +780,7 @@ export function saveSystemSetting(key, value, type, description) {
     settingType = 'number'
   }
   
-  db.prepare(`
+  await db.prepare(`
     INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
     VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
   `).run(key, stringValue, settingType, description || '')
@@ -789,7 +789,7 @@ export function saveSystemSetting(key, value, type, description) {
 /**
  * 批量保存系统设置（兼容旧API）
  */
-export function saveSystemSettingsBatch(settings) {
+export async function saveSystemSettingsBatch(settings) {
   const db = getDatabase()
   
   const upsertStmt = db.prepare(`

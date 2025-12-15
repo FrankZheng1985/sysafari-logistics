@@ -17,7 +17,7 @@ export async function getUsers(req, res) {
   try {
     const { role, status, search, page, pageSize } = req.query
     
-    const result = model.getUsers({
+    const result = await model.getUsers({
       role,
       status,
       search,
@@ -47,7 +47,7 @@ export async function getUsers(req, res) {
  */
 export async function getUserById(req, res) {
   try {
-    const user = model.getUserById(req.params.id)
+    const user = await model.getUserById(req.params.id)
     if (!user) {
       return notFound(res, '用户不存在')
     }
@@ -73,7 +73,7 @@ export async function createUser(req, res) {
     }
     
     // 检查用户名是否已存在
-    const existing = model.getUserByUsername(username)
+    const existing = await model.getUserByUsername(username)
     if (existing) {
       return conflict(res, '用户名已存在')
     }
@@ -84,7 +84,7 @@ export async function createUser(req, res) {
       return badRequest(res, passwordValidation.errors.join('; '))
     }
     
-    const result = model.createUser({
+    const result = await model.createUser({
       username,
       password,
       name,
@@ -93,7 +93,7 @@ export async function createUser(req, res) {
       role
     })
     
-    const newUser = model.getUserById(result.id)
+    const newUser = await model.getUserById(result.id)
     const { passwordHash, ...safeUser } = newUser
     
     return success(res, safeUser, '创建成功')
@@ -110,17 +110,17 @@ export async function updateUser(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getUserById(id)
+    const existing = await model.getUserById(id)
     if (!existing) {
       return notFound(res, '用户不存在')
     }
     
-    const updated = model.updateUser(id, req.body)
+    const updated = await model.updateUser(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedUser = model.getUserById(id)
+    const updatedUser = await model.getUserById(id)
     const { passwordHash, ...safeUser } = updatedUser
     
     return success(res, safeUser, '更新成功')
@@ -142,7 +142,7 @@ export async function updateUserStatus(req, res) {
       return badRequest(res, '状态值无效')
     }
     
-    const existing = model.getUserById(id)
+    const existing = await model.getUserById(id)
     if (!existing) {
       return notFound(res, '用户不存在')
     }
@@ -152,7 +152,7 @@ export async function updateUserStatus(req, res) {
       return badRequest(res, '不能禁用自己的账号')
     }
     
-    model.updateUserStatus(id, status)
+    await model.updateUserStatus(id, status)
     return success(res, null, status === 'active' ? '用户已启用' : '用户已禁用')
   } catch (error) {
     console.error('更新用户状态失败:', error)
@@ -167,7 +167,7 @@ export async function deleteUser(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getUserById(id)
+    const existing = await model.getUserById(id)
     if (!existing) {
       return notFound(res, '用户不存在')
     }
@@ -202,7 +202,7 @@ export async function changePassword(req, res) {
       return badRequest(res, '新密码为必填项')
     }
     
-    const user = model.getUserById(id)
+    const user = await model.getUserById(id)
     if (!user) {
       return notFound(res, '用户不存在')
     }
@@ -224,7 +224,7 @@ export async function changePassword(req, res) {
       return badRequest(res, passwordValidation.errors.join('; '))
     }
     
-    model.changePassword(id, newPassword)
+    await model.changePassword(id, newPassword)
     return success(res, null, '密码修改成功')
   } catch (error) {
     console.error('修改密码失败:', error)
@@ -247,7 +247,7 @@ export async function login(req, res) {
     
     // 检查用户是否被锁定
     if (await model.isUserLocked(username)) {
-      model.addLoginLog({
+      await model.addLoginLog({
         username,
         loginIp: req.ip,
         userAgent: req.get('User-Agent'),
@@ -260,7 +260,7 @@ export async function login(req, res) {
     const user = await model.getUserByUsername(username)
     
     if (!user) {
-      model.addLoginLog({
+      await model.addLoginLog({
         username,
         loginIp: req.ip,
         userAgent: req.get('User-Agent'),
@@ -271,7 +271,7 @@ export async function login(req, res) {
     }
     
     if (user.status !== 'active') {
-      model.addLoginLog({
+      await model.addLoginLog({
         userId: user.id,
         username,
         loginIp: req.ip,
@@ -284,9 +284,9 @@ export async function login(req, res) {
     
     // 验证密码
     if (!model.verifyPassword(user, password)) {
-      model.incrementLoginAttempts(username, req.ip, '密码错误')
+      await model.incrementLoginAttempts(username, req.ip, '密码错误')
       
-      model.addLoginLog({
+      await model.addLoginLog({
         userId: user.id,
         username,
         loginIp: req.ip,
@@ -299,10 +299,10 @@ export async function login(req, res) {
     }
     
     // 更新登录信息
-    model.updateLoginInfo(user.id, req.ip)
+    await model.updateLoginInfo(user.id, req.ip)
     
     // 记录成功登录
-    model.addLoginLog({
+    await model.addLoginLog({
       userId: user.id,
       username,
       loginIp: req.ip,
@@ -344,7 +344,7 @@ export async function getCurrentUser(req, res) {
       return unauthorized(res, '未登录')
     }
     
-    const user = model.getUserById(req.user.id)
+    const user = await model.getUserById(req.user.id)
     if (!user) {
       return notFound(res, '用户不存在')
     }
@@ -618,7 +618,7 @@ export async function createAndBindUser(req, res) {
 export async function getRoles(req, res) {
   try {
     const { status, search } = req.query
-    const roles = model.getRoles({ status, search })
+    const roles = await model.getRoles({ status, search })
     return success(res, roles)
   } catch (error) {
     console.error('获取角色列表失败:', error)
@@ -631,7 +631,7 @@ export async function getRoles(req, res) {
  */
 export async function getRoleByCode(req, res) {
   try {
-    const role = model.getRoleByCode(req.params.roleCode)
+    const role = await model.getRoleByCode(req.params.roleCode)
     if (!role) {
       return notFound(res, '角色不存在')
     }
@@ -661,13 +661,13 @@ export async function createRole(req, res) {
     }
     
     // 检查角色代码是否已存在
-    const existing = model.getRoleByCode(roleCode)
+    const existing = await model.getRoleByCode(roleCode)
     if (existing) {
       return conflict(res, '角色代码已存在')
     }
     
-    const result = model.createRole(req.body)
-    const newRole = model.getRoleByCode(roleCode)
+    const result = await model.createRole(req.body)
+    const newRole = await model.getRoleByCode(roleCode)
     
     return success(res, newRole, '创建成功')
   } catch (error) {
@@ -683,7 +683,7 @@ export async function updateRole(req, res) {
   try {
     const { roleCode } = req.params
     
-    const existing = model.getRoleByCode(roleCode)
+    const existing = await model.getRoleByCode(roleCode)
     if (!existing) {
       return notFound(res, '角色不存在')
     }
@@ -693,12 +693,12 @@ export async function updateRole(req, res) {
       return badRequest(res, '不能修改管理员角色的代码')
     }
     
-    const updated = model.updateRole(roleCode, req.body)
+    const updated = await model.updateRole(roleCode, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedRole = model.getRoleByCode(roleCode)
+    const updatedRole = await model.getRoleByCode(roleCode)
     return success(res, updatedRole, '更新成功')
   } catch (error) {
     console.error('更新角色失败:', error)
@@ -718,7 +718,7 @@ export async function deleteRole(req, res) {
       return badRequest(res, '不能删除系统内置角色')
     }
     
-    const existing = model.getRoleByCode(roleCode)
+    const existing = await model.getRoleByCode(roleCode)
     if (!existing) {
       return notFound(res, '角色不存在')
     }
@@ -741,7 +741,7 @@ export async function deleteRole(req, res) {
  */
 export async function getPermissions(req, res) {
   try {
-    const permissions = model.getPermissions()
+    const permissions = await model.getPermissions()
     return success(res, permissions)
   } catch (error) {
     console.error('获取权限列表失败:', error)
@@ -756,7 +756,7 @@ export async function getRolePermissions(req, res) {
   try {
     const { roleCode } = req.params
     
-    const role = model.getRoleByCode(roleCode)
+    const role = await model.getRoleByCode(roleCode)
     if (!role) {
       return notFound(res, '角色不存在')
     }
@@ -781,7 +781,7 @@ export async function updateRolePermissions(req, res) {
       return badRequest(res, 'permissionCodes 必须是数组')
     }
     
-    const role = model.getRoleByCode(roleCode)
+    const role = await model.getRoleByCode(roleCode)
     if (!role) {
       return notFound(res, '角色不存在')
     }
@@ -791,7 +791,7 @@ export async function updateRolePermissions(req, res) {
       return badRequest(res, '不能修改管理员角色的权限')
     }
     
-    model.updateRolePermissions(roleCode, permissionCodes)
+    await model.updateRolePermissions(roleCode, permissionCodes)
     return success(res, null, '权限更新成功')
   } catch (error) {
     console.error('更新角色权限失败:', error)
@@ -807,7 +807,7 @@ export async function updateRolePermissions(req, res) {
 export async function getSystemSettings(req, res) {
   try {
     const { category } = req.query
-    const settings = model.getSystemSettings(category)
+    const settings = await model.getSystemSettings(category)
     return success(res, settings)
   } catch (error) {
     console.error('获取系统设置失败:', error)
@@ -826,7 +826,7 @@ export async function updateSystemSettings(req, res) {
       return badRequest(res, '没有需要更新的设置')
     }
     
-    model.updateSystemSettings(settings)
+    await model.updateSystemSettings(settings)
     return success(res, null, '设置保存成功')
   } catch (error) {
     console.error('更新系统设置失败:', error)
@@ -839,7 +839,7 @@ export async function updateSystemSettings(req, res) {
  */
 export async function getSecuritySettings(req, res) {
   try {
-    const settings = model.getSecuritySettings()
+    const settings = await model.getSecuritySettings()
     return success(res, settings)
   } catch (error) {
     console.error('获取安全设置失败:', error)
@@ -858,7 +858,7 @@ export async function updateSecuritySettings(req, res) {
       return badRequest(res, '没有需要更新的设置')
     }
     
-    model.updateSecuritySettings(settings)
+    await model.updateSecuritySettings(settings)
     return success(res, null, '安全设置保存成功')
   } catch (error) {
     console.error('更新安全设置失败:', error)
@@ -875,7 +875,7 @@ export async function getLoginLogs(req, res) {
   try {
     const { userId, username, result, startDate, endDate, page, pageSize } = req.query
     
-    const logs = model.getLoginLogs({
+    const logs = await model.getLoginLogs({
       userId,
       username,
       result,
@@ -904,7 +904,7 @@ export async function getLoginLogs(req, res) {
 export async function getSystemSettingsByKey(req, res) {
   try {
     const { key } = req.query
-    const settings = model.getSystemSettingsByKey(key)
+    const settings = await model.getSystemSettingsByKey(key)
     return success(res, settings)
   } catch (error) {
     console.error('获取系统设置失败:', error)
@@ -923,7 +923,7 @@ export async function saveSystemSetting(req, res) {
       return badRequest(res, '设置键名是必填项')
     }
     
-    model.saveSystemSetting(key, value, type, description)
+    await model.saveSystemSetting(key, value, type, description)
     return success(res, null, '保存成功')
   } catch (error) {
     console.error('保存系统设置失败:', error)
@@ -942,7 +942,7 @@ export async function saveSystemSettingsBatch(req, res) {
       return badRequest(res, '无效的设置数据')
     }
     
-    model.saveSystemSettingsBatch(settings)
+    await model.saveSystemSettingsBatch(settings)
     return success(res, null, '批量保存成功')
   } catch (error) {
     console.error('批量保存系统设置失败:', error)

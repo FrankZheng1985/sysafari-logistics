@@ -54,27 +54,27 @@ export async function getCountries(params = {}) {
 /**
  * 根据ID获取国家
  */
-export function getCountryById(id) {
+export async function getCountryById(id) {
   const db = getDatabase()
-  const country = db.prepare('SELECT * FROM countries WHERE id = ?').get(id)
+  const country = await db.prepare('SELECT * FROM countries WHERE id = ?').get(id)
   return country ? convertCountryToCamelCase(country) : null
 }
 
 /**
  * 根据国家代码获取国家
  */
-export function getCountryByCode(code) {
+export async function getCountryByCode(code) {
   const db = getDatabase()
-  const country = db.prepare('SELECT * FROM countries WHERE country_code = ?').get(code.toUpperCase())
+  const country = await db.prepare('SELECT * FROM countries WHERE country_code = ?').get(code.toUpperCase())
   return country ? convertCountryToCamelCase(country) : null
 }
 
 /**
  * 创建国家
  */
-export function createCountry(data) {
+export async function createCountry(data) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO countries (
       country_code, country_name_cn, country_name_en, continent,
       region, capital, currency_code, currency_name, phone_code,
@@ -101,7 +101,7 @@ export function createCountry(data) {
 /**
  * 更新国家
  */
-export function updateCountry(id, data) {
+export async function updateCountry(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -133,16 +133,16 @@ export function updateCountry(id, data) {
   fields.push('updated_at = CURRENT_TIMESTAMP')
   values.push(id)
   
-  const result = db.prepare(`UPDATE countries SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE countries SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除国家
  */
-export function deleteCountry(id) {
+export async function deleteCountry(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM countries WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM countries WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -151,7 +151,7 @@ export function deleteCountry(id) {
 /**
  * 获取起运港列表
  */
-export function getPortsOfLoading(params = {}) {
+export async function getPortsOfLoading(params = {}) {
   const db = getDatabase()
   const { country, transportType, status = 'active', search, page = 1, pageSize = 100 } = params
   
@@ -180,12 +180,12 @@ export function getPortsOfLoading(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY sort_order, port_name_cn LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertPortToCamelCase),
@@ -198,7 +198,7 @@ export function getPortsOfLoading(params = {}) {
 /**
  * 获取目的港列表
  */
-export function getDestinationPorts(params = {}) {
+export async function getDestinationPorts(params = {}) {
   const db = getDatabase()
   const { country, continent, transportType, status = 'active', search, page = 1, pageSize = 100 } = params
   
@@ -232,12 +232,12 @@ export function getDestinationPorts(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY continent, country, port_name_cn LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertPortToCamelCase),
@@ -252,7 +252,7 @@ export function getDestinationPorts(params = {}) {
 /**
  * 获取船公司列表
  */
-export function getShippingCompanies(params = {}) {
+export async function getShippingCompanies(params = {}) {
   const db = getDatabase()
   const { status = 'active', search, page = 1, pageSize = 100 } = params
   
@@ -271,12 +271,12 @@ export function getShippingCompanies(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY company_name LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertShippingCompanyToCamelCase),
@@ -291,7 +291,7 @@ export function getShippingCompanies(params = {}) {
 /**
  * 获取增值税率列表
  */
-export function getVatRates(params = {}) {
+export async function getVatRates(params = {}) {
   const db = getDatabase()
   const { status = 'active', search, page = 1, pageSize = 100 } = params
   
@@ -310,12 +310,12 @@ export function getVatRates(params = {}) {
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   query += ' ORDER BY standard_rate DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertVatRateToCamelCase),
@@ -328,9 +328,9 @@ export function getVatRates(params = {}) {
 /**
  * 根据国家代码获取增值税率
  */
-export function getVatRateByCountryCode(countryCode) {
+export async function getVatRateByCountryCode(countryCode) {
   const db = getDatabase()
-  const vatRate = db.prepare(
+  const vatRate = await db.prepare(
     "SELECT * FROM vat_rates WHERE country_code = ? AND status = 'active'"
   ).get(countryCode.toUpperCase())
   

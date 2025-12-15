@@ -14,7 +14,7 @@ export async function getCMRList(req, res) {
   try {
     const { type, search, page, pageSize } = req.query
     
-    const result = model.getCMRList({
+    const result = await model.getCMRList({
       type: type || 'undelivered',
       search,
       page: parseInt(page) || 1,
@@ -38,7 +38,7 @@ export async function getCMRList(req, res) {
  */
 export async function getCMRStats(req, res) {
   try {
-    const stats = model.getCMRStats()
+    const stats = await model.getCMRStats()
     return success(res, stats)
   } catch (error) {
     console.error('获取CMR统计失败:', error)
@@ -51,7 +51,7 @@ export async function getCMRStats(req, res) {
  */
 export async function getCMRById(req, res) {
   try {
-    const cmr = model.getCMRById(req.params.id)
+    const cmr = await model.getCMRById(req.params.id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
@@ -76,12 +76,12 @@ export async function startDelivery(req, res) {
       return badRequest(res, '预计提货时间为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.startDelivery(id, {
+    const updated = await model.startDelivery(id, {
       estimatedPickupTime,
       serviceProvider
     })
@@ -91,7 +91,7 @@ export async function startDelivery(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'delivery_start',
       operationName: '开始派送',
@@ -101,7 +101,7 @@ export async function startDelivery(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '派送已开始')
   } catch (error) {
     console.error('开始派送失败:', error)
@@ -121,12 +121,12 @@ export async function updateDestination(req, res) {
       return badRequest(res, '派送地址和预计到达时间为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.updateDestination(id, {
+    const updated = await model.updateDestination(id, {
       deliveryAddress,
       estimatedArrivalTime
     })
@@ -136,7 +136,7 @@ export async function updateDestination(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'destination_update',
       operationName: '更新目的地信息',
@@ -146,7 +146,7 @@ export async function updateDestination(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '目的地信息已更新')
   } catch (error) {
     console.error('更新目的地信息失败:', error)
@@ -166,19 +166,19 @@ export async function recordDeliveryTime(req, res) {
       return badRequest(res, '实际到达时间为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.recordDeliveryTime(id, { actualArrivalTime })
+    const updated = await model.recordDeliveryTime(id, { actualArrivalTime })
     
     if (!updated) {
       return badRequest(res, '记录派送时间失败')
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'delivery_time',
       operationName: '记录派送时间',
@@ -188,7 +188,7 @@ export async function recordDeliveryTime(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '派送时间已记录')
   } catch (error) {
     console.error('记录派送时间失败:', error)
@@ -208,19 +208,19 @@ export async function completeUnloading(req, res) {
       return badRequest(res, '卸货完成时间为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.completeUnloading(id, { unloadingCompleteTime })
+    const updated = await model.completeUnloading(id, { unloadingCompleteTime })
     
     if (!updated) {
       return badRequest(res, '记录卸货完成失败')
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'unloading_complete',
       operationName: '卸货完成',
@@ -230,7 +230,7 @@ export async function completeUnloading(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '卸货已完成')
   } catch (error) {
     console.error('记录卸货完成失败:', error)
@@ -246,12 +246,12 @@ export async function confirmDelivery(req, res) {
     const { id } = req.params
     const { confirmedTime, remark } = req.body
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.confirmDelivery(id, { 
+    const updated = await model.confirmDelivery(id, { 
       confirmedTime: confirmedTime || new Date().toISOString() 
     })
     
@@ -260,7 +260,7 @@ export async function confirmDelivery(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'delivery_confirm',
       operationName: '确认送达',
@@ -271,7 +271,7 @@ export async function confirmDelivery(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '派送已确认完成')
   } catch (error) {
     console.error('确认送达失败:', error)
@@ -286,19 +286,19 @@ export async function updateCMRDetail(req, res) {
   try {
     const { id } = req.params
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.updateCMRDetail(id, req.body)
+    const updated = await model.updateCMRDetail(id, req.body)
     
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'cmr_update',
       operationName: '更新CMR信息',
@@ -308,7 +308,7 @@ export async function updateCMRDetail(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '更新成功')
   } catch (error) {
     console.error('更新CMR详情失败:', error)
@@ -330,12 +330,12 @@ export async function markException(req, res) {
       return badRequest(res, '异常说明为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.markException(id, {
+    const updated = await model.markException(id, {
       exceptionNote,
       currentStep,
       operator: req.user?.name || '系统'
@@ -346,7 +346,7 @@ export async function markException(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'exception_mark',
       operationName: '标记异常',
@@ -357,7 +357,7 @@ export async function markException(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '已标记为异常')
   } catch (error) {
     console.error('标记异常失败:', error)
@@ -377,12 +377,12 @@ export async function followUpException(req, res) {
       return badRequest(res, '跟进说明为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.followUpException(id, {
+    const updated = await model.followUpException(id, {
       followUpNote,
       operator: req.user?.name || '系统'
     })
@@ -392,7 +392,7 @@ export async function followUpException(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'exception_follow_up',
       operationName: '异常跟进',
@@ -401,7 +401,7 @@ export async function followUpException(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '已记录跟进')
   } catch (error) {
     console.error('继续跟进失败:', error)
@@ -421,12 +421,12 @@ export async function resolveAndContinue(req, res) {
       return badRequest(res, '解决说明为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.resolveAndContinue(id, {
+    const updated = await model.resolveAndContinue(id, {
       resolveNote,
       operator: req.user?.name || '系统'
     })
@@ -436,7 +436,7 @@ export async function resolveAndContinue(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'exception_resolve_continue',
       operationName: '解决异常并继续派送',
@@ -447,7 +447,7 @@ export async function resolveAndContinue(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '异常已解决，继续派送')
   } catch (error) {
     console.error('解决并继续派送失败:', error)
@@ -467,12 +467,12 @@ export async function markResolved(req, res) {
       return badRequest(res, '解决说明为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.markResolved(id, {
+    const updated = await model.markResolved(id, {
       resolveNote,
       operator: req.user?.name || '系统'
     })
@@ -482,7 +482,7 @@ export async function markResolved(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'exception_resolve',
       operationName: '标记异常已解决',
@@ -491,7 +491,7 @@ export async function markResolved(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '已标记为解决')
   } catch (error) {
     console.error('标记已解决失败:', error)
@@ -511,12 +511,12 @@ export async function closeOrder(req, res) {
       return badRequest(res, '关闭说明为必填项')
     }
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const updated = model.closeOrder(id, {
+    const updated = await model.closeOrder(id, {
       closeNote,
       operator: req.user?.name || '系统'
     })
@@ -526,7 +526,7 @@ export async function closeOrder(req, res) {
     }
     
     // 记录操作日志
-    model.addTMSLog({
+    await model.addTMSLog({
       billId: id,
       operationType: 'exception_close',
       operationName: '异常关闭订单',
@@ -537,7 +537,7 @@ export async function closeOrder(req, res) {
       operatorId: req.user?.id
     })
     
-    const updatedCMR = model.getCMRById(id)
+    const updatedCMR = await model.getCMRById(id)
     return success(res, updatedCMR, '订单已关闭')
   } catch (error) {
     console.error('关闭订单失败:', error)
@@ -552,12 +552,12 @@ export async function getExceptionHistory(req, res) {
   try {
     const { id } = req.params
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const history = model.getExceptionHistory(id)
+    const history = await model.getExceptionHistory(id)
     return success(res, history)
   } catch (error) {
     console.error('获取异常历史失败:', error)
@@ -574,7 +574,7 @@ export async function getServiceProviders(req, res) {
   try {
     const { type, status, search, page, pageSize } = req.query
     
-    const result = model.getServiceProviders({
+    const result = await model.getServiceProviders({
       type,
       status,
       search,
@@ -598,7 +598,7 @@ export async function getServiceProviders(req, res) {
  */
 export async function getServiceProviderById(req, res) {
   try {
-    const provider = model.getServiceProviderById(req.params.id)
+    const provider = await model.getServiceProviderById(req.params.id)
     if (!provider) {
       return notFound(res, '服务商不存在')
     }
@@ -620,8 +620,8 @@ export async function createServiceProvider(req, res) {
       return badRequest(res, '服务商代码和名称为必填项')
     }
     
-    const result = model.createServiceProvider(req.body)
-    const newProvider = model.getServiceProviderById(result.id)
+    const result = await model.createServiceProvider(req.body)
+    const newProvider = await model.getServiceProviderById(result.id)
     
     return success(res, newProvider, '创建成功')
   } catch (error) {
@@ -640,17 +640,17 @@ export async function updateServiceProvider(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getServiceProviderById(id)
+    const existing = await model.getServiceProviderById(id)
     if (!existing) {
       return notFound(res, '服务商不存在')
     }
     
-    const updated = model.updateServiceProvider(id, req.body)
+    const updated = await model.updateServiceProvider(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedProvider = model.getServiceProviderById(id)
+    const updatedProvider = await model.getServiceProviderById(id)
     return success(res, updatedProvider, '更新成功')
   } catch (error) {
     console.error('更新服务商失败:', error)
@@ -665,7 +665,7 @@ export async function deleteServiceProvider(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getServiceProviderById(id)
+    const existing = await model.getServiceProviderById(id)
     if (!existing) {
       return notFound(res, '服务商不存在')
     }
@@ -687,12 +687,12 @@ export async function getTMSLogs(req, res) {
   try {
     const { id } = req.params
     
-    const cmr = model.getCMRById(id)
+    const cmr = await model.getCMRById(id)
     if (!cmr) {
       return notFound(res, 'CMR记录不存在')
     }
     
-    const logs = model.getTMSLogs(id)
+    const logs = await model.getTMSLogs(id)
     return success(res, logs)
   } catch (error) {
     console.error('获取TMS日志失败:', error)

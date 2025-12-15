@@ -32,7 +32,7 @@ export const SUPPLIER_LEVELS = {
 
 // ==================== 初始化供应商表 ====================
 
-export function initSupplierTable() {
+export async function initSupplierTable() {
   const db = getDatabase()
   
   // 创建供应商表
@@ -103,7 +103,7 @@ export function initSupplierTable() {
 /**
  * 获取供应商列表
  */
-export function getSupplierList(params = {}) {
+export async function getSupplierList(params = {}) {
   const db = getDatabase()
   const { 
     search, 
@@ -150,13 +150,13 @@ export function getSupplierList(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页和排序
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertToCamelCase),
@@ -169,29 +169,29 @@ export function getSupplierList(params = {}) {
 /**
  * 根据ID获取供应商
  */
-export function getSupplierById(id) {
+export async function getSupplierById(id) {
   const db = getDatabase()
-  const supplier = db.prepare('SELECT * FROM suppliers WHERE id = ?').get(id)
+  const supplier = await db.prepare('SELECT * FROM suppliers WHERE id = ?').get(id)
   return supplier ? convertToCamelCase(supplier) : null
 }
 
 /**
  * 根据编码获取供应商
  */
-export function getSupplierByCode(code) {
+export async function getSupplierByCode(code) {
   const db = getDatabase()
-  const supplier = db.prepare('SELECT * FROM suppliers WHERE supplier_code = ?').get(code)
+  const supplier = await db.prepare('SELECT * FROM suppliers WHERE supplier_code = ?').get(code)
   return supplier ? convertToCamelCase(supplier) : null
 }
 
 /**
  * 创建供应商
  */
-export function createSupplier(data) {
+export async function createSupplier(data) {
   const db = getDatabase()
   const id = generateId()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO suppliers (
       id, supplier_code, supplier_name, short_name, supplier_type,
       contact_person, contact_phone, contact_email, contact_mobile, fax, website,
@@ -247,7 +247,7 @@ export function createSupplier(data) {
 /**
  * 更新供应商
  */
-export function updateSupplier(id, data) {
+export async function updateSupplier(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -298,35 +298,35 @@ export function updateSupplier(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE suppliers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE suppliers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除供应商
  */
-export function deleteSupplier(id) {
+export async function deleteSupplier(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM suppliers WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM suppliers WHERE id = ?').run(id)
   return result.changes > 0
 }
 
 /**
  * 批量删除供应商
  */
-export function batchDeleteSuppliers(ids) {
+export async function batchDeleteSuppliers(ids) {
   const db = getDatabase()
   const placeholders = ids.map(() => '?').join(',')
-  const result = db.prepare(`DELETE FROM suppliers WHERE id IN (${placeholders})`).run(...ids)
+  const result = await db.prepare(`DELETE FROM suppliers WHERE id IN (${placeholders})`).run(...ids)
   return result.changes
 }
 
 /**
  * 更新供应商状态
  */
-export function updateSupplierStatus(id, status, updatedBy) {
+export async function updateSupplierStatus(id, status, updatedBy) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE suppliers 
     SET status = ?, updated_at = datetime('now', 'localtime'), updated_by = ?
     WHERE id = ?
@@ -337,7 +337,7 @@ export function updateSupplierStatus(id, status, updatedBy) {
 /**
  * 检查供应商编码是否存在
  */
-export function checkSupplierCodeExists(code, excludeId = null) {
+export async function checkSupplierCodeExists(code, excludeId = null) {
   const db = getDatabase()
   let query = 'SELECT COUNT(*) as count FROM suppliers WHERE supplier_code = ?'
   const params = [code]
@@ -347,17 +347,17 @@ export function checkSupplierCodeExists(code, excludeId = null) {
     params.push(excludeId)
   }
   
-  const result = db.prepare(query).get(...params)
+  const result = await db.prepare(query).get(...params)
   return result.count > 0
 }
 
 /**
  * 获取供应商统计数据
  */
-export function getSupplierStats() {
+export async function getSupplierStats() {
   const db = getDatabase()
   
-  const stats = db.prepare(`
+  const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total,
       SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
@@ -389,9 +389,9 @@ export function getSupplierStats() {
 /**
  * 生成供应商编码
  */
-export function generateSupplierCode() {
+export async function generateSupplierCode() {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     SELECT supplier_code FROM suppliers 
     WHERE supplier_code LIKE 'SUP%' 
     ORDER BY supplier_code DESC 
@@ -410,9 +410,9 @@ export function generateSupplierCode() {
 /**
  * 获取所有启用的供应商（用于下拉选择）
  */
-export function getActiveSuppliers() {
+export async function getActiveSuppliers() {
   const db = getDatabase()
-  const list = db.prepare(`
+  const list = await db.prepare(`
     SELECT id, supplier_code, supplier_name, short_name 
     FROM suppliers 
     WHERE status = 'active' 

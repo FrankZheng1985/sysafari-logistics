@@ -14,7 +14,7 @@ export async function getInvoices(req, res) {
   try {
     const { type, status, customerId, billId, startDate, endDate, search, page, pageSize } = req.query
     
-    const result = model.getInvoices({
+    const result = await model.getInvoices({
       type,
       status,
       customerId,
@@ -43,7 +43,7 @@ export async function getInvoices(req, res) {
 export async function getInvoiceStats(req, res) {
   try {
     const { startDate, endDate } = req.query
-    const stats = model.getInvoiceStats({ startDate, endDate })
+    const stats = await model.getInvoiceStats({ startDate, endDate })
     return success(res, stats)
   } catch (error) {
     console.error('获取发票统计失败:', error)
@@ -56,13 +56,13 @@ export async function getInvoiceStats(req, res) {
  */
 export async function getInvoiceById(req, res) {
   try {
-    const invoice = model.getInvoiceById(req.params.id)
+    const invoice = await model.getInvoiceById(req.params.id)
     if (!invoice) {
       return notFound(res, '发票不存在')
     }
     
     // 获取关联付款记录
-    const payments = model.getPayments({ invoiceId: invoice.id })
+    const payments = await model.getPayments({ invoiceId: invoice.id })
     
     return success(res, {
       ...invoice,
@@ -85,12 +85,12 @@ export async function createInvoice(req, res) {
       return badRequest(res, '发票金额必须大于0')
     }
     
-    const result = model.createInvoice({
+    const result = await model.createInvoice({
       ...req.body,
       createdBy: req.user?.id
     })
     
-    const newInvoice = model.getInvoiceById(result.id)
+    const newInvoice = await model.getInvoiceById(result.id)
     return success(res, newInvoice, '创建成功')
   } catch (error) {
     console.error('创建发票失败:', error)
@@ -105,7 +105,7 @@ export async function updateInvoice(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getInvoiceById(id)
+    const existing = await model.getInvoiceById(id)
     if (!existing) {
       return notFound(res, '发票不存在')
     }
@@ -115,12 +115,12 @@ export async function updateInvoice(req, res) {
       return badRequest(res, '已付款的发票不能修改')
     }
     
-    const updated = model.updateInvoice(id, req.body)
+    const updated = await model.updateInvoice(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedInvoice = model.getInvoiceById(id)
+    const updatedInvoice = await model.getInvoiceById(id)
     return success(res, updatedInvoice, '更新成功')
   } catch (error) {
     console.error('更新发票失败:', error)
@@ -135,7 +135,7 @@ export async function deleteInvoice(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getInvoiceById(id)
+    const existing = await model.getInvoiceById(id)
     if (!existing) {
       return notFound(res, '发票不存在')
     }
@@ -162,7 +162,7 @@ export async function getPayments(req, res) {
   try {
     const { type, invoiceId, customerId, method, startDate, endDate, status, search, page, pageSize } = req.query
     
-    const result = model.getPayments({
+    const result = await model.getPayments({
       type,
       invoiceId,
       customerId,
@@ -192,7 +192,7 @@ export async function getPayments(req, res) {
 export async function getPaymentStats(req, res) {
   try {
     const { startDate, endDate } = req.query
-    const stats = model.getPaymentStats({ startDate, endDate })
+    const stats = await model.getPaymentStats({ startDate, endDate })
     return success(res, stats)
   } catch (error) {
     console.error('获取付款统计失败:', error)
@@ -205,7 +205,7 @@ export async function getPaymentStats(req, res) {
  */
 export async function getPaymentById(req, res) {
   try {
-    const payment = model.getPaymentById(req.params.id)
+    const payment = await model.getPaymentById(req.params.id)
     if (!payment) {
       return notFound(res, '付款记录不存在')
     }
@@ -229,7 +229,7 @@ export async function createPayment(req, res) {
     
     // 如果关联发票，检查发票是否存在
     if (req.body.invoiceId) {
-      const invoice = model.getInvoiceById(req.body.invoiceId)
+      const invoice = await model.getInvoiceById(req.body.invoiceId)
       if (!invoice) {
         return badRequest(res, '关联的发票不存在')
       }
@@ -241,12 +241,12 @@ export async function createPayment(req, res) {
       }
     }
     
-    const result = model.createPayment({
+    const result = await model.createPayment({
       ...req.body,
       createdBy: req.user?.id
     })
     
-    const newPayment = model.getPaymentById(result.id)
+    const newPayment = await model.getPaymentById(result.id)
     return success(res, newPayment, '创建成功')
   } catch (error) {
     console.error('创建付款记录失败:', error)
@@ -261,17 +261,17 @@ export async function updatePayment(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getPaymentById(id)
+    const existing = await model.getPaymentById(id)
     if (!existing) {
       return notFound(res, '付款记录不存在')
     }
     
-    const updated = model.updatePayment(id, req.body)
+    const updated = await model.updatePayment(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedPayment = model.getPaymentById(id)
+    const updatedPayment = await model.getPaymentById(id)
     return success(res, updatedPayment, '更新成功')
   } catch (error) {
     console.error('更新付款记录失败:', error)
@@ -286,7 +286,7 @@ export async function deletePayment(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getPaymentById(id)
+    const existing = await model.getPaymentById(id)
     if (!existing) {
       return notFound(res, '付款记录不存在')
     }
@@ -308,7 +308,7 @@ export async function getFees(req, res) {
   try {
     const { category, billId, customerId, startDate, endDate, search, page, pageSize } = req.query
     
-    const result = model.getFees({
+    const result = await model.getFees({
       category,
       billId,
       customerId,
@@ -336,7 +336,7 @@ export async function getFees(req, res) {
 export async function getFeeStats(req, res) {
   try {
     const { billId, startDate, endDate } = req.query
-    const stats = model.getFeeStats({ billId, startDate, endDate })
+    const stats = await model.getFeeStats({ billId, startDate, endDate })
     return success(res, stats)
   } catch (error) {
     console.error('获取费用统计失败:', error)
@@ -349,7 +349,7 @@ export async function getFeeStats(req, res) {
  */
 export async function getFeeById(req, res) {
   try {
-    const fee = model.getFeeById(req.params.id)
+    const fee = await model.getFeeById(req.params.id)
     if (!fee) {
       return notFound(res, '费用记录不存在')
     }
@@ -375,12 +375,12 @@ export async function createFee(req, res) {
       return badRequest(res, '费用金额必须大于0')
     }
     
-    const result = model.createFee({
+    const result = await model.createFee({
       ...req.body,
       createdBy: req.user?.id
     })
     
-    const newFee = model.getFeeById(result.id)
+    const newFee = await model.getFeeById(result.id)
     return success(res, newFee, '创建成功')
   } catch (error) {
     console.error('创建费用失败:', error)
@@ -395,17 +395,17 @@ export async function updateFee(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getFeeById(id)
+    const existing = await model.getFeeById(id)
     if (!existing) {
       return notFound(res, '费用记录不存在')
     }
     
-    const updated = model.updateFee(id, req.body)
+    const updated = await model.updateFee(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    const updatedFee = model.getFeeById(id)
+    const updatedFee = await model.getFeeById(id)
     return success(res, updatedFee, '更新成功')
   } catch (error) {
     console.error('更新费用失败:', error)
@@ -420,7 +420,7 @@ export async function deleteFee(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getFeeById(id)
+    const existing = await model.getFeeById(id)
     if (!existing) {
       return notFound(res, '费用记录不存在')
     }
@@ -442,7 +442,7 @@ export async function getBillFinanceSummary(req, res) {
   try {
     const { billId } = req.params
     
-    const summary = model.getBillFinanceSummary(billId)
+    const summary = await model.getBillFinanceSummary(billId)
     return success(res, summary)
   } catch (error) {
     console.error('获取提单财务汇总失败:', error)
@@ -459,9 +459,9 @@ export async function getFinanceOverview(req, res) {
   try {
     const { startDate, endDate } = req.query
     
-    const invoiceStats = model.getInvoiceStats({ startDate, endDate })
-    const paymentStats = model.getPaymentStats({ startDate, endDate })
-    const feeStats = model.getFeeStats({ startDate, endDate })
+    const invoiceStats = await model.getInvoiceStats({ startDate, endDate })
+    const paymentStats = await model.getPaymentStats({ startDate, endDate })
+    const feeStats = await model.getFeeStats({ startDate, endDate })
     
     return success(res, {
       invoices: invoiceStats,
@@ -487,7 +487,7 @@ export async function getOrderFeeReport(req, res) {
   try {
     const { startDate, endDate, page, pageSize } = req.query
     
-    const result = model.getOrderFeeReport({
+    const result = await model.getOrderFeeReport({
       startDate,
       endDate,
       page: parseInt(page) || 1,
@@ -508,7 +508,7 @@ export async function getCustomerFeeReport(req, res) {
   try {
     const { startDate, endDate, page, pageSize } = req.query
     
-    const result = model.getCustomerFeeReport({
+    const result = await model.getCustomerFeeReport({
       startDate,
       endDate,
       page: parseInt(page) || 1,

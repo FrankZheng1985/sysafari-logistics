@@ -45,7 +45,7 @@ const UPLOAD_DIR = path.join(process.cwd(), 'uploads')
 /**
  * 获取文档列表
  */
-export function getDocuments(params = {}) {
+export async function getDocuments(params = {}) {
   const db = getDatabase()
   const { 
     type, status, entityType, entityId,
@@ -99,13 +99,13 @@ export function getDocuments(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY upload_time DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertDocumentToCamelCase),
@@ -118,7 +118,7 @@ export function getDocuments(params = {}) {
 /**
  * 获取文档统计
  */
-export function getDocumentStats(params = {}) {
+export async function getDocumentStats(params = {}) {
   const db = getDatabase()
   const { entityType, entityId } = params
   
@@ -136,21 +136,21 @@ export function getDocumentStats(params = {}) {
   }
   
   // 按文档类型统计
-  const byType = db.prepare(`
+  const byType = await db.prepare(`
     SELECT document_type, COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size
     FROM documents ${whereClause}
     GROUP BY document_type
   `).all(...queryParams)
   
   // 按状态统计
-  const byStatus = db.prepare(`
+  const byStatus = await db.prepare(`
     SELECT status, COUNT(*) as count
     FROM documents ${whereClause}
     GROUP BY status
   `).all(...queryParams)
   
   // 总计
-  const total = db.prepare(`
+  const total = await db.prepare(`
     SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size
     FROM documents ${whereClause}
   `).get(...queryParams)
@@ -175,20 +175,20 @@ export function getDocumentStats(params = {}) {
 /**
  * 根据ID获取文档
  */
-export function getDocumentById(id) {
+export async function getDocumentById(id) {
   const db = getDatabase()
-  const document = db.prepare('SELECT * FROM documents WHERE id = ?').get(id)
+  const document = await db.prepare('SELECT * FROM documents WHERE id = ?').get(id)
   return document ? convertDocumentToCamelCase(document) : null
 }
 
 /**
  * 创建文档记录
  */
-export function createDocument(data) {
+export async function createDocument(data) {
   const db = getDatabase()
   const id = generateId()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO documents (
       id, document_name, original_name, document_type, file_path,
       file_size, mime_type, entity_type, entity_id, entity_number,
@@ -221,7 +221,7 @@ export function createDocument(data) {
 /**
  * 更新文档
  */
-export function updateDocument(id, data) {
+export async function updateDocument(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -251,21 +251,21 @@ export function updateDocument(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除文档
  */
-export function deleteDocument(id) {
+export async function deleteDocument(id) {
   const db = getDatabase()
   
   // 获取文档信息以删除文件
   const doc = getDocumentById(id)
   
   // 删除数据库记录
-  const result = db.prepare('DELETE FROM documents WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM documents WHERE id = ?').run(id)
   
   // 尝试删除物理文件
   if (doc && doc.filePath) {
@@ -285,9 +285,9 @@ export function deleteDocument(id) {
 /**
  * 更新文档状态
  */
-export function updateDocumentStatus(id, status, reviewNote = '') {
+export async function updateDocumentStatus(id, status, reviewNote = '') {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE documents 
     SET status = ?, review_note = ?, review_time = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
     WHERE id = ?
@@ -300,9 +300,9 @@ export function updateDocumentStatus(id, status, reviewNote = '') {
 /**
  * 获取实体关联的文档
  */
-export function getEntityDocuments(entityType, entityId) {
+export async function getEntityDocuments(entityType, entityId) {
   const db = getDatabase()
-  const documents = db.prepare(`
+  const documents = await db.prepare(`
     SELECT * FROM documents 
     WHERE entity_type = ? AND entity_id = ?
     ORDER BY document_type, upload_time DESC
@@ -314,9 +314,9 @@ export function getEntityDocuments(entityType, entityId) {
 /**
  * 关联文档到实体
  */
-export function linkDocumentToEntity(documentId, entityType, entityId, entityNumber = '') {
+export async function linkDocumentToEntity(documentId, entityType, entityId, entityNumber = '') {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE documents 
     SET entity_type = ?, entity_id = ?, entity_number = ?, updated_at = datetime('now', 'localtime')
     WHERE id = ?
@@ -327,9 +327,9 @@ export function linkDocumentToEntity(documentId, entityType, entityId, entityNum
 /**
  * 解除文档与实体的关联
  */
-export function unlinkDocumentFromEntity(documentId) {
+export async function unlinkDocumentFromEntity(documentId) {
   const db = getDatabase()
-  const result = db.prepare(`
+  const result = await db.prepare(`
     UPDATE documents 
     SET entity_type = NULL, entity_id = NULL, entity_number = '', updated_at = datetime('now', 'localtime')
     WHERE id = ?
@@ -342,7 +342,7 @@ export function unlinkDocumentFromEntity(documentId) {
 /**
  * 获取文档模板列表
  */
-export function getTemplates(params = {}) {
+export async function getTemplates(params = {}) {
   const db = getDatabase()
   const { type, status = 'active', search, page = 1, pageSize = 20 } = params
   
@@ -367,13 +367,13 @@ export function getTemplates(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY sort_order, template_name LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertTemplateToCamelCase),
@@ -386,20 +386,20 @@ export function getTemplates(params = {}) {
 /**
  * 根据ID获取模板
  */
-export function getTemplateById(id) {
+export async function getTemplateById(id) {
   const db = getDatabase()
-  const template = db.prepare('SELECT * FROM document_templates WHERE id = ?').get(id)
+  const template = await db.prepare('SELECT * FROM document_templates WHERE id = ?').get(id)
   return template ? convertTemplateToCamelCase(template) : null
 }
 
 /**
  * 创建文档模板
  */
-export function createTemplate(data) {
+export async function createTemplate(data) {
   const db = getDatabase()
   const id = generateId()
   
-  const result = db.prepare(`
+  const result = await db.prepare(`
     INSERT INTO document_templates (
       id, template_name, template_type, file_path, file_name,
       description, variables, sort_order, status,
@@ -424,7 +424,7 @@ export function createTemplate(data) {
 /**
  * 更新文档模板
  */
-export function updateTemplate(id, data) {
+export async function updateTemplate(id, data) {
   const db = getDatabase()
   const fields = []
   const values = []
@@ -457,16 +457,16 @@ export function updateTemplate(id, data) {
   fields.push('updated_at = datetime("now", "localtime")')
   values.push(id)
   
-  const result = db.prepare(`UPDATE document_templates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE document_templates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
  * 删除文档模板
  */
-export function deleteTemplate(id) {
+export async function deleteTemplate(id) {
   const db = getDatabase()
-  const result = db.prepare('DELETE FROM document_templates WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM document_templates WHERE id = ?').run(id)
   return result.changes > 0
 }
 
@@ -475,9 +475,9 @@ export function deleteTemplate(id) {
 /**
  * 获取文档版本历史
  */
-export function getDocumentVersions(documentId) {
+export async function getDocumentVersions(documentId) {
   const db = getDatabase()
-  const versions = db.prepare(`
+  const versions = await db.prepare(`
     SELECT * FROM document_versions 
     WHERE document_id = ?
     ORDER BY version DESC
@@ -499,18 +499,18 @@ export function getDocumentVersions(documentId) {
 /**
  * 创建新版本
  */
-export function createDocumentVersion(data) {
+export async function createDocumentVersion(data) {
   const db = getDatabase()
   const id = generateId()
   
   // 获取当前最高版本
-  const latest = db.prepare(`
+  const latest = await db.prepare(`
     SELECT MAX(version) as max_version FROM document_versions WHERE document_id = ?
   `).get(data.documentId)
   
   const newVersion = (latest?.max_version || 0) + 1
   
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO document_versions (
       id, document_id, version, file_path, file_size,
       change_note, uploaded_by, uploaded_by_name, upload_time
@@ -527,7 +527,7 @@ export function createDocumentVersion(data) {
   )
   
   // 更新主文档版本号和文件路径
-  db.prepare(`
+  await db.prepare(`
     UPDATE documents 
     SET version = ?, file_path = ?, file_size = ?, updated_at = datetime('now', 'localtime')
     WHERE id = ?
@@ -570,7 +570,7 @@ export function getFilePath(relativePath) {
 /**
  * 格式化文件大小
  */
-export function formatFileSize(bytes) {
+export async function formatFileSize(bytes) {
   if (bytes === 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']

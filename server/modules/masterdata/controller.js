@@ -51,7 +51,7 @@ export async function getCountryContinents(req, res) {
  */
 export async function getCountryById(req, res) {
   try {
-    const country = model.getCountryById(req.params.id)
+    const country = await model.getCountryById(req.params.id)
     if (!country) {
       return notFound(res, '国家不存在')
     }
@@ -73,13 +73,13 @@ export async function createCountry(req, res) {
       return badRequest(res, '国家代码、中文名称和英文名称为必填项')
     }
     
-    const existing = model.getCountryByCode(countryCode)
+    const existing = await model.getCountryByCode(countryCode)
     if (existing) {
       return conflict(res, '国家代码已存在')
     }
     
-    const result = model.createCountry(req.body)
-    const newCountry = model.getCountryById(result.id)
+    const result = await model.createCountry(req.body)
+    const newCountry = await model.getCountryById(result.id)
     
     return success(res, newCountry, '创建成功')
   } catch (error) {
@@ -95,12 +95,12 @@ export async function updateCountry(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getCountryById(id)
+    const existing = await model.getCountryById(id)
     if (!existing) {
       return notFound(res, '国家不存在')
     }
     
-    const updated = model.updateCountry(id, req.body)
+    const updated = await model.updateCountry(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
@@ -119,7 +119,7 @@ export async function deleteCountry(req, res) {
   try {
     const { id } = req.params
     
-    const existing = model.getCountryById(id)
+    const existing = await model.getCountryById(id)
     if (!existing) {
       return notFound(res, '国家不存在')
     }
@@ -137,7 +137,7 @@ export async function deleteCountry(req, res) {
 export async function getPortsOfLoading(req, res) {
   try {
     const { country, transportType, status, search, page, pageSize } = req.query
-    const result = model.getPortsOfLoading({
+    const result = await model.getPortsOfLoading({
       country,
       transportType,
       status,
@@ -290,7 +290,7 @@ export async function deletePortOfLoading(req, res) {
 export async function getDestinationPorts(req, res) {
   try {
     const { country, continent, transportType, status, search, page, pageSize } = req.query
-    const result = model.getDestinationPorts({
+    const result = await model.getDestinationPorts({
       country,
       continent,
       transportType,
@@ -589,7 +589,7 @@ export async function deleteAirPort(req, res) {
 export async function getShippingCompanies(req, res) {
   try {
     const { status, search, page, pageSize } = req.query
-    const result = model.getShippingCompanies({
+    const result = await model.getShippingCompanies({
       status,
       search,
       page: parseInt(page) || 1,
@@ -834,7 +834,7 @@ export async function deleteContainerCode(req, res) {
 export async function getVatRates(req, res) {
   try {
     const { status, search, page, pageSize } = req.query
-    const result = model.getVatRates({
+    const result = await model.getVatRates({
       status,
       search,
       page: parseInt(page) || 1,
@@ -850,7 +850,7 @@ export async function getVatRates(req, res) {
 
 export async function getVatRateByCountryCode(req, res) {
   try {
-    const vatRate = model.getVatRateByCountryCode(req.params.countryCode)
+    const vatRate = await model.getVatRateByCountryCode(req.params.countryCode)
     
     if (!vatRate) {
       return success(res, {
