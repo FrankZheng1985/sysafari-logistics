@@ -14,7 +14,7 @@ import * as model from './model.js'
 export async function getCountries(req, res) {
   try {
     const { continent, status, search, page, pageSize } = req.query
-    const result = model.getCountries({
+    const result = await model.getCountries({
       continent,
       status,
       search,

@@ -10,7 +10,7 @@ import { getDatabase } from '../../config/database.js'
 /**
  * 获取国家列表
  */
-export function getCountries(params = {}) {
+export async function getCountries(params = {}) {
   const db = getDatabase()
   const { continent, status = 'active', search, page = 1, pageSize = 100 } = params
   
@@ -35,13 +35,13 @@ export function getCountries(params = {}) {
   
   // 获取总数
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = db.prepare(countQuery).get(...queryParams)
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
   query += ' ORDER BY country_name_cn LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
-  const list = db.prepare(query).all(...queryParams)
+  const list = await db.prepare(query).all(...queryParams)
   
   return {
     list: list.map(convertCountryToCamelCase),
