@@ -35,7 +35,7 @@ export async function getCountries(req, res) {
 export async function getCountryContinents(req, res) {
   try {
     const db = getDatabase()
-    const continents = db.prepare(
+    const continents = await db.prepare(
       'SELECT DISTINCT continent FROM countries WHERE continent IS NOT NULL AND continent != "" ORDER BY continent'
     ).all().map(r => r.continent)
     
@@ -124,7 +124,7 @@ export async function deleteCountry(req, res) {
       return notFound(res, '国家不存在')
     }
     
-    model.deleteCountry(id)
+    await model.deleteCountry(id)
     return success(res, null, '删除成功')
   } catch (error) {
     console.error('删除国家失败:', error)
@@ -156,7 +156,7 @@ export async function getPortsOfLoading(req, res) {
 export async function getPortOfLoadingCountries(req, res) {
   try {
     const db = getDatabase()
-    const countries = db.prepare(
+    const countries = await db.prepare(
       'SELECT DISTINCT country, country_code FROM ports_of_loading WHERE country IS NOT NULL ORDER BY country'
     ).all().map(r => ({ country: r.country, countryCode: r.country_code }))
     
@@ -170,7 +170,7 @@ export async function getPortOfLoadingCountries(req, res) {
 export async function getPortOfLoadingById(req, res) {
   try {
     const db = getDatabase()
-    const port = db.prepare('SELECT * FROM ports_of_loading WHERE id = ?').get(req.params.id)
+    const port = await db.prepare('SELECT * FROM ports_of_loading WHERE id = ?').get(req.params.id)
     
     if (!port) {
       return notFound(res, '起运港不存在')
@@ -193,12 +193,12 @@ export async function createPortOfLoading(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM ports_of_loading WHERE port_code = ?').get(portCode)
+    const existing = await db.prepare('SELECT id FROM ports_of_loading WHERE port_code = ?').get(portCode)
     if (existing) {
       return conflict(res, '港口代码已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO ports_of_loading (
         port_code, port_name_cn, port_name_en, country, country_code,
         transport_type, sort_order, description, status
@@ -227,7 +227,7 @@ export async function updatePortOfLoading(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM ports_of_loading WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM ports_of_loading WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '起运港不存在')
     }
@@ -260,7 +260,7 @@ export async function updatePortOfLoading(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE ports_of_loading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE ports_of_loading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -272,7 +272,7 @@ export async function updatePortOfLoading(req, res) {
 export async function deletePortOfLoading(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM ports_of_loading WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM ports_of_loading WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '起运港不存在')
@@ -310,7 +310,7 @@ export async function getDestinationPorts(req, res) {
 export async function getDestinationPortCountries(req, res) {
   try {
     const db = getDatabase()
-    const countries = db.prepare(
+    const countries = await db.prepare(
       'SELECT DISTINCT country, country_code FROM destination_ports WHERE country IS NOT NULL ORDER BY country'
     ).all().map(r => ({ country: r.country, countryCode: r.country_code }))
     
@@ -324,7 +324,7 @@ export async function getDestinationPortCountries(req, res) {
 export async function getDestinationPortById(req, res) {
   try {
     const db = getDatabase()
-    const port = db.prepare('SELECT * FROM destination_ports WHERE id = ?').get(req.params.id)
+    const port = await db.prepare('SELECT * FROM destination_ports WHERE id = ?').get(req.params.id)
     
     if (!port) {
       return notFound(res, '目的港不存在')
@@ -347,12 +347,12 @@ export async function createDestinationPort(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM destination_ports WHERE port_code = ?').get(portCode)
+    const existing = await db.prepare('SELECT id FROM destination_ports WHERE port_code = ?').get(portCode)
     if (existing) {
       return conflict(res, '港口代码已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO destination_ports (
         port_code, port_name_cn, port_name_en, country, country_code,
         city, transport_type, continent, description, status
@@ -382,7 +382,7 @@ export async function updateDestinationPort(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM destination_ports WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM destination_ports WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '目的港不存在')
     }
@@ -416,7 +416,7 @@ export async function updateDestinationPort(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE destination_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE destination_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -428,7 +428,7 @@ export async function updateDestinationPort(req, res) {
 export async function deleteDestinationPort(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM destination_ports WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM destination_ports WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '目的港不存在')
@@ -468,7 +468,7 @@ export async function getAirPorts(req, res) {
     
     query += ' ORDER BY country, port_name_cn'
     
-    const list = db.prepare(query).all(...params)
+    const list = await db.prepare(query).all(...params)
     return success(res, list.map(model.convertPortToCamelCase))
   } catch (error) {
     console.error('获取机场列表失败:', error)
@@ -479,7 +479,7 @@ export async function getAirPorts(req, res) {
 export async function getAirPortById(req, res) {
   try {
     const db = getDatabase()
-    const port = db.prepare('SELECT * FROM air_ports WHERE id = ?').get(req.params.id)
+    const port = await db.prepare('SELECT * FROM air_ports WHERE id = ?').get(req.params.id)
     
     if (!port) {
       return notFound(res, '机场不存在')
@@ -502,12 +502,12 @@ export async function createAirPort(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM air_ports WHERE port_code = ?').get(portCode)
+    const existing = await db.prepare('SELECT id FROM air_ports WHERE port_code = ?').get(portCode)
     if (existing) {
       return conflict(res, '机场代码已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO air_ports (
         port_code, port_name_cn, port_name_en, country, country_code,
         city, description, status
@@ -535,7 +535,7 @@ export async function updateAirPort(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM air_ports WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM air_ports WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '机场不存在')
     }
@@ -559,7 +559,7 @@ export async function updateAirPort(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE air_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE air_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -571,7 +571,7 @@ export async function updateAirPort(req, res) {
 export async function deleteAirPort(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM air_ports WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM air_ports WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '机场不存在')
@@ -606,7 +606,7 @@ export async function getShippingCompanies(req, res) {
 export async function getShippingCompanyById(req, res) {
   try {
     const db = getDatabase()
-    const company = db.prepare('SELECT * FROM shipping_companies WHERE id = ?').get(req.params.id)
+    const company = await db.prepare('SELECT * FROM shipping_companies WHERE id = ?').get(req.params.id)
     
     if (!company) {
       return notFound(res, '船公司不存在')
@@ -629,12 +629,12 @@ export async function createShippingCompany(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM shipping_companies WHERE company_code = ?').get(companyCode)
+    const existing = await db.prepare('SELECT id FROM shipping_companies WHERE company_code = ?').get(companyCode)
     if (existing) {
       return conflict(res, '公司代码已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO shipping_companies (company_code, company_name, country, website, description, status)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(
@@ -658,7 +658,7 @@ export async function updateShippingCompany(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM shipping_companies WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM shipping_companies WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '船公司不存在')
     }
@@ -680,7 +680,7 @@ export async function updateShippingCompany(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE shipping_companies SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE shipping_companies SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -692,7 +692,7 @@ export async function updateShippingCompany(req, res) {
 export async function deleteShippingCompany(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM shipping_companies WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM shipping_companies WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '船公司不存在')
@@ -732,7 +732,7 @@ export async function getContainerCodes(req, res) {
     
     query += ' ORDER BY cc.container_code'
     
-    const list = db.prepare(query).all(...params)
+    const list = await db.prepare(query).all(...params)
     return success(res, list.map(r => ({
       id: String(r.id),
       shippingCompanyId: r.shipping_company_id,
@@ -757,12 +757,12 @@ export async function createContainerCode(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM container_codes WHERE container_code = ?').get(containerCode)
+    const existing = await db.prepare('SELECT id FROM container_codes WHERE container_code = ?').get(containerCode)
     if (existing) {
       return conflict(res, '柜号已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO container_codes (shipping_company_id, container_code, description, status)
       VALUES (?, ?, ?, ?)
     `).run(
@@ -784,7 +784,7 @@ export async function updateContainerCode(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM container_codes WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM container_codes WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '柜号不存在')
     }
@@ -804,7 +804,7 @@ export async function updateContainerCode(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE container_codes SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE container_codes SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -816,7 +816,7 @@ export async function updateContainerCode(req, res) {
 export async function deleteContainerCode(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM container_codes WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM container_codes WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '柜号不存在')
@@ -872,7 +872,7 @@ export async function getVatRateByCountryCode(req, res) {
 export async function getVatRateById(req, res) {
   try {
     const db = getDatabase()
-    const vatRate = db.prepare('SELECT * FROM vat_rates WHERE id = ?').get(req.params.id)
+    const vatRate = await db.prepare('SELECT * FROM vat_rates WHERE id = ?').get(req.params.id)
     
     if (!vatRate) {
       return notFound(res, '增值税率不存在')
@@ -895,12 +895,12 @@ export async function createVatRate(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM vat_rates WHERE country_code = ?').get(countryCode)
+    const existing = await db.prepare('SELECT id FROM vat_rates WHERE country_code = ?').get(countryCode)
     if (existing) {
       return conflict(res, '该国家的增值税率已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO vat_rates (
         country_code, country_name, standard_rate, reduced_rate,
         super_reduced_rate, parking_rate, description, effective_date, status
@@ -929,7 +929,7 @@ export async function updateVatRate(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM vat_rates WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM vat_rates WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '增值税率不存在')
     }
@@ -954,7 +954,7 @@ export async function updateVatRate(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE vat_rates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE vat_rates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -966,7 +966,7 @@ export async function updateVatRate(req, res) {
 export async function deleteVatRate(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM vat_rates WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM vat_rates WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '增值税率不存在')
@@ -996,7 +996,7 @@ export async function getTransportMethods(req, res) {
     
     query += ' ORDER BY sort_order, name'
     
-    const list = db.prepare(query).all(...params)
+    const list = await db.prepare(query).all(...params)
     return success(res, list.map(r => ({
       id: String(r.id),
       name: r.name,
@@ -1022,12 +1022,12 @@ export async function createTransportMethod(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM transport_methods WHERE code = ?').get(code)
+    const existing = await db.prepare('SELECT id FROM transport_methods WHERE code = ?').get(code)
     if (existing) {
       return conflict(res, '代码已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO transport_methods (name, code, description, icon, sort_order, status)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(
@@ -1051,7 +1051,7 @@ export async function updateTransportMethod(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM transport_methods WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM transport_methods WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '运输方式不存在')
     }
@@ -1073,7 +1073,7 @@ export async function updateTransportMethod(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE transport_methods SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE transport_methods SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -1085,7 +1085,7 @@ export async function updateTransportMethod(req, res) {
 export async function deleteTransportMethod(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM transport_methods WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM transport_methods WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '运输方式不存在')
@@ -1115,7 +1115,7 @@ export async function getServiceFeeCategories(req, res) {
     
     query += ' ORDER BY sort_order, name'
     
-    const list = db.prepare(query).all(...params)
+    const list = await db.prepare(query).all(...params)
     return success(res, list.map(r => ({
       id: String(r.id),
       name: r.name,
@@ -1140,12 +1140,12 @@ export async function createServiceFeeCategory(req, res) {
     
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM service_fee_categories WHERE code = ?').get(code)
+    const existing = await db.prepare('SELECT id FROM service_fee_categories WHERE code = ?').get(code)
     if (existing) {
       return conflict(res, '代码已存在')
     }
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO service_fee_categories (name, code, description, sort_order, status)
       VALUES (?, ?, ?, ?, ?)
     `).run(
@@ -1168,7 +1168,7 @@ export async function updateServiceFeeCategory(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = db.prepare('SELECT id FROM service_fee_categories WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id FROM service_fee_categories WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '服务费类别不存在')
     }
@@ -1189,7 +1189,7 @@ export async function updateServiceFeeCategory(req, res) {
     fields.push('updated_at = CURRENT_TIMESTAMP')
     values.push(id)
     
-    db.prepare(`UPDATE service_fee_categories SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+    await db.prepare(`UPDATE service_fee_categories SET ${fields.join(', ')} WHERE id = ?`).run(...values)
     
     return success(res, null, '更新成功')
   } catch (error) {
@@ -1201,7 +1201,7 @@ export async function updateServiceFeeCategory(req, res) {
 export async function deleteServiceFeeCategory(req, res) {
   try {
     const db = getDatabase()
-    const result = db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(req.params.id)
+    const result = await db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(req.params.id)
     
     if (result.changes === 0) {
       return notFound(res, '服务费类别不存在')
