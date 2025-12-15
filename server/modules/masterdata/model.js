@@ -153,7 +153,7 @@ export async function deleteCountry(id) {
  */
 export async function getPortsOfLoading(params = {}) {
   const db = getDatabase()
-  const { country, transportType, status = 'active', search, page = 1, pageSize = 100 } = params
+  const { country, transportType, status = 'active', search, continent, page = 1, pageSize = 100 } = params
   
   let query = 'SELECT * FROM ports_of_loading WHERE 1=1'
   const queryParams = []
@@ -171,6 +171,11 @@ export async function getPortsOfLoading(params = {}) {
   if (transportType) {
     query += ' AND transport_type = ?'
     queryParams.push(transportType)
+  }
+  
+  if (continent) {
+    query += ' AND continent = ?'
+    queryParams.push(continent)
   }
   
   if (search) {

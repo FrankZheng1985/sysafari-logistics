@@ -136,12 +136,13 @@ export async function deleteCountry(req, res) {
 
 export async function getPortsOfLoading(req, res) {
   try {
-    const { country, transportType, status, search, page, pageSize } = req.query
+    const { country, transportType, status, search, page, pageSize, continent } = req.query
     const result = await model.getPortsOfLoading({
       country,
       transportType,
       status,
       search,
+      continent,
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 100
     })
@@ -446,7 +447,7 @@ export async function deleteDestinationPort(req, res) {
 export async function getAirPorts(req, res) {
   try {
     const db = getDatabase()
-    const { country, status = 'active', search } = req.query
+    const { country, status = 'active', search, continent } = req.query
     
     let query = 'SELECT * FROM air_ports WHERE 1=1'
     const params = []
@@ -459,6 +460,11 @@ export async function getAirPorts(req, res) {
     if (country) {
       query += ' AND country = ?'
       params.push(country)
+    }
+    
+    if (continent) {
+      query += ' AND continent = ?'
+      params.push(continent)
     }
     
     if (search) {

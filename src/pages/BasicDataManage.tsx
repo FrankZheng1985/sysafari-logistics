@@ -135,7 +135,7 @@ export default function BasicDataManage() {
   const [editingContainerData, setEditingContainerData] = useState<ContainerCodeItem | null>(null)
   const [shippingCompanies, setShippingCompanies] = useState<ShippingCompany[]>([])
   
-  // 启运地相关状态
+  // 起运地相关状态
   const [portData, setPortData] = useState<PortOfLoadingItem[]>([])
   const [portLoading, setPortLoading] = useState(false)
   const [portError, setPortError] = useState<string | null>(null)
@@ -252,7 +252,7 @@ export default function BasicDataManage() {
     }
   }
 
-  // 加载启运地数据
+  // 加载起运地数据
   const loadPortData = async () => {
     // 如果选择的是空运港，则从 air_ports 表加载数据
     if (portTransportType === 'air') {
@@ -274,7 +274,7 @@ export default function BasicDataManage() {
         setPortError('加载数据失败')
       }
     } catch (err: any) {
-      console.error('加载启运地数据失败:', err)
+      console.error('加载起运地数据失败:', err)
       setPortError(err.message || '加载数据失败')
     } finally {
       setPortLoading(false)
@@ -363,7 +363,7 @@ export default function BasicDataManage() {
     setAirPortLoading(true)
     setAirPortError(null)
     try {
-      // 在"启运地"标签页下的"空运"子分类，或者在"空运港"标签页，都需要加载空运港数据
+      // 在"起运地"标签页下的"空运"子分类，或者在"空运港"标签页，都需要加载空运港数据
       const shouldSearch = (activeTab === 'port' && portTransportType === 'air') || activeTab === 'airport'
       const response = await getAirPortsList({
         search: shouldSearch && searchValue ? searchValue : undefined,
@@ -488,7 +488,7 @@ export default function BasicDataManage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  // 当启运地运输方式子分类切换时重新加载数据
+  // 当起运地运输方式子分类切换时重新加载数据
   useEffect(() => {
     if (activeTab === 'port') {
       loadPortData()
@@ -683,7 +683,7 @@ export default function BasicDataManage() {
     },
   ]
 
-  // 启运地表格列
+  // 起运地表格列
   const portColumns: Column<PortOfLoadingItem>[] = [
     {
       key: 'portCode',
@@ -1594,7 +1594,7 @@ export default function BasicDataManage() {
     setEditingContainerData(null)
   }
 
-  // 启运地操作（已在上面定义，这里删除重复定义）
+  // 起运地操作（已在上面定义，这里删除重复定义）
 
   const handlePortAdd = () => {
     // 如果选择的是空运港，使用空运港模态框
@@ -1637,7 +1637,7 @@ export default function BasicDataManage() {
         return
       }
       
-      // 否则删除启运地数据
+      // 否则删除起运地数据
       const response = await deletePortOfLoading(id)
       if (response.errCode === 200) {
         loadPortData()
@@ -1670,9 +1670,9 @@ export default function BasicDataManage() {
     }
   }
 
-  // 清空所有启运地数据
+  // 清空所有起运地数据
   const handleClearAllPorts = async () => {
-    if (!confirm('确定要清空所有启运地数据吗？此操作不可恢复！')) {
+    if (!confirm('确定要清空所有起运地数据吗？此操作不可恢复！')) {
       return
     }
 
@@ -1685,12 +1685,12 @@ export default function BasicDataManage() {
         alert(response.msg || '清空失败')
       }
     } catch (err: any) {
-      console.error('清空启运地数据失败:', err)
+      console.error('清空起运地数据失败:', err)
       alert(err.message || '清空失败，请稍后重试')
     }
   }
 
-  // 切换启运地状态
+  // 切换起运地状态
   const handleTogglePortStatus = async (item: PortOfLoadingItem | AirPortItem) => {
     try {
       const newStatus = item.status === 'active' ? 'inactive' : 'active'
@@ -1716,7 +1716,7 @@ export default function BasicDataManage() {
         return
       }
       
-      // 否则更新启运地状态
+      // 否则更新起运地状态
       const portItem = item as PortOfLoadingItem
       const response = await updatePortOfLoading(portItem.id, {
         portCode: portItem.portCode,
@@ -1948,7 +1948,7 @@ export default function BasicDataManage() {
         tabs={[
           { label: '船公司名称', path: '/system/basic-data' },
           { label: '集装箱代码', path: '/system/basic-data/container' },
-          { label: '启运地', path: '/system/basic-data/port' },
+          { label: '起运地', path: '/system/basic-data/port' },
           { label: '目的地', path: '/system/basic-data/destination' },
           { label: '国家', path: '/system/basic-data/country' },
           { label: '服务费类别', path: '/system/basic-data/fee-category' },
@@ -2166,7 +2166,7 @@ export default function BasicDataManage() {
             />
           )
         ) : activeTab === 'port' ? (
-          // 启运地表格
+          // 起运地表格
           <>
             {/* 运输方式子分类标签 */}
             <div className="mb-4">
@@ -2727,7 +2727,7 @@ export default function BasicDataManage() {
         data={editingContainerData}
       />
 
-      {/* 启运地弹出页面 */}
+      {/* 起运地弹出页面 */}
       {portTransportType !== 'air' && (
         <PortModal
           visible={portModalVisible}
@@ -2738,7 +2738,7 @@ export default function BasicDataManage() {
         />
       )}
 
-      {/* 空运港弹出页面（在启运地标签页下的空运子分类中使用） */}
+      {/* 空运港弹出页面（在起运地标签页下的空运子分类中使用） */}
       {portTransportType === 'air' && (
         <AirPortModal
           visible={portModalVisible}

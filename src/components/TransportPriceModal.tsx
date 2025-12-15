@@ -127,7 +127,7 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
       newErrors.name = '请输入价格名称'
     }
     if (!formData.origin?.trim()) {
-      newErrors.origin = '请输入启运地'
+      newErrors.origin = '请输入起运地'
     }
     if (!formData.destination?.trim()) {
       newErrors.destination = '请输入目的地'
@@ -260,7 +260,7 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  启运地 <span className="text-red-500">*</span>
+                  起运地 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -291,7 +291,7 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
             </div>
             <div className="mt-2 flex items-center justify-center">
               <div className="flex items-center gap-2 text-xs text-gray-600">
-                <span className="px-2 py-0.5 bg-white rounded border border-gray-200">{formData.origin || '启运地'}</span>
+                <span className="px-2 py-0.5 bg-white rounded border border-gray-200">{formData.origin || '起运地'}</span>
                 <span className="text-primary-600">→</span>
                 <span className="px-2 py-0.5 bg-white rounded border border-gray-200">{formData.destination || '目的地'}</span>
               </div>

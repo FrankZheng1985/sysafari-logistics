@@ -629,7 +629,7 @@ export default function Inquiry() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500">价格名称</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500">启运地</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500">起运地</th>
                     <th className="px-3 py-1.5 text-left text-xs font-medium text-gray-500">目的地</th>
                     <th className="px-3 py-1.5 text-center text-xs font-medium text-gray-500">方式</th>
                     <th className="px-3 py-1.5 text-right text-xs font-medium text-gray-500">公里数</th>
@@ -701,7 +701,7 @@ export default function Inquiry() {
             <div className="bg-blue-50 border border-blue-200 rounded p-3">
               <h4 className="text-xs font-medium text-blue-800 mb-1">计费说明</h4>
               <ul className="text-xs text-blue-700 space-y-0.5">
-                <li>• 公里数：从启运地到目的地的运输距离</li>
+                <li>• 公里数：从起运地到目的地的运输距离</li>
                 <li>• 公里单价：每公里的运输费用</li>
                 <li>• 运输总价 = 公里数 × 公里单价</li>
                 <li>• 如果输入总价和公里数，系统会自动反推公里单价</li>

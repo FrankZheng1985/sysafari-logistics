@@ -279,6 +279,7 @@ CREATE TABLE IF NOT EXISTS air_ports (
     country TEXT,
     country_code TEXT,
     city TEXT,
+    continent TEXT,
     description TEXT,
     status TEXT DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

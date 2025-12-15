@@ -6906,7 +6906,7 @@ app.post('/api/transport-prices', (req, res) => {
     if (!name || !origin || !destination) {
       return res.status(400).json({
         errCode: 400,
-        msg: '名称、启运地和目的地是必填项',
+        msg: '名称、起运地和目的地是必填项',
       })
     }
 
@@ -10778,6 +10778,48 @@ app.delete('/api/service-providers/:id', (req, res) => {
 })
 
 
+// 数据库迁移：添加 air_ports 表的 continent 字段
+async function migrateAirPortsContinent() {
+  if (!USE_POSTGRES) return
+  
+  try {
+    const db = getDatabase()
+    
+    // 检查 continent 列是否存在
+    const checkColumn = await db.prepare(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'air_ports' AND column_name = 'continent'
+    `).get()
+    
+    if (!checkColumn) {
+      console.log('🔄 正在迁移 air_ports 表，添加 continent 字段...')
+      
+      // 添加 continent 列
+      await db.prepare('ALTER TABLE air_ports ADD COLUMN continent TEXT').run()
+      
+      // 根据 country 从 countries 表填充 continent
+      await db.prepare(`
+        UPDATE air_ports SET continent = (
+          SELECT c.continent FROM countries c WHERE c.country_name_cn = air_ports.country
+        )
+      `).run()
+      
+      // 手动补充缺失的国家/地区的洲信息
+      await db.prepare(`
+        UPDATE air_ports SET continent = '亚洲' 
+        WHERE continent IS NULL AND country IN (
+          '中国台湾', '中国香港', '以色列', '卡塔尔', '土耳其', 
+          '巴林', '沙特阿拉伯', '科威特', '阿曼', '阿联酋'
+        )
+      `).run()
+      
+      console.log('✅ air_ports 表 continent 字段迁移完成')
+    }
+  } catch (error) {
+    console.error('⚠️ air_ports 迁移失败:', error.message)
+  }
+}
+
 // 启动服务器
 async function startServer() {
   // PostgreSQL 模式下测试连接
@@ -10788,6 +10830,9 @@ async function startServer() {
       console.error('❌ 无法连接到 PostgreSQL 数据库，服务器启动失败')
       process.exit(1)
     }
+    
+    // 执行数据库迁移
+    await migrateAirPortsContinent()
   }
   
   app.listen(PORT, () => {
