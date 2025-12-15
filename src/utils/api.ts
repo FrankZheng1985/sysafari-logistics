@@ -5,8 +5,33 @@
 
 import { isTestMode, mockAPI, createWriteBlockedResponse } from '../services/mockDataService'
 
-// API 基础地址配置
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
+// API 基础地址配置 - 根据域名自动选择
+function getApiBaseUrl(): string {
+  // 优先使用环境变量
+  if (import.meta.env?.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL as string
+  }
+  
+  // 根据当前域名自动选择 API
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    
+    // 演示环境 -> 演示 API
+    if (hostname === 'demo.xianfeng-eu.com') {
+      return 'https://sysafari-logistics-demo-api.onrender.com'
+    }
+    
+    // 生产环境 -> 生产 API
+    if (hostname === 'erp.xianfeng-eu.com') {
+      return 'https://sysafari-logistics-api.onrender.com'
+    }
+  }
+  
+  // 默认使用相对路径（本地开发或其他情况）
+  return ''
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 // 测试模式本地存储键
 const TEST_MODE_KEY = 'bp_logistics_test_mode'

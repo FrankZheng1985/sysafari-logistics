@@ -51,6 +51,7 @@ import FinanceInvoices from './pages/FinanceInvoices'
 import FinancePayments from './pages/FinancePayments'
 import FinanceFees from './pages/FinanceFees'
 import FinanceReports from './pages/FinanceReports'
+import CreateInvoice from './pages/CreateInvoice'
 // TMS模块
 import TMSDashboard from './pages/TMSDashboard'
 import ServiceProviders from './pages/ServiceProviders'
@@ -162,6 +163,7 @@ function AppRoutes() {
         {/* 财务管理 */}
         <Route path="/finance" element={<FinanceDashboard />} />
         <Route path="/finance/invoices" element={<FinanceInvoices />} />
+        <Route path="/finance/invoices/create" element={<CreateInvoice />} />
         <Route path="/finance/invoices/:id" element={<FinanceInvoices />} />
         <Route path="/finance/payments" element={<FinancePayments />} />
         <Route path="/finance/fees" element={<FinanceFees />} />

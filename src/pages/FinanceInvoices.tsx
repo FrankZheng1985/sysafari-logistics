@@ -398,10 +398,7 @@ export default function FinanceInvoices() {
         </div>
 
         <button
-          onClick={() => {
-            setEditingInvoice(null)
-            setModalVisible(true)
-          }}
+          onClick={() => navigate('/finance/invoices/create')}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
