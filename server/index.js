@@ -10035,12 +10035,19 @@ app.get('/api/feedbacks', (req, res) => {
 // ==================== 财务管理 API ====================
 
 // 获取财务概览
-app.get('/api/finance/overview', (req, res) => {
+app.get('/api/finance/overview', async (req, res) => {
   try {
     const { startDate, endDate } = req.query
     
+    // 获取当月的起止日期
+    const now = new Date()
+    const currentMonth = now.getMonth() + 1 // 1-12
+    const currentYear = now.getFullYear()
+    const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
+    const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`
+    
     // 获取发票统计
-    const invoiceStats = db.prepare(`
+    const invoiceStats = await db.prepare(`
       SELECT 
         COALESCE(SUM(CASE WHEN invoice_type = 'sales' THEN total_amount ELSE 0 END), 0) as receivable,
         COALESCE(SUM(CASE WHEN invoice_type = 'purchase' THEN total_amount ELSE 0 END), 0) as payable,
@@ -10049,8 +10056,8 @@ app.get('/api/finance/overview', (req, res) => {
       FROM invoices
     `).get()
     
-    // 获取收付款统计
-    const paymentStats = db.prepare(`
+    // 获取收付款统计（全部）
+    const paymentStats = await db.prepare(`
       SELECT 
         COALESCE(SUM(CASE WHEN payment_type = 'income' THEN amount ELSE 0 END), 0) as totalIncome,
         COALESCE(SUM(CASE WHEN payment_type = 'expense' THEN amount ELSE 0 END), 0) as totalExpense,
@@ -10059,8 +10066,16 @@ app.get('/api/finance/overview', (req, res) => {
       FROM payments
     `).get()
     
+    // 获取当月营业收入
+    const monthlyIncomeStats = await db.prepare(`
+      SELECT 
+        COALESCE(SUM(CASE WHEN payment_type = 'income' THEN amount ELSE 0 END), 0) as monthlyIncome
+      FROM payments
+      WHERE payment_date >= ? AND payment_date <= ?
+    `).get(monthStart, monthEnd)
+    
     // 获取费用统计
-    const feeStats = db.prepare(`
+    const feeStats = await db.prepare(`
       SELECT 
         COALESCE(SUM(amount), 0) as totalFees,
         COUNT(*) as feeCount
@@ -10077,7 +10092,9 @@ app.get('/api/finance/overview', (req, res) => {
           receivable: invoiceStats?.receivable || 0,
           payable: invoiceStats?.payable || 0,
           netCashFlow: netCashFlow,
-          totalFees: feeStats?.totalFees || 0
+          totalFees: feeStats?.totalFees || 0,
+          monthlyIncome: monthlyIncomeStats?.monthlyIncome || 0,
+          currentMonth: currentMonth
         },
         invoices: {
           salesCount: invoiceStats?.salesCount || 0,
@@ -10101,7 +10118,7 @@ app.get('/api/finance/overview', (req, res) => {
   } catch (error) {
     console.error('获取财务概览失败:', error)
     res.json({ errCode: 200, msg: 'success', data: {
-      summary: { receivable: 0, payable: 0, netCashFlow: 0, totalFees: 0 },
+      summary: { receivable: 0, payable: 0, netCashFlow: 0, totalFees: 0, monthlyIncome: 0, currentMonth: new Date().getMonth() + 1 },
       invoices: { salesCount: 0, purchaseCount: 0, salesAmount: 0, purchaseAmount: 0 },
       payments: { incomeCount: 0, expenseCount: 0, totalIncome: 0, totalExpense: 0, netCashFlow: 0 },
       fees: { totalFees: 0, feeCount: 0 }

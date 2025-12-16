@@ -45,6 +45,8 @@ interface DashboardStats {
     payable: number
     netCashFlow: number
     totalFees: number
+    monthlyIncome: number
+    currentMonth: number
   }
 }
 
@@ -330,8 +332,10 @@ export default function SystemDashboard() {
           )}
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-amber-100 text-sm mb-1">财务管理</div>
-              <div className="text-2xl font-bold">{formatCurrency(stats?.finance.netCashFlow || 0)}</div>
+              <div className="text-amber-100 text-sm mb-1">
+                总营业收入（{stats?.finance.currentMonth || new Date().getMonth() + 1}月）
+              </div>
+              <div className="text-2xl font-bold">{formatCurrency(stats?.finance.monthlyIncome || 0)}</div>
               <div className="mt-3 flex items-center gap-4 text-xs text-amber-100">
                 <span>应收: {formatCurrency(stats?.finance.receivable || 0)}</span>
               </div>
