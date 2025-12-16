@@ -615,7 +615,9 @@ export async function getCustomerOrderStats(customerId) {
   const customer = await getCustomerById(customerId)
   if (!customer) return null
   
-  // 统计该客户相关的所有订单（作为发货人或收货人）
+  const searchPattern = `%${customer.customerName}%`
+  
+  // 统计该客户相关的所有订单（通过customer_id或名称匹配）
   const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total_orders,
@@ -624,10 +626,13 @@ export async function getCustomerOrderStats(customerId) {
       COALESCE(SUM(pieces), 0) as total_pieces,
       COALESCE(SUM(weight), 0) as total_weight
     FROM bills_of_lading
-    WHERE (shipper LIKE ? OR consignee LIKE ?) 
-      AND (is_void = 0 OR is_void IS NULL)
-      AND status != '草稿'
-  `).get(`%${customer.customerName}%`, `%${customer.customerName}%`)
+    WHERE (is_void = 0 OR is_void IS NULL)
+      AND (
+        customer_id = ? OR 
+        shipper LIKE ? OR 
+        consignee LIKE ?
+      )
+  `).get(customerId, searchPattern, searchPattern)
   
   return {
     totalOrders: Number(stats?.total_orders || 0),
