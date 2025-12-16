@@ -147,7 +147,32 @@ export async function getCMRStats() {
         WHEN (delivery_status = '已送达' OR delivery_status = '已完成')
              AND (is_void = 0 OR is_void IS NULL)
              AND status != '草稿'
-        THEN 1 ELSE 0 END) as archived
+        THEN 1 ELSE 0 END) as archived,
+      SUM(CASE 
+        WHEN cmr_current_step = 1
+             AND (is_void = 0 OR is_void IS NULL)
+             AND status != '草稿'
+        THEN 1 ELSE 0 END) as step1,
+      SUM(CASE 
+        WHEN cmr_current_step = 2
+             AND (is_void = 0 OR is_void IS NULL)
+             AND status != '草稿'
+        THEN 1 ELSE 0 END) as step2,
+      SUM(CASE 
+        WHEN cmr_current_step = 3
+             AND (is_void = 0 OR is_void IS NULL)
+             AND status != '草稿'
+        THEN 1 ELSE 0 END) as step3,
+      SUM(CASE 
+        WHEN cmr_current_step = 4
+             AND (is_void = 0 OR is_void IS NULL)
+             AND status != '草稿'
+        THEN 1 ELSE 0 END) as step4,
+      SUM(CASE 
+        WHEN cmr_current_step = 5
+             AND (is_void = 0 OR is_void IS NULL)
+             AND status != '草稿'
+        THEN 1 ELSE 0 END) as step5
     FROM bills_of_lading
   `).get()
   
@@ -155,7 +180,14 @@ export async function getCMRStats() {
     undelivered: Number(stats.undelivered || 0),
     delivering: Number(stats.delivering || 0),
     exception: Number(stats.exception || 0),
-    archived: Number(stats.archived || 0)
+    archived: Number(stats.archived || 0),
+    stepDistribution: {
+      step1: Number(stats.step1 || 0),
+      step2: Number(stats.step2 || 0),
+      step3: Number(stats.step3 || 0),
+      step4: Number(stats.step4 || 0),
+      step5: Number(stats.step5 || 0)
+    }
   }
 }
 
