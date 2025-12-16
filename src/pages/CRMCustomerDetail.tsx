@@ -847,20 +847,26 @@ function AddressModal({
   }
 
   const loadCities = async (countryCode: string) => {
+    console.log('[CRM] loadCities called with:', countryCode)
     if (!countryCode) {
+      console.log('[CRM] No countryCode, clearing cities')
       setCities([])
       return
     }
     try {
       const { getCitiesByCountry } = await import('../utils/api')
+      console.log('[CRM] Fetching cities for:', countryCode)
       const response = await getCitiesByCountry(countryCode)
+      console.log('[CRM] Cities response:', response)
       if (response.errCode === 200 && response.data) {
+        console.log('[CRM] Setting cities:', response.data.length, 'items')
         setCities(response.data)
       } else {
+        console.log('[CRM] Invalid response, clearing cities')
         setCities([])
       }
     } catch (error) {
-      console.error('加载城市列表失败:', error)
+      console.error('[CRM] 加载城市列表失败:', error)
       setCities([])
     }
   }
@@ -876,6 +882,7 @@ function AddressModal({
   )
 
   const handleSelectCountry = (country: { countryNameCn: string; countryCode: string }) => {
+    console.log('[CRM] handleSelectCountry:', country)
     setFormData({ ...formData, country: country.countryNameCn, city: '' })
     setCountrySearch(country.countryNameCn)
     setSelectedCountryCode(country.countryCode)
@@ -888,12 +895,15 @@ function AddressModal({
   const handleCountryBlur = () => {
     setTimeout(() => {
       setShowCountryDropdown(false)
+      console.log('[CRM] handleCountryBlur, countrySearch:', countrySearch, 'countries:', countries.length)
       // 如果输入的内容能精确匹配到一个国家，自动选择它
       const exactMatch = countries.find(c => 
         c.countryNameCn === countrySearch || 
         c.countryCode.toUpperCase() === countrySearch.toUpperCase()
       )
+      console.log('[CRM] exactMatch:', exactMatch, 'selectedCountryCode:', selectedCountryCode)
       if (exactMatch && exactMatch.countryCode !== selectedCountryCode) {
+        console.log('[CRM] Matching country found, loading cities for:', exactMatch.countryCode)
         setFormData({ ...formData, country: exactMatch.countryNameCn, city: '' })
         setSelectedCountryCode(exactMatch.countryCode)
         setCitySearch('')
