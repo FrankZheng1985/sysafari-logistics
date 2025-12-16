@@ -212,28 +212,62 @@ export async function getCustomerByCode(code) {
 }
 
 /**
+ * 生成客户编码
+ * 格式：C + 年月日 + 3位序号（如：C20241216001）
+ */
+export async function generateCustomerCode() {
+  const db = getDatabase()
+  const today = new Date()
+  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
+  const prefix = `C${dateStr}`
+  
+  // 查询今天已有的最大序号
+  const result = await db.prepare(`
+    SELECT customer_code FROM customers 
+    WHERE customer_code LIKE ? 
+    ORDER BY customer_code DESC 
+    LIMIT 1
+  `).get(`${prefix}%`)
+  
+  let seq = 1
+  if (result && result.customer_code) {
+    const lastSeq = parseInt(result.customer_code.slice(-3), 10)
+    if (!isNaN(lastSeq)) {
+      seq = lastSeq + 1
+    }
+  }
+  
+  return `${prefix}${seq.toString().padStart(3, '0')}`
+}
+
+/**
  * 创建客户
  */
 export async function createCustomer(data) {
   const db = getDatabase()
   const id = generateId()
   
+  // 自动生成客户编码（如果没有提供）
+  const customerCode = data.customerCode || await generateCustomerCode()
+  
   const result = await db.prepare(`
     INSERT INTO customers (
       id, customer_code, customer_name, company_name, customer_type,
-      customer_level, country_code, province, city, address, postal_code,
+      customer_level, customer_region, country_code, province, city, address, postal_code,
       contact_person, contact_phone, contact_email, tax_number,
+      legal_person, registered_capital, establishment_date, business_scope,
       bank_name, bank_account, credit_limit, payment_terms,
       assigned_to, assigned_name, tags, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
-    data.customerCode,
+    customerCode,
     data.customerName,
     data.companyName || '',
     data.customerType || 'shipper',
     data.customerLevel || 'normal',
+    data.customerRegion || 'china',
     data.countryCode || '',
     data.province || '',
     data.city || '',
@@ -243,6 +277,10 @@ export async function createCustomer(data) {
     data.contactPhone || '',
     data.contactEmail || '',
     data.taxNumber || '',
+    data.legalPerson || '',
+    data.registeredCapital || '',
+    data.establishmentDate || '',
+    data.businessScope || '',
     data.bankName || '',
     data.bankAccount || '',
     data.creditLimit || 0,
@@ -254,7 +292,7 @@ export async function createCustomer(data) {
     data.status || 'active'
   )
   
-  return { id }
+  return { id, customerCode }
 }
 
 /**
@@ -270,6 +308,7 @@ export async function updateCustomer(id, data) {
     companyName: 'company_name',
     customerType: 'customer_type',
     customerLevel: 'customer_level',
+    customerRegion: 'customer_region',
     countryCode: 'country_code',
     province: 'province',
     city: 'city',
@@ -279,6 +318,10 @@ export async function updateCustomer(id, data) {
     contactPhone: 'contact_phone',
     contactEmail: 'contact_email',
     taxNumber: 'tax_number',
+    legalPerson: 'legal_person',
+    registeredCapital: 'registered_capital',
+    establishmentDate: 'establishment_date',
+    businessScope: 'business_scope',
     bankName: 'bank_name',
     bankAccount: 'bank_account',
     creditLimit: 'credit_limit',
@@ -381,15 +424,16 @@ export async function createContact(data) {
   
   const result = await db.prepare(`
     INSERT INTO customer_contacts (
-      id, customer_id, contact_name, position, department,
+      id, customer_id, contact_name, contact_type, position, department,
       phone, mobile, email, wechat, qq,
       is_primary, is_decision_maker, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.customerId,
     data.contactName,
+    data.contactType || 'other',
     data.position || '',
     data.department || '',
     data.phone || '',
@@ -416,6 +460,7 @@ export async function updateContact(id, data) {
   
   const fieldMap = {
     contactName: 'contact_name',
+    contactType: 'contact_type',
     position: 'position',
     department: 'department',
     phone: 'phone',
@@ -2136,6 +2181,7 @@ export function convertCustomerToCamelCase(row) {
     companyName: row.company_name,
     customerType: row.customer_type,
     customerLevel: row.customer_level,
+    customerRegion: row.customer_region || 'china',
     countryCode: row.country_code,
     province: row.province,
     city: row.city,
@@ -2145,6 +2191,10 @@ export function convertCustomerToCamelCase(row) {
     contactPhone: row.contact_phone,
     contactEmail: row.contact_email,
     taxNumber: row.tax_number,
+    legalPerson: row.legal_person,
+    registeredCapital: row.registered_capital,
+    establishmentDate: row.establishment_date,
+    businessScope: row.business_scope,
     bankName: row.bank_name,
     bankAccount: row.bank_account,
     creditLimit: row.credit_limit,
@@ -2165,6 +2215,7 @@ export function convertContactToCamelCase(row) {
     id: row.id,
     customerId: row.customer_id,
     contactName: row.contact_name,
+    contactType: row.contact_type || 'other',
     position: row.position,
     department: row.department,
     phone: row.phone,
@@ -2326,6 +2377,7 @@ export default {
   getCustomerStats,
   getCustomerById,
   getCustomerByCode,
+  generateCustomerCode,
   createCustomer,
   updateCustomer,
   deleteCustomer,

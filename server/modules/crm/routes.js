@@ -213,6 +213,14 @@ router.post('/tax/validate-all', controller.validateAllTaxNumbers)
 // 获取税号验证统计
 router.get('/tax/validation-stats', controller.getTaxValidationStats)
 
+// ==================== 营业执照OCR识别路由 ====================
+
+// 识别营业执照图片
+router.post('/ocr/business-license', controller.recognizeBusinessLicense)
+
+// 检查OCR服务状态
+router.get('/ocr/status', controller.checkOcrStatus)
+
 // ==================== 共享税号管理路由（公司级税号库） ====================
 
 // 获取共享税号列表

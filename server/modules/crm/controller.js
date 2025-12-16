@@ -79,16 +79,19 @@ export async function getCustomerById(req, res) {
  */
 export async function createCustomer(req, res) {
   try {
-    const { customerCode, customerName } = req.body
+    const { customerName } = req.body
     
-    if (!customerCode || !customerName) {
-      return badRequest(res, '客户代码和客户名称为必填项')
+    // 客户名称为必填项，客户编码由系统自动生成
+    if (!customerName) {
+      return badRequest(res, '客户名称为必填项')
     }
     
-    // 检查客户代码是否已存在
-    const existing = await model.getCustomerByCode(customerCode)
-    if (existing) {
-      return conflict(res, '客户代码已存在')
+    // 如果提供了customerCode，检查是否已存在
+    if (req.body.customerCode) {
+      const existing = await model.getCustomerByCode(req.body.customerCode)
+      if (existing) {
+        return conflict(res, '客户代码已存在')
+      }
     }
     
     const result = await model.createCustomer(req.body)
@@ -1523,6 +1526,57 @@ export async function getTaxValidationStats(req, res) {
   } catch (error) {
     console.error('获取税号验证统计失败:', error)
     return serverError(res, '获取统计失败')
+  }
+}
+
+// ==================== 营业执照OCR识别 ====================
+
+import * as ocrService from './ocrService.js'
+
+/**
+ * 识别营业执照图片
+ */
+export async function recognizeBusinessLicense(req, res) {
+  try {
+    const { imageBase64, imageUrl } = req.body
+    
+    if (!imageBase64 && !imageUrl) {
+      return badRequest(res, '请提供营业执照图片（Base64编码或URL）')
+    }
+    
+    // 检查配置
+    const config = ocrService.checkOcrConfig()
+    if (!config.configured) {
+      return serverError(res, '营业执照识别服务未配置，请联系管理员')
+    }
+    
+    // 调用OCR识别
+    const result = await ocrService.recognizeBusinessLicense(imageBase64, imageUrl)
+    
+    if (result.success) {
+      return success(res, result.data, '营业执照识别成功')
+    } else {
+      return badRequest(res, result.error || '营业执照识别失败')
+    }
+  } catch (error) {
+    console.error('营业执照识别失败:', error)
+    return serverError(res, '营业执照识别服务暂时不可用')
+  }
+}
+
+/**
+ * 检查OCR服务配置状态
+ */
+export async function checkOcrStatus(req, res) {
+  try {
+    const config = ocrService.checkOcrConfig()
+    return success(res, {
+      available: config.configured,
+      message: config.configured ? 'OCR服务已配置' : 'OCR服务未配置'
+    })
+  } catch (error) {
+    console.error('检查OCR状态失败:', error)
+    return serverError(res, '检查OCR状态失败')
   }
 }
 

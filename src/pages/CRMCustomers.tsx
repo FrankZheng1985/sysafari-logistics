@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, Eye, Edit, Trash2, 
-  Phone, Mail, MapPin, X
+  Phone, Mail, MapPin, X, Upload, Loader2,
+  ChevronLeft, ChevronRight, Check, Building2, Globe, User, FileText
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -17,6 +18,7 @@ interface Customer {
   companyName: string
   customerType: string
   customerLevel: string
+  customerRegion?: string
   contactPerson: string
   contactPhone: string
   contactEmail: string
@@ -30,11 +32,16 @@ interface Customer {
 }
 
 interface CustomerFormData {
-  customerCode: string
-  customerName: string
-  companyName: string
+  customerRegion: 'china' | 'overseas'
   customerType: string
   customerLevel: string
+  customerName: string
+  companyName: string
+  taxNumber: string
+  legalPerson: string
+  registeredCapital: string
+  establishmentDate: string
+  businessScope: string
   contactPerson: string
   contactPhone: string
   contactEmail: string
@@ -42,9 +49,34 @@ interface CustomerFormData {
   province: string
   city: string
   address: string
-  taxNumber: string
   notes: string
 }
+
+interface ContactInfo {
+  contactType: string
+  contactName: string
+  phone: string
+  mobile: string
+  email: string
+  position: string
+}
+
+// 联系人类型选项
+const CONTACT_TYPES = [
+  { value: 'legal', label: '法人代表' },
+  { value: 'customs', label: '清关负责人' },
+  { value: 'finance', label: '财务负责人' },
+  { value: 'customer_service', label: '客服对接人' },
+  { value: 'sales', label: '销售对接人' },
+  { value: 'other', label: '其他' }
+]
+
+// 客户类型选项
+const CUSTOMER_TYPES = [
+  { value: 'shipper', label: '发货人' },
+  { value: 'consignee', label: '收货人' },
+  { value: 'forwarder', label: '货代公司' }
+]
 
 export default function CRMCustomers() {
   const navigate = useNavigate()
@@ -56,25 +88,50 @@ export default function CRMCustomers() {
   const [searchValue, setSearchValue] = useState('')
   const [filterLevel, setFilterLevel] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
+  
+  // 模态框状态
   const [showModal, setShowModal] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const [currentStep, setCurrentStep] = useState(1)
+  
+  // 表单数据
   const [formData, setFormData] = useState<CustomerFormData>({
-    customerCode: '',
-    customerName: '',
-    companyName: '',
+    customerRegion: 'china',
     customerType: 'shipper',
     customerLevel: 'normal',
+    customerName: '',
+    companyName: '',
+    taxNumber: '',
+    legalPerson: '',
+    registeredCapital: '',
+    establishmentDate: '',
+    businessScope: '',
     contactPerson: '',
     contactPhone: '',
     contactEmail: '',
-    countryCode: '',
+    countryCode: '中国',
     province: '',
     city: '',
     address: '',
-    taxNumber: '',
     notes: ''
   })
+  
+  // 多联系人
+  const [contacts, setContacts] = useState<ContactInfo[]>([])
+  
+  // OCR状态
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrError, setOcrError] = useState<string | null>(null)
+  const [licenseImage, setLicenseImage] = useState<string | null>(null)
 
+  const tabs = [
+    { path: '/crm', label: '概览' },
+    { path: '/crm/customers', label: '客户管理' },
+    { path: '/crm/opportunities', label: '销售机会' },
+    { path: '/crm/quotations', label: '报价管理' },
+    { path: '/crm/contracts', label: '合同管理' },
+    { path: '/crm/feedbacks', label: '客户反馈' }
+  ]
    
   useEffect(() => {
     loadCustomers()
@@ -106,21 +163,20 @@ export default function CRMCustomers() {
     }
   }
 
-  const generateCustomerCode = () => {
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-    return `C${date}${random}`
-  }
-
   const handleOpenModal = (customer?: Customer) => {
     if (customer) {
       setEditingCustomer(customer)
       setFormData({
-        customerCode: customer.customerCode,
-        customerName: customer.customerName,
-        companyName: customer.companyName || '',
+        customerRegion: (customer.customerRegion as 'china' | 'overseas') || 'china',
         customerType: customer.customerType,
         customerLevel: customer.customerLevel,
+        customerName: customer.customerName,
+        companyName: customer.companyName || '',
+        taxNumber: '',
+        legalPerson: '',
+        registeredCapital: '',
+        establishmentDate: '',
+        businessScope: '',
         contactPerson: customer.contactPerson || '',
         contactPhone: customer.contactPhone || '',
         contactEmail: customer.contactEmail || '',
@@ -128,29 +184,130 @@ export default function CRMCustomers() {
         province: '',
         city: customer.city || '',
         address: customer.address || '',
-        taxNumber: '',
         notes: ''
       })
+      setCurrentStep(2) // 编辑模式直接跳到第二步
     } else {
       setEditingCustomer(null)
       setFormData({
-        customerCode: generateCustomerCode(),
-        customerName: '',
-        companyName: '',
+        customerRegion: 'china',
         customerType: 'shipper',
         customerLevel: 'normal',
+        customerName: '',
+        companyName: '',
+        taxNumber: '',
+        legalPerson: '',
+        registeredCapital: '',
+        establishmentDate: '',
+        businessScope: '',
         contactPerson: '',
         contactPhone: '',
         contactEmail: '',
-        countryCode: '',
+        countryCode: '中国',
         province: '',
         city: '',
         address: '',
-        taxNumber: '',
         notes: ''
       })
+      setCurrentStep(1)
     }
+    setContacts([])
+    setLicenseImage(null)
+    setOcrError(null)
     setShowModal(true)
+  }
+
+  // 处理营业执照上传
+  const handleLicenseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    // 检查文件大小（限制5MB）
+    if (file.size > 5 * 1024 * 1024) {
+      setOcrError('图片大小不能超过5MB')
+      return
+    }
+    
+    // 转换为Base64
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const base64 = reader.result as string
+      setLicenseImage(base64)
+      setOcrLoading(true)
+      setOcrError(null)
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/crm/ocr/business-license`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64 })
+        })
+        const data = await response.json()
+        
+        if (data.errCode === 200 && data.data) {
+          const ocrData = data.data
+          setFormData(prev => ({
+            ...prev,
+            companyName: ocrData.companyName || prev.companyName,
+            customerName: ocrData.companyName || prev.customerName,
+            taxNumber: ocrData.creditCode || prev.taxNumber,
+            legalPerson: ocrData.legalPerson || prev.legalPerson,
+            registeredCapital: ocrData.registeredCapital || prev.registeredCapital,
+            establishmentDate: ocrData.establishmentDate || prev.establishmentDate,
+            businessScope: ocrData.businessScope || prev.businessScope,
+            address: ocrData.address || prev.address
+          }))
+          
+          // 如果识别出法人信息，自动添加到联系人
+          if (ocrData.legalPerson) {
+            setContacts(prev => {
+              const hasLegal = prev.some(c => c.contactType === 'legal')
+              if (!hasLegal) {
+                return [...prev, {
+                  contactType: 'legal',
+                  contactName: ocrData.legalPerson,
+                  phone: '',
+                  mobile: '',
+                  email: '',
+                  position: '法定代表人'
+                }]
+              }
+              return prev
+            })
+          }
+        } else {
+          setOcrError(data.msg || '营业执照识别失败')
+        }
+      } catch (error) {
+        console.error('OCR识别失败:', error)
+        setOcrError('营业执照识别服务暂时不可用')
+      } finally {
+        setOcrLoading(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 添加联系人
+  const handleAddContact = () => {
+    setContacts(prev => [...prev, {
+      contactType: 'other',
+      contactName: '',
+      phone: '',
+      mobile: '',
+      email: '',
+      position: ''
+    }])
+  }
+
+  // 删除联系人
+  const handleRemoveContact = (index: number) => {
+    setContacts(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // 更新联系人
+  const handleUpdateContact = (index: number, field: keyof ContactInfo, value: string) => {
+    setContacts(prev => prev.map((c, i) => i === index ? { ...c, [field]: value } : c))
   }
 
   const handleSubmit = async () => {
@@ -161,8 +318,8 @@ export default function CRMCustomers() {
 
     try {
       const url = editingCustomer 
-        ? `/api/customers/${editingCustomer.id}`
-        : '/api/customers'
+        ? `${API_BASE}/api/customers/${editingCustomer.id}`
+        : `${API_BASE}/api/customers`
       const method = editingCustomer ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
@@ -173,6 +330,19 @@ export default function CRMCustomers() {
 
       const data = await response.json()
       if (data.errCode === 200) {
+        // 如果有联系人，创建联系人
+        if (contacts.length > 0 && data.data?.id) {
+          for (const contact of contacts) {
+            if (contact.contactName) {
+              await fetch(`${API_BASE}/api/crm/customers/${data.data.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(contact)
+              })
+            }
+          }
+        }
+        
         setShowModal(false)
         loadCustomers()
       } else {
@@ -226,11 +396,13 @@ export default function CRMCustomers() {
     const styles: Record<string, string> = {
       shipper: 'bg-indigo-100 text-indigo-700',
       consignee: 'bg-teal-100 text-teal-700',
+      forwarder: 'bg-orange-100 text-orange-700',
       both: 'bg-purple-100 text-purple-700'
     }
     const labels: Record<string, string> = {
       shipper: '发货人',
       consignee: '收货人',
+      forwarder: '货代公司',
       both: '两者'
     }
     return (
@@ -297,41 +469,23 @@ export default function CRMCustomers() {
     {
       key: 'location',
       label: '地址',
-      width: 150,
+      width: 200,
       render: (item) => (
-        <div className="text-xs text-gray-600 flex items-start gap-1">
-          <MapPin className="w-3 h-3 text-gray-400 mt-0.5" />
-          <span className="line-clamp-2">{item.city || '-'} {item.address}</span>
+        <div className="flex items-center gap-1 text-xs text-gray-600">
+          <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
+          <span className="truncate">{[item.countryCode, item.city, item.address].filter(Boolean).join(' ') || '-'}</span>
         </div>
-      )
-    },
-    {
-      key: 'assignedName',
-      label: '负责人',
-      width: 80,
-      render: (item) => (
-        <span className="text-xs text-gray-600">{item.assignedName || '-'}</span>
-      )
-    },
-    {
-      key: 'lastFollowUpTime',
-      label: '最后跟进',
-      width: 100,
-      render: (item) => (
-        <span className="text-xs text-gray-500">
-          {item.lastFollowUpTime ? new Date(item.lastFollowUpTime).toLocaleDateString() : '-'}
-        </span>
       )
     },
     {
       key: 'status',
       label: '状态',
-      width: 70,
+      width: 80,
       render: (item) => (
-        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-          item.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+        <span className={`px-2 py-0.5 rounded text-[10px] ${
+          item.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
         }`}>
-          {item.status === 'active' ? '活跃' : '不活跃'}
+          {item.status === 'active' ? '活跃' : '停用'}
         </span>
       )
     },
@@ -341,41 +495,453 @@ export default function CRMCustomers() {
       width: 120,
       render: (item) => (
         <div className="flex items-center gap-1">
-          <button 
+          <button
             onClick={() => navigate(`/crm/customers/${item.id}`)}
-            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
+            className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"
             title="查看详情"
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-4 h-4" />
           </button>
-          <button 
+          <button
             onClick={() => handleOpenModal(item)}
-            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
+            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded"
             title="编辑"
           >
-            <Edit className="w-3.5 h-3.5" />
+            <Edit className="w-4 h-4" />
           </button>
-          <button 
+          <button
             onClick={() => handleDelete(item)}
-            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
+            className="p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
             title="删除"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       )
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [navigate])
 
-  const tabs = [
-    { label: '仪表盘', path: '/crm' },
-    { label: '客户管理', path: '/crm/customers' },
-    { label: '销售机会', path: '/crm/opportunities' },
-    { label: '报价管理', path: '/crm/quotations' },
-    { label: '合同管理', path: '/crm/contracts' },
-    { label: '客户反馈', path: '/crm/feedbacks' },
+  // 步骤配置
+  const steps = [
+    { num: 1, title: '选择类型', icon: Building2 },
+    { num: 2, title: '填写信息', icon: FileText },
+    { num: 3, title: '联系人', icon: User },
+    { num: 4, title: '确认', icon: Check }
   ]
+
+  // 渲染步骤指示器
+  const renderStepIndicator = () => (
+    <div className="flex items-center justify-center gap-2 mb-6">
+      {steps.map((step, index) => (
+        <div key={step.num} className="flex items-center">
+          <div 
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
+              currentStep === step.num 
+                ? 'bg-primary-100 text-primary-700' 
+                : currentStep > step.num 
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            <step.icon className="w-4 h-4" />
+            <span className="text-xs font-medium">{step.title}</span>
+          </div>
+          {index < steps.length - 1 && (
+            <ChevronRight className="w-4 h-4 text-gray-300 mx-1" />
+          )}
+        </div>
+      ))}
+    </div>
+  )
+
+  // 步骤1：选择客户区域和类型
+  const renderStep1 = () => (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">客户区域</label>
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, customerRegion: 'china', countryCode: '中国' })}
+            className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all ${
+              formData.customerRegion === 'china' 
+                ? 'border-primary-500 bg-primary-50' 
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <Building2 className={`w-8 h-8 ${formData.customerRegion === 'china' ? 'text-primary-600' : 'text-gray-400'}`} />
+            <span className={`text-sm font-medium ${formData.customerRegion === 'china' ? 'text-primary-700' : 'text-gray-600'}`}>中国客户</span>
+            <span className="text-xs text-gray-500">支持营业执照OCR识别</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFormData({ ...formData, customerRegion: 'overseas', countryCode: '' })}
+            className={`p-4 border-2 rounded-lg flex flex-col items-center gap-2 transition-all ${
+              formData.customerRegion === 'overseas' 
+                ? 'border-primary-500 bg-primary-50' 
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <Globe className={`w-8 h-8 ${formData.customerRegion === 'overseas' ? 'text-primary-600' : 'text-gray-400'}`} />
+            <span className={`text-sm font-medium ${formData.customerRegion === 'overseas' ? 'text-primary-700' : 'text-gray-600'}`}>海外客户</span>
+            <span className="text-xs text-gray-500">手动填写信息</span>
+          </button>
+        </div>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">客户类型</label>
+        <div className="grid grid-cols-3 gap-3">
+          {CUSTOMER_TYPES.map(type => (
+            <button
+              key={type.value}
+              type="button"
+              onClick={() => setFormData({ ...formData, customerType: type.value })}
+              className={`p-3 border-2 rounded-lg text-center transition-all ${
+                formData.customerType === type.value 
+                  ? 'border-primary-500 bg-primary-50 text-primary-700' 
+                  : 'border-gray-200 hover:border-gray-300 text-gray-600'
+              }`}
+            >
+              <span className="text-sm font-medium">{type.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">客户级别</label>
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { value: 'potential', label: '潜在' },
+            { value: 'normal', label: '普通' },
+            { value: 'important', label: '重要' },
+            { value: 'vip', label: 'VIP' }
+          ].map(level => (
+            <button
+              key={level.value}
+              type="button"
+              onClick={() => setFormData({ ...formData, customerLevel: level.value })}
+              className={`p-2 border-2 rounded-lg text-center transition-all ${
+                formData.customerLevel === level.value 
+                  ? 'border-primary-500 bg-primary-50 text-primary-700' 
+                  : 'border-gray-200 hover:border-gray-300 text-gray-600'
+              }`}
+            >
+              <span className="text-xs font-medium">{level.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+
+  // 步骤2：填写公司信息
+  const renderStep2 = () => (
+    <div className="space-y-4">
+      {/* 中国客户：营业执照上传 */}
+      {formData.customerRegion === 'china' && (
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+          <div className="text-center">
+            {licenseImage ? (
+              <div className="space-y-3">
+                <img src={licenseImage} alt="营业执照" className="max-h-40 mx-auto rounded-lg" />
+                {ocrLoading && (
+                  <div className="flex items-center justify-center gap-2 text-primary-600">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">正在识别...</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setLicenseImage(null)}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  重新上传
+                </button>
+              </div>
+            ) : (
+              <label className="cursor-pointer">
+                <Upload className="w-10 h-10 mx-auto text-gray-400 mb-2" />
+                <p className="text-sm text-gray-600">点击上传营业执照</p>
+                <p className="text-xs text-gray-400 mt-1">支持 JPG/PNG 格式，不超过5MB</p>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLicenseUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
+            {ocrError && (
+              <p className="text-xs text-red-500 mt-2">{ocrError}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 基本信息 */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">客户名称 *</label>
+          <input
+            type="text"
+            value={formData.customerName}
+            onChange={(e) => setFormData({...formData, customerName: e.target.value})}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            placeholder="请输入客户名称"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">公司名称</label>
+          <input
+            type="text"
+            value={formData.companyName}
+            onChange={(e) => setFormData({...formData, companyName: e.target.value})}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            placeholder="公司全称"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">税号/统一社会信用代码</label>
+          <input
+            type="text"
+            value={formData.taxNumber}
+            onChange={(e) => setFormData({...formData, taxNumber: e.target.value})}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            placeholder="请输入税号"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">法定代表人</label>
+          <input
+            type="text"
+            value={formData.legalPerson}
+            onChange={(e) => setFormData({...formData, legalPerson: e.target.value})}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            placeholder="法定代表人姓名"
+          />
+        </div>
+        {formData.customerRegion === 'china' && (
+          <>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">注册资本</label>
+              <input
+                type="text"
+                value={formData.registeredCapital}
+                onChange={(e) => setFormData({...formData, registeredCapital: e.target.value})}
+                className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                placeholder="如：100万人民币"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">成立日期</label>
+              <input
+                type="text"
+                value={formData.establishmentDate}
+                onChange={(e) => setFormData({...formData, establishmentDate: e.target.value})}
+                className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                placeholder="如：2020-01-01"
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      {formData.customerRegion === 'china' && (
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">经营范围</label>
+          <textarea
+            value={formData.businessScope}
+            onChange={(e) => setFormData({...formData, businessScope: e.target.value})}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white resize-none"
+            rows={2}
+            placeholder="公司经营范围"
+          />
+        </div>
+      )}
+
+      {/* 地址信息 */}
+      <div className="border-t pt-4">
+        <h4 className="text-xs font-medium text-gray-700 mb-3">地址信息</h4>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">国家</label>
+            <input
+              type="text"
+              value={formData.countryCode}
+              onChange={(e) => setFormData({...formData, countryCode: e.target.value})}
+              className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              placeholder="国家"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">省/州</label>
+            <input
+              type="text"
+              value={formData.province}
+              onChange={(e) => setFormData({...formData, province: e.target.value})}
+              className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              placeholder="省份"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">城市</label>
+            <input
+              type="text"
+              value={formData.city}
+              onChange={(e) => setFormData({...formData, city: e.target.value})}
+              className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              placeholder="城市"
+            />
+          </div>
+        </div>
+        <div className="mt-3">
+          <label className="block text-xs text-gray-600 mb-1">详细地址</label>
+          <input
+            type="text"
+            value={formData.address}
+            onChange={(e) => setFormData({...formData, address: e.target.value})}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            placeholder="详细地址"
+          />
+        </div>
+      </div>
+    </div>
+  )
+
+  // 步骤3：多联系人管理
+  const renderStep3 = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium text-gray-700">联系人信息</h4>
+        <button
+          type="button"
+          onClick={handleAddContact}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50"
+        >
+          <Plus className="w-3 h-3" />
+          添加联系人
+        </button>
+      </div>
+
+      {contacts.length === 0 ? (
+        <div className="text-center py-8 text-gray-400">
+          <User className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">暂无联系人</p>
+          <p className="text-xs mt-1">点击上方按钮添加联系人</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {contacts.map((contact, index) => (
+            <div key={index} className="border rounded-lg p-4 bg-gray-50">
+              <div className="flex items-center justify-between mb-3">
+                <select
+                  value={contact.contactType}
+                  onChange={(e) => handleUpdateContact(index, 'contactType', e.target.value)}
+                  className="px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                >
+                  {CONTACT_TYPES.map(type => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveContact(index)}
+                  className="p-1 text-gray-400 hover:text-red-500"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">姓名 *</label>
+                  <input
+                    type="text"
+                    value={contact.contactName}
+                    onChange={(e) => handleUpdateContact(index, 'contactName', e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    placeholder="联系人姓名"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">手机</label>
+                  <input
+                    type="text"
+                    value={contact.mobile}
+                    onChange={(e) => handleUpdateContact(index, 'mobile', e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    placeholder="手机号码"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">邮箱</label>
+                  <input
+                    type="email"
+                    value={contact.email}
+                    onChange={(e) => handleUpdateContact(index, 'email', e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    placeholder="电子邮箱"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  // 步骤4：确认信息
+  const renderStep4 = () => (
+    <div className="space-y-4">
+      <div className="bg-gray-50 rounded-lg p-4">
+        <h4 className="text-sm font-medium text-gray-700 mb-3">基本信息</h4>
+        <div className="grid grid-cols-2 gap-y-2 text-xs">
+          <div className="text-gray-500">客户区域</div>
+          <div className="text-gray-900">{formData.customerRegion === 'china' ? '中国' : '海外'}</div>
+          <div className="text-gray-500">客户类型</div>
+          <div className="text-gray-900">{CUSTOMER_TYPES.find(t => t.value === formData.customerType)?.label}</div>
+          <div className="text-gray-500">客户名称</div>
+          <div className="text-gray-900">{formData.customerName || '-'}</div>
+          <div className="text-gray-500">公司名称</div>
+          <div className="text-gray-900">{formData.companyName || '-'}</div>
+          <div className="text-gray-500">税号</div>
+          <div className="text-gray-900">{formData.taxNumber || '-'}</div>
+          <div className="text-gray-500">法定代表人</div>
+          <div className="text-gray-900">{formData.legalPerson || '-'}</div>
+        </div>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-4">
+        <h4 className="text-sm font-medium text-gray-700 mb-3">地址信息</h4>
+        <div className="text-xs text-gray-900">
+          {[formData.countryCode, formData.province, formData.city, formData.address].filter(Boolean).join(' ') || '-'}
+        </div>
+      </div>
+
+      {contacts.length > 0 && (
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">联系人 ({contacts.length})</h4>
+          <div className="space-y-2">
+            {contacts.map((contact, index) => (
+              <div key={index} className="flex items-center gap-2 text-xs">
+                <span className="px-2 py-0.5 bg-gray-200 rounded text-gray-600">
+                  {CONTACT_TYPES.find(t => t.value === contact.contactType)?.label}
+                </span>
+                <span className="text-gray-900">{contact.contactName}</span>
+                {contact.mobile && <span className="text-gray-500">{contact.mobile}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="text-xs text-gray-500 text-center">
+        确认以上信息无误后，点击"保存"按钮完成创建
+      </div>
+    </div>
+  )
 
   return (
     <div className="p-4 space-y-4">
@@ -423,7 +989,7 @@ export default function CRMCustomers() {
             <option value="">全部类型</option>
             <option value="shipper">发货人</option>
             <option value="consignee">收货人</option>
-            <option value="both">两者</option>
+            <option value="forwarder">货代公司</option>
           </select>
         </div>
 
@@ -469,10 +1035,10 @@ export default function CRMCustomers() {
         </div>
       )}
 
-      {/* 新增/编辑弹窗 */}
+      {/* 新增/编辑弹窗 - 分步表单 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-[640px] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-sm font-medium">{editingCustomer ? '编辑客户' : '新增客户'}</h3>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
@@ -480,186 +1046,52 @@ export default function CRMCustomers() {
               </button>
             </div>
 
-            <div className="p-4 space-y-4">
-              {/* 基本信息 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">客户编号 *</label>
-                  <input
-                    type="text"
-                    value={formData.customerCode}
-                    onChange={(e) => setFormData({...formData, customerCode: e.target.value})}
-                    disabled={!!editingCustomer}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">客户名称 *</label>
-                  <input
-                    type="text"
-                    value={formData.customerName}
-                    onChange={(e) => setFormData({...formData, customerName: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    placeholder="请输入客户名称"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">公司名称</label>
-                  <input
-                    type="text"
-                    value={formData.companyName}
-                    onChange={(e) => setFormData({...formData, companyName: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    placeholder="请输入公司全称"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">税号</label>
-                  <input
-                    type="text"
-                    value={formData.taxNumber}
-                    onChange={(e) => setFormData({...formData, taxNumber: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    placeholder="请输入税号"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">客户类型</label>
-                  <select
-                    value={formData.customerType}
-                    onChange={(e) => setFormData({...formData, customerType: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  >
-                    <option value="shipper">发货人</option>
-                    <option value="consignee">收货人</option>
-                    <option value="both">两者</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">客户级别</label>
-                  <select
-                    value={formData.customerLevel}
-                    onChange={(e) => setFormData({...formData, customerLevel: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  >
-                    <option value="potential">潜在客户</option>
-                    <option value="normal">普通客户</option>
-                    <option value="important">重要客户</option>
-                    <option value="vip">VIP客户</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* 联系信息 */}
-              <div className="border-t pt-4">
-                <h4 className="text-xs font-medium text-gray-700 mb-3">联系信息</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">联系人</label>
-                    <input
-                      type="text"
-                      value={formData.contactPerson}
-                      onChange={(e) => setFormData({...formData, contactPerson: e.target.value})}
-                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      placeholder="请输入联系人姓名"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">联系电话</label>
-                    <input
-                      type="text"
-                      value={formData.contactPhone}
-                      onChange={(e) => setFormData({...formData, contactPhone: e.target.value})}
-                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      placeholder="请输入电话号码"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">电子邮箱</label>
-                    <input
-                      type="email"
-                      value={formData.contactEmail}
-                      onChange={(e) => setFormData({...formData, contactEmail: e.target.value})}
-                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      placeholder="请输入邮箱地址"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 地址信息 */}
-              <div className="border-t pt-4">
-                <h4 className="text-xs font-medium text-gray-700 mb-3">地址信息</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">国家</label>
-                    <input
-                      type="text"
-                      value={formData.countryCode}
-                      onChange={(e) => setFormData({...formData, countryCode: e.target.value})}
-                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      placeholder="请输入国家"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">省/州</label>
-                    <input
-                      type="text"
-                      value={formData.province}
-                      onChange={(e) => setFormData({...formData, province: e.target.value})}
-                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      placeholder="请输入省份"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-600 mb-1">城市</label>
-                    <input
-                      type="text"
-                      value={formData.city}
-                      onChange={(e) => setFormData({...formData, city: e.target.value})}
-                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      placeholder="请输入城市"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="block text-xs text-gray-600 mb-1">详细地址</label>
-                  <input
-                    type="text"
-                    value={formData.address}
-                    onChange={(e) => setFormData({...formData, address: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    placeholder="请输入详细地址"
-                  />
-                </div>
-              </div>
-
-              {/* 备注 */}
-              <div className="border-t pt-4">
-                <label className="block text-xs text-gray-600 mb-1">备注</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white resize-none"
-                  rows={3}
-                  placeholder="请输入备注信息"
-                />
-              </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              {renderStepIndicator()}
+              
+              {currentStep === 1 && renderStep1()}
+              {currentStep === 2 && renderStep2()}
+              {currentStep === 3 && renderStep3()}
+              {currentStep === 4 && renderStep4()}
             </div>
 
-            <div className="flex justify-end gap-2 p-4 border-t">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
-              >
-                确定
-              </button>
+            <div className="flex justify-between items-center p-4 border-t bg-gray-50">
+              <div>
+                {currentStep > 1 && (
+                  <button
+                    onClick={() => setCurrentStep(s => s - 1)}
+                    className="flex items-center gap-1 px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    上一步
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
+                >
+                  取消
+                </button>
+                {currentStep < 4 ? (
+                  <button
+                    onClick={() => setCurrentStep(s => s + 1)}
+                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                  >
+                    下一步
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSubmit}
+                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                  >
+                    <Check className="w-4 h-4" />
+                    保存
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -667,4 +1099,3 @@ export default function CRMCustomers() {
     </div>
   )
 }
-
