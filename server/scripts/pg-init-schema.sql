@@ -1186,9 +1186,47 @@ CREATE INDEX IF NOT EXISTS idx_tms_results_type ON tms_assessment_results(condit
 CREATE INDEX IF NOT EXISTS idx_tms_results_period ON tms_assessment_results(period);
 CREATE INDEX IF NOT EXISTS idx_tms_results_passed ON tms_assessment_results(is_passed);
 
+-- ==================== 客户地址表 ====================
+CREATE TABLE IF NOT EXISTS customer_addresses (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL,
+    address_code TEXT,
+    company_name TEXT NOT NULL,
+    contact_person TEXT,
+    phone TEXT,
+    country TEXT,
+    city TEXT,
+    address TEXT NOT NULL,
+    postal_code TEXT,
+    is_default INTEGER DEFAULT 0,
+    address_type TEXT DEFAULT 'both',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_type ON customer_addresses(address_type);
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_default ON customer_addresses(is_default);
+
+-- ==================== 客户税号表 ====================
+CREATE TABLE IF NOT EXISTS customer_tax_numbers (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL,
+    tax_type TEXT NOT NULL,
+    tax_number TEXT NOT NULL,
+    country TEXT,
+    is_default INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_tax_customer ON customer_tax_numbers(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_tax_type ON customer_tax_numbers(tax_type);
+CREATE INDEX IF NOT EXISTS idx_customer_tax_default ON customer_tax_numbers(is_default);
+
 -- 完成提示
 DO $$
 BEGIN
     RAISE NOTICE '✅ PostgreSQL 数据库表结构初始化完成！';
-    RAISE NOTICE '📊 共创建 53 个数据表';
+    RAISE NOTICE '📊 共创建 55 个数据表';
 END $$;

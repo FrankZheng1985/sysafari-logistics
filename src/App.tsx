@@ -25,7 +25,6 @@ import LastMile from './pages/LastMile'
 import Inquiry from './pages/Inquiry'
 import TariffCalculator from './pages/TariffCalculator'
 import PaymentInvoice from './pages/PaymentInvoice'
-import AddressTax from './pages/AddressTax'
 import CommodityCode from './pages/CommodityCode'
 import ProductCategory from './pages/ProductCategory'
 import EditableTableDemo from './pages/EditableTableDemo'
@@ -149,7 +148,6 @@ function AppRoutes() {
         <Route path="/tools/inquiry" element={<Inquiry />} />
         <Route path="/tools/tariff-calculator" element={<TariffCalculator />} />
         <Route path="/tools/payment" element={<PaymentInvoice />} />
-        <Route path="/tools/address" element={<AddressTax />} />
         <Route path="/tools/commodity-code" element={<CommodityCode />} />
         <Route path="/tools/productCare" element={<ProductCategory />} />
         <Route path="/tools/editable-table" element={<EditableTableDemo />} />

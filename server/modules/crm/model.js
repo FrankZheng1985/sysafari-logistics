@@ -710,6 +710,231 @@ export async function getCustomerOrders(customerId, params = {}) {
   }
 }
 
+// ==================== 客户地址管理 ====================
+
+/**
+ * 获取客户地址列表
+ */
+export async function getCustomerAddresses(customerId) {
+  const db = getDatabase()
+  const rows = await db.prepare(`
+    SELECT * FROM customer_addresses 
+    WHERE customer_id = ? 
+    ORDER BY is_default DESC, created_at DESC
+  `).all(customerId)
+  
+  return rows.map(row => ({
+    id: row.id,
+    customerId: row.customer_id,
+    addressCode: row.address_code,
+    companyName: row.company_name,
+    contactPerson: row.contact_person,
+    phone: row.phone,
+    country: row.country,
+    city: row.city,
+    address: row.address,
+    postalCode: row.postal_code,
+    isDefault: row.is_default === 1,
+    addressType: row.address_type,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
+}
+
+/**
+ * 创建客户地址
+ */
+export async function createCustomerAddress(customerId, data) {
+  const db = getDatabase()
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_addresses SET is_default = 0 WHERE customer_id = ?
+    `).run(customerId)
+  }
+  
+  const result = await db.prepare(`
+    INSERT INTO customer_addresses (
+      customer_id, address_code, company_name, contact_person, phone,
+      country, city, address, postal_code, is_default, address_type
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    customerId,
+    data.addressCode || null,
+    data.companyName,
+    data.contactPerson || null,
+    data.phone || null,
+    data.country || null,
+    data.city || null,
+    data.address,
+    data.postalCode || null,
+    data.isDefault ? 1 : 0,
+    data.addressType || 'both'
+  )
+  
+  return { id: result.id }
+}
+
+/**
+ * 更新客户地址
+ */
+export async function updateCustomerAddress(addressId, data) {
+  const db = getDatabase()
+  
+  // 获取当前地址信息
+  const current = await db.prepare('SELECT customer_id FROM customer_addresses WHERE id = ?').get(addressId)
+  if (!current) return null
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_addresses SET is_default = 0 WHERE customer_id = ?
+    `).run(current.customer_id)
+  }
+  
+  await db.prepare(`
+    UPDATE customer_addresses SET
+      address_code = COALESCE(?, address_code),
+      company_name = COALESCE(?, company_name),
+      contact_person = COALESCE(?, contact_person),
+      phone = COALESCE(?, phone),
+      country = COALESCE(?, country),
+      city = COALESCE(?, city),
+      address = COALESCE(?, address),
+      postal_code = COALESCE(?, postal_code),
+      is_default = ?,
+      address_type = COALESCE(?, address_type),
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    data.addressCode,
+    data.companyName,
+    data.contactPerson,
+    data.phone,
+    data.country,
+    data.city,
+    data.address,
+    data.postalCode,
+    data.isDefault ? 1 : 0,
+    data.addressType,
+    addressId
+  )
+  
+  return { id: addressId }
+}
+
+/**
+ * 删除客户地址
+ */
+export async function deleteCustomerAddress(addressId) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_addresses WHERE id = ?').run(addressId)
+  return { success: true }
+}
+
+// ==================== 客户税号管理 ====================
+
+/**
+ * 获取客户税号列表
+ */
+export async function getCustomerTaxNumbers(customerId) {
+  const db = getDatabase()
+  const rows = await db.prepare(`
+    SELECT * FROM customer_tax_numbers 
+    WHERE customer_id = ? 
+    ORDER BY is_default DESC, created_at DESC
+  `).all(customerId)
+  
+  return rows.map(row => ({
+    id: row.id,
+    customerId: row.customer_id,
+    taxType: row.tax_type,
+    taxNumber: row.tax_number,
+    country: row.country,
+    isDefault: row.is_default === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
+}
+
+/**
+ * 创建客户税号
+ */
+export async function createCustomerTaxNumber(customerId, data) {
+  const db = getDatabase()
+  
+  // 如果设为默认，先取消同类型的其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_tax_numbers SET is_default = 0 
+      WHERE customer_id = ? AND tax_type = ?
+    `).run(customerId, data.taxType)
+  }
+  
+  const result = await db.prepare(`
+    INSERT INTO customer_tax_numbers (
+      customer_id, tax_type, tax_number, country, is_default
+    ) VALUES (?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    customerId,
+    data.taxType,
+    data.taxNumber,
+    data.country || null,
+    data.isDefault ? 1 : 0
+  )
+  
+  return { id: result.id }
+}
+
+/**
+ * 更新客户税号
+ */
+export async function updateCustomerTaxNumber(taxId, data) {
+  const db = getDatabase()
+  
+  // 获取当前税号信息
+  const current = await db.prepare('SELECT customer_id, tax_type FROM customer_tax_numbers WHERE id = ?').get(taxId)
+  if (!current) return null
+  
+  // 如果设为默认，先取消同类型的其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_tax_numbers SET is_default = 0 
+      WHERE customer_id = ? AND tax_type = ?
+    `).run(current.customer_id, data.taxType || current.tax_type)
+  }
+  
+  await db.prepare(`
+    UPDATE customer_tax_numbers SET
+      tax_type = COALESCE(?, tax_type),
+      tax_number = COALESCE(?, tax_number),
+      country = COALESCE(?, country),
+      is_default = ?,
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    data.taxType,
+    data.taxNumber,
+    data.country,
+    data.isDefault ? 1 : 0,
+    taxId
+  )
+  
+  return { id: taxId }
+}
+
+/**
+ * 删除客户税号
+ */
+export async function deleteCustomerTaxNumber(taxId) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_tax_numbers WHERE id = ?').run(taxId)
+  return { success: true }
+}
+
 // ==================== 销售机会管理 ====================
 
 /**
@@ -1874,6 +2099,18 @@ export default {
   // 客户订单
   getCustomerOrderStats,
   getCustomerOrders,
+  
+  // 客户地址
+  getCustomerAddresses,
+  createCustomerAddress,
+  updateCustomerAddress,
+  deleteCustomerAddress,
+  
+  // 客户税号
+  getCustomerTaxNumbers,
+  createCustomerTaxNumber,
+  updateCustomerTaxNumber,
+  deleteCustomerTaxNumber,
   
   // 销售机会
   getOpportunities,

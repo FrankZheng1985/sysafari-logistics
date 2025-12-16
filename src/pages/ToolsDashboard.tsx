@@ -40,14 +40,6 @@ const tools: ToolCard[] = [
     bgColor: 'bg-purple-50 hover:bg-purple-100',
   },
   {
-    path: '/tools/address',
-    label: '地址&税号',
-    description: '管理客户地址信息和税务登记号',
-    icon: MapPin,
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-50 hover:bg-orange-100',
-  },
-  {
     path: '/tools/commodity-code',
     label: '海关编码',
     description: '查询和管理HS编码，支持智能搜索',

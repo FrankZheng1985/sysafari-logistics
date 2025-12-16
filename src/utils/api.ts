@@ -3875,6 +3875,186 @@ export async function getCustomerOrderStats(customerId: string): Promise<ApiResp
   }
 }
 
+// ==================== 客户地址 API 接口 ====================
+
+export interface CustomerAddress {
+  id?: number
+  customerId?: number
+  addressCode?: string
+  companyName: string
+  contactPerson?: string
+  phone?: string
+  country?: string
+  city?: string
+  address: string
+  postalCode?: string
+  isDefault?: boolean
+  addressType?: 'shipper' | 'consignee' | 'both'
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * 获取客户地址列表
+ */
+export async function getCustomerAddresses(customerId: string): Promise<ApiResponse<CustomerAddress[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/addresses`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取客户地址列表失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 创建客户地址
+ */
+export async function createCustomerAddress(customerId: string, data: CustomerAddress): Promise<ApiResponse<{ id: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/addresses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('创建客户地址失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 更新客户地址
+ */
+export async function updateCustomerAddress(customerId: string, addressId: number, data: Partial<CustomerAddress>): Promise<ApiResponse<{ id: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/addresses/${addressId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('更新客户地址失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 删除客户地址
+ */
+export async function deleteCustomerAddress(customerId: string, addressId: number): Promise<ApiResponse<null>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/addresses/${addressId}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('删除客户地址失败:', error)
+    throw error
+  }
+}
+
+// ==================== 客户税号 API 接口 ====================
+
+export interface CustomerTaxNumber {
+  id?: number
+  customerId?: number
+  taxType: 'vat' | 'eori' | 'other'
+  taxNumber: string
+  country?: string
+  isDefault?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * 获取客户税号列表
+ */
+export async function getCustomerTaxNumbers(customerId: string): Promise<ApiResponse<CustomerTaxNumber[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取客户税号列表失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 创建客户税号
+ */
+export async function createCustomerTaxNumber(customerId: string, data: CustomerTaxNumber): Promise<ApiResponse<{ id: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('创建客户税号失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 更新客户税号
+ */
+export async function updateCustomerTaxNumber(customerId: string, taxId: number, data: Partial<CustomerTaxNumber>): Promise<ApiResponse<{ id: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers/${taxId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('更新客户税号失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 删除客户税号
+ */
+export async function deleteCustomerTaxNumber(customerId: string, taxId: number): Promise<ApiResponse<null>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers/${taxId}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('删除客户税号失败:', error)
+    throw error
+  }
+}
+
 // ==================== 财务费用 API 接口 ====================
 
 export interface Fee {

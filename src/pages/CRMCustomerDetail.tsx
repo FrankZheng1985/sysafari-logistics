@@ -2,12 +2,17 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Building, User, Phone, Mail, MapPin,
-  Package, TrendingUp, Ship,
-  Edit, ExternalLink, RefreshCw
+  Package, TrendingUp, Ship, Plus, Trash2, Star,
+  Edit, ExternalLink, RefreshCw, FileText, X
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { getCustomerById, getCustomerOrders, getCustomerOrderStats, type Customer } from '../utils/api'
+import { 
+  getCustomerById, getCustomerOrders, getCustomerOrderStats, 
+  getCustomerAddresses, createCustomerAddress, updateCustomerAddress, deleteCustomerAddress,
+  getCustomerTaxNumbers, createCustomerTaxNumber, updateCustomerTaxNumber, deleteCustomerTaxNumber,
+  type Customer, type CustomerAddress, type CustomerTaxNumber 
+} from '../utils/api'
 
 interface CustomerOrder {
   id: string
@@ -48,12 +53,23 @@ export default function CRMCustomerDetail() {
   const [total, setTotal] = useState(0)
   const [pageSize] = useState(10)
   const [searchValue, setSearchValue] = useState('')
+  
+  // 地址和税号状态
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([])
+  const [taxNumbers, setTaxNumbers] = useState<CustomerTaxNumber[]>([])
+  const [addressModalVisible, setAddressModalVisible] = useState(false)
+  const [taxModalVisible, setTaxModalVisible] = useState(false)
+  const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null)
+  const [editingTax, setEditingTax] = useState<CustomerTaxNumber | null>(null)
+  const [activeInfoTab, setActiveInfoTab] = useState<'orders' | 'addresses' | 'tax'>('orders')
 
    
   useEffect(() => {
     if (id) {
       loadCustomer()
       loadOrderStats()
+      loadAddresses()
+      loadTaxNumbers()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -102,6 +118,78 @@ export default function CRMCustomerDetail() {
       }
     } catch (error) {
       console.error('加载订单统计失败:', error)
+    }
+  }
+
+  const loadAddresses = async () => {
+    try {
+      const response = await getCustomerAddresses(id!)
+      if (response.errCode === 200 && response.data) {
+        setAddresses(response.data)
+      }
+    } catch (error) {
+      console.error('加载地址列表失败:', error)
+    }
+  }
+
+  const loadTaxNumbers = async () => {
+    try {
+      const response = await getCustomerTaxNumbers(id!)
+      if (response.errCode === 200 && response.data) {
+        setTaxNumbers(response.data)
+      }
+    } catch (error) {
+      console.error('加载税号列表失败:', error)
+    }
+  }
+
+  const handleSaveAddress = async (data: CustomerAddress) => {
+    try {
+      if (editingAddress?.id) {
+        await updateCustomerAddress(id!, editingAddress.id, data)
+      } else {
+        await createCustomerAddress(id!, data)
+      }
+      setAddressModalVisible(false)
+      setEditingAddress(null)
+      loadAddresses()
+    } catch (error) {
+      console.error('保存地址失败:', error)
+    }
+  }
+
+  const handleDeleteAddress = async (addressId: number) => {
+    if (!confirm('确定要删除这个地址吗？')) return
+    try {
+      await deleteCustomerAddress(id!, addressId)
+      loadAddresses()
+    } catch (error) {
+      console.error('删除地址失败:', error)
+    }
+  }
+
+  const handleSaveTax = async (data: CustomerTaxNumber) => {
+    try {
+      if (editingTax?.id) {
+        await updateCustomerTaxNumber(id!, editingTax.id, data)
+      } else {
+        await createCustomerTaxNumber(id!, data)
+      }
+      setTaxModalVisible(false)
+      setEditingTax(null)
+      loadTaxNumbers()
+    } catch (error) {
+      console.error('保存税号失败:', error)
+    }
+  }
+
+  const handleDeleteTax = async (taxId: number) => {
+    if (!confirm('确定要删除这个税号吗？')) return
+    try {
+      await deleteCustomerTaxNumber(id!, taxId)
+      loadTaxNumbers()
+    } catch (error) {
+      console.error('删除税号失败:', error)
     }
   }
 
@@ -400,53 +488,579 @@ export default function CRMCustomerDetail() {
         </div>
       </div>
 
-      {/* 订单列表 */}
+      {/* Tab切换 */}
       <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
-              <Package className="w-4 h-4 text-gray-400" />
-              关联订单 ({total})
-            </h3>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="搜索提单号/箱号..."
-                  value={searchValue}
-                  onChange={(e) => {
-                    setSearchValue(e.target.value)
-                    setPage(1)
-                  }}
-                  className="w-48 px-3 py-1.5 pl-8 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                />
-                <Ship className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+        <div className="border-b border-gray-200">
+          <div className="flex">
+            <button
+              onClick={() => setActiveInfoTab('orders')}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeInfoTab === 'orders'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Package className="w-4 h-4" />
+                关联订单 ({total})
               </div>
+            </button>
+            <button
+              onClick={() => setActiveInfoTab('addresses')}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeInfoTab === 'addresses'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <MapPin className="w-4 h-4" />
+                地址 ({addresses.length})
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveInfoTab('tax')}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeInfoTab === 'tax'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <FileText className="w-4 h-4" />
+                税号 ({taxNumbers.length})
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* 订单列表 */}
+        {activeInfoTab === 'orders' && (
+          <>
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="搜索提单号/箱号..."
+                      value={searchValue}
+                      onChange={(e) => {
+                        setSearchValue(e.target.value)
+                        setPage(1)
+                      }}
+                      className="w-48 px-3 py-1.5 pl-8 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                    />
+                    <Ship className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setPage(1)
+                      loadOrders()
+                    }}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg"
+                    title="刷新"
+                  >
+                    <RefreshCw className={`w-4 h-4 text-gray-500 ${ordersLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <DataTable
+              data={orders}
+              columns={orderColumns}
+              loading={ordersLoading}
+              pagination={{
+                current: page,
+                pageSize,
+                total,
+                onChange: (p) => setPage(p)
+              }}
+              emptyText="该客户暂无关联订单"
+            />
+          </>
+        )}
+
+        {/* 地址列表 */}
+        {activeInfoTab === 'addresses' && (
+          <div className="p-4">
+            <div className="flex justify-end mb-3">
               <button
                 onClick={() => {
-                  setPage(1)
-                  loadOrders()
+                  setEditingAddress(null)
+                  setAddressModalVisible(true)
                 }}
-                className="p-1.5 hover:bg-gray-100 rounded-lg"
-                title="刷新"
+                className="flex items-center gap-1 px-2.5 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
               >
-                <RefreshCw className={`w-4 h-4 text-gray-500 ${ordersLoading ? 'animate-spin' : ''}`} />
+                <Plus className="w-3.5 h-3.5" />
+                添加地址
               </button>
+            </div>
+            {addresses.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">暂无地址信息</div>
+            ) : (
+              <div className="space-y-3">
+                {addresses.map((addr) => (
+                  <div key={addr.id} className="border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-sm text-gray-900">{addr.companyName}</span>
+                          {addr.isDefault && (
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">
+                              <Star className="w-3 h-3" />
+                              默认
+                            </span>
+                          )}
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${
+                            addr.addressType === 'shipper' ? 'bg-blue-100 text-blue-700' :
+                            addr.addressType === 'consignee' ? 'bg-green-100 text-green-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {addr.addressType === 'shipper' ? '发货地址' : addr.addressType === 'consignee' ? '收货地址' : '通用'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-600 space-y-0.5">
+                          {addr.contactPerson && <div>联系人: {addr.contactPerson} {addr.phone && `(${addr.phone})`}</div>}
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-gray-400" />
+                            {[addr.country, addr.city, addr.address, addr.postalCode].filter(Boolean).join(', ')}
+                          </div>
+                          {addr.addressCode && <div>地址编码: {addr.addressCode}</div>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingAddress(addr)
+                            setAddressModalVisible(true)
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
+                          title="编辑"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => addr.id && handleDeleteAddress(addr.id)}
+                          className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
+                          title="删除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 税号列表 */}
+        {activeInfoTab === 'tax' && (
+          <div className="p-4">
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={() => {
+                  setEditingTax(null)
+                  setTaxModalVisible(true)
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                添加税号
+              </button>
+            </div>
+            {taxNumbers.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">暂无税号信息</div>
+            ) : (
+              <div className="space-y-3">
+                {taxNumbers.map((tax) => (
+                  <div key={tax.id} className="border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-sm text-gray-900">{tax.taxNumber}</span>
+                          {tax.isDefault && (
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">
+                              <Star className="w-3 h-3" />
+                              默认
+                            </span>
+                          )}
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${
+                            tax.taxType === 'vat' ? 'bg-blue-100 text-blue-700' :
+                            tax.taxType === 'eori' ? 'bg-green-100 text-green-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {tax.taxType === 'vat' ? 'VAT税号' : tax.taxType === 'eori' ? 'EORI号' : '其他'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {tax.country && <span>国家: {tax.country}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingTax(tax)
+                            setTaxModalVisible(true)
+                          }}
+                          className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
+                          title="编辑"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => tax.id && handleDeleteTax(tax.id)}
+                          className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
+                          title="删除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 地址编辑弹窗 */}
+      {addressModalVisible && (
+        <AddressModal
+          visible={addressModalVisible}
+          onClose={() => {
+            setAddressModalVisible(false)
+            setEditingAddress(null)
+          }}
+          onSave={handleSaveAddress}
+          initialData={editingAddress}
+        />
+      )}
+
+      {/* 税号编辑弹窗 */}
+      {taxModalVisible && (
+        <TaxModal
+          visible={taxModalVisible}
+          onClose={() => {
+            setTaxModalVisible(false)
+            setEditingTax(null)
+          }}
+          onSave={handleSaveTax}
+          initialData={editingTax}
+        />
+      )}
+    </div>
+  )
+}
+
+// 地址编辑弹窗组件
+function AddressModal({ 
+  visible, 
+  onClose, 
+  onSave, 
+  initialData 
+}: { 
+  visible: boolean
+  onClose: () => void
+  onSave: (data: CustomerAddress) => void
+  initialData: CustomerAddress | null
+}) {
+  const [formData, setFormData] = useState<CustomerAddress>({
+    companyName: '',
+    address: '',
+    addressCode: '',
+    contactPerson: '',
+    phone: '',
+    country: '',
+    city: '',
+    postalCode: '',
+    isDefault: false,
+    addressType: 'both'
+  })
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData(initialData)
+    } else {
+      setFormData({
+        companyName: '',
+        address: '',
+        addressCode: '',
+        contactPerson: '',
+        phone: '',
+        country: '',
+        city: '',
+        postalCode: '',
+        isDefault: false,
+        addressType: 'both'
+      })
+    }
+  }, [initialData])
+
+  if (!visible) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-medium text-gray-900">
+            {initialData ? '编辑地址' : '添加地址'}
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">公司名称 *</label>
+            <input
+              type="text"
+              value={formData.companyName}
+              onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="请输入公司名称"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">联系人</label>
+              <input
+                type="text"
+                value={formData.contactPerson || ''}
+                onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="联系人"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">电话</label>
+              <input
+                type="text"
+                value={formData.phone || ''}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="联系电话"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">国家</label>
+              <input
+                type="text"
+                value={formData.country || ''}
+                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="国家"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">城市</label>
+              <input
+                type="text"
+                value={formData.city || ''}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="城市"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">详细地址 *</label>
+            <textarea
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              rows={2}
+              placeholder="请输入详细地址"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">邮编</label>
+              <input
+                type="text"
+                value={formData.postalCode || ''}
+                onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="邮政编码"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">地址编码</label>
+              <input
+                type="text"
+                value={formData.addressCode || ''}
+                onChange={(e) => setFormData({ ...formData, addressCode: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="地址编码"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">地址类型</label>
+              <select
+                value={formData.addressType}
+                onChange={(e) => setFormData({ ...formData, addressType: e.target.value as CustomerAddress['addressType'] })}
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              >
+                <option value="both">通用</option>
+                <option value="shipper">发货地址</option>
+                <option value="consignee">收货地址</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isDefault}
+                  onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <span className="text-xs text-gray-700">设为默认</span>
+              </label>
             </div>
           </div>
         </div>
-        <DataTable
-          data={orders}
-          columns={orderColumns}
-          loading={ordersLoading}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            onChange: (p) => setPage(p)
-          }}
-          emptyText="该客户暂无关联订单"
-        />
+        <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => {
+              if (!formData.companyName || !formData.address) {
+                alert('请填写公司名称和详细地址')
+                return
+              }
+              onSave(formData)
+            }}
+            className="px-3 py-1.5 text-xs text-white bg-primary-600 rounded hover:bg-primary-700"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 税号编辑弹窗组件
+function TaxModal({ 
+  visible, 
+  onClose, 
+  onSave, 
+  initialData 
+}: { 
+  visible: boolean
+  onClose: () => void
+  onSave: (data: CustomerTaxNumber) => void
+  initialData: CustomerTaxNumber | null
+}) {
+  const [formData, setFormData] = useState<CustomerTaxNumber>({
+    taxType: 'vat',
+    taxNumber: '',
+    country: '',
+    isDefault: false
+  })
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData(initialData)
+    } else {
+      setFormData({
+        taxType: 'vat',
+        taxNumber: '',
+        country: '',
+        isDefault: false
+      })
+    }
+  }, [initialData])
+
+  if (!visible) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-medium text-gray-900">
+            {initialData ? '编辑税号' : '添加税号'}
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">税号类型 *</label>
+            <select
+              value={formData.taxType}
+              onChange={(e) => setFormData({ ...formData, taxType: e.target.value as CustomerTaxNumber['taxType'] })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="vat">VAT税号</option>
+              <option value="eori">EORI号</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">税号 *</label>
+            <input
+              type="text"
+              value={formData.taxNumber}
+              onChange={(e) => setFormData({ ...formData, taxNumber: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="请输入税号"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">国家</label>
+            <input
+              type="text"
+              value={formData.country || ''}
+              onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="所属国家"
+            />
+          </div>
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.isDefault}
+                onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              <span className="text-xs text-gray-700">设为默认</span>
+            </label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => {
+              if (!formData.taxType || !formData.taxNumber) {
+                alert('请填写税号类型和税号')
+                return
+              }
+              onSave(formData)
+            }}
+            className="px-3 py-1.5 text-xs text-white bg-primary-600 rounded hover:bg-primary-700"
+          >
+            保存
+          </button>
+        </div>
       </div>
     </div>
   )

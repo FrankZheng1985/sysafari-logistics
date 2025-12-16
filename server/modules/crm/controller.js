@@ -496,6 +496,168 @@ export async function getCustomerOrders(req, res) {
   }
 }
 
+// ==================== 客户地址管理 ====================
+
+/**
+ * 获取客户地址列表
+ */
+export async function getCustomerAddresses(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const addresses = await model.getCustomerAddresses(customerId)
+    return success(res, addresses)
+  } catch (error) {
+    console.error('获取客户地址列表失败:', error)
+    return serverError(res, '获取客户地址列表失败')
+  }
+}
+
+/**
+ * 创建客户地址
+ */
+export async function createCustomerAddress(req, res) {
+  try {
+    const { customerId } = req.params
+    const { companyName, address } = req.body
+    
+    if (!companyName || !address) {
+      return badRequest(res, '公司名称和地址为必填项')
+    }
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const result = await model.createCustomerAddress(customerId, req.body)
+    return success(res, result, '地址创建成功')
+  } catch (error) {
+    console.error('创建客户地址失败:', error)
+    return serverError(res, '创建客户地址失败')
+  }
+}
+
+/**
+ * 更新客户地址
+ */
+export async function updateCustomerAddress(req, res) {
+  try {
+    const { addressId } = req.params
+    
+    const result = await model.updateCustomerAddress(addressId, req.body)
+    if (!result) {
+      return notFound(res, '地址不存在')
+    }
+    
+    return success(res, result, '地址更新成功')
+  } catch (error) {
+    console.error('更新客户地址失败:', error)
+    return serverError(res, '更新客户地址失败')
+  }
+}
+
+/**
+ * 删除客户地址
+ */
+export async function deleteCustomerAddress(req, res) {
+  try {
+    const { addressId } = req.params
+    
+    await model.deleteCustomerAddress(addressId)
+    return success(res, null, '地址删除成功')
+  } catch (error) {
+    console.error('删除客户地址失败:', error)
+    return serverError(res, '删除客户地址失败')
+  }
+}
+
+// ==================== 客户税号管理 ====================
+
+/**
+ * 获取客户税号列表
+ */
+export async function getCustomerTaxNumbers(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const taxNumbers = await model.getCustomerTaxNumbers(customerId)
+    return success(res, taxNumbers)
+  } catch (error) {
+    console.error('获取客户税号列表失败:', error)
+    return serverError(res, '获取客户税号列表失败')
+  }
+}
+
+/**
+ * 创建客户税号
+ */
+export async function createCustomerTaxNumber(req, res) {
+  try {
+    const { customerId } = req.params
+    const { taxType, taxNumber } = req.body
+    
+    if (!taxType || !taxNumber) {
+      return badRequest(res, '税号类型和税号为必填项')
+    }
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const result = await model.createCustomerTaxNumber(customerId, req.body)
+    return success(res, result, '税号创建成功')
+  } catch (error) {
+    console.error('创建客户税号失败:', error)
+    return serverError(res, '创建客户税号失败')
+  }
+}
+
+/**
+ * 更新客户税号
+ */
+export async function updateCustomerTaxNumber(req, res) {
+  try {
+    const { taxId } = req.params
+    
+    const result = await model.updateCustomerTaxNumber(taxId, req.body)
+    if (!result) {
+      return notFound(res, '税号不存在')
+    }
+    
+    return success(res, result, '税号更新成功')
+  } catch (error) {
+    console.error('更新客户税号失败:', error)
+    return serverError(res, '更新客户税号失败')
+  }
+}
+
+/**
+ * 删除客户税号
+ */
+export async function deleteCustomerTaxNumber(req, res) {
+  try {
+    const { taxId } = req.params
+    
+    await model.deleteCustomerTaxNumber(taxId)
+    return success(res, null, '税号删除成功')
+  } catch (error) {
+    console.error('删除客户税号失败:', error)
+    return serverError(res, '删除客户税号失败')
+  }
+}
+
 // ==================== 销售机会管理 ====================
 
 /**

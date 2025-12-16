@@ -75,6 +75,34 @@ router.get('/customers/:customerId/order-stats', controller.getCustomerOrderStat
 // 获取客户订单列表
 router.get('/customers/:customerId/orders', controller.getCustomerOrders)
 
+// ==================== 客户地址路由 ====================
+
+// 获取客户地址列表
+router.get('/customers/:customerId/addresses', controller.getCustomerAddresses)
+
+// 创建客户地址
+router.post('/customers/:customerId/addresses', controller.createCustomerAddress)
+
+// 更新客户地址
+router.put('/customers/:customerId/addresses/:addressId', controller.updateCustomerAddress)
+
+// 删除客户地址
+router.delete('/customers/:customerId/addresses/:addressId', controller.deleteCustomerAddress)
+
+// ==================== 客户税号路由 ====================
+
+// 获取客户税号列表
+router.get('/customers/:customerId/tax-numbers', controller.getCustomerTaxNumbers)
+
+// 创建客户税号
+router.post('/customers/:customerId/tax-numbers', controller.createCustomerTaxNumber)
+
+// 更新客户税号
+router.put('/customers/:customerId/tax-numbers/:taxId', controller.updateCustomerTaxNumber)
+
+// 删除客户税号
+router.delete('/customers/:customerId/tax-numbers/:taxId', controller.deleteCustomerTaxNumber)
+
 // ==================== 销售机会路由 ====================
 
 // 获取销售机会统计
