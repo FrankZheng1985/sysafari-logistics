@@ -114,11 +114,13 @@ async function callViesApi(countryCode, vatNumber) {
       
       res.on('end', () => {
         try {
-          // 解析SOAP响应
-          const validMatch = data.match(/<valid>(\w+)<\/valid>/i)
-          const nameMatch = data.match(/<name>([^<]*)<\/name>/i)
-          const addressMatch = data.match(/<address>([^<]*)<\/address>/i)
-          const faultMatch = data.match(/<faultstring>([^<]*)<\/faultstring>/i)
+          console.log('[VIES响应]', data.substring(0, 500)) // 记录响应便于调试
+          
+          // 解析SOAP响应 - 支持带命名空间前缀的标签
+          const validMatch = data.match(/<(?:\w+:)?valid>(\w+)<\/(?:\w+:)?valid>/i)
+          const nameMatch = data.match(/<(?:\w+:)?name>([^<]*)<\/(?:\w+:)?name>/i)
+          const addressMatch = data.match(/<(?:\w+:)?address>([^<]*)<\/(?:\w+:)?address>/i)
+          const faultMatch = data.match(/<(?:\w+:)?faultstring>([^<]*)<\/(?:\w+:)?faultstring>/i)
           
           if (faultMatch) {
             resolve({
@@ -129,7 +131,8 @@ async function callViesApi(countryCode, vatNumber) {
             return
           }
           
-          const isValid = validMatch && validMatch[1].toLowerCase() === 'true'
+          // 确保返回布尔值而不是null
+          const isValid = validMatch ? validMatch[1].toLowerCase() === 'true' : false
           
           resolve({
             valid: isValid,
@@ -266,14 +269,16 @@ async function callEoriApi(eoriNumber) {
       
       res.on('end', () => {
         try {
-          // 解析响应 - EORI验证返回XML
-          const statusMatch = data.match(/<status>(\d+)<\/status>/i)
-          const resultMatch = data.match(/<result>(\w+)<\/result>/i)
-          const nameMatch = data.match(/<name>([^<]*)<\/name>/i)
-          const addressMatch = data.match(/<address>([^<]*)<\/address>/i)
+          console.log('[EORI响应]', data.substring(0, 500)) // 记录响应便于调试
           
-          // 状态码 0 = 有效, 1 = 无效
-          const isValid = statusMatch && statusMatch[1] === '0'
+          // 解析响应 - EORI验证返回XML，支持带命名空间前缀
+          const statusMatch = data.match(/<(?:\w+:)?status(?:Code)?>(\d+)<\/(?:\w+:)?status(?:Code)?>/i)
+          const resultMatch = data.match(/<(?:\w+:)?result>(\w+)<\/(?:\w+:)?result>/i)
+          const nameMatch = data.match(/<(?:\w+:)?name>([^<]*)<\/(?:\w+:)?name>/i)
+          const addressMatch = data.match(/<(?:\w+:)?address>([^<]*)<\/(?:\w+:)?address>/i)
+          
+          // 状态码 0 = 有效, 1 = 无效；确保返回布尔值
+          const isValid = statusMatch ? statusMatch[1] === '0' : false
           
           resolve({
             valid: isValid,
