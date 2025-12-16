@@ -3743,8 +3743,8 @@ app.get('/api/cmr', (req, res) => {
                  AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')`
     } else if (type === 'delivering') {
       // 派送中
-      query += ' AND (delivery_status = ? OR delivery_status = ?)'
-      params.push('配送中', '派送中')
+      query += ' AND delivery_status = ?'
+      params.push('派送中')
     } else if (type === 'exception') {
       // 订单异常
       query += ' AND delivery_status IN (?, ?)'
@@ -3780,7 +3780,7 @@ app.get('/api/cmr', (req, res) => {
         AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')
       `).get().count,
       // 派送中
-      delivering: db.prepare("SELECT COUNT(*) as count FROM bills_of_lading WHERE status != '草稿' AND (is_void = 0 OR is_void IS NULL) AND (delivery_status = '配送中' OR delivery_status = '派送中')").get().count,
+      delivering: db.prepare("SELECT COUNT(*) as count FROM bills_of_lading WHERE status != '草稿' AND (is_void = 0 OR is_void IS NULL) AND delivery_status = '派送中'").get().count,
       // 订单异常
       exception: db.prepare("SELECT COUNT(*) as count FROM bills_of_lading WHERE status != '草稿' AND (is_void = 0 OR is_void IS NULL) AND delivery_status IN ('订单异常', '异常关闭')").get().count,
       // 已归档
@@ -10598,7 +10598,7 @@ app.get('/api/cmr/stats', (req, res) => {
     
     const stats = db.prepare(`
       SELECT 
-        SUM(CASE WHEN delivery_status = '配送中' OR delivery_status = '派送中' THEN 1 ELSE 0 END) as delivering,
+        SUM(CASE WHEN delivery_status = '派送中' THEN 1 ELSE 0 END) as delivering,
         SUM(CASE WHEN delivery_status = '已送达' THEN 1 ELSE 0 END) as delivered,
         SUM(CASE WHEN cmr_has_exception = 1 OR delivery_status = '订单异常' OR delivery_status = '异常关闭' THEN 1 ELSE 0 END) as exception
       FROM bills_of_lading
@@ -10618,7 +10618,7 @@ app.get('/api/cmr/stats', (req, res) => {
         END) as step1,
         SUM(CASE 
           WHEN cmr_current_step = 2 THEN 1 
-          WHEN (cmr_current_step IS NULL OR cmr_current_step = 0) AND (delivery_status = '配送中' OR delivery_status = '派送中') THEN 1
+          WHEN (cmr_current_step IS NULL OR cmr_current_step = 0) AND delivery_status = '派送中' THEN 1
           ELSE 0 
         END) as step2,
         SUM(CASE WHEN cmr_current_step = 3 THEN 1 ELSE 0 END) as step3,
@@ -10630,7 +10630,7 @@ app.get('/api/cmr/stats', (req, res) => {
         END) as step5
       FROM bills_of_lading
       WHERE (is_void = 0 OR is_void IS NULL) 
-        AND (delivery_status = '配送中' OR delivery_status = '派送中' OR delivery_status = '已送达')
+        AND (delivery_status = '派送中' OR delivery_status = '已送达')
     `).get()
     
     res.json({
@@ -10926,6 +10926,32 @@ async function migrateAirPortsContinent() {
   }
 }
 
+// 数据库迁移：统一派送状态值（将"配送中"改为"派送中"）
+async function migrateDeliveryStatus() {
+  if (!USE_POSTGRES) return
+  
+  try {
+    const db = getDatabase()
+    
+    // 检查是否有"配送中"状态的记录
+    const count = await db.prepare(`
+      SELECT COUNT(*) as count FROM bills_of_lading WHERE delivery_status = '配送中'
+    `).get()
+    
+    if (count && count.count > 0) {
+      console.log(`🔄 正在统一派送状态：发现 ${count.count} 条"配送中"记录，更新为"派送中"...`)
+      
+      await db.prepare(`
+        UPDATE bills_of_lading SET delivery_status = '派送中' WHERE delivery_status = '配送中'
+      `).run()
+      
+      console.log('✅ 派送状态统一完成')
+    }
+  } catch (error) {
+    console.error('⚠️ 派送状态迁移失败:', error.message)
+  }
+}
+
 // 启动服务器
 async function startServer() {
   // PostgreSQL 模式下测试连接
@@ -10939,6 +10965,7 @@ async function startServer() {
     
     // 执行数据库迁移
     await migrateAirPortsContinent()
+    await migrateDeliveryStatus()
   }
   
   app.listen(PORT, () => {
