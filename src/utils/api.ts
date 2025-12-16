@@ -6,7 +6,7 @@
 import { isTestMode, mockAPI, createWriteBlockedResponse } from '../services/mockDataService'
 
 // API 基础地址配置 - 根据域名自动选择
-function getApiBaseUrl(): string {
+export function getApiBaseUrl(): string {
   // 优先使用环境变量
   if (import.meta.env?.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL as string

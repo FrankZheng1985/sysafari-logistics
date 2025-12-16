@@ -6,6 +6,10 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+// 获取API基础URL
+const API_BASE = getApiBaseUrl()
 
 interface ServiceProvider {
   id: string
@@ -94,7 +98,7 @@ export default function ServiceProviders() {
         ...(filterStatus && { status: filterStatus }),
       })
       
-      const res = await fetch(`/api/service-providers?${params}`)
+      const res = await fetch(`${API_BASE}/api/service-providers?${params}`)
       const data = await res.json()
       
       if (data.errCode === 200) {
@@ -144,8 +148,8 @@ export default function ServiceProviders() {
     setSaving(true)
     try {
       const url = editingProvider 
-        ? `/api/service-providers/${editingProvider.id}`
-        : '/api/service-providers'
+        ? `${API_BASE}/api/service-providers/${editingProvider.id}`
+        : `${API_BASE}/api/service-providers`
       
       const res = await fetch(url, {
         method: editingProvider ? 'PUT' : 'POST',
@@ -175,7 +179,7 @@ export default function ServiceProviders() {
     }
 
     try {
-      const res = await fetch(`/api/service-providers/${provider.id}`, {
+      const res = await fetch(`${API_BASE}/api/service-providers/${provider.id}`, {
         method: 'DELETE',
       })
       
@@ -196,7 +200,7 @@ export default function ServiceProviders() {
     const newStatus = provider.status === 'active' ? 'inactive' : 'active'
     
     try {
-      const res = await fetch(`/api/service-providers/${provider.id}`, {
+      const res = await fetch(`${API_BASE}/api/service-providers/${provider.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
