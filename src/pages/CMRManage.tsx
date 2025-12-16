@@ -484,7 +484,7 @@ export default function CMRManage() {
   return (
     <div className="h-full flex flex-col bg-white">
       <PageHeader
-        title="CMR管理"
+        title="TMS管理"
         icon={<Truck className="w-6 h-6 text-primary-600" />}
         tabs={[
           { label: '未派送', path: '/cmr-manage', count: stats.undelivered },

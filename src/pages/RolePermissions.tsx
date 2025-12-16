@@ -29,7 +29,7 @@ const permissionGroups = [
   },
   { 
     key: 'cmr', 
-    label: 'CMR管理', 
+    label: 'TMS管理', 
     icon: '🚚',
     description: 'CMR派送的查看和操作权限'
   },

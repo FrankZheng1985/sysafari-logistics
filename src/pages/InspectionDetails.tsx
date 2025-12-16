@@ -131,7 +131,7 @@ export default function InspectionDetails() {
   
   // 处理放行操作（放行后会转移到"查验-放行"标签，同时在CMR管理显示）- 保留用于扩展功能
   const handleReleaseInspectionReserved = async (bill: BillOfLading) => {
-    if (!confirm(`确定要放行提单 ${bill.billNumber} 吗？放行后将转移到"查验-放行"并可在CMR管理中派送。`)) return
+    if (!confirm(`确定要放行提单 ${bill.billNumber} 吗？放行后将转移到"查验-放行"并可在TMS管理中派送。`)) return
     
     try {
       const response = await updateBillInspection(String(bill.id), '已放行')

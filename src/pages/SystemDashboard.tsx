@@ -363,7 +363,7 @@ export default function SystemDashboard() {
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: '提单管理', path: '/bookings/bill', icon: FileText, color: 'bg-blue-50 text-blue-600', module: 'order' as const },
-              { label: 'CMR管理', path: '/cmr-manage', icon: Truck, color: 'bg-green-50 text-green-600', module: 'tms' as const },
+              { label: 'TMS管理', path: '/cmr-manage', icon: Truck, color: 'bg-green-50 text-green-600', module: 'tms' as const },
               { label: '客户管理', path: '/crm/customers', icon: Users, color: 'bg-purple-50 text-purple-600', module: 'crm' as const },
               { label: '财务报表', path: '/finance/reports', icon: BarChart3, color: 'bg-amber-50 text-amber-600', module: 'finance' as const },
               { label: '查验明细', path: '/inspection-overview', icon: CheckCircle, color: 'bg-cyan-50 text-cyan-600', module: 'inspection' as const },

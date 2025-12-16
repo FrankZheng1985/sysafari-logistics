@@ -58,7 +58,7 @@ export default function TMSDashboard() {
 
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
-    { label: 'CMR管理', path: '/cmr-manage' },
+    { label: 'TMS管理', path: '/cmr-manage' },
     { label: '服务商管理', path: '/tms/service-providers' },
     { label: '运费管理', path: '/tms/pricing' },
   ]

@@ -79,7 +79,7 @@ const menuItems: MenuItem[] = [
     icon: Truck,
     children: [
       { path: '/tms', label: 'TMS概览', icon: ClipboardList },
-      { path: '/cmr-manage', label: 'CMR管理', icon: Truck },
+      { path: '/cmr-manage', label: 'TMS管理', icon: Truck },
       { path: '/tms/service-providers', label: '服务商管理', icon: UserCircle },
       { path: '/tms/pricing', label: '运费管理', icon: Wallet },
       { path: '/last-mile', label: '最后里程', icon: Truck },

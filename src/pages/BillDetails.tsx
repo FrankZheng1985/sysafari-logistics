@@ -1196,7 +1196,7 @@ export default function BillDetails() {
                         {billDetail.inspection === '已查验' && (
                           <button
                             onClick={async () => {
-                              if (!confirm('确定要放行此提单吗？放行后将转移到CMR管理。')) return
+                              if (!confirm('确定要放行此提单吗？放行后将转移到TMS管理。')) return
                               try {
                                 const response = await updateBillInspection(String(billDetail.id), '已放行')
                                 if (response.errCode === 200) {
@@ -1492,7 +1492,7 @@ export default function BillDetails() {
                           }}
                           className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
                         >
-                          查看CMR管理
+                          查看TMS管理
                         </button>
                         <div className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded">
                           当前状态: <span className={`font-medium ${

@@ -42,7 +42,7 @@ export default function CMRExceptionManage() {
 
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
-    { label: 'CMR管理', path: '/cmr-manage' },
+    { label: 'TMS管理', path: '/cmr-manage' },
     { label: '异常管理', path: '/tms/exceptions' },
     { label: '服务商管理', path: '/tms/service-providers' },
   ]
