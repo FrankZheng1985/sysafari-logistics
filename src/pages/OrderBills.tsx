@@ -17,6 +17,22 @@ const textPrimary = "text-gray-900"
 const textSecondary = "text-gray-500"
 const textMuted = "text-gray-400"
 
+// 格式化日期时间
+const formatDateTime = (dateStr: string | undefined | null) => {
+  if (!dateStr) return '-'
+  try {
+    return new Date(dateStr).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch {
+    return dateStr
+  }
+}
+
 export default function OrderBills() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -294,7 +310,7 @@ export default function OrderBills() {
         return dateA - dateB
       },
       render: (item: BillOfLading) => (
-        <span className={textSecondary}>{item.createTime}</span>
+        <span className={textSecondary}>{formatDateTime(item.createTime)}</span>
       ),
     },
     {
@@ -535,7 +551,7 @@ export default function OrderBills() {
       render: (item: BillOfLading) => (
         <div className="space-y-0.5">
           <div className={`font-medium ${textPrimary}`}>{item.creator || '-'}</div>
-          <div className={`text-xs ${textMuted}`}>{item.createTime || '-'}</div>
+          <div className={`text-xs ${textMuted}`}>{formatDateTime(item.createTime)}</div>
         </div>
       ),
     },
