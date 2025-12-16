@@ -3903,6 +3903,7 @@ export async function getCustomerOrderStats(customerId: string): Promise<ApiResp
   completedOrders: number
   totalPieces: number
   totalWeight: number
+  totalVolume: number
 }>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/order-stats`)

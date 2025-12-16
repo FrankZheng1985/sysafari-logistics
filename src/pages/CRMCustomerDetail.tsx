@@ -1313,17 +1313,18 @@ function TaxModal({
       const response = await validateVATNumber(formData.vatNumber.trim())
       
       if (response.errCode === 200 && response.data) {
-        if (response.data.valid) {
+        const data = response.data
+        if (data.valid) {
           setFormData(prev => ({
             ...prev,
-            vatCompanyName: response.data.companyName || '',
-            vatCompanyAddress: response.data.companyAddress || '',
+            vatCompanyName: data.companyName || '',
+            vatCompanyAddress: data.companyAddress || '',
             vatVerified: true
           }))
           setValidationError(null)
         } else {
           setFormData(prev => ({ ...prev, vatVerified: false }))
-          setValidationError(response.data.error || 'VAT税号验证失败')
+          setValidationError(data.error || 'VAT税号验证失败')
         }
       } else {
         setValidationError('VAT验证服务暂时不可用')
@@ -1351,17 +1352,18 @@ function TaxModal({
       const response = await validateEORINumber(formData.eoriNumber.trim())
       
       if (response.errCode === 200 && response.data) {
-        if (response.data.valid) {
+        const data = response.data
+        if (data.valid) {
           setFormData(prev => ({
             ...prev,
-            eoriCompanyName: response.data.companyName || '',
-            eoriCompanyAddress: response.data.companyAddress || '',
+            eoriCompanyName: data.companyName || '',
+            eoriCompanyAddress: data.companyAddress || '',
             eoriVerified: true
           }))
           setValidationError(null)
         } else {
           setFormData(prev => ({ ...prev, eoriVerified: false }))
-          setValidationError(response.data.error || 'EORI号码验证失败')
+          setValidationError(data.error || 'EORI号码验证失败')
         }
       } else {
         setValidationError('EORI验证服务暂时不可用')
