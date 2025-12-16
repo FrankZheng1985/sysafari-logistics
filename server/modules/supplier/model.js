@@ -64,7 +64,7 @@ export async function initSupplierTable() {
       bank_name TEXT,
       bank_account TEXT,
       bank_branch TEXT,
-      currency TEXT DEFAULT 'CNY',
+      currency TEXT DEFAULT 'EUR',
       payment_terms TEXT,
       credit_limit REAL DEFAULT 0,
       
@@ -228,7 +228,7 @@ export async function createSupplier(data) {
     data.bankName || '',
     data.bankAccount || '',
     data.bankBranch || '',
-    data.currency || 'CNY',
+    data.currency || 'EUR',
     data.paymentTerms || '',
     data.creditLimit || 0,
     data.status || 'active',

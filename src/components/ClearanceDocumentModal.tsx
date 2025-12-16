@@ -94,7 +94,7 @@ export default function ClearanceDocumentModal({
     volumeUnit: 'CBM',
     packages: 0,
     packageType: 'CARTON',
-    currency: 'USD',
+    currency: 'EUR',
     totalValue: 0,
     unitPrice: 0,
     freightAmount: 0,
@@ -237,7 +237,7 @@ export default function ClearanceDocumentModal({
           volumeUnit: doc.volumeUnit || 'CBM',
           packages: doc.packages || 0,
           packageType: doc.packageType || 'CARTON',
-          currency: doc.currency || 'USD',
+          currency: doc.currency || 'EUR',
           totalValue: doc.totalValue || 0,
           unitPrice: doc.unitPrice || 0,
           freightAmount: doc.freightAmount || 0,
@@ -294,7 +294,7 @@ export default function ClearanceDocumentModal({
       volumeUnit: 'CBM',
       packages: 0,
       packageType: 'CARTON',
-      currency: 'USD',
+      currency: 'EUR',
       totalValue: 0,
       unitPrice: 0,
       freightAmount: 0,
@@ -793,8 +793,8 @@ export default function ClearanceDocumentModal({
                       onChange={(e) => handleInputChange('currency', e.target.value)}
                       className={selectClass}
                     >
-                      <option value="USD">USD - 美元</option>
                       <option value="EUR">EUR - 欧元</option>
+                      <option value="USD">USD - 美元</option>
                       <option value="CNY">CNY - 人民币</option>
                       <option value="GBP">GBP - 英镑</option>
                     </select>

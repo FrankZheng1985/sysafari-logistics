@@ -100,7 +100,7 @@ export default function CreateInvoice() {
     customerName: '',
     billId: '',
     billNumber: '',
-    currency: 'CNY',
+    currency: 'EUR',
     exchangeRate: 1,
     description: '',
     notes: '',
@@ -117,9 +117,9 @@ export default function CreateInvoice() {
   ]
 
   const currencies = [
-    { value: 'CNY', label: '人民币 (CNY)' },
-    { value: 'USD', label: '美元 (USD)' },
     { value: 'EUR', label: '欧元 (EUR)' },
+    { value: 'USD', label: '美元 (USD)' },
+    { value: 'CNY', label: '人民币 (CNY)' },
     { value: 'GBP', label: '英镑 (GBP)' },
     { value: 'JPY', label: '日元 (JPY)' },
   ]

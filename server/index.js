@@ -1624,7 +1624,7 @@ function initDatabase() {
       service_type TEXT DEFAULT 'delivery',
       price_type TEXT DEFAULT 'per_kg',
       unit_price REAL DEFAULT 0,
-      currency TEXT DEFAULT 'CNY',
+      currency TEXT DEFAULT 'EUR',
       min_weight REAL DEFAULT 0,
       max_weight REAL DEFAULT 0,
       effective_date DATE,
@@ -1652,11 +1652,11 @@ function initDatabase() {
       INSERT INTO transport_pricing (route_code, route_name, origin, destination, service_type, price_type, unit_price, currency, min_weight, max_weight, effective_date, expiry_date, provider_id, provider_name, status, remark) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    insertPricing.run('RT001', '上海-鹿特丹派送', '上海', '鹿特丹', 'delivery', 'per_kg', 12.5, 'CNY', 0, 1000, '2024-01-01', '2024-12-31', 1, 'DHL快递', 'active', '含基本保险')
-    insertPricing.run('RT002', '宁波-汉堡派送', '宁波', '汉堡', 'delivery', 'per_kg', 15.0, 'CNY', 0, 500, '2024-01-01', '2024-12-31', 2, 'UPS物流', 'active', '')
-    insertPricing.run('RT003', '深圳-伦敦整柜', '深圳', '伦敦', 'fcl', 'per_container', 2800, 'USD', 0, 0, '2024-01-01', '2024-12-31', null, 'MSC海运', 'active', '40尺柜')
-    insertPricing.run('RT004', '上海-纽约空运', '上海', '纽约', 'air', 'per_kg', 35.0, 'CNY', 0, 0, '2024-01-01', '2024-12-31', 3, 'FedEx联邦快递', 'active', '')
-    insertPricing.run('RT005', '广州-新加坡拼箱', '广州', '新加坡', 'lcl', 'per_cbm', 450, 'CNY', 0, 0, '2024-01-01', '2024-12-31', null, '', 'active', '')
+    insertPricing.run('RT001', '上海-鹿特丹派送', '上海', '鹿特丹', 'delivery', 'per_kg', 12.5, 'EUR', 0, 1000, '2024-01-01', '2024-12-31', 1, 'DHL快递', 'active', '含基本保险')
+    insertPricing.run('RT002', '宁波-汉堡派送', '宁波', '汉堡', 'delivery', 'per_kg', 15.0, 'EUR', 0, 500, '2024-01-01', '2024-12-31', 2, 'UPS物流', 'active', '')
+    insertPricing.run('RT003', '深圳-伦敦整柜', '深圳', '伦敦', 'fcl', 'per_container', 2800, 'EUR', 0, 0, '2024-01-01', '2024-12-31', null, 'MSC海运', 'active', '40尺柜')
+    insertPricing.run('RT004', '上海-纽约空运', '上海', '纽约', 'air', 'per_kg', 35.0, 'EUR', 0, 0, '2024-01-01', '2024-12-31', 3, 'FedEx联邦快递', 'active', '')
+    insertPricing.run('RT005', '广州-新加坡拼箱', '广州', '新加坡', 'lcl', 'per_cbm', 450, 'EUR', 0, 0, '2024-01-01', '2024-12-31', null, '', 'active', '')
     console.log('已插入示例运费数据')
   }
 
@@ -2323,7 +2323,7 @@ function initDatabase() {
       discount REAL DEFAULT 0,
       tax_amount REAL DEFAULT 0,
       total_amount REAL DEFAULT 0,
-      currency TEXT DEFAULT 'CNY',
+      currency TEXT DEFAULT 'EUR',
       terms TEXT,
       notes TEXT,
       items TEXT DEFAULT '[]',
@@ -2347,7 +2347,7 @@ function initDatabase() {
       opportunity_id TEXT,
       contract_type TEXT DEFAULT 'service',
       contract_amount REAL DEFAULT 0,
-      currency TEXT DEFAULT 'CNY',
+      currency TEXT DEFAULT 'EUR',
       start_date DATE,
       end_date DATE,
       sign_date DATE,
@@ -2728,7 +2728,7 @@ if (!USE_POSTGRES) {
           bank_name TEXT,
           bank_account TEXT,
           bank_branch TEXT,
-          currency TEXT DEFAULT 'CNY',
+          currency TEXT DEFAULT 'EUR',
           payment_terms TEXT,
           credit_limit REAL DEFAULT 0,
           status TEXT DEFAULT 'active',

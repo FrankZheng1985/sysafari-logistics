@@ -60,7 +60,7 @@ export default function CRMQuotations() {
     subject: '',
     quoteDate: new Date().toISOString().split('T')[0],
     validUntil: '',
-    currency: 'CNY',
+    currency: 'EUR',
     terms: '',
     notes: '',
     items: [{ name: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[]
@@ -113,7 +113,7 @@ export default function CRMQuotations() {
         subject: item.subject || '',
         quoteDate: item.quoteDate || new Date().toISOString().split('T')[0],
         validUntil: item.validUntil || '',
-        currency: item.currency || 'CNY',
+        currency: item.currency || 'EUR',
         terms: '',
         notes: '',
         items: item.items?.length > 0 ? item.items : [{ name: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
@@ -126,7 +126,7 @@ export default function CRMQuotations() {
         subject: '',
         quoteDate: new Date().toISOString().split('T')[0],
         validUntil: '',
-        currency: 'CNY',
+        currency: 'EUR',
         terms: '',
         notes: '',
         items: [{ name: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
@@ -237,8 +237,8 @@ export default function CRMQuotations() {
     }
   }
 
-  const formatCurrency = (value: number, currency = 'CNY') => {
-    return new Intl.NumberFormat('zh-CN', { style: 'currency', currency }).format(value)
+  const formatCurrency = (value: number, currency = 'EUR') => {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(value)
   }
 
   const getStatusInfo = (status: string) => {

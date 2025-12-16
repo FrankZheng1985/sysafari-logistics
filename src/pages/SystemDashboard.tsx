@@ -171,9 +171,9 @@ export default function SystemDashboard() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('zh-CN', {
+    return new Intl.NumberFormat('de-DE', {
       style: 'currency',
-      currency: 'CNY',
+      currency: 'EUR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount)

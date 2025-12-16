@@ -202,7 +202,7 @@ export default function CRMOpportunities() {
   }
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(value)
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value)
   }
 
   const getStageInfo = (stage: string) => {

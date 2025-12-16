@@ -51,7 +51,7 @@ export default function CRMContracts() {
     customerName: '',
     contractType: 'service',
     contractAmount: 0,
-    currency: 'CNY',
+    currency: 'EUR',
     startDate: '',
     endDate: '',
     signDate: '',
@@ -106,7 +106,7 @@ export default function CRMContracts() {
         customerName: item.customerName || '',
         contractType: item.contractType || 'service',
         contractAmount: item.contractAmount,
-        currency: item.currency || 'CNY',
+        currency: item.currency || 'EUR',
         startDate: item.startDate || '',
         endDate: item.endDate || '',
         signDate: item.signDate || '',
@@ -121,7 +121,7 @@ export default function CRMContracts() {
         customerName: '',
         contractType: 'service',
         contractAmount: 0,
-        currency: 'CNY',
+        currency: 'EUR',
         startDate: '',
         endDate: '',
         signDate: '',
@@ -201,8 +201,8 @@ export default function CRMContracts() {
     }
   }
 
-  const formatCurrency = (value: number, currency = 'CNY') => {
-    return new Intl.NumberFormat('zh-CN', { style: 'currency', currency }).format(value)
+  const formatCurrency = (value: number, currency = 'EUR') => {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(value)
   }
 
   const getStatusInfo = (status: string) => {

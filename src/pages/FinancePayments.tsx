@@ -125,8 +125,8 @@ export default function FinancePayments() {
     }
   }
 
-  const formatCurrency = (amount: number, currency = 'CNY') => {
-    return new Intl.NumberFormat('zh-CN', {
+  const formatCurrency = (amount: number, currency = 'EUR') => {
+    return new Intl.NumberFormat('de-DE', {
       style: 'currency',
       currency: currency,
       minimumFractionDigits: 2

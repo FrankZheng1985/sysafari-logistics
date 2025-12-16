@@ -1662,7 +1662,7 @@ export default function BillDetails() {
                                       </span>
                                     </td>
                                     <td className="px-3 py-2 text-right font-medium text-gray-900">
-                                      {fee.currency || '¥'}{fee.amount?.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                                      {fee.currency || '€'}{fee.amount?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                                     </td>
                                     <td className="px-3 py-2 text-gray-500">
                                       {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
@@ -1820,7 +1820,7 @@ export default function BillDetails() {
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-medium text-gray-900">{fee.feeName}</span>
                             <span className="text-xs font-semibold text-gray-900">
-                              {fee.currency || '¥'}{fee.amount?.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                              {fee.currency || '€'}{fee.amount?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                           <div className="flex items-center justify-between mt-1">

@@ -87,9 +87,9 @@ export default function FinanceDashboard() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('zh-CN', {
+    return new Intl.NumberFormat('de-DE', {
       style: 'currency',
-      currency: 'CNY',
+      currency: 'EUR',
       minimumFractionDigits: 2
     }).format(amount)
   }

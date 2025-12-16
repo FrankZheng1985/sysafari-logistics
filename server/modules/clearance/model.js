@@ -294,7 +294,7 @@ export async function createClearanceDocument(data) {
     data.grossWeight || 0, data.netWeight || 0, data.weightUnit || 'KGS',
     data.volume || 0, data.volumeUnit || 'CBM',
     data.packages || 0, data.packageType || '',
-    data.currency || 'USD', data.totalValue || 0, data.unitPrice || 0,
+    data.currency || 'EUR', data.totalValue || 0, data.unitPrice || 0,
     data.freightAmount || 0, data.insuranceAmount || 0,
     data.transportMethod || '', data.vesselName || '', data.voyageNo || '',
     data.portOfLoading || '', data.portOfDischarge || '',
