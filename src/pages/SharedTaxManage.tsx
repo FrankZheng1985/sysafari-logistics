@@ -113,7 +113,7 @@ export default function SharedTaxManage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/countries?status=active`)
       const data = await response.json()
-      if (data.errCode === 200 && data.data) {
+      if (data.errCode === 200 && Array.isArray(data.data)) {
         setCountries(data.data)
       }
     } catch (error) {
@@ -121,7 +121,7 @@ export default function SharedTaxManage() {
     }
   }
 
-  const filteredCountries = countries.filter(c => 
+  const filteredCountries = (countries || []).filter(c => 
     c.countryNameCn.toLowerCase().includes(countrySearch.toLowerCase()) ||
     c.countryCode.toLowerCase().includes(countrySearch.toLowerCase())
   )
