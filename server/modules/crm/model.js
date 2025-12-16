@@ -612,48 +612,29 @@ export async function getCustomerOrderStats(customerId) {
   const db = getDatabase()
   
   // 根据客户ID关联提单统计
-  const customer = getCustomerById(customerId)
+  const customer = await getCustomerById(customerId)
   if (!customer) return null
   
-  // 统计作为发货人的订单
-  const shipperStats = await db.prepare(`
+  // 统计该客户相关的所有订单（作为发货人或收货人）
+  const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total_orders,
-      SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
-      SUM(CASE WHEN status = '进行中' OR ship_status NOT IN ('已送达', '已完成') THEN 1 ELSE 0 END) as active_orders,
-      SUM(pieces) as total_pieces,
-      SUM(weight) as total_weight
+      SUM(CASE WHEN delivery_status = '已送达' OR delivery_status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
+      SUM(CASE WHEN delivery_status NOT IN ('已送达', '已完成') OR delivery_status IS NULL THEN 1 ELSE 0 END) as active_orders,
+      COALESCE(SUM(pieces), 0) as total_pieces,
+      COALESCE(SUM(weight), 0) as total_weight
     FROM bills_of_lading
-    WHERE shipper LIKE ? AND is_void = 0
-  `).get(`%${customer.customerName}%`)
-  
-  // 统计作为收货人的订单
-  const consigneeStats = await db.prepare(`
-    SELECT 
-      COUNT(*) as total_orders,
-      SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
-      SUM(CASE WHEN status = '进行中' OR ship_status NOT IN ('已送达', '已完成') THEN 1 ELSE 0 END) as active_orders,
-      SUM(pieces) as total_pieces,
-      SUM(weight) as total_weight
-    FROM bills_of_lading
-    WHERE consignee LIKE ? AND is_void = 0
-  `).get(`%${customer.customerName}%`)
+    WHERE (shipper LIKE ? OR consignee LIKE ?) 
+      AND (is_void = 0 OR is_void IS NULL)
+      AND status != '草稿'
+  `).get(`%${customer.customerName}%`, `%${customer.customerName}%`)
   
   return {
-    asShipper: {
-      totalOrders: shipperStats?.total_orders || 0,
-      completedOrders: shipperStats?.completed_orders || 0,
-      activeOrders: shipperStats?.active_orders || 0,
-      totalPieces: shipperStats?.total_pieces || 0,
-      totalWeight: shipperStats?.total_weight || 0
-    },
-    asConsignee: {
-      totalOrders: consigneeStats?.total_orders || 0,
-      completedOrders: consigneeStats?.completed_orders || 0,
-      activeOrders: consigneeStats?.active_orders || 0,
-      totalPieces: consigneeStats?.total_pieces || 0,
-      totalWeight: consigneeStats?.total_weight || 0
-    }
+    totalOrders: Number(stats?.total_orders || 0),
+    activeOrders: Number(stats?.active_orders || 0),
+    completedOrders: Number(stats?.completed_orders || 0),
+    totalPieces: Number(stats?.total_pieces || 0),
+    totalWeight: Number(stats?.total_weight || 0)
   }
 }
 
@@ -664,7 +645,7 @@ export async function getCustomerOrders(customerId, params = {}) {
   const db = getDatabase()
   const { page = 1, pageSize = 10, search, status } = params
   
-  const customer = getCustomerById(customerId)
+  const customer = await getCustomerById(customerId)
   if (!customer) return { list: [], total: 0, page, pageSize }
   
   // 优先通过customer_id查找，同时也支持通过shipper/consignee名称匹配（兼容历史数据）
