@@ -209,7 +209,7 @@ export default function CRMCustomerDetail() {
       key: 'weight',
       label: '重量(KG)',
       width: 80,
-      render: (item) => item.weight ? item.weight.toFixed(2) : '-'
+      render: (item) => item.weight ? Number(item.weight).toFixed(2) : '-'
     },
     {
       key: 'eta',
@@ -390,7 +390,7 @@ export default function CRMCustomerDetail() {
                 <div className="text-xs text-gray-600">已完成</div>
               </div>
               <div className="bg-orange-50 rounded-lg p-2 text-center">
-                <div className="text-lg font-semibold text-orange-700">{orderStats.totalWeight?.toFixed(0) || 0}</div>
+                <div className="text-lg font-semibold text-orange-700">{orderStats.totalWeight ? Number(orderStats.totalWeight).toFixed(0) : 0}</div>
                 <div className="text-xs text-orange-600">总重量(KG)</div>
               </div>
             </div>
