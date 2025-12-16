@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { ClipboardCheck, Check, X, Eye, RefreshCw, Clock, CheckCircle, XCircle, FileText, Settings, Save } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface User {
   id: string
@@ -156,7 +159,7 @@ export default function ApprovalList() {
     setSubmitting(true)
     
     try {
-      const response = await fetch(`/api/void-applications/${selectedApp.id}/approve`, {
+      const response = await fetch(`${API_BASE}/api/void-applications/${selectedApp.id}/approve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comment })
@@ -189,7 +192,7 @@ export default function ApprovalList() {
     setSubmitting(true)
     
     try {
-      const response = await fetch(`/api/void-applications/${selectedApp.id}/reject`, {
+      const response = await fetch(`${API_BASE}/api/void-applications/${selectedApp.id}/reject`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comment })

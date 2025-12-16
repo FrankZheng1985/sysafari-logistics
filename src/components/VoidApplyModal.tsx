@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { X, AlertTriangle, Plus, Trash2, Check, FileText, DollarSign, Clock, CheckCircle, Ship, FileCheck, Truck, Package, Edit, Ban } from 'lucide-react'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface VoidApplyModalProps {
   visible: boolean
@@ -224,7 +227,7 @@ export default function VoidApplyModal({
   const loadOperationLogs = async () => {
     setLogsLoading(true)
     try {
-      const response = await fetch(`/api/bills/${billId}/logs`)
+      const response = await fetch(`${API_BASE}/api/bills/${billId}/logs`)
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
         setOperationLogs(data.data)
@@ -240,7 +243,7 @@ export default function VoidApplyModal({
   const loadExistingFees = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/fees?billId=${billId}`)
+      const response = await fetch(`${API_BASE}/api/fees?billId=${billId}`)
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
         // API 返回 { list: [], total: ... } 格式
@@ -322,7 +325,7 @@ export default function VoidApplyModal({
         ...newFees.map(f => ({ ...f, isNew: true }))
       ]
       
-      const response = await fetch(`/api/bills/${billId}/void-apply`, {
+      const response = await fetch(`${API_BASE}/api/bills/${billId}/void-apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

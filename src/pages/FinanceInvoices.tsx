@@ -6,6 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Invoice {
   id: string
@@ -94,7 +97,7 @@ export default function FinanceInvoices() {
         ...(searchValue && { search: searchValue }),
       })
       
-      const response = await fetch(`/api/invoices?${params}`)
+      const response = await fetch(`${API_BASE}/api/invoices?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -124,7 +127,7 @@ export default function FinanceInvoices() {
     if (!confirm('确定要删除这张发票吗？')) return
     
     try {
-      const response = await fetch(`/api/invoices/${id}`, { method: 'DELETE' })
+      const response = await fetch(`${API_BASE}/api/invoices/${id}`, { method: 'DELETE' })
       const data = await response.json()
       
       if (data.errCode === 200) {

@@ -7,6 +7,9 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import FeeModal from '../components/FeeModal'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Fee {
   id: string
@@ -85,7 +88,7 @@ export default function FinanceFees() {
         ...(filterBillId && { billId: filterBillId }),
       })
       
-      const response = await fetch(`/api/fees?${params}`)
+      const response = await fetch(`${API_BASE}/api/fees?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -115,7 +118,7 @@ export default function FinanceFees() {
     if (!confirm('确定要删除这条费用记录吗？')) return
     
     try {
-      const response = await fetch(`/api/fees/${id}`, { method: 'DELETE' })
+      const response = await fetch(`${API_BASE}/api/fees/${id}`, { method: 'DELETE' })
       const data = await response.json()
       
       if (data.errCode === 200) {

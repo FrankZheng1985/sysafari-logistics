@@ -7,6 +7,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Feedback {
   id: string
@@ -84,8 +87,8 @@ export default function CRMFeedbacks() {
       if (filterStatus) params.append('status', filterStatus)
 
       const [fbRes, statsRes, custRes] = await Promise.all([
-        fetch(`/api/feedbacks?${params}`),
-        fetch('/api/feedbacks/stats'),
+        fetch(`${API_BASE}/api/feedbacks?${params}`),
+        fetch(`${API_BASE}/api/feedbacks/stats`),
         fetch('/api/customers?pageSize=100')
       ])
 
@@ -150,7 +153,7 @@ export default function CRMFeedbacks() {
 
   const handleUpdateStatus = async (id: string, status: string) => {
     try {
-      const response = await fetch(`/api/feedbacks/${id}`, {
+      const response = await fetch(`${API_BASE}/api/feedbacks/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -171,7 +174,7 @@ export default function CRMFeedbacks() {
     }
 
     try {
-      const response = await fetch(`/api/feedbacks/${selectedFeedback.id}/resolve`, {
+      const response = await fetch(`${API_BASE}/api/feedbacks/${selectedFeedback.id}/resolve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolution })
@@ -194,7 +197,7 @@ export default function CRMFeedbacks() {
     if (!confirm(`确定要删除反馈"${item.subject}"吗？`)) return
 
     try {
-      const response = await fetch(`/api/feedbacks/${item.id}`, {
+      const response = await fetch(`${API_BASE}/api/feedbacks/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()

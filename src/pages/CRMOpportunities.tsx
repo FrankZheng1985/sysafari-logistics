@@ -6,6 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Opportunity {
   id: string
@@ -79,8 +82,8 @@ export default function CRMOpportunities() {
       if (filterStage) params.append('stage', filterStage)
 
       const [oppRes, statsRes, custRes] = await Promise.all([
-        fetch(`/api/opportunities?${params}`),
-        fetch('/api/opportunities/stats'),
+        fetch(`${API_BASE}/api/opportunities?${params}`),
+        fetch(`${API_BASE}/api/opportunities/stats`),
         fetch('/api/customers?pageSize=100')
       ])
 
@@ -167,7 +170,7 @@ export default function CRMOpportunities() {
 
   const handleUpdateStage = async (id: string, stage: string, lostReason?: string) => {
     try {
-      const response = await fetch(`/api/opportunities/${id}/stage`, {
+      const response = await fetch(`${API_BASE}/api/opportunities/${id}/stage`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage, lostReason })
@@ -186,7 +189,7 @@ export default function CRMOpportunities() {
     if (!confirm(`确定要删除销售机会"${item.opportunityName}"吗？`)) return
 
     try {
-      const response = await fetch(`/api/opportunities/${item.id}`, {
+      const response = await fetch(`${API_BASE}/api/opportunities/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()

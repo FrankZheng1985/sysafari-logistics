@@ -6,6 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Payment {
   id: string
@@ -77,7 +80,7 @@ export default function FinancePayments() {
         ...(searchValue && { search: searchValue }),
       })
       
-      const response = await fetch(`/api/payments?${params}`)
+      const response = await fetch(`${API_BASE}/api/payments?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -107,7 +110,7 @@ export default function FinancePayments() {
     if (!confirm('确定要删除这条付款记录吗？')) return
     
     try {
-      const response = await fetch(`/api/payments/${id}`, { method: 'DELETE' })
+      const response = await fetch(`${API_BASE}/api/payments/${id}`, { method: 'DELETE' })
       const data = await response.json()
       
       if (data.errCode === 200) {

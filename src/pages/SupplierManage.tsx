@@ -7,6 +7,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // ==================== 类型定义 ====================
 
@@ -206,7 +209,7 @@ export default function SupplierManage() {
         ...(filterLevel && { level: filterLevel }),
       })
       
-      const res = await fetch(`/api/suppliers?${params}`)
+      const res = await fetch(`${API_BASE}/api/suppliers?${params}`)
       const data = await res.json()
       
       if (data.errCode === 200) {
@@ -340,7 +343,7 @@ export default function SupplierManage() {
     }
 
     try {
-      const res = await fetch(`/api/suppliers/${supplier.id}`, {
+      const res = await fetch(`${API_BASE}/api/suppliers/${supplier.id}`, {
         method: 'DELETE',
       })
       
@@ -362,7 +365,7 @@ export default function SupplierManage() {
     const newStatus = supplier.status === 'active' ? 'inactive' : 'active'
     
     try {
-      const res = await fetch(`/api/suppliers/${supplier.id}/status`, {
+      const res = await fetch(`${API_BASE}/api/suppliers/${supplier.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),

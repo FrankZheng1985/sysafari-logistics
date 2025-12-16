@@ -7,8 +7,10 @@ import ColumnSettingsModal from '../components/ColumnSettingsModal'
 import CreateBillModal from '../components/CreateBillModal'
 import VoidApplyModal from '../components/VoidApplyModal'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
-import { getBillsList, voidBill, restoreBill, publishDraft, type BillOfLading, type BillStats } from '../utils/api'
+import { getBillsList, voidBill, restoreBill, publishDraft, type BillOfLading, type BillStats, getApiBaseUrl } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
+
+const API_BASE = getApiBaseUrl()
 
 // 统一样式类
 const textPrimary = "text-gray-900"
@@ -100,7 +102,7 @@ export default function OrderBills() {
   const handleVoidBill = async (bill: BillOfLading) => {
     try {
       // 先检查是否有操作记录或费用
-      const checkResponse = await fetch(`/api/bills/${bill.id}/void-check`)
+      const checkResponse = await fetch(`${API_BASE}/api/bills/${bill.id}/void-check`)
       const checkData = await checkResponse.json()
       
       if (checkData.errCode === 200 && checkData.data?.hasOperations) {

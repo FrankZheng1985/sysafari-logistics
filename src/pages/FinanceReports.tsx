@@ -6,6 +6,9 @@ import {
   ArrowUpRight, ArrowDownRight, RefreshCw, Package
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // 订单维度费用报表
 interface OrderFeeReport {
@@ -122,10 +125,10 @@ export default function FinanceReports() {
       
       // 并行获取各类数据
       const [overviewRes, invoiceRes, paymentRes, feeRes] = await Promise.all([
-        fetch(`/api/finance/overview?${params}`),
-        fetch(`/api/invoices/stats?${params}`),
-        fetch(`/api/payments/stats?${params}`),
-        fetch(`/api/fees/stats?${params}`)
+        fetch(`${API_BASE}/api/finance/overview?${params}`),
+        fetch(`${API_BASE}/api/invoices/stats?${params}`),
+        fetch(`${API_BASE}/api/payments/stats?${params}`),
+        fetch(`${API_BASE}/api/fees/stats?${params}`)
       ])
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -188,7 +191,7 @@ export default function FinanceReports() {
         pageSize: '20'
       })
       
-      const response = await fetch(`/api/finance/reports/orders?${params}`)
+      const response = await fetch(`${API_BASE}/api/finance/reports/orders?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {

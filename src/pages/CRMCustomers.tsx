@@ -6,6 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Customer {
   id: string
@@ -89,7 +92,7 @@ export default function CRMCustomers() {
       if (filterLevel) params.append('level', filterLevel)
       if (filterType) params.append('type', filterType)
 
-      const response = await fetch(`/api/customers?${params}`)
+      const response = await fetch(`${API_BASE}/api/customers?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -185,7 +188,7 @@ export default function CRMCustomers() {
     if (!confirm(`确定要删除客户"${customer.customerName}"吗？`)) return
 
     try {
-      const response = await fetch(`/api/customers/${customer.id}`, {
+      const response = await fetch(`${API_BASE}/api/customers/${customer.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()

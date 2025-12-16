@@ -6,6 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Contract {
   id: string
@@ -73,8 +76,8 @@ export default function CRMContracts() {
       if (filterStatus) params.append('status', filterStatus)
 
       const [contractRes, custRes] = await Promise.all([
-        fetch(`/api/contracts?${params}`),
-        fetch('/api/customers?pageSize=100')
+        fetch(`${API_BASE}/api/contracts?${params}`),
+        fetch(`${API_BASE}/api/customers?pageSize=100`)
       ])
 
       const [contractData, custData] = await Promise.all([
@@ -166,7 +169,7 @@ export default function CRMContracts() {
 
   const handleUpdateStatus = async (id: string, status: string) => {
     try {
-      const response = await fetch(`/api/contracts/${id}`, {
+      const response = await fetch(`${API_BASE}/api/contracts/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -184,7 +187,7 @@ export default function CRMContracts() {
     if (!confirm(`确定要删除合同"${item.contractName}"吗？`)) return
 
     try {
-      const response = await fetch(`/api/contracts/${item.id}`, {
+      const response = await fetch(`${API_BASE}/api/contracts/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()

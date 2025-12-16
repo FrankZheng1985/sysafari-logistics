@@ -6,7 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { type BillOfLading } from '../utils/api'
+import { type BillOfLading, getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface ExceptionRecord {
   id: string
@@ -70,7 +72,7 @@ export default function CMRExceptionManage() {
     if (!selectedBill || !resolution.trim()) return
     
     try {
-      const response = await fetch(`/api/cmr/${selectedBill.id}/resolve-exception`, {
+      const response = await fetch(`${API_BASE}/api/cmr/${selectedBill.id}/resolve-exception`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolution })
@@ -92,7 +94,7 @@ export default function CMRExceptionManage() {
     if (!confirm('确定要关闭此异常订单吗？关闭后将无法恢复。')) return
     
     try {
-      const response = await fetch(`/api/cmr/${billId}/close-exception`, {
+      const response = await fetch(`${API_BASE}/api/cmr/${billId}/close-exception`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })

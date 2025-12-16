@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, FileText, Package, User, Ship, DollarSign, Anchor, Search } from 'lucide-react'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface DocumentType {
   id: number
@@ -146,7 +149,7 @@ export default function ClearanceDocumentModal({
       const params = new URLSearchParams({ pageSize: '50' })
       if (search) params.append('search', search)
       
-      const response = await fetch(`/api/bills?${params}`)
+      const response = await fetch(`${API_BASE}/api/bills?${params}`)
       const result = await response.json()
       
       if (result.errCode === 200 && result.data?.list) {
@@ -207,7 +210,7 @@ export default function ClearanceDocumentModal({
 
   const loadDocumentDetail = async (id: string) => {
     try {
-      const response = await fetch(`/api/clearance/documents/${id}`)
+      const response = await fetch(`${API_BASE}/api/clearance/documents/${id}`)
       const result = await response.json()
       if (result.errCode === 200 && result.data) {
         const doc = result.data

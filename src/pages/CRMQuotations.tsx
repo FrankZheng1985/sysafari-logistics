@@ -6,6 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Quotation {
   id: string
@@ -80,8 +83,8 @@ export default function CRMQuotations() {
       if (filterStatus) params.append('status', filterStatus)
 
       const [quoteRes, custRes] = await Promise.all([
-        fetch(`/api/quotations?${params}`),
-        fetch('/api/customers?pageSize=100')
+        fetch(`${API_BASE}/api/quotations?${params}`),
+        fetch(`${API_BASE}/api/customers?pageSize=100`)
       ])
 
       const [quoteData, custData] = await Promise.all([
@@ -202,7 +205,7 @@ export default function CRMQuotations() {
 
   const handleUpdateStatus = async (id: string, status: string) => {
     try {
-      const response = await fetch(`/api/quotations/${id}`, {
+      const response = await fetch(`${API_BASE}/api/quotations/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -220,7 +223,7 @@ export default function CRMQuotations() {
     if (!confirm(`确定要删除报价单"${item.quoteNumber}"吗？`)) return
 
     try {
-      const response = await fetch(`/api/quotations/${item.id}`, {
+      const response = await fetch(`${API_BASE}/api/quotations/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()

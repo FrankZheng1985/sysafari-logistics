@@ -6,6 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface Customer {
   id: string
@@ -166,7 +169,7 @@ export default function CreateInvoice() {
       const params = new URLSearchParams({ pageSize: '50' })
       if (search) params.append('search', search)
       
-      const response = await fetch(`/api/customers?${params}`)
+      const response = await fetch(`${API_BASE}/api/customers?${params}`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setCustomers(data.data.list)
@@ -185,7 +188,7 @@ export default function CreateInvoice() {
       })
       if (search) params.append('search', search)
       
-      const response = await fetch(`/api/bills?${params}`)
+      const response = await fetch(`${API_BASE}/api/bills?${params}`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setBills(data.data.list)
@@ -199,7 +202,7 @@ export default function CreateInvoice() {
   const fetchBillFees = async (billId: string) => {
     setLoadingFees(true)
     try {
-      const response = await fetch(`/api/fees?billId=${billId}&pageSize=100`)
+      const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&pageSize=100`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setBillFees(data.data.list)

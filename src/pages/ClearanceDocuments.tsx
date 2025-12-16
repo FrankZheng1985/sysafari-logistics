@@ -8,6 +8,9 @@ import { PageContainer, ContentCard } from '../components/ui'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ClearanceDocumentModal from '../components/ClearanceDocumentModal'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // 单证类型接口
 interface DocumentType {
@@ -145,7 +148,7 @@ export default function ClearanceDocuments() {
         params.append('status', activeTab)
       }
       
-      const response = await fetch(`/api/clearance/documents?${params}`)
+      const response = await fetch(`${API_BASE}/api/clearance/documents?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -173,7 +176,7 @@ export default function ClearanceDocuments() {
     if (!confirm('确定要删除此单证吗？')) return
     
     try {
-      const response = await fetch(`/api/clearance/documents/${id}`, { method: 'DELETE' })
+      const response = await fetch(`${API_BASE}/api/clearance/documents/${id}`, { method: 'DELETE' })
       const data = await response.json()
       
       if (data.errCode === 200) {
