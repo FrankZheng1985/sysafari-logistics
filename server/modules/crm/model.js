@@ -860,6 +860,7 @@ export async function getCustomerTaxNumbers(customerId) {
     taxType: row.tax_type,
     taxNumber: row.tax_number,
     country: row.country,
+    companyShortName: row.company_short_name,
     companyName: row.company_name,
     companyAddress: row.company_address,
     isVerified: row.is_verified === 1,
@@ -888,15 +889,16 @@ export async function createCustomerTaxNumber(customerId, data) {
   const result = await db.prepare(`
     INSERT INTO customer_tax_numbers (
       customer_id, tax_type, tax_number, country, 
-      company_name, company_address, is_verified, verified_at, verification_data,
+      company_short_name, company_name, company_address, is_verified, verified_at, verification_data,
       is_default
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).get(
     customerId,
     data.taxType,
     data.taxNumber,
     data.country || null,
+    data.companyShortName || null,
     data.companyName || null,
     data.companyAddress || null,
     data.isVerified ? 1 : 0,
@@ -931,6 +933,7 @@ export async function updateCustomerTaxNumber(taxId, data) {
       tax_type = COALESCE(?, tax_type),
       tax_number = COALESCE(?, tax_number),
       country = COALESCE(?, country),
+      company_short_name = COALESCE(?, company_short_name),
       company_name = COALESCE(?, company_name),
       company_address = COALESCE(?, company_address),
       is_verified = COALESCE(?, is_verified),
@@ -943,6 +946,7 @@ export async function updateCustomerTaxNumber(taxId, data) {
     data.taxType,
     data.taxNumber,
     data.country,
+    data.companyShortName,
     data.companyName,
     data.companyAddress,
     data.isVerified !== undefined ? (data.isVerified ? 1 : 0) : null,

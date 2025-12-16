@@ -4018,6 +4018,7 @@ export interface CustomerTaxNumber {
   taxType: 'vat' | 'eori' | 'other'
   taxNumber: string
   country?: string
+  companyShortName?: string
   companyName?: string
   companyAddress?: string
   isVerified?: boolean

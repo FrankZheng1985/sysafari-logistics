@@ -1239,6 +1239,7 @@ CREATE TABLE IF NOT EXISTS customer_tax_numbers (
     tax_type TEXT NOT NULL,
     tax_number TEXT NOT NULL,
     country TEXT,
+    company_short_name TEXT,
     company_name TEXT,
     company_address TEXT,
     is_verified INTEGER DEFAULT 0,

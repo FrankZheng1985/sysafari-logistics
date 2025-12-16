@@ -702,10 +702,10 @@ export default function CRMCustomerDetail() {
               </button>
             </div>
             {(() => {
-              // 按公司名称分组税号
+              // 按公司名称分组税号（优先使用简称作为key）
               const companyGroups: Record<string, CustomerTaxNumber[]> = {}
               taxNumbers.forEach(tax => {
-                const key = tax.companyName || '未命名公司'
+                const key = tax.companyShortName || tax.companyName || '未命名公司'
                 if (!companyGroups[key]) companyGroups[key] = []
                 companyGroups[key].push(tax)
               })
@@ -1230,6 +1230,7 @@ type ValidationStatus = 'none' | 'valid' | 'invalid'
 
 interface TaxFormData {
   // 公司信息（公共）
+  companyShortName: string
   companyName: string
   companyAddress: string
   country: string
@@ -1296,6 +1297,7 @@ function TaxModal({
   const existingOther = initialCompanyTaxes?.find(t => t.taxType === 'other')
   const isEditMode = initialCompanyTaxes && initialCompanyTaxes.length > 0
   const [formData, setFormData] = useState<TaxFormData>({
+    companyShortName: '',
     companyName: '',
     companyAddress: '',
     country: '',
@@ -1330,6 +1332,7 @@ function TaxModal({
       // 编辑模式：从公司的所有税号中提取数据
       const firstTax = initialCompanyTaxes[0]
       setFormData({
+        companyShortName: firstTax?.companyShortName || '',
         companyName: firstTax?.companyName || '',
         companyAddress: firstTax?.companyAddress || '',
         country: firstTax?.country || '',
@@ -1351,6 +1354,7 @@ function TaxModal({
     } else {
       // 新增模式：清空所有字段
       setFormData({
+        companyShortName: '',
         companyName: '',
         companyAddress: '',
         country: '',
@@ -1532,6 +1536,7 @@ function TaxModal({
     const taxNumbers: Array<{ 
       taxType: 'vat' | 'eori' | 'other'
       taxNumber: string
+      companyShortName: string
       companyName: string
       companyAddress: string
       isVerified: boolean
@@ -1541,6 +1546,7 @@ function TaxModal({
       taxNumbers.push({ 
         taxType: 'vat', 
         taxNumber: formData.vatNumber.trim(),
+        companyShortName: formData.companyShortName,
         companyName: formData.companyName,
         companyAddress: formData.companyAddress,
         isVerified: formData.vatVerified
@@ -1550,6 +1556,7 @@ function TaxModal({
       taxNumbers.push({ 
         taxType: 'eori', 
         taxNumber: formData.eoriNumber.trim(),
+        companyShortName: formData.companyShortName,
         companyName: formData.companyName,
         companyAddress: formData.companyAddress,
         isVerified: formData.eoriVerified
@@ -1559,6 +1566,7 @@ function TaxModal({
       taxNumbers.push({ 
         taxType: 'other', 
         taxNumber: formData.otherNumber.trim(),
+        companyShortName: formData.companyShortName,
         companyName: formData.companyName,
         companyAddress: formData.companyAddress,
         isVerified: false
@@ -1814,10 +1822,17 @@ function TaxModal({
             <label className="block text-xs font-medium text-gray-700">公司信息</label>
             <input
               type="text"
+              value={formData.companyShortName}
+              onChange={(e) => setFormData({ ...formData, companyShortName: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+              placeholder="公司简称"
+            />
+            <input
+              type="text"
               value={formData.companyName}
               onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
               className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-              placeholder="公司名称（验证后自动填充）"
+              placeholder="公司全称（验证后自动填充）"
             />
             <input
               type="text"
