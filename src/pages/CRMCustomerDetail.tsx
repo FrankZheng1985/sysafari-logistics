@@ -1487,19 +1487,42 @@ function TaxModal({
 
     setSaving(true)
     try {
-      // 如果是编辑模式，只保存第一个（更新现有记录）
+      // 如果是编辑模式
       if (initialData) {
-        const firstTax = taxNumbers[0]
-        await onSave({
-          ...initialData,
-          taxType: firstTax.taxType,
-          taxNumber: firstTax.taxNumber,
-          companyName: firstTax.companyName,
-          companyAddress: firstTax.companyAddress,
-          isVerified: firstTax.isVerified,
-          country: formData.country,
-          isDefault: formData.isDefault
-        }, true)
+        // 找到与原始数据相同类型的税号进行更新
+        const sameTypeTax = taxNumbers.find(t => t.taxType === initialData.taxType)
+        // 新增其他类型的税号
+        const newTaxes = taxNumbers.filter(t => t.taxType !== initialData.taxType)
+        
+        if (sameTypeTax) {
+          // 更新原有记录
+          const shouldClose = newTaxes.length === 0 // 如果没有新增，更新后就关闭
+          await onSave({
+            ...initialData,
+            taxType: sameTypeTax.taxType,
+            taxNumber: sameTypeTax.taxNumber,
+            companyName: sameTypeTax.companyName,
+            companyAddress: sameTypeTax.companyAddress,
+            isVerified: sameTypeTax.isVerified,
+            country: formData.country,
+            isDefault: formData.isDefault
+          }, shouldClose)
+        }
+        
+        // 新增其他类型的税号
+        for (let i = 0; i < newTaxes.length; i++) {
+          const tax = newTaxes[i]
+          const isLast = i === newTaxes.length - 1
+          await onSave({
+            taxType: tax.taxType,
+            taxNumber: tax.taxNumber,
+            companyName: tax.companyName,
+            companyAddress: tax.companyAddress,
+            isVerified: tax.isVerified,
+            country: formData.country,
+            isDefault: false
+          }, isLast) // 最后一个新增后关闭弹窗
+        }
       } else {
         // 新增模式：依次保存每个税号
         for (let i = 0; i < taxNumbers.length; i++) {
