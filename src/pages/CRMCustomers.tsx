@@ -237,7 +237,7 @@ export default function CRMCustomers() {
       setOcrError(null)
       
       try {
-        const response = await fetch(`${API_BASE}/api/crm/ocr/business-license`, {
+        const response = await fetch(`${API_BASE}/api/ocr/business-license`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 })
