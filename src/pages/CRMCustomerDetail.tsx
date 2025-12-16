@@ -1273,6 +1273,23 @@ function TaxModal({
   onSave: (data: CustomerTaxNumber, closeAfterSave?: boolean) => Promise<void>
   initialCompanyTaxes: CustomerTaxNumber[] | null
 }) {
+  // 欧盟国家代码映射表
+  const euCountryCodeMap: Record<string, string> = {
+    'AT': '奥地利', 'BE': '比利时', 'BG': '保加利亚', 'HR': '克罗地亚',
+    'CY': '塞浦路斯', 'CZ': '捷克', 'DK': '丹麦', 'EE': '爱沙尼亚',
+    'FI': '芬兰', 'FR': '法国', 'DE': '德国', 'EL': '希腊', 'GR': '希腊',
+    'HU': '匈牙利', 'IE': '爱尔兰', 'IT': '意大利', 'LV': '拉脱维亚',
+    'LT': '立陶宛', 'LU': '卢森堡', 'MT': '马耳他', 'NL': '荷兰',
+    'PL': '波兰', 'PT': '葡萄牙', 'RO': '罗马尼亚', 'SK': '斯洛伐克',
+    'SI': '斯洛文尼亚', 'ES': '西班牙', 'SE': '瑞典', 'GB': '英国', 'XI': '北爱尔兰'
+  }
+
+  // 从税号中提取国家代码并获取国家名称
+  const getCountryFromTaxNumber = (taxNumber: string): string | null => {
+    const code = taxNumber.substring(0, 2).toUpperCase()
+    return euCountryCodeMap[code] || null
+  }
+
   // 从公司税号列表中提取各类型税号
   const existingVat = initialCompanyTaxes?.find(t => t.taxType === 'vat')
   const existingEori = initialCompanyTaxes?.find(t => t.taxType === 'eori')
@@ -1396,23 +1413,35 @@ function TaxModal({
       
       if (response.errCode === 200 && response.data) {
         const data = response.data
+        // 从VAT号码中提取国家
+        const detectedCountry = getCountryFromTaxNumber(formData.vatNumber.trim())
         if (data.valid) {
-          // 如果公司名称为空，自动填充验证返回的公司信息
+          // 如果公司名称/国家为空，自动填充验证返回的信息
           setFormData(prev => ({
             ...prev,
             companyName: prev.companyName || data.companyName || '',
             companyAddress: prev.companyAddress || data.companyAddress || '',
+            country: prev.country || detectedCountry || '',
             vatVerified: true,
             vatValidationStatus: 'valid',
             vatValidationError: ''
           }))
+          // 同步更新国家搜索框
+          if (!formData.country && detectedCountry) {
+            setCountrySearch(detectedCountry)
+          }
         } else {
+          // 即使验证失败，也尝试填充国家
           setFormData(prev => ({ 
             ...prev, 
+            country: prev.country || detectedCountry || '',
             vatVerified: false,
             vatValidationStatus: 'invalid',
             vatValidationError: data.error || 'VAT税号在欧盟数据库中不存在'
           }))
+          if (!formData.country && detectedCountry) {
+            setCountrySearch(detectedCountry)
+          }
         }
       } else {
         setFormData(prev => ({ 
@@ -1449,23 +1478,35 @@ function TaxModal({
       
       if (response.errCode === 200 && response.data) {
         const data = response.data
+        // 从EORI号码中提取国家
+        const detectedCountry = getCountryFromTaxNumber(formData.eoriNumber.trim())
         if (data.valid) {
-          // 如果公司名称为空，自动填充验证返回的公司信息
+          // 如果公司名称/国家为空，自动填充验证返回的信息
           setFormData(prev => ({
             ...prev,
             companyName: prev.companyName || data.companyName || '',
             companyAddress: prev.companyAddress || data.companyAddress || '',
+            country: prev.country || detectedCountry || '',
             eoriVerified: true,
             eoriValidationStatus: 'valid',
             eoriValidationError: ''
           }))
+          // 同步更新国家搜索框
+          if (!formData.country && detectedCountry) {
+            setCountrySearch(detectedCountry)
+          }
         } else {
+          // 即使验证失败，也尝试填充国家
           setFormData(prev => ({ 
             ...prev, 
+            country: prev.country || detectedCountry || '',
             eoriVerified: false,
             eoriValidationStatus: 'invalid',
             eoriValidationError: data.error || 'EORI号码在欧盟数据库中不存在或已失效'
           }))
+          if (!formData.country && detectedCountry) {
+            setCountrySearch(detectedCountry)
+          }
         }
       } else {
         setFormData(prev => ({ 
