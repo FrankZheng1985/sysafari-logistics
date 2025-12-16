@@ -237,12 +237,29 @@ export default function CRMCustomers() {
       setOcrError(null)
       
       try {
+        console.log('开始调用OCR API:', `${API_BASE}/api/ocr/business-license`)
         const response = await fetch(`${API_BASE}/api/ocr/business-license`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 })
         })
+        console.log('OCR API响应状态:', response.status)
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('OCR API错误响应:', errorText)
+          try {
+            const errorData = JSON.parse(errorText)
+            setOcrError(errorData.msg || `服务器错误 (${response.status})`)
+          } catch {
+            setOcrError(`服务器错误 (${response.status})`)
+          }
+          setOcrLoading(false)
+          return
+        }
+        
         const data = await response.json()
+        console.log('OCR API返回数据:', data)
         
         if (data.errCode === 200 && data.data) {
           const ocrData = data.data
@@ -278,9 +295,11 @@ export default function CRMCustomers() {
         } else {
           setOcrError(data.msg || '营业执照识别失败')
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('OCR识别失败:', error)
-        setOcrError('营业执照识别服务暂时不可用')
+        // 显示更详细的错误信息
+        const errorMessage = error instanceof Error ? error.message : '未知错误'
+        setOcrError(`营业执照识别服务暂时不可用: ${errorMessage}`)
       } finally {
         setOcrLoading(false)
       }
