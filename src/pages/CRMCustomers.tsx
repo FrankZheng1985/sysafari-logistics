@@ -115,7 +115,7 @@ export default function CRMCustomers() {
     address: '',
     notes: ''
   })
-  
+
   // 多联系人
   const [contacts, setContacts] = useState<ContactInfo[]>([])
   
@@ -495,21 +495,21 @@ export default function CRMCustomers() {
       width: 120,
       render: (item) => (
         <div className="flex items-center gap-1">
-          <button
+          <button 
             onClick={() => navigate(`/crm/customers/${item.id}`)}
             className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"
             title="查看详情"
           >
             <Eye className="w-4 h-4" />
           </button>
-          <button
+          <button 
             onClick={() => handleOpenModal(item)}
             className="p-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded"
             title="编辑"
           >
             <Edit className="w-4 h-4" />
           </button>
-          <button
+          <button 
             onClick={() => handleDelete(item)}
             className="p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
             title="删除"
@@ -587,13 +587,13 @@ export default function CRMCustomers() {
             <span className="text-xs text-gray-500">手动填写信息</span>
           </button>
         </div>
-      </div>
-      
+        </div>
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">客户类型</label>
         <div className="grid grid-cols-3 gap-3">
           {CUSTOMER_TYPES.map(type => (
-            <button
+        <button
               key={type.value}
               type="button"
               onClick={() => setFormData({ ...formData, customerType: type.value })}
@@ -602,12 +602,12 @@ export default function CRMCustomers() {
                   ? 'border-primary-500 bg-primary-50 text-primary-700' 
                   : 'border-gray-200 hover:border-gray-300 text-gray-600'
               }`}
-            >
+        >
               <span className="text-sm font-medium">{type.label}</span>
-            </button>
+        </button>
           ))}
-        </div>
       </div>
+          </div>
       
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">客户级别</label>
@@ -652,13 +652,13 @@ export default function CRMCustomers() {
                     <span className="text-sm">正在识别...</span>
                   </div>
                 )}
-                <button
+            <button
                   type="button"
                   onClick={() => setLicenseImage(null)}
                   className="text-xs text-gray-500 hover:text-gray-700"
-                >
+            >
                   重新上传
-                </button>
+            </button>
               </div>
             ) : (
               <label className="cursor-pointer">
@@ -680,73 +680,73 @@ export default function CRMCustomers() {
         </div>
       )}
 
-      {/* 基本信息 */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">客户名称 *</label>
-          <input
-            type="text"
-            value={formData.customerName}
-            onChange={(e) => setFormData({...formData, customerName: e.target.value})}
-            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-            placeholder="请输入客户名称"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">公司名称</label>
-          <input
-            type="text"
-            value={formData.companyName}
-            onChange={(e) => setFormData({...formData, companyName: e.target.value})}
-            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              {/* 基本信息 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">客户名称 *</label>
+                  <input
+                    type="text"
+                    value={formData.customerName}
+                    onChange={(e) => setFormData({...formData, customerName: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    placeholder="请输入客户名称"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">公司名称</label>
+                  <input
+                    type="text"
+                    value={formData.companyName}
+                    onChange={(e) => setFormData({...formData, companyName: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             placeholder="公司全称"
-          />
-        </div>
-        <div>
+                  />
+                </div>
+                <div>
           <label className="block text-xs text-gray-600 mb-1">税号/统一社会信用代码</label>
-          <input
-            type="text"
-            value={formData.taxNumber}
-            onChange={(e) => setFormData({...formData, taxNumber: e.target.value})}
-            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-            placeholder="请输入税号"
-          />
-        </div>
-        <div>
+                  <input
+                    type="text"
+                    value={formData.taxNumber}
+                    onChange={(e) => setFormData({...formData, taxNumber: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    placeholder="请输入税号"
+                  />
+                </div>
+                <div>
           <label className="block text-xs text-gray-600 mb-1">法定代表人</label>
-          <input
-            type="text"
+                    <input
+                      type="text"
             value={formData.legalPerson}
             onChange={(e) => setFormData({...formData, legalPerson: e.target.value})}
-            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             placeholder="法定代表人姓名"
-          />
-        </div>
+                    />
+                  </div>
         {formData.customerRegion === 'china' && (
           <>
-            <div>
+                  <div>
               <label className="block text-xs text-gray-600 mb-1">注册资本</label>
-              <input
-                type="text"
+                    <input
+                      type="text"
                 value={formData.registeredCapital}
                 onChange={(e) => setFormData({...formData, registeredCapital: e.target.value})}
-                className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 placeholder="如：100万人民币"
-              />
-            </div>
-            <div>
+                    />
+                  </div>
+                  <div>
               <label className="block text-xs text-gray-600 mb-1">成立日期</label>
-              <input
+                    <input
                 type="text"
                 value={formData.establishmentDate}
                 onChange={(e) => setFormData({...formData, establishmentDate: e.target.value})}
-                className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 placeholder="如：2020-01-01"
-              />
-            </div>
+                    />
+                  </div>
           </>
         )}
-      </div>
+                </div>
 
       {formData.customerRegion === 'china' && (
         <div>
@@ -758,55 +758,55 @@ export default function CRMCustomers() {
             rows={2}
             placeholder="公司经营范围"
           />
-        </div>
+              </div>
       )}
 
-      {/* 地址信息 */}
-      <div className="border-t pt-4">
-        <h4 className="text-xs font-medium text-gray-700 mb-3">地址信息</h4>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">国家</label>
-            <input
-              type="text"
-              value={formData.countryCode}
-              onChange={(e) => setFormData({...formData, countryCode: e.target.value})}
-              className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              {/* 地址信息 */}
+              <div className="border-t pt-4">
+                <h4 className="text-xs font-medium text-gray-700 mb-3">地址信息</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">国家</label>
+                    <input
+                      type="text"
+                      value={formData.countryCode}
+                      onChange={(e) => setFormData({...formData, countryCode: e.target.value})}
+                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
               placeholder="国家"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">省/州</label>
-            <input
-              type="text"
-              value={formData.province}
-              onChange={(e) => setFormData({...formData, province: e.target.value})}
-              className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">省/州</label>
+                    <input
+                      type="text"
+                      value={formData.province}
+                      onChange={(e) => setFormData({...formData, province: e.target.value})}
+                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
               placeholder="省份"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">城市</label>
-            <input
-              type="text"
-              value={formData.city}
-              onChange={(e) => setFormData({...formData, city: e.target.value})}
-              className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">城市</label>
+                    <input
+                      type="text"
+                      value={formData.city}
+                      onChange={(e) => setFormData({...formData, city: e.target.value})}
+                      className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
               placeholder="城市"
-            />
-          </div>
-        </div>
-        <div className="mt-3">
-          <label className="block text-xs text-gray-600 mb-1">详细地址</label>
-          <input
-            type="text"
-            value={formData.address}
-            onChange={(e) => setFormData({...formData, address: e.target.value})}
-            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-xs text-gray-600 mb-1">详细地址</label>
+                  <input
+                    type="text"
+                    value={formData.address}
+                    onChange={(e) => setFormData({...formData, address: e.target.value})}
+                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             placeholder="详细地址"
-          />
-        </div>
-      </div>
+                  />
+                </div>
+              </div>
     </div>
   )
 
@@ -862,8 +862,8 @@ export default function CRMCustomers() {
                     onChange={(e) => handleUpdateContact(index, 'contactName', e.target.value)}
                     className="w-full px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     placeholder="联系人姓名"
-                  />
-                </div>
+                />
+              </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">手机</label>
                   <input
@@ -873,7 +873,7 @@ export default function CRMCustomers() {
                     className="w-full px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                     placeholder="手机号码"
                   />
-                </div>
+            </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">邮箱</label>
                   <input
@@ -1068,12 +1068,12 @@ export default function CRMCustomers() {
                 )}
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setShowModal(false)}
+              <button
+                onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
-                >
-                  取消
-                </button>
+              >
+                取消
+              </button>
                 {currentStep < 4 ? (
                   <button
                     onClick={() => setCurrentStep(s => s + 1)}
@@ -1083,13 +1083,13 @@ export default function CRMCustomers() {
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 ) : (
-                  <button
-                    onClick={handleSubmit}
+              <button
+                onClick={handleSubmit}
                     className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
-                  >
+              >
                     <Check className="w-4 h-4" />
                     保存
-                  </button>
+              </button>
                 )}
               </div>
             </div>

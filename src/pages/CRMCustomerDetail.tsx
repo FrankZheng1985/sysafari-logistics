@@ -178,8 +178,8 @@ export default function CRMCustomerDetail() {
         await createCustomerTaxNumber(id!, data)
       }
       if (closeAfterSave) {
-        setTaxModalVisible(false)
-        setEditingTax(null)
+      setTaxModalVisible(false)
+      setEditingTax(null)
       }
       await loadTaxNumbers()
     } catch (error) {
@@ -716,7 +716,7 @@ export default function CRMCustomerDetail() {
               }
               
               return (
-                <div className="space-y-3">
+              <div className="space-y-3">
                   {companyNames.map((companyName) => {
                     const taxes = companyGroups[companyName]
                     const vatTax = taxes.find(t => t.taxType === 'vat')
@@ -733,27 +733,27 @@ export default function CRMCustomerDetail() {
                             {firstTax?.country && (
                               <div className="text-xs text-gray-500">{firstTax.country}</div>
                             )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => { 
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
                                 setEditingCompanyTaxes(taxes)
-                                setTaxModalVisible(true) 
-                              }}
+                            setTaxModalVisible(true)
+                          }}
                               className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-primary-600"
-                              title="编辑"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            <button
+                          title="编辑"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                               onClick={() => handleDeleteCompanyTaxes(taxes)}
                               className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"
-                              title="删除"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
+                          title="删除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                         
                         {/* 税号列表 */}
                         <div className="space-y-1.5">
@@ -765,7 +765,7 @@ export default function CRMCustomerDetail() {
                                 title={vatTax.isVerified ? '验证通过' : '未验证或验证失败'}
                               />
                               <span className="text-xs text-gray-700">{vatTax.taxNumber}</span>
-                            </div>
+                  </div>
                           )}
                           {eoriTax && (
                             <div className="flex items-center gap-2">
@@ -775,8 +775,8 @@ export default function CRMCustomerDetail() {
                                 title={eoriTax.isVerified ? '验证通过' : '未验证或验证失败'}
                               />
                               <span className="text-xs text-gray-700">{eoriTax.taxNumber}</span>
-                            </div>
-                          )}
+              </div>
+            )}
                           {otherTaxes.map((tax) => (
                             <div key={tax.id} className="flex items-center gap-2">
                               <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600 w-12 text-center">其他</span>
@@ -1115,13 +1115,13 @@ function AddressModal({
                         className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
                       >
                         <div className="flex flex-col">
-                          <span>{city.cityNameCn}</span>
+                        <span>{city.cityNameCn}</span>
                           {city.cityNamePinyin && (
                             <span className="text-gray-400 text-[10px]">{city.cityNamePinyin}</span>
                           )}
                         </div>
                         <div className="flex flex-col items-end">
-                          <span className="text-gray-400 text-[10px]">{getLevelLabel(city.level)}</span>
+                        <span className="text-gray-400 text-[10px]">{getLevelLabel(city.level)}</span>
                           {city.postalCode && (
                             <span className="text-gray-400 text-[10px]">{city.postalCode}</span>
                           )}
@@ -1844,7 +1844,7 @@ function TaxModal({
                           </span>
                           <span className="text-xs font-mono truncate">{tax.taxNumber}</span>
                           {tax.isVerified && <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />}
-                        </div>
+          </div>
                         <div className="text-[10px] text-gray-500 truncate mt-0.5">
                           {tax.companyShortName || tax.companyName || '-'}
                         </div>
@@ -1882,8 +1882,8 @@ function TaxModal({
                 {formData.vatEnabled && (
                   <div className="space-y-2 ml-6">
                     <div className="flex items-center gap-2">
-                      <input
-                        type="text"
+            <input
+              type="text"
                         value={formData.vatNumber}
                         onChange={(e) => setFormData({ ...formData, vatNumber: e.target.value, vatVerified: false, vatValidationStatus: 'none', vatValidationError: '' })}
                         className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -1980,10 +1980,10 @@ function TaxModal({
                       type="text"
                       value={formData.otherNumber}
                       onChange={(e) => setFormData({ ...formData, otherNumber: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      placeholder="请输入税号"
-                    />
-                  </div>
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="请输入税号"
+            />
+          </div>
                 )}
               </div>
             </div>

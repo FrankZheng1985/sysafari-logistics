@@ -89,8 +89,8 @@ export async function createCustomer(req, res) {
     // 如果提供了customerCode，检查是否已存在
     if (req.body.customerCode) {
       const existing = await model.getCustomerByCode(req.body.customerCode)
-      if (existing) {
-        return conflict(res, '客户代码已存在')
+    if (existing) {
+      return conflict(res, '客户代码已存在')
       }
     }
     
