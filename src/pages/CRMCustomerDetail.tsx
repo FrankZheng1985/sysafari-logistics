@@ -693,6 +693,13 @@ export default function CRMCustomerDetail() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-medium text-sm text-gray-900">{tax.taxNumber}</span>
+                          {/* 验证状态红绿灯 */}
+                          {(tax.taxType === 'vat' || tax.taxType === 'eori') && (
+                            <span 
+                              className={`w-3 h-3 rounded-full inline-block ${tax.isVerified ? 'bg-green-500' : 'bg-red-500'}`}
+                              title={tax.isVerified ? '验证通过' : '未验证或验证失败'}
+                            />
+                          )}
                           {tax.isDefault && (
                             <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">
                               <Star className="w-3 h-3" />
@@ -709,6 +716,7 @@ export default function CRMCustomerDetail() {
                         </div>
                         <div className="text-xs text-gray-600">
                           {tax.country && <span>国家: {tax.country}</span>}
+                          {tax.companyName && <span className="ml-2">公司: {tax.companyName}</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -1168,23 +1176,41 @@ function AddressModal({
 }
 
 // 税号编辑弹窗组件 - 支持多选税号类型和验证
+// 验证状态: 'none' = 未验证, 'valid' = 有效(绿灯), 'invalid' = 无效(红灯)
+type ValidationStatus = 'none' | 'valid' | 'invalid'
+
 interface TaxFormData {
   vatEnabled: boolean
   vatNumber: string
   vatCompanyName: string
   vatCompanyAddress: string
   vatVerified: boolean
+  vatValidationStatus: ValidationStatus
+  vatValidationError: string
   eoriEnabled: boolean
   eoriNumber: string
   eoriCompanyName: string
   eoriCompanyAddress: string
   eoriVerified: boolean
+  eoriValidationStatus: ValidationStatus
+  eoriValidationError: string
   otherEnabled: boolean
   otherNumber: string
   otherCompanyName: string
   otherCompanyAddress: string
   country: string
   isDefault: boolean
+}
+
+// 验证状态指示灯组件
+function ValidationLight({ status, error }: { status: ValidationStatus; error?: string }) {
+  if (status === 'none') {
+    return <span className="w-3 h-3 rounded-full bg-gray-300 inline-block" title="未验证" />
+  }
+  if (status === 'valid') {
+    return <span className="w-3 h-3 rounded-full bg-green-500 inline-block" title="验证通过" />
+  }
+  return <span className="w-3 h-3 rounded-full bg-red-500 inline-block" title={error || '验证失败'} />
 }
 
 function TaxModal({ 
@@ -1204,11 +1230,15 @@ function TaxModal({
     vatCompanyName: '',
     vatCompanyAddress: '',
     vatVerified: false,
+    vatValidationStatus: 'none',
+    vatValidationError: '',
     eoriEnabled: false,
     eoriNumber: '',
     eoriCompanyName: '',
     eoriCompanyAddress: '',
     eoriVerified: false,
+    eoriValidationStatus: 'none',
+    eoriValidationError: '',
     otherEnabled: false,
     otherNumber: '',
     otherCompanyName: '',
@@ -1231,17 +1261,23 @@ function TaxModal({
   useEffect(() => {
     if (initialData) {
       // 编辑模式：根据现有数据设置对应类型
+      const vatIsVerified = initialData.taxType === 'vat' && initialData.isVerified === true
+      const eoriIsVerified = initialData.taxType === 'eori' && initialData.isVerified === true
       setFormData({
         vatEnabled: initialData.taxType === 'vat',
         vatNumber: initialData.taxType === 'vat' ? initialData.taxNumber : '',
         vatCompanyName: initialData.taxType === 'vat' ? (initialData.companyName || '') : '',
         vatCompanyAddress: initialData.taxType === 'vat' ? (initialData.companyAddress || '') : '',
-        vatVerified: initialData.taxType === 'vat' && initialData.isVerified === true,
+        vatVerified: vatIsVerified,
+        vatValidationStatus: initialData.taxType === 'vat' ? (vatIsVerified ? 'valid' : (initialData.taxNumber ? 'invalid' : 'none')) : 'none',
+        vatValidationError: '',
         eoriEnabled: initialData.taxType === 'eori',
         eoriNumber: initialData.taxType === 'eori' ? initialData.taxNumber : '',
         eoriCompanyName: initialData.taxType === 'eori' ? (initialData.companyName || '') : '',
         eoriCompanyAddress: initialData.taxType === 'eori' ? (initialData.companyAddress || '') : '',
-        eoriVerified: initialData.taxType === 'eori' && initialData.isVerified === true,
+        eoriVerified: eoriIsVerified,
+        eoriValidationStatus: initialData.taxType === 'eori' ? (eoriIsVerified ? 'valid' : (initialData.taxNumber ? 'invalid' : 'none')) : 'none',
+        eoriValidationError: '',
         otherEnabled: initialData.taxType === 'other',
         otherNumber: initialData.taxType === 'other' ? initialData.taxNumber : '',
         otherCompanyName: initialData.taxType === 'other' ? (initialData.companyName || '') : '',
@@ -1258,11 +1294,15 @@ function TaxModal({
         vatCompanyName: '',
         vatCompanyAddress: '',
         vatVerified: false,
+        vatValidationStatus: 'none',
+        vatValidationError: '',
         eoriEnabled: false,
         eoriNumber: '',
         eoriCompanyName: '',
         eoriCompanyAddress: '',
         eoriVerified: false,
+        eoriValidationStatus: 'none',
+        eoriValidationError: '',
         otherEnabled: false,
         otherNumber: '',
         otherCompanyName: '',
@@ -1301,7 +1341,7 @@ function TaxModal({
   // VAT验证
   const handleValidateVAT = async () => {
     if (!formData.vatNumber.trim()) {
-      setValidationError('请先输入VAT税号')
+      setFormData(prev => ({ ...prev, vatValidationError: '请先输入VAT税号' }))
       return
     }
     
@@ -1319,19 +1359,32 @@ function TaxModal({
             ...prev,
             vatCompanyName: data.companyName || '',
             vatCompanyAddress: data.companyAddress || '',
-            vatVerified: true
+            vatVerified: true,
+            vatValidationStatus: 'valid',
+            vatValidationError: ''
           }))
-          setValidationError(null)
         } else {
-          setFormData(prev => ({ ...prev, vatVerified: false }))
-          setValidationError(data.error || 'VAT税号验证失败')
+          setFormData(prev => ({ 
+            ...prev, 
+            vatVerified: false,
+            vatValidationStatus: 'invalid',
+            vatValidationError: data.error || 'VAT税号在欧盟数据库中不存在'
+          }))
         }
       } else {
-        setValidationError('VAT验证服务暂时不可用')
+        setFormData(prev => ({ 
+          ...prev, 
+          vatValidationStatus: 'invalid',
+          vatValidationError: 'VAT验证服务暂时不可用'
+        }))
       }
     } catch (error) {
       console.error('VAT验证失败:', error)
-      setValidationError('VAT验证服务暂时不可用')
+      setFormData(prev => ({ 
+        ...prev, 
+        vatValidationStatus: 'invalid',
+        vatValidationError: 'VAT验证服务暂时不可用'
+      }))
     } finally {
       setVatValidating(false)
     }
@@ -1340,7 +1393,7 @@ function TaxModal({
   // EORI验证
   const handleValidateEORI = async () => {
     if (!formData.eoriNumber.trim()) {
-      setValidationError('请先输入EORI号码')
+      setFormData(prev => ({ ...prev, eoriValidationError: '请先输入EORI号码' }))
       return
     }
     
@@ -1358,19 +1411,32 @@ function TaxModal({
             ...prev,
             eoriCompanyName: data.companyName || '',
             eoriCompanyAddress: data.companyAddress || '',
-            eoriVerified: true
+            eoriVerified: true,
+            eoriValidationStatus: 'valid',
+            eoriValidationError: ''
           }))
-          setValidationError(null)
         } else {
-          setFormData(prev => ({ ...prev, eoriVerified: false }))
-          setValidationError(data.error || 'EORI号码验证失败')
+          setFormData(prev => ({ 
+            ...prev, 
+            eoriVerified: false,
+            eoriValidationStatus: 'invalid',
+            eoriValidationError: data.error || 'EORI号码在欧盟数据库中不存在或已失效'
+          }))
         }
       } else {
-        setValidationError('EORI验证服务暂时不可用')
+        setFormData(prev => ({ 
+          ...prev, 
+          eoriValidationStatus: 'invalid',
+          eoriValidationError: 'EORI验证服务暂时不可用'
+        }))
       }
     } catch (error) {
       console.error('EORI验证失败:', error)
-      setValidationError('EORI验证服务暂时不可用')
+      setFormData(prev => ({ 
+        ...prev, 
+        eoriValidationStatus: 'invalid',
+        eoriValidationError: 'EORI验证服务暂时不可用'
+      }))
     } finally {
       setEoriValidating(false)
     }
@@ -1472,13 +1538,6 @@ function TaxModal({
           </button>
         </div>
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
-          {/* 验证错误提示 */}
-          {validationError && (
-            <div className="p-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded">
-              {validationError}
-            </div>
-          )}
-          
           {/* 税号类型多选 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">税号类型 *</label>
@@ -1490,12 +1549,12 @@ function TaxModal({
                     type="checkbox"
                     id="vat-checkbox"
                     checked={formData.vatEnabled}
-                    onChange={(e) => setFormData({ ...formData, vatEnabled: e.target.checked, vatVerified: false })}
+                    onChange={(e) => setFormData({ ...formData, vatEnabled: e.target.checked, vatVerified: false, vatValidationStatus: 'none', vatValidationError: '' })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                   />
                   <label htmlFor="vat-checkbox" className="text-xs font-medium text-gray-700">VAT税号</label>
-                  {formData.vatVerified && (
-                    <span className="px-1.5 py-0.5 text-xs text-green-600 bg-green-50 rounded">✓ 已验证</span>
+                  {formData.vatEnabled && formData.vatNumber && (
+                    <ValidationLight status={formData.vatValidationStatus} error={formData.vatValidationError} />
                   )}
                 </div>
                 {formData.vatEnabled && (
@@ -1504,7 +1563,7 @@ function TaxModal({
                       <input
                         type="text"
                         value={formData.vatNumber}
-                        onChange={(e) => setFormData({ ...formData, vatNumber: e.target.value, vatVerified: false })}
+                        onChange={(e) => setFormData({ ...formData, vatNumber: e.target.value, vatVerified: false, vatValidationStatus: 'none', vatValidationError: '' })}
                         className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                         placeholder="例如: DE123456789"
                       />
@@ -1517,6 +1576,17 @@ function TaxModal({
                         {vatValidating ? '验证中...' : '验证'}
                       </button>
                     </div>
+                    {/* VAT验证错误提示 */}
+                    {formData.vatValidationStatus === 'invalid' && formData.vatValidationError && (
+                      <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                        ⚠ {formData.vatValidationError}
+                      </div>
+                    )}
+                    {formData.vatValidationStatus === 'valid' && (
+                      <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                        ✓ VAT税号验证通过
+                      </div>
+                    )}
                     <input
                       type="text"
                       value={formData.vatCompanyName}
@@ -1542,12 +1612,12 @@ function TaxModal({
                     type="checkbox"
                     id="eori-checkbox"
                     checked={formData.eoriEnabled}
-                    onChange={(e) => setFormData({ ...formData, eoriEnabled: e.target.checked, eoriVerified: false })}
+                    onChange={(e) => setFormData({ ...formData, eoriEnabled: e.target.checked, eoriVerified: false, eoriValidationStatus: 'none', eoriValidationError: '' })}
                     className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                   />
                   <label htmlFor="eori-checkbox" className="text-xs font-medium text-gray-700">EORI号</label>
-                  {formData.eoriVerified && (
-                    <span className="px-1.5 py-0.5 text-xs text-green-600 bg-green-50 rounded">✓ 已验证</span>
+                  {formData.eoriEnabled && formData.eoriNumber && (
+                    <ValidationLight status={formData.eoriValidationStatus} error={formData.eoriValidationError} />
                   )}
                 </div>
                 {formData.eoriEnabled && (
@@ -1556,7 +1626,7 @@ function TaxModal({
                       <input
                         type="text"
                         value={formData.eoriNumber}
-                        onChange={(e) => setFormData({ ...formData, eoriNumber: e.target.value, eoriVerified: false })}
+                        onChange={(e) => setFormData({ ...formData, eoriNumber: e.target.value, eoriVerified: false, eoriValidationStatus: 'none', eoriValidationError: '' })}
                         className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                         placeholder="例如: DE123456789012345"
                       />
@@ -1569,6 +1639,17 @@ function TaxModal({
                         {eoriValidating ? '验证中...' : '验证'}
                       </button>
                     </div>
+                    {/* EORI验证错误提示 */}
+                    {formData.eoriValidationStatus === 'invalid' && formData.eoriValidationError && (
+                      <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                        ⚠ {formData.eoriValidationError}
+                      </div>
+                    )}
+                    {formData.eoriValidationStatus === 'valid' && (
+                      <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                        ✓ EORI号码验证通过
+                      </div>
+                    )}
                     <input
                       type="text"
                       value={formData.eoriCompanyName}
