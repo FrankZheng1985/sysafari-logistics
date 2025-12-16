@@ -6345,6 +6345,113 @@ app.delete('/api/countries/:id', (req, res) => {
   }
 })
 
+// ==================== 城市 API ====================
+
+// 根据国家获取城市列表
+app.get('/api/cities/country/:countryCode', async (req, res) => {
+  try {
+    const { countryCode } = req.params
+    const { search } = req.query
+    
+    let query = 'SELECT * FROM cities WHERE country_code = ? AND status = ?'
+    const queryParams = [countryCode.toUpperCase(), 'active']
+    
+    if (search) {
+      query += ' AND (city_name_cn LIKE ? OR city_name_en LIKE ?)'
+      const searchPattern = `%${search}%`
+      queryParams.push(searchPattern, searchPattern)
+    }
+    
+    query += ' ORDER BY level, city_name_cn LIMIT 100'
+    
+    const cities = await db.prepare(query).all(...queryParams)
+    
+    res.json({
+      errCode: 200,
+      msg: 'success',
+      data: cities.map(row => ({
+        id: row.id,
+        countryCode: row.country_code,
+        cityCode: row.city_code,
+        cityNameCn: row.city_name_cn,
+        cityNameEn: row.city_name_en,
+        parentId: row.parent_id,
+        level: row.level,
+        postalCode: row.postal_code,
+        status: row.status
+      }))
+    })
+  } catch (error) {
+    console.error('获取城市列表失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: '获取城市列表失败'
+    })
+  }
+})
+
+// 获取城市列表
+app.get('/api/cities', async (req, res) => {
+  try {
+    const { countryCode, parentId, level, status = 'active', search } = req.query
+    
+    let query = 'SELECT * FROM cities WHERE 1=1'
+    const queryParams = []
+    
+    if (status) {
+      query += ' AND status = ?'
+      queryParams.push(status)
+    }
+    
+    if (countryCode) {
+      query += ' AND country_code = ?'
+      queryParams.push(countryCode.toUpperCase())
+    }
+    
+    if (parentId !== undefined) {
+      query += ' AND parent_id = ?'
+      queryParams.push(parseInt(parentId))
+    }
+    
+    if (level) {
+      query += ' AND level = ?'
+      queryParams.push(parseInt(level))
+    }
+    
+    if (search) {
+      query += ' AND (city_name_cn LIKE ? OR city_name_en LIKE ?)'
+      const searchPattern = `%${search}%`
+      queryParams.push(searchPattern, searchPattern)
+    }
+    
+    query += ' ORDER BY level, city_name_cn LIMIT 500'
+    
+    const cities = await db.prepare(query).all(...queryParams)
+    
+    res.json({
+      errCode: 200,
+      msg: 'success',
+      data: cities.map(row => ({
+        id: row.id,
+        countryCode: row.country_code,
+        cityCode: row.city_code,
+        cityNameCn: row.city_name_cn,
+        cityNameEn: row.city_name_en,
+        parentId: row.parent_id,
+        level: row.level,
+        postalCode: row.postal_code,
+        status: row.status
+      }))
+    })
+  } catch (error) {
+    console.error('获取城市列表失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: '获取城市列表失败'
+    })
+  }
+})
+
 // 从文本中提取提单信息
 function extractDataFromText(text, fileName) {
   const extracted = {}
