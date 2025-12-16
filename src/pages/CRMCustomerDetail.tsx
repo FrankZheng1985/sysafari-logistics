@@ -780,10 +780,18 @@ function AddressModal({
     isDefault: false,
     addressType: 'both'
   })
+  const [countries, setCountries] = useState<Array<{ id: string; countryNameCn: string; countryCode: string }>>([])
+  const [countrySearch, setCountrySearch] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+
+  useEffect(() => {
+    loadCountries()
+  }, [])
 
   useEffect(() => {
     if (initialData) {
       setFormData(initialData)
+      setCountrySearch(initialData.country || '')
     } else {
       setFormData({
         companyName: '',
@@ -797,8 +805,32 @@ function AddressModal({
         isDefault: false,
         addressType: 'both'
       })
+      setCountrySearch('')
     }
   }, [initialData])
+
+  const loadCountries = async () => {
+    try {
+      const { getCountriesList } = await import('../utils/api')
+      const response = await getCountriesList({ status: 'active' })
+      if (response.errCode === 200 && response.data) {
+        setCountries(response.data)
+      }
+    } catch (error) {
+      console.error('加载国家列表失败:', error)
+    }
+  }
+
+  const filteredCountries = countries.filter(c => 
+    c.countryNameCn.toLowerCase().includes(countrySearch.toLowerCase()) ||
+    c.countryCode.toLowerCase().includes(countrySearch.toLowerCase())
+  )
+
+  const handleSelectCountry = (country: { countryNameCn: string; countryCode: string }) => {
+    setFormData({ ...formData, country: country.countryNameCn })
+    setCountrySearch(country.countryNameCn)
+    setShowCountryDropdown(false)
+  }
 
   if (!visible) return null
 
@@ -847,15 +879,36 @@ function AddressModal({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="relative">
               <label className="block text-xs font-medium text-gray-700 mb-1">国家</label>
               <input
                 type="text"
-                value={formData.country || ''}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                value={countrySearch}
+                onChange={(e) => {
+                  setCountrySearch(e.target.value)
+                  setShowCountryDropdown(true)
+                  if (!e.target.value) {
+                    setFormData({ ...formData, country: '' })
+                  }
+                }}
+                onFocus={() => setShowCountryDropdown(true)}
                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="国家"
+                placeholder="搜索国家..."
               />
+              {showCountryDropdown && filteredCountries.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {filteredCountries.slice(0, 20).map((country) => (
+                    <div
+                      key={country.id}
+                      onClick={() => handleSelectCountry(country)}
+                      className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
+                    >
+                      <span>{country.countryNameCn}</span>
+                      <span className="text-gray-400">{country.countryCode}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">城市</label>
@@ -969,10 +1022,18 @@ function TaxModal({
     country: '',
     isDefault: false
   })
+  const [countries, setCountries] = useState<Array<{ id: string; countryNameCn: string; countryCode: string }>>([])
+  const [countrySearch, setCountrySearch] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+
+  useEffect(() => {
+    loadCountries()
+  }, [])
 
   useEffect(() => {
     if (initialData) {
       setFormData(initialData)
+      setCountrySearch(initialData.country || '')
     } else {
       setFormData({
         taxType: 'vat',
@@ -980,8 +1041,32 @@ function TaxModal({
         country: '',
         isDefault: false
       })
+      setCountrySearch('')
     }
   }, [initialData])
+
+  const loadCountries = async () => {
+    try {
+      const { getCountriesList } = await import('../utils/api')
+      const response = await getCountriesList({ status: 'active' })
+      if (response.errCode === 200 && response.data) {
+        setCountries(response.data)
+      }
+    } catch (error) {
+      console.error('加载国家列表失败:', error)
+    }
+  }
+
+  const filteredCountries = countries.filter(c => 
+    c.countryNameCn.toLowerCase().includes(countrySearch.toLowerCase()) ||
+    c.countryCode.toLowerCase().includes(countrySearch.toLowerCase())
+  )
+
+  const handleSelectCountry = (country: { countryNameCn: string; countryCode: string }) => {
+    setFormData({ ...formData, country: country.countryNameCn })
+    setCountrySearch(country.countryNameCn)
+    setShowCountryDropdown(false)
+  }
 
   if (!visible) return null
 
@@ -1019,15 +1104,36 @@ function TaxModal({
               placeholder="请输入税号"
             />
           </div>
-          <div>
+          <div className="relative">
             <label className="block text-xs font-medium text-gray-700 mb-1">国家</label>
             <input
               type="text"
-              value={formData.country || ''}
-              onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+              value={countrySearch}
+              onChange={(e) => {
+                setCountrySearch(e.target.value)
+                setShowCountryDropdown(true)
+                if (!e.target.value) {
+                  setFormData({ ...formData, country: '' })
+                }
+              }}
+              onFocus={() => setShowCountryDropdown(true)}
               className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-              placeholder="所属国家"
+              placeholder="搜索国家..."
             />
+            {showCountryDropdown && filteredCountries.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {filteredCountries.slice(0, 20).map((country) => (
+                  <div
+                    key={country.id}
+                    onClick={() => handleSelectCountry(country)}
+                    className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
+                  >
+                    <span>{country.countryNameCn}</span>
+                    <span className="text-gray-400">{country.countryCode}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <label className="flex items-center gap-2 cursor-pointer">
