@@ -16,6 +16,7 @@ import crmRoutes from './modules/crm/routes.js'
 import financeRoutes from './modules/finance/routes.js'
 import masterdataRoutes from './modules/masterdata/routes.js'
 import orderRoutes from './modules/order/routes.js'
+import supplierRoutes from './modules/supplier/routes.js'
 import systemRoutes from './modules/system/routes.js'
 import tmsRoutes from './modules/tms/routes.js'
 
@@ -70,6 +71,7 @@ app.use('/api', crmRoutes)
 app.use('/api', financeRoutes)
 app.use('/api', masterdataRoutes)
 app.use('/api', orderRoutes)
+app.use('/api', supplierRoutes)
 app.use('/api', systemRoutes)
 app.use('/api', tmsRoutes)
 
@@ -2697,6 +2699,52 @@ if (!USE_POSTGRES) {
   initDatabase()
 } else {
   console.log('🌐 PostgreSQL 模式：跳过本地数据库初始化（表已存在）')
+  
+  // PostgreSQL 模式下，确保 suppliers 表存在
+  ;(async () => {
+    try {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS suppliers (
+          id TEXT PRIMARY KEY,
+          supplier_code TEXT UNIQUE NOT NULL,
+          supplier_name TEXT NOT NULL,
+          short_name TEXT,
+          supplier_type TEXT DEFAULT 'trader',
+          contact_person TEXT,
+          contact_phone TEXT,
+          contact_email TEXT,
+          contact_mobile TEXT,
+          fax TEXT,
+          website TEXT,
+          country TEXT,
+          province TEXT,
+          city TEXT,
+          address TEXT,
+          postal_code TEXT,
+          tax_number TEXT,
+          bank_name TEXT,
+          bank_account TEXT,
+          bank_branch TEXT,
+          currency TEXT DEFAULT 'CNY',
+          payment_terms TEXT,
+          credit_limit REAL DEFAULT 0,
+          status TEXT DEFAULT 'active',
+          level TEXT DEFAULT 'new',
+          rating INTEGER DEFAULT 0,
+          cooperation_date TEXT,
+          contract_expire_date TEXT,
+          remark TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_by TEXT,
+          updated_by TEXT
+        )
+      `)
+      console.log('✅ PostgreSQL: suppliers 表已确保存在')
+    } catch (error) {
+      console.error('❌ 创建 suppliers 表失败:', error.message)
+    }
+  })()
 }
 
 // 记录操作日志
