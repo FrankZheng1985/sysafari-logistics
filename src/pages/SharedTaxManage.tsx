@@ -134,7 +134,7 @@ export default function SharedTaxManage() {
       if (searchText) params.append('search', searchText)
       if (filterType) params.append('taxType', filterType)
       
-      const response = await fetch(`${API_BASE_URL}/api/crm/shared-tax-numbers?${params}`)
+      const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -214,7 +214,7 @@ export default function SharedTaxManage() {
     if (!confirm('确定要删除这个共享税号吗？')) return
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/crm/shared-tax-numbers/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers/${id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -410,7 +410,7 @@ export default function SharedTaxManage() {
           return
         }
         
-        const response = await fetch(`${API_BASE_URL}/api/crm/shared-tax-numbers/${editingTax.id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers/${editingTax.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -436,7 +436,7 @@ export default function SharedTaxManage() {
         // 新增模式：批量创建
         let hasError = false
         for (const tax of taxNumbers) {
-          const response = await fetch(`${API_BASE_URL}/api/crm/shared-tax-numbers`, {
+          const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
