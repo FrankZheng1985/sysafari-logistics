@@ -83,7 +83,15 @@ export default function TMSDashboard() {
       ])
 
       if (statsData.errCode === 200) {
-        setStats(statsData.data)
+        // 映射API字段到前端期望的字段名
+        setStats({
+          pending: statsData.data?.undelivered || statsData.data?.pending || 0,
+          delivering: statsData.data?.delivering || 0,
+          delivered: statsData.data?.delivered || statsData.data?.archived || 0,
+          exception: statsData.data?.exception || 0,
+          closed: statsData.data?.closed || 0,
+          stepDistribution: statsData.data?.stepDistribution
+        })
       }
       
       if (deliveringData.errCode === 200) {
