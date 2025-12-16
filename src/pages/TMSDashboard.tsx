@@ -116,9 +116,26 @@ export default function TMSDashboard() {
     }
   }
 
-  const getStepLabel = (step: number) => {
-    const steps = ['未开始', '已提货', '运输中', '已到达', '卸货中', '已送达']
-    return steps[step] || '未知'
+  const getStepLabel = (step: number | null | undefined, deliveryStatus?: string) => {
+    // 如果有有效的step值，使用step
+    if (step !== null && step !== undefined && step > 0) {
+      const steps = ['未开始', '已提货', '运输中', '已到达', '卸货中', '已送达']
+      return steps[step] || '未知'
+    }
+    // 否则根据deliveryStatus推断
+    if (deliveryStatus === '派送中') return '运输中'
+    if (deliveryStatus === '已送达') return '已送达'
+    if (deliveryStatus === '订单异常') return '异常'
+    return '未开始'
+  }
+
+  // 根据deliveryStatus推断步骤数
+  const inferStep = (step: number | null | undefined, deliveryStatus?: string): number => {
+    if (step !== null && step !== undefined && step > 0) return step
+    if (deliveryStatus === '派送中') return 2 // 运输中
+    if (deliveryStatus === '已送达') return 5
+    if (deliveryStatus === '订单异常') return 3
+    return 0
   }
 
   const getStatusConfig = (status: string) => {
@@ -373,13 +390,13 @@ export default function TMSDashboard() {
                             <div
                               key={step}
                               className={`w-2 h-2 rounded-full ${
-                                step <= (item.cmrCurrentStep || 0) ? 'bg-blue-500' : 'bg-gray-200'
+                                step <= inferStep(item.cmrCurrentStep, item.deliveryStatus) ? 'bg-blue-500' : 'bg-gray-200'
                               }`}
                             />
                           ))}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          {getStepLabel(item.cmrCurrentStep || 0)}
+                          {getStepLabel(item.cmrCurrentStep, item.deliveryStatus)}
                         </div>
                       </td>
                       <td className="py-2 px-3 text-center">
