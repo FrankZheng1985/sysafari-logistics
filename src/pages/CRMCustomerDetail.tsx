@@ -557,7 +557,7 @@ export default function CRMCustomerDetail() {
             >
               <div className="flex items-center gap-1.5">
                 <FileText className="w-4 h-4" />
-                税号 ({taxNumbers.length})
+                税号 ({new Set(taxNumbers.map(t => t.companyName || '未命名公司')).size})
               </div>
             </button>
           </div>
