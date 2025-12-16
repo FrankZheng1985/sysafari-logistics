@@ -54,7 +54,7 @@ export default function CMRExceptionManage() {
   const fetchExceptionBills = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/cmr/exceptions')
+      const response = await fetch(`${API_BASE}/api/cmr/exceptions`)
       const data = await response.json()
       
       if (data.errCode === 200) {

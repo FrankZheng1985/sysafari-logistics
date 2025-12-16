@@ -113,7 +113,7 @@ export default function FinanceInvoices() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/invoices/stats')
+      const response = await fetch(`${API_BASE}/api/invoices/stats`)
       const data = await response.json()
       if (data.errCode === 200) {
         setStats(data.data)

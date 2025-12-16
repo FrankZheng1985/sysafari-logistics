@@ -7,6 +7,9 @@ import {
   Wallet, PieChart
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface FinanceOverview {
   invoices: {
@@ -71,7 +74,7 @@ export default function FinanceDashboard() {
   const fetchOverview = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/finance/overview')
+      const response = await fetch(`${API_BASE}/api/finance/overview`)
       const data = await response.json()
       if (data.errCode === 200) {
         setOverview(data.data)

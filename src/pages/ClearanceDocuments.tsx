@@ -110,7 +110,7 @@ export default function ClearanceDocuments() {
 
   const loadDocumentTypes = async () => {
     try {
-      const response = await fetch('/api/clearance/document-types')
+      const response = await fetch(`${API_BASE}/api/clearance/document-types`)
       const data = await response.json()
       if (data.errCode === 200) {
         setDocumentTypes(data.data || [])
@@ -122,7 +122,7 @@ export default function ClearanceDocuments() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/clearance/stats')
+      const response = await fetch(`${API_BASE}/api/clearance/stats`)
       const data = await response.json()
       if (data.errCode === 200) {
         setStats(data.data)

@@ -96,7 +96,7 @@ export default function FinancePayments() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/payments/stats')
+      const response = await fetch(`${API_BASE}/api/payments/stats`)
       const data = await response.json()
       if (data.errCode === 200) {
         setStats(data.data)

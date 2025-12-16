@@ -225,7 +225,7 @@ export default function SupplierManage() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/suppliers/stats')
+      const res = await fetch(`${API_BASE}/api/suppliers/stats`)
       const data = await res.json()
       if (data.errCode === 200) {
         setStats(data.data)
@@ -279,7 +279,7 @@ export default function SupplierManage() {
       setEditingSupplier(null)
       // 获取新编码
       try {
-        const res = await fetch('/api/suppliers/generate-code')
+        const res = await fetch(`${API_BASE}/api/suppliers/generate-code`)
         const data = await res.json()
         if (data.errCode === 200) {
           setFormData({ ...initialFormData, supplierCode: data.data.code })
@@ -396,7 +396,7 @@ export default function SupplierManage() {
     }
 
     try {
-      const res = await fetch('/api/suppliers/batch-delete', {
+      const res = await fetch(`${API_BASE}/api/suppliers/batch-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedIds }),

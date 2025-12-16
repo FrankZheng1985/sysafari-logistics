@@ -84,7 +84,7 @@ export default function CRMOpportunities() {
       const [oppRes, statsRes, custRes] = await Promise.all([
         fetch(`${API_BASE}/api/opportunities?${params}`),
         fetch(`${API_BASE}/api/opportunities/stats`),
-        fetch('/api/customers?pageSize=100')
+        fetch(`${API_BASE}/api/customers?pageSize=100`)
       ])
 
       const [oppData, statsData, custData] = await Promise.all([

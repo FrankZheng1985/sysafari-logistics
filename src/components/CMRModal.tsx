@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Truck, Clock, MapPin, Package, CheckCircle, AlertTriangle, Calendar, ChevronDown } from 'lucide-react'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // 服务商类型
 interface ServiceProvider {
@@ -160,7 +163,7 @@ export default function CMRModal({
   useEffect(() => {
     const fetchServiceProviders = async () => {
       try {
-        const response = await fetch('/api/service-providers?status=active&pageSize=100')
+        const response = await fetch(`${API_BASE}/api/service-providers?status=active&pageSize=100`)
         const data = await response.json()
         if (data.errCode === 200 && data.data?.list) {
           setServiceProviderList(data.data.list)

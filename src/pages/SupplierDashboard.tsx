@@ -6,6 +6,9 @@ import {
   Wallet, FileText, Phone
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // ==================== 类型定义 ====================
 
@@ -80,14 +83,14 @@ export default function SupplierDashboard() {
     setLoading(true)
     try {
       // 获取统计数据
-      const statsRes = await fetch('/api/suppliers/stats')
+      const statsRes = await fetch(`${API_BASE}/api/suppliers/stats`)
       const statsData = await statsRes.json()
       if (statsData.errCode === 200) {
         setStats(statsData.data)
       }
 
       // 获取最近添加的供应商
-      const recentRes = await fetch('/api/suppliers?page=1&pageSize=5')
+      const recentRes = await fetch(`${API_BASE}/api/suppliers?page=1&pageSize=5`)
       const recentData = await recentRes.json()
       if (recentData.errCode === 200) {
         setRecentSuppliers(recentData.data?.list || [])

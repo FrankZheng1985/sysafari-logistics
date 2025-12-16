@@ -6,6 +6,9 @@ import {
   RefreshCw, ArrowUpRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface StepDistribution {
   step1: number
@@ -68,9 +71,9 @@ export default function TMSDashboard() {
     setLoading(true)
     try {
       const [statsRes, deliveringRes, providersRes] = await Promise.all([
-        fetch('/api/cmr/stats'),
-        fetch('/api/cmr/list?type=delivering&pageSize=5'),
-        fetch('/api/service-providers?pageSize=5&status=active')
+        fetch(`${API_BASE}/api/cmr/stats`),
+        fetch(`${API_BASE}/api/cmr/list?type=delivering&pageSize=5`),
+        fetch(`${API_BASE}/api/service-providers?pageSize=5&status=active`)
       ])
 
       const [statsData, deliveringData, providersData] = await Promise.all([

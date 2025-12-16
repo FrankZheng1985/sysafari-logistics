@@ -7,6 +7,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface ActivityLog {
   id: string
@@ -82,7 +85,7 @@ export default function ActivityLogs() {
     setLoading(true)
     try {
       // 尝试从API获取活动日志
-      const response = await fetch('/api/activity-logs').then(r => r.json()).catch(() => null)
+      const response = await fetch(`${API_BASE}/api/activity-logs`).then(r => r.json()).catch(() => null)
       
       if (response?.data) {
         setActivities(response.data)

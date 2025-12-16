@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { X, Receipt, Truck, Building2, Shield, Package, FileText, Settings } from 'lucide-react'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface FeeModalProps {
   visible: boolean
@@ -129,7 +132,7 @@ export default function FeeModal({
 
   const loadBills = async () => {
     try {
-      const response = await fetch('/api/bills?pageSize=100')
+      const response = await fetch(`${API_BASE}/api/bills?pageSize=100`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setBills(data.data.list.map((b: any) => ({

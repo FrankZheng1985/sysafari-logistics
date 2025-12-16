@@ -6,6 +6,9 @@ import {
   ChevronRight, ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface CustomerStats {
   total: number
@@ -96,11 +99,11 @@ export default function CRMDashboard() {
       }
 
       const [custData, oppData, fbData, funnelData, rankingData] = await Promise.all([
-        fetchJson('/api/customers/stats'),
-        fetchJson('/api/opportunities/stats'),
-        fetchJson('/api/feedbacks/stats'),
-        fetchJson('/api/analytics/sales-funnel'),
-        fetchJson('/api/analytics/activity-ranking?limit=5')
+        fetchJson(`${API_BASE}/api/customers/stats`),
+        fetchJson(`${API_BASE}/api/opportunities/stats`),
+        fetchJson(`${API_BASE}/api/feedbacks/stats`),
+        fetchJson(`${API_BASE}/api/analytics/sales-funnel`),
+        fetchJson(`${API_BASE}/api/analytics/activity-ranking?limit=5`)
       ])
 
       if (custData.errCode === 200) setCustomerStats(custData.data)

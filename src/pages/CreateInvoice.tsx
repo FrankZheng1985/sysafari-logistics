@@ -389,7 +389,7 @@ export default function CreateInvoice() {
         status: formData.status
       }
 
-      const response = await fetch('/api/invoices', {
+      const response = await fetch(`${API_BASE}/api/invoices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submitData)

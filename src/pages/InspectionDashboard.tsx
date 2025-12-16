@@ -6,6 +6,9 @@ import {
   FileText, Search, Shield, Eye
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // ==================== 类型定义 ====================
 
@@ -71,15 +74,15 @@ export default function InspectionDashboard() {
     setLoading(true)
     try {
       // 获取待查验统计
-      const pendingRes = await fetch('/api/inspection/list?type=pending&pageSize=1')
+      const pendingRes = await fetch(`${API_BASE}/api/inspection/list?type=pending&pageSize=1`)
       const pendingData = await pendingRes.json()
       
       // 获取已放行统计
-      const releasedRes = await fetch('/api/inspection/list?type=released&pageSize=1')
+      const releasedRes = await fetch(`${API_BASE}/api/inspection/list?type=released&pageSize=1`)
       const releasedData = await releasedRes.json()
       
       // 获取最近查验记录
-      const recentRes = await fetch('/api/inspection/list?type=pending&pageSize=5')
+      const recentRes = await fetch(`${API_BASE}/api/inspection/list?type=pending&pageSize=5`)
       const recentData = await recentRes.json()
 
       if (pendingData.errCode === 200 && releasedData.errCode === 200) {

@@ -70,7 +70,7 @@ export default function ApprovalList() {
   
   const loadUsers = async () => {
     try {
-      const response = await fetch('/api/users')
+      const response = await fetch(`${API_BASE}/api/users`)
       const data = await response.json()
       if (data.errCode === 200) {
         setUsers(data.data || [])
@@ -83,7 +83,7 @@ export default function ApprovalList() {
   const loadConfigs = async () => {
     setConfigLoading(true)
     try {
-      const response = await fetch('/api/system-configs')
+      const response = await fetch(`${API_BASE}/api/system-configs`)
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
         const configs = data.data
@@ -102,7 +102,7 @@ export default function ApprovalList() {
   const saveConfig = async (key: string, value: string) => {
     setConfigSaving(true)
     try {
-      const response = await fetch('/api/system-configs', {
+      const response = await fetch(`${API_BASE}/api/system-configs`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key, value })
@@ -128,8 +128,8 @@ export default function ApprovalList() {
       if (statusFilter === 'pending') {
         // 获取所有待审批的
         const [supervisor, finance] = await Promise.all([
-          fetch('/api/void-applications?status=pending_supervisor').then(r => r.json()),
-          fetch('/api/void-applications?status=pending_finance').then(r => r.json())
+          fetch(`${API_BASE}/api/void-applications?status=pending_supervisor`).then(r => r.json()),
+          fetch(`${API_BASE}/api/void-applications?status=pending_finance`).then(r => r.json())
         ])
         const combined = [
           ...(supervisor.errCode === 200 ? supervisor.data : []),

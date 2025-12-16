@@ -89,7 +89,7 @@ export default function CRMFeedbacks() {
       const [fbRes, statsRes, custRes] = await Promise.all([
         fetch(`${API_BASE}/api/feedbacks?${params}`),
         fetch(`${API_BASE}/api/feedbacks/stats`),
-        fetch('/api/customers?pageSize=100')
+        fetch(`${API_BASE}/api/customers?pageSize=100`)
       ])
 
       const [fbData, statsData, custData] = await Promise.all([
@@ -132,7 +132,7 @@ export default function CRMFeedbacks() {
     }
 
     try {
-      const response = await fetch('/api/feedbacks', {
+      const response = await fetch(`${API_BASE}/api/feedbacks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

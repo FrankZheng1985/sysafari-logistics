@@ -7,6 +7,9 @@ import {
   ChevronRight, Activity, BarChart3, Lock
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // 模块权限配置
 const MODULE_PERMISSIONS = {
@@ -91,12 +94,12 @@ export default function SystemDashboard() {
     try {
       // 并行获取各模块数据
       const [billStatsRes, cmrRes, financeRes, customerRes, opportunityRes, feedbackRes] = await Promise.all([
-        fetch('/api/bills/stats').then(r => r.json()).catch(() => ({ data: {} })),
-        fetch('/api/cmr/stats').then(r => r.json()).catch(() => ({ data: {} })),
-        fetch('/api/finance/overview').then(r => r.json()).catch(() => ({ data: {} })),
-        fetch('/api/customers/stats').then(r => r.json()).catch(() => ({ data: { total: 0 } })),
-        fetch('/api/opportunities/stats').then(r => r.json()).catch(() => ({ data: { total: 0, wonValue: 0 } })),
-        fetch('/api/feedbacks/stats').then(r => r.json()).catch(() => ({ data: { byStatus: { open: 0, processing: 0 } } }))
+        fetch(`${API_BASE}/api/bills/stats`).then(r => r.json()).catch(() => ({ data: {} })),
+        fetch(`${API_BASE}/api/cmr/stats`).then(r => r.json()).catch(() => ({ data: {} })),
+        fetch(`${API_BASE}/api/finance/overview`).then(r => r.json()).catch(() => ({ data: {} })),
+        fetch(`${API_BASE}/api/customers/stats`).then(r => r.json()).catch(() => ({ data: { total: 0 } })),
+        fetch(`${API_BASE}/api/opportunities/stats`).then(r => r.json()).catch(() => ({ data: { total: 0, wonValue: 0 } })),
+        fetch(`${API_BASE}/api/feedbacks/stats`).then(r => r.json()).catch(() => ({ data: { byStatus: { open: 0, processing: 0 } } }))
       ])
 
       // 从 /api/bills/stats 获取真实统计数据
@@ -147,7 +150,7 @@ export default function SystemDashboard() {
 
       // 获取最近活动
       try {
-        const activitiesRes = await fetch('/api/recent-activities?limit=5').then(r => r.json())
+        const activitiesRes = await fetch(`${API_BASE}/api/recent-activities?limit=5`).then(r => r.json())
         if (activitiesRes.errCode === 200 && activitiesRes.data) {
           setRecentActivities(activitiesRes.data)
         }
