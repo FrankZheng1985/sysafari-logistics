@@ -111,7 +111,7 @@ export default function SharedTaxManage() {
 
   const loadCountries = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/basic-data/countries?status=active`)
+      const response = await fetch(`${API_BASE_URL}/api/countries?status=active`)
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
         setCountries(data.data)
