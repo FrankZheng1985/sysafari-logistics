@@ -666,6 +666,108 @@ export async function deleteCustomerTaxNumber(req, res) {
   }
 }
 
+// ==================== 共享税号管理（公司级税号库） ====================
+
+/**
+ * 获取共享税号列表
+ */
+export async function getSharedTaxNumbers(req, res) {
+  try {
+    const { taxType, search, status, page, pageSize } = req.query
+    
+    const result = await model.getSharedTaxNumbers({
+      taxType,
+      search,
+      status,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取共享税号列表失败:', error)
+    return serverError(res, '获取共享税号列表失败')
+  }
+}
+
+/**
+ * 获取共享税号详情
+ */
+export async function getSharedTaxNumberById(req, res) {
+  try {
+    const { id } = req.params
+    const result = await model.getSharedTaxNumberById(id)
+    
+    if (!result) {
+      return notFound(res, '共享税号不存在')
+    }
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取共享税号详情失败:', error)
+    return serverError(res, '获取共享税号详情失败')
+  }
+}
+
+/**
+ * 创建共享税号
+ */
+export async function createSharedTaxNumber(req, res) {
+  try {
+    const { taxType, taxNumber } = req.body
+    
+    if (!taxType || !taxNumber) {
+      return badRequest(res, '税号类型和税号为必填项')
+    }
+    
+    const result = await model.createSharedTaxNumber(req.body)
+    return success(res, result, '共享税号创建成功')
+  } catch (error) {
+    console.error('创建共享税号失败:', error)
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '创建共享税号失败')
+  }
+}
+
+/**
+ * 更新共享税号
+ */
+export async function updateSharedTaxNumber(req, res) {
+  try {
+    const { id } = req.params
+    
+    const result = await model.updateSharedTaxNumber(id, req.body)
+    return success(res, result, '共享税号更新成功')
+  } catch (error) {
+    console.error('更新共享税号失败:', error)
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '更新共享税号失败')
+  }
+}
+
+/**
+ * 删除共享税号
+ */
+export async function deleteSharedTaxNumber(req, res) {
+  try {
+    const { id } = req.params
+    
+    await model.deleteSharedTaxNumber(id)
+    return success(res, null, '共享税号删除成功')
+  } catch (error) {
+    console.error('删除共享税号失败:', error)
+    return serverError(res, '删除共享税号失败')
+  }
+}
+
 // ==================== 销售机会管理 ====================
 
 /**

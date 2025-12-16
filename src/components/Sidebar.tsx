@@ -129,6 +129,7 @@ const menuItems: MenuItem[] = [
       { path: '/tools/tariff-calculator', label: '关税计算', icon: FileText },
       { path: '/tools/payment', label: '付款&发票', icon: FileText },
             { path: '/tools/commodity-code', label: '海关编码', icon: FileText },
+            { path: '/tools/shared-tax', label: '共享税号库', icon: FileText },
             { path: '/tools/productCare', label: '品类库', icon: Package },
             { path: '/tools/editable-table', label: '可编辑表格', icon: FileText },
             { path: '/tools/components-demo', label: '组件示例', icon: FileText },

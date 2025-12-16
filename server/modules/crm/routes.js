@@ -213,5 +213,22 @@ router.post('/tax/validate-all', controller.validateAllTaxNumbers)
 // 获取税号验证统计
 router.get('/tax/validation-stats', controller.getTaxValidationStats)
 
+// ==================== 共享税号管理路由（公司级税号库） ====================
+
+// 获取共享税号列表
+router.get('/shared-tax-numbers', controller.getSharedTaxNumbers)
+
+// 获取共享税号详情
+router.get('/shared-tax-numbers/:id', controller.getSharedTaxNumberById)
+
+// 创建共享税号
+router.post('/shared-tax-numbers', controller.createSharedTaxNumber)
+
+// 更新共享税号
+router.put('/shared-tax-numbers/:id', controller.updateSharedTaxNumber)
+
+// 删除共享税号
+router.delete('/shared-tax-numbers/:id', controller.deleteSharedTaxNumber)
+
 export default router
 

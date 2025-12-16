@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { 
   FileText, Calculator, CreditCard, MapPin, Package, 
   Table, Component, Settings, Wrench, ArrowRight,
-  TrendingUp, Globe, BarChart3
+  TrendingUp, Globe, BarChart3, Building2
 } from 'lucide-react'
 
 interface ToolCard {
@@ -46,6 +46,14 @@ const tools: ToolCard[] = [
     icon: Globe,
     color: 'text-indigo-600',
     bgColor: 'bg-indigo-50 hover:bg-indigo-100',
+  },
+  {
+    path: '/tools/shared-tax',
+    label: '共享税号库',
+    description: '公司级税号管理，可分享给客户使用',
+    icon: Building2,
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50 hover:bg-amber-100',
   },
   {
     path: '/tools/productCare',

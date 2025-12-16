@@ -59,6 +59,7 @@ import CMRExceptionManage from './pages/CMRExceptionManage'
 import TMSConditions from './pages/TMSConditions'
 // 工具模块
 import ToolsDashboard from './pages/ToolsDashboard'
+import SharedTaxManage from './pages/SharedTaxManage'
 // 系统模块
 import SystemManageDashboard from './pages/SystemManageDashboard'
 import ActivityLogs from './pages/ActivityLogs'
@@ -149,6 +150,7 @@ function AppRoutes() {
         <Route path="/tools/tariff-calculator" element={<TariffCalculator />} />
         <Route path="/tools/payment" element={<PaymentInvoice />} />
         <Route path="/tools/commodity-code" element={<CommodityCode />} />
+        <Route path="/tools/shared-tax" element={<SharedTaxManage />} />
         <Route path="/tools/productCare" element={<ProductCategory />} />
         <Route path="/tools/editable-table" element={<EditableTableDemo />} />
         <Route path="/tools/components-demo" element={<ComponentsDemo />} />

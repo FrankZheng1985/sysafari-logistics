@@ -878,16 +878,16 @@ export async function getCustomerTaxNumbers(customerId) {
 export async function createCustomerTaxNumber(customerId, data) {
   const db = getDatabase()
   
-  // 检查VAT或EORI号码是否已存在（全局唯一）
+  // 检查VAT或EORI号码是否在该客户下已存在（同一客户下不能重复）
   if (data.taxType === 'vat' || data.taxType === 'eori') {
     const existing = await db.prepare(`
-      SELECT id, customer_id FROM customer_tax_numbers 
-      WHERE tax_type = ? AND tax_number = ?
-    `).get(data.taxType, data.taxNumber)
+      SELECT id FROM customer_tax_numbers 
+      WHERE customer_id = ? AND tax_type = ? AND tax_number = ?
+    `).get(customerId, data.taxType, data.taxNumber)
     
     if (existing) {
       const taxTypeName = data.taxType === 'vat' ? 'VAT税号' : 'EORI号码'
-      throw new Error(`该${taxTypeName}已存在，不能重复添加`)
+      throw new Error(`该客户已存在相同的${taxTypeName}`)
     }
   }
   
@@ -933,18 +933,18 @@ export async function updateCustomerTaxNumber(taxId, data) {
   const current = await db.prepare('SELECT customer_id, tax_type, tax_number FROM customer_tax_numbers WHERE id = ?').get(taxId)
   if (!current) return null
   
-  // 如果修改了税号，检查VAT或EORI号码是否已存在（排除当前记录）
+  // 如果修改了税号，检查VAT或EORI号码是否在该客户下已存在（排除当前记录）
   const newTaxType = data.taxType || current.tax_type
   const newTaxNumber = data.taxNumber || current.tax_number
   if ((newTaxType === 'vat' || newTaxType === 'eori') && newTaxNumber !== current.tax_number) {
     const existing = await db.prepare(`
       SELECT id FROM customer_tax_numbers 
-      WHERE tax_type = ? AND tax_number = ? AND id != ?
-    `).get(newTaxType, newTaxNumber, taxId)
+      WHERE customer_id = ? AND tax_type = ? AND tax_number = ? AND id != ?
+    `).get(current.customer_id, newTaxType, newTaxNumber, taxId)
     
     if (existing) {
       const taxTypeName = newTaxType === 'vat' ? 'VAT税号' : 'EORI号码'
-      throw new Error(`该${taxTypeName}已存在，不能重复添加`)
+      throw new Error(`该客户已存在相同的${taxTypeName}`)
     }
   }
   
@@ -993,6 +993,194 @@ export async function updateCustomerTaxNumber(taxId, data) {
 export async function deleteCustomerTaxNumber(taxId) {
   const db = getDatabase()
   await db.prepare('DELETE FROM customer_tax_numbers WHERE id = ?').run(taxId)
+  return { success: true }
+}
+
+// ==================== 共享税号管理（公司级税号库） ====================
+
+/**
+ * 获取共享税号列表
+ */
+export async function getSharedTaxNumbers(params = {}) {
+  const db = getDatabase()
+  const { taxType, search, status = 'active', page = 1, pageSize = 50 } = params
+  
+  let query = 'SELECT * FROM shared_tax_numbers WHERE 1=1'
+  const queryParams = []
+  
+  if (status) {
+    query += ' AND status = ?'
+    queryParams.push(status)
+  }
+  
+  if (taxType) {
+    query += ' AND tax_type = ?'
+    queryParams.push(taxType)
+  }
+  
+  if (search) {
+    query += ' AND (tax_number LIKE ? OR company_name LIKE ? OR company_short_name LIKE ?)'
+    const searchPattern = `%${search}%`
+    queryParams.push(searchPattern, searchPattern, searchPattern)
+  }
+  
+  // 获取总数
+  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const countResult = await db.prepare(countQuery).get(...queryParams)
+  const total = countResult?.total || 0
+  
+  // 分页
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  queryParams.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(query).all(...queryParams)
+  
+  return {
+    list: rows.map(row => ({
+      id: row.id,
+      taxType: row.tax_type,
+      taxNumber: row.tax_number,
+      country: row.country,
+      companyShortName: row.company_short_name,
+      companyName: row.company_name,
+      companyAddress: row.company_address,
+      isVerified: row.is_verified === 1,
+      verifiedAt: row.verified_at,
+      verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
+      status: row.status,
+      remark: row.remark,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    })),
+    total,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 根据ID获取共享税号
+ */
+export async function getSharedTaxNumberById(id) {
+  const db = getDatabase()
+  const row = await db.prepare('SELECT * FROM shared_tax_numbers WHERE id = ?').get(id)
+  if (!row) return null
+  
+  return {
+    id: row.id,
+    taxType: row.tax_type,
+    taxNumber: row.tax_number,
+    country: row.country,
+    companyShortName: row.company_short_name,
+    companyName: row.company_name,
+    companyAddress: row.company_address,
+    isVerified: row.is_verified === 1,
+    verifiedAt: row.verified_at,
+    verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
+    status: row.status,
+    remark: row.remark,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+/**
+ * 创建共享税号
+ */
+export async function createSharedTaxNumber(data) {
+  const db = getDatabase()
+  
+  // 检查税号是否已存在
+  const existing = await db.prepare(`
+    SELECT id FROM shared_tax_numbers WHERE tax_number = ?
+  `).get(data.taxNumber)
+  
+  if (existing) {
+    throw new Error('该税号已存在于共享库中')
+  }
+  
+  const result = await db.prepare(`
+    INSERT INTO shared_tax_numbers (
+      tax_type, tax_number, country, company_short_name, company_name, company_address,
+      is_verified, verified_at, verification_data, status, remark, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    data.taxType,
+    data.taxNumber,
+    data.country || null,
+    data.companyShortName || null,
+    data.companyName || null,
+    data.companyAddress || null,
+    data.isVerified ? 1 : 0,
+    data.verifiedAt || null,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
+    data.status || 'active',
+    data.remark || null,
+    data.createdBy || null
+  )
+  
+  return { id: result.id }
+}
+
+/**
+ * 更新共享税号
+ */
+export async function updateSharedTaxNumber(id, data) {
+  const db = getDatabase()
+  
+  // 如果修改了税号，检查是否与其他记录冲突
+  if (data.taxNumber) {
+    const existing = await db.prepare(`
+      SELECT id FROM shared_tax_numbers WHERE tax_number = ? AND id != ?
+    `).get(data.taxNumber, id)
+    
+    if (existing) {
+      throw new Error('该税号已存在于共享库中')
+    }
+  }
+  
+  await db.prepare(`
+    UPDATE shared_tax_numbers SET
+      tax_type = COALESCE(?, tax_type),
+      tax_number = COALESCE(?, tax_number),
+      country = COALESCE(?, country),
+      company_short_name = COALESCE(?, company_short_name),
+      company_name = COALESCE(?, company_name),
+      company_address = COALESCE(?, company_address),
+      is_verified = COALESCE(?, is_verified),
+      verified_at = COALESCE(?, verified_at),
+      verification_data = COALESCE(?, verification_data),
+      status = COALESCE(?, status),
+      remark = COALESCE(?, remark),
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    data.taxType,
+    data.taxNumber,
+    data.country,
+    data.companyShortName,
+    data.companyName,
+    data.companyAddress,
+    data.isVerified !== undefined ? (data.isVerified ? 1 : 0) : null,
+    data.verifiedAt,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
+    data.status,
+    data.remark,
+    id
+  )
+  
+  return { id }
+}
+
+/**
+ * 删除共享税号
+ */
+export async function deleteSharedTaxNumber(id) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM shared_tax_numbers WHERE id = ?').run(id)
   return { success: true }
 }
 
@@ -2172,6 +2360,13 @@ export default {
   createCustomerTaxNumber,
   updateCustomerTaxNumber,
   deleteCustomerTaxNumber,
+  
+  // 共享税号（公司级税号库）
+  getSharedTaxNumbers,
+  getSharedTaxNumberById,
+  createSharedTaxNumber,
+  updateSharedTaxNumber,
+  deleteSharedTaxNumber,
   
   // 销售机会
   getOpportunities,

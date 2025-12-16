@@ -1255,6 +1255,29 @@ CREATE INDEX IF NOT EXISTS idx_customer_tax_type ON customer_tax_numbers(tax_typ
 CREATE INDEX IF NOT EXISTS idx_customer_tax_default ON customer_tax_numbers(is_default);
 CREATE INDEX IF NOT EXISTS idx_customer_tax_verified ON customer_tax_numbers(is_verified);
 
+-- ==================== 共享税号表（公司级税号库） ====================
+CREATE TABLE IF NOT EXISTS shared_tax_numbers (
+    id SERIAL PRIMARY KEY,
+    tax_type TEXT NOT NULL,
+    tax_number TEXT NOT NULL UNIQUE,
+    country TEXT,
+    company_short_name TEXT,
+    company_name TEXT,
+    company_address TEXT,
+    is_verified INTEGER DEFAULT 0,
+    verified_at TIMESTAMP,
+    verification_data TEXT,
+    status TEXT DEFAULT 'active',
+    remark TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_shared_tax_type ON shared_tax_numbers(tax_type);
+CREATE INDEX IF NOT EXISTS idx_shared_tax_number ON shared_tax_numbers(tax_number);
+CREATE INDEX IF NOT EXISTS idx_shared_tax_status ON shared_tax_numbers(status);
+
 -- 完成提示
 DO $$
 BEGIN
