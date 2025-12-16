@@ -1213,7 +1213,7 @@ CREATE INDEX IF NOT EXISTS idx_tms_results_passed ON tms_assessment_results(is_p
 -- ==================== 客户地址表 ====================
 CREATE TABLE IF NOT EXISTS customer_addresses (
     id SERIAL PRIMARY KEY,
-    customer_id INTEGER NOT NULL,
+    customer_id TEXT NOT NULL,
     address_code TEXT,
     company_name TEXT NOT NULL,
     contact_person TEXT,
@@ -1235,7 +1235,7 @@ CREATE INDEX IF NOT EXISTS idx_customer_addresses_default ON customer_addresses(
 -- ==================== 客户税号表 ====================
 CREATE TABLE IF NOT EXISTS customer_tax_numbers (
     id SERIAL PRIMARY KEY,
-    customer_id INTEGER NOT NULL,
+    customer_id TEXT NOT NULL,
     tax_type TEXT NOT NULL,
     tax_number TEXT NOT NULL,
     country TEXT,
