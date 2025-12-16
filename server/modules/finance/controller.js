@@ -463,6 +463,15 @@ export async function getFinanceOverview(req, res) {
     const paymentStats = await model.getPaymentStats({ startDate, endDate })
     const feeStats = await model.getFeeStats({ startDate, endDate })
     
+    // 获取当月营业收入
+    const now = new Date()
+    const currentMonth = now.getMonth() + 1 // 1-12
+    const currentYear = now.getFullYear()
+    const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
+    const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`
+    
+    const monthlyStats = await model.getPaymentStats({ startDate: monthStart, endDate: monthEnd })
+    
     return success(res, {
       invoices: invoiceStats,
       payments: paymentStats,
@@ -471,7 +480,9 @@ export async function getFinanceOverview(req, res) {
         receivable: invoiceStats.balance.receivable,
         payable: invoiceStats.balance.payable,
         netCashFlow: paymentStats.netCashFlow,
-        totalFees: feeStats.totalAmount
+        totalFees: feeStats.totalAmount,
+        monthlyIncome: monthlyStats.income?.total || 0,
+        currentMonth: currentMonth
       }
     })
   } catch (error) {
