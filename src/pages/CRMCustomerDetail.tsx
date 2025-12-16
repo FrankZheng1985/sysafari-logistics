@@ -1231,26 +1231,26 @@ function AddressModal({
 type ValidationStatus = 'none' | 'valid' | 'invalid'
 
 interface TaxFormData {
+  // 公司信息（公共）
+  companyName: string
+  companyAddress: string
+  country: string
+  isDefault: boolean
+  // VAT
   vatEnabled: boolean
   vatNumber: string
-  vatCompanyName: string
-  vatCompanyAddress: string
   vatVerified: boolean
   vatValidationStatus: ValidationStatus
   vatValidationError: string
+  // EORI
   eoriEnabled: boolean
   eoriNumber: string
-  eoriCompanyName: string
-  eoriCompanyAddress: string
   eoriVerified: boolean
   eoriValidationStatus: ValidationStatus
   eoriValidationError: string
+  // 其他
   otherEnabled: boolean
   otherNumber: string
-  otherCompanyName: string
-  otherCompanyAddress: string
-  country: string
-  isDefault: boolean
 }
 
 // 验证状态指示灯组件
@@ -1276,26 +1276,22 @@ function TaxModal({
   initialData: CustomerTaxNumber | null
 }) {
   const [formData, setFormData] = useState<TaxFormData>({
+    companyName: '',
+    companyAddress: '',
+    country: '',
+    isDefault: false,
     vatEnabled: false,
     vatNumber: '',
-    vatCompanyName: '',
-    vatCompanyAddress: '',
     vatVerified: false,
     vatValidationStatus: 'none',
     vatValidationError: '',
     eoriEnabled: false,
     eoriNumber: '',
-    eoriCompanyName: '',
-    eoriCompanyAddress: '',
     eoriVerified: false,
     eoriValidationStatus: 'none',
     eoriValidationError: '',
     otherEnabled: false,
-    otherNumber: '',
-    otherCompanyName: '',
-    otherCompanyAddress: '',
-    country: '',
-    isDefault: false
+    otherNumber: ''
   })
   const [countries, setCountries] = useState<Array<{ id: string; countryNameCn: string; countryCode: string }>>([])
   const [countrySearch, setCountrySearch] = useState('')
@@ -1315,51 +1311,43 @@ function TaxModal({
       const vatIsVerified = initialData.taxType === 'vat' && initialData.isVerified === true
       const eoriIsVerified = initialData.taxType === 'eori' && initialData.isVerified === true
       setFormData({
+        companyName: initialData.companyName || '',
+        companyAddress: initialData.companyAddress || '',
+        country: initialData.country || '',
+        isDefault: initialData.isDefault || false,
         vatEnabled: initialData.taxType === 'vat',
         vatNumber: initialData.taxType === 'vat' ? initialData.taxNumber : '',
-        vatCompanyName: initialData.taxType === 'vat' ? (initialData.companyName || '') : '',
-        vatCompanyAddress: initialData.taxType === 'vat' ? (initialData.companyAddress || '') : '',
         vatVerified: vatIsVerified,
         vatValidationStatus: initialData.taxType === 'vat' ? (vatIsVerified ? 'valid' : (initialData.taxNumber ? 'invalid' : 'none')) : 'none',
         vatValidationError: '',
         eoriEnabled: initialData.taxType === 'eori',
         eoriNumber: initialData.taxType === 'eori' ? initialData.taxNumber : '',
-        eoriCompanyName: initialData.taxType === 'eori' ? (initialData.companyName || '') : '',
-        eoriCompanyAddress: initialData.taxType === 'eori' ? (initialData.companyAddress || '') : '',
         eoriVerified: eoriIsVerified,
         eoriValidationStatus: initialData.taxType === 'eori' ? (eoriIsVerified ? 'valid' : (initialData.taxNumber ? 'invalid' : 'none')) : 'none',
         eoriValidationError: '',
         otherEnabled: initialData.taxType === 'other',
-        otherNumber: initialData.taxType === 'other' ? initialData.taxNumber : '',
-        otherCompanyName: initialData.taxType === 'other' ? (initialData.companyName || '') : '',
-        otherCompanyAddress: initialData.taxType === 'other' ? (initialData.companyAddress || '') : '',
-        country: initialData.country || '',
-        isDefault: initialData.isDefault || false
+        otherNumber: initialData.taxType === 'other' ? initialData.taxNumber : ''
       })
       setCountrySearch(initialData.country || '')
     } else {
       // 新增模式：清空所有字段
       setFormData({
+        companyName: '',
+        companyAddress: '',
+        country: '',
+        isDefault: false,
         vatEnabled: false,
         vatNumber: '',
-        vatCompanyName: '',
-        vatCompanyAddress: '',
         vatVerified: false,
         vatValidationStatus: 'none',
         vatValidationError: '',
         eoriEnabled: false,
         eoriNumber: '',
-        eoriCompanyName: '',
-        eoriCompanyAddress: '',
         eoriVerified: false,
         eoriValidationStatus: 'none',
         eoriValidationError: '',
         otherEnabled: false,
-        otherNumber: '',
-        otherCompanyName: '',
-        otherCompanyAddress: '',
-        country: '',
-        isDefault: false
+        otherNumber: ''
       })
       setCountrySearch('')
     }
@@ -1406,10 +1394,11 @@ function TaxModal({
       if (response.errCode === 200 && response.data) {
         const data = response.data
         if (data.valid) {
+          // 如果公司名称为空，自动填充验证返回的公司信息
           setFormData(prev => ({
             ...prev,
-            vatCompanyName: data.companyName || '',
-            vatCompanyAddress: data.companyAddress || '',
+            companyName: prev.companyName || data.companyName || '',
+            companyAddress: prev.companyAddress || data.companyAddress || '',
             vatVerified: true,
             vatValidationStatus: 'valid',
             vatValidationError: ''
@@ -1458,10 +1447,11 @@ function TaxModal({
       if (response.errCode === 200 && response.data) {
         const data = response.data
         if (data.valid) {
+          // 如果公司名称为空，自动填充验证返回的公司信息
           setFormData(prev => ({
             ...prev,
-            eoriCompanyName: data.companyName || '',
-            eoriCompanyAddress: data.companyAddress || '',
+            companyName: prev.companyName || data.companyName || '',
+            companyAddress: prev.companyAddress || data.companyAddress || '',
             eoriVerified: true,
             eoriValidationStatus: 'valid',
             eoriValidationError: ''
@@ -1507,8 +1497,8 @@ function TaxModal({
       taxNumbers.push({ 
         taxType: 'vat', 
         taxNumber: formData.vatNumber.trim(),
-        companyName: formData.vatCompanyName,
-        companyAddress: formData.vatCompanyAddress,
+        companyName: formData.companyName,
+        companyAddress: formData.companyAddress,
         isVerified: formData.vatVerified
       })
     }
@@ -1516,8 +1506,8 @@ function TaxModal({
       taxNumbers.push({ 
         taxType: 'eori', 
         taxNumber: formData.eoriNumber.trim(),
-        companyName: formData.eoriCompanyName,
-        companyAddress: formData.eoriCompanyAddress,
+        companyName: formData.companyName,
+        companyAddress: formData.companyAddress,
         isVerified: formData.eoriVerified
       })
     }
@@ -1525,8 +1515,8 @@ function TaxModal({
       taxNumbers.push({ 
         taxType: 'other', 
         taxNumber: formData.otherNumber.trim(),
-        companyName: formData.otherCompanyName,
-        companyAddress: formData.otherCompanyAddress,
+        companyName: formData.companyName,
+        companyAddress: formData.companyAddress,
         isVerified: false
       })
     }
@@ -1650,7 +1640,7 @@ function TaxModal({
                         {vatValidating ? '验证中...' : '验证'}
                       </button>
                     </div>
-                    {/* VAT验证错误提示 */}
+                    {/* VAT验证状态提示 */}
                     {formData.vatValidationStatus === 'invalid' && formData.vatValidationError && (
                       <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
                         ⚠ {formData.vatValidationError}
@@ -1661,20 +1651,6 @@ function TaxModal({
                         ✓ VAT税号验证通过
                       </div>
                     )}
-                    <input
-                      type="text"
-                      value={formData.vatCompanyName}
-                      onChange={(e) => setFormData({ ...formData, vatCompanyName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      placeholder="公司名称（验证后自动填充）"
-                    />
-                    <input
-                      type="text"
-                      value={formData.vatCompanyAddress}
-                      onChange={(e) => setFormData({ ...formData, vatCompanyAddress: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      placeholder="公司地址（验证后自动填充）"
-                    />
                   </div>
                 )}
               </div>
@@ -1713,7 +1689,7 @@ function TaxModal({
                         {eoriValidating ? '验证中...' : '验证'}
                       </button>
                     </div>
-                    {/* EORI验证错误提示 */}
+                    {/* EORI验证状态提示 */}
                     {formData.eoriValidationStatus === 'invalid' && formData.eoriValidationError && (
                       <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
                         ⚠ {formData.eoriValidationError}
@@ -1724,20 +1700,6 @@ function TaxModal({
                         ✓ EORI号码验证通过
                       </div>
                     )}
-                    <input
-                      type="text"
-                      value={formData.eoriCompanyName}
-                      onChange={(e) => setFormData({ ...formData, eoriCompanyName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      placeholder="公司名称（验证后自动填充）"
-                    />
-                    <input
-                      type="text"
-                      value={formData.eoriCompanyAddress}
-                      onChange={(e) => setFormData({ ...formData, eoriCompanyAddress: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      placeholder="公司地址（验证后自动填充）"
-                    />
                   </div>
                 )}
               </div>
@@ -1755,7 +1717,7 @@ function TaxModal({
                   <label htmlFor="other-checkbox" className="text-xs font-medium text-gray-700">其他税号</label>
                 </div>
                 {formData.otherEnabled && (
-                  <div className="space-y-2 ml-6">
+                  <div className="ml-6">
                     <input
                       type="text"
                       value={formData.otherNumber}
@@ -1763,24 +1725,29 @@ function TaxModal({
                       className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                       placeholder="请输入税号"
                     />
-                    <input
-                      type="text"
-                      value={formData.otherCompanyName}
-                      onChange={(e) => setFormData({ ...formData, otherCompanyName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      placeholder="公司名称"
-                    />
-                    <input
-                      type="text"
-                      value={formData.otherCompanyAddress}
-                      onChange={(e) => setFormData({ ...formData, otherCompanyAddress: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                      placeholder="公司地址"
-                    />
                   </div>
                 )}
               </div>
             </div>
+          </div>
+
+          {/* 公司信息（公共） */}
+          <div className="space-y-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
+            <label className="block text-xs font-medium text-gray-700">公司信息</label>
+            <input
+              type="text"
+              value={formData.companyName}
+              onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+              placeholder="公司名称（验证后自动填充）"
+            />
+            <input
+              type="text"
+              value={formData.companyAddress}
+              onChange={(e) => setFormData({ ...formData, companyAddress: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+              placeholder="公司地址（验证后自动填充）"
+            />
           </div>
 
           {/* 国家选择 */}
