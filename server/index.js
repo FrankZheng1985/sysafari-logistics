@@ -19,6 +19,8 @@ import orderRoutes from './modules/order/routes.js'
 import supplierRoutes from './modules/supplier/routes.js'
 import systemRoutes from './modules/system/routes.js'
 import tmsRoutes from './modules/tms/routes.js'
+// 导入税号自动验证定时任务
+import { startTaxValidationScheduler } from './modules/crm/taxScheduler.js'
 
 const require = createRequire(import.meta.url)
 const pdfParse = require('pdf-parse')
@@ -11107,6 +11109,9 @@ async function startServer() {
     } catch (err) {
       // 目录已存在，忽略错误
     }
+    
+    // 启动税号自动验证定时任务
+    startTaxValidationScheduler()
   })
 }
 

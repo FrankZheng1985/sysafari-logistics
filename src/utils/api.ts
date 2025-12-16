@@ -4326,3 +4326,76 @@ export async function getBillFeeStats(billId: string): Promise<ApiResponse<{
   }
 }
 
+// ==================== 税号批量验证 API ====================
+
+/**
+ * 税号批量验证结果
+ */
+export interface TaxValidationBatchResult {
+  success: boolean
+  total: number
+  validated: number
+  failed: number
+  duration?: string
+  results?: Array<{
+    id: number
+    taxNumber: string
+    taxType: string
+    valid: boolean
+    error?: string
+  }>
+  error?: string
+}
+
+/**
+ * 税号验证统计
+ */
+export interface TaxValidationStats {
+  total: number
+  verified: number
+  unverified: number
+  lastVerifiedAt?: string
+  lastAutoValidation?: {
+    total: number
+    validated: number
+    failed: number
+    duration: string
+    runAt: string
+  }
+}
+
+/**
+ * 手动触发批量验证所有税号
+ */
+export async function validateAllTaxNumbers(): Promise<ApiResponse<TaxValidationBatchResult>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/crm/tax/validate-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('批量验证税号失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取税号验证统计
+ */
+export async function getTaxValidationStats(): Promise<ApiResponse<TaxValidationStats>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/crm/tax/validation-stats`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取税号验证统计失败:', error)
+    throw error
+  }
+}
+

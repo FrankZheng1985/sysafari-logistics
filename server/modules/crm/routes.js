@@ -205,5 +205,13 @@ router.get('/analytics/activity-ranking', controller.getCustomerActivityRanking)
 // 获取客户价值分析
 router.get('/customers/:customerId/value-analysis', controller.getCustomerValueAnalysis)
 
+// ==================== 税号自动验证路由 ====================
+
+// 手动触发批量验证所有税号
+router.post('/tax/validate-all', controller.validateAllTaxNumbers)
+
+// 获取税号验证统计
+router.get('/tax/validation-stats', controller.getTaxValidationStats)
+
 export default router
 

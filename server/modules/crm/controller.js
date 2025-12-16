@@ -1380,3 +1380,39 @@ export async function getSupportedVatCountries(req, res) {
   }
 }
 
+// ==================== 税号自动验证 ====================
+
+import { validateAllTaxNumbers as runValidateAll, getValidationStats } from './taxScheduler.js'
+
+/**
+ * 手动触发批量验证所有税号
+ */
+export async function validateAllTaxNumbers(req, res) {
+  try {
+    console.log('🔄 [手动触发] 开始批量验证所有税号...')
+    const result = await runValidateAll()
+    
+    if (result.success) {
+      return success(res, result, `税号验证完成: 总计${result.total}个，有效${result.validated}个，无效${result.failed}个`)
+    } else {
+      return serverError(res, result.error || '批量验证失败')
+    }
+  } catch (error) {
+    console.error('批量验证税号失败:', error)
+    return serverError(res, `批量验证失败: ${error.message}`)
+  }
+}
+
+/**
+ * 获取税号验证统计
+ */
+export async function getTaxValidationStats(req, res) {
+  try {
+    const stats = await getValidationStats()
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取税号验证统计失败:', error)
+    return serverError(res, '获取统计失败')
+  }
+}
+
