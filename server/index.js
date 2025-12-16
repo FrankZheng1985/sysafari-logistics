@@ -10751,67 +10751,7 @@ app.post('/api/cmr/:id/close-exception', (req, res) => {
   }
 })
 
-// 获取CMR派送列表
-app.get('/api/cmr/list', (req, res) => {
-  try {
-    const { type, search, page = 1, pageSize = 20 } = req.query
-    
-    let query = 'SELECT * FROM bills_of_lading WHERE (is_void = 0 OR is_void IS NULL)'
-    const params = []
-    
-    // 根据类型筛选
-    if (type === 'pending') {
-      query += " AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '待派送')"
-    } else if (type === 'delivering') {
-      query += " AND (delivery_status = '配送中' OR delivery_status = '派送中')"
-    } else if (type === 'delivered') {
-      query += " AND delivery_status = '已送达'"
-    } else if (type === 'exception') {
-      query += ' AND cmr_has_exception = 1'
-    }
-    
-    if (search) {
-      query += ' AND (bill_number LIKE ? OR container_number LIKE ?)'
-      params.push(`%${search}%`, `%${search}%`)
-    }
-    
-    // 获取总数
-    const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-    const total = db.prepare(countQuery).get(...params)?.total || 0
-    
-    // 分页
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    params.push(parseInt(pageSize), (parseInt(page) - 1) * parseInt(pageSize))
-    
-    const bills = db.prepare(query).all(...params)
-    
-    // 转换为驼峰命名
-    const list = bills.map(b => ({
-      id: b.id,
-      billNumber: b.bill_number,
-      containerNumber: b.container_number,
-      customerName: b.customer_name,
-      deliveryStatus: b.delivery_status,
-      cmrServiceProvider: b.cmr_service_provider,
-      cmrDeliveryAddress: b.cmr_delivery_address,
-      cmrEstimatedArrivalTime: b.cmr_estimated_arrival_time,
-      cmrActualArrivalTime: b.cmr_actual_arrival_time,
-      cmrHasException: b.cmr_has_exception,
-      cmrExceptionNote: b.cmr_exception_note,
-      createdAt: b.created_at,
-      updatedAt: b.updated_at
-    }))
-    
-    res.json({
-      errCode: 200,
-      msg: 'success',
-      data: { list, total, page: parseInt(page), pageSize: parseInt(pageSize) }
-    })
-  } catch (error) {
-    console.error('获取CMR列表失败:', error)
-    res.json({ errCode: 200, msg: 'success', data: { list: [], total: 0, page: 1, pageSize: 20 } })
-  }
-})
+// 注意: CMR列表API已移至 modules/tms/routes.js，使用 tmsRoutes 中的实现
 
 // 获取服务商列表
 app.get('/api/service-providers', (req, res) => {
