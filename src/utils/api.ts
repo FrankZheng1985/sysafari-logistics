@@ -4127,7 +4127,7 @@ export async function deleteCustomerTaxNumber(customerId: string, taxId: number)
  */
 export async function validateVATNumber(vatNumber: string, countryCode?: string): Promise<ApiResponse<TaxValidationResult>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/crm/tax/validate-vat`, {
+    const response = await fetch(`${API_BASE_URL}/api/tax/validate-vat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vatNumber, countryCode })
@@ -4147,7 +4147,7 @@ export async function validateVATNumber(vatNumber: string, countryCode?: string)
  */
 export async function validateEORINumber(eoriNumber: string): Promise<ApiResponse<TaxValidationResult>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/crm/tax/validate-eori`, {
+    const response = await fetch(`${API_BASE_URL}/api/tax/validate-eori`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ eoriNumber })
@@ -4167,7 +4167,7 @@ export async function validateEORINumber(eoriNumber: string): Promise<ApiRespons
  */
 export async function getSupportedVatCountries(): Promise<ApiResponse<Array<{ code: string; pattern: string }>>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/crm/tax/supported-countries`)
+    const response = await fetch(`${API_BASE_URL}/api/tax/supported-countries`)
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
