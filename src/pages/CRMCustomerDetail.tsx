@@ -62,6 +62,7 @@ export default function CRMCustomerDetail() {
   const [taxModalVisible, setTaxModalVisible] = useState(false)
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null)
   const [editingTax, setEditingTax] = useState<CustomerTaxNumber | null>(null)
+  const [editingCompanyTaxes, setEditingCompanyTaxes] = useState<CustomerTaxNumber[] | null>(null)
   const [activeInfoTab, setActiveInfoTab] = useState<'orders' | 'addresses' | 'tax'>('orders')
 
    
@@ -194,6 +195,22 @@ export default function CRMCustomerDetail() {
       loadTaxNumbers()
     } catch (error) {
       console.error('删除税号失败:', error)
+    }
+  }
+
+  // 删除一个公司的所有税号
+  const handleDeleteCompanyTaxes = async (taxes: CustomerTaxNumber[]) => {
+    const companyName = taxes[0]?.companyName || '未命名公司'
+    if (!confirm(`确定要删除"${companyName}"的所有税号吗？`)) return
+    try {
+      for (const tax of taxes) {
+        if (tax.id) {
+          await deleteCustomerTaxNumber(id!, tax.id)
+        }
+      }
+      loadTaxNumbers()
+    } catch (error) {
+      console.error('删除公司税号失败:', error)
     }
   }
 
@@ -675,125 +692,105 @@ export default function CRMCustomerDetail() {
               <button
                 onClick={() => {
                   setEditingTax(null)
+                  setEditingCompanyTaxes(null)
                   setTaxModalVisible(true)
                 }}
                 className="flex items-center gap-1 px-2.5 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
               >
                 <Plus className="w-3.5 h-3.5" />
-                添加税号
+                添加公司
               </button>
             </div>
-            {taxNumbers.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">暂无税号信息</div>
-            ) : (
-              <div className="border border-gray-200 rounded-lg p-3">
-                {/* 税号列表 - 合并显示 */}
-                <div className="space-y-2">
-                  {/* VAT税号 */}
-                  {taxNumbers.filter(t => t.taxType === 'vat').map((tax) => (
-                    <div key={tax.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 w-16 text-center">VAT</span>
-                        <span 
-                          className={`w-3 h-3 rounded-full inline-block flex-shrink-0 ${tax.isVerified ? 'bg-green-500' : 'bg-red-500'}`}
-                          title={tax.isVerified ? '验证通过' : '未验证或验证失败'}
-                        />
-                        <span className="font-medium text-sm text-gray-900">{tax.taxNumber}</span>
-                        {tax.isDefault && (
-                          <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">
-                            <Star className="w-3 h-3" />
-                          </span>
-                        )}
+            {(() => {
+              // 按公司名称分组税号
+              const companyGroups: Record<string, CustomerTaxNumber[]> = {}
+              taxNumbers.forEach(tax => {
+                const key = tax.companyName || '未命名公司'
+                if (!companyGroups[key]) companyGroups[key] = []
+                companyGroups[key].push(tax)
+              })
+              const companyNames = Object.keys(companyGroups)
+              
+              if (companyNames.length === 0) {
+                return <div className="text-center py-8 text-gray-400 text-sm">暂无税号信息</div>
+              }
+              
+              return (
+                <div className="space-y-3">
+                  {companyNames.map((companyName) => {
+                    const taxes = companyGroups[companyName]
+                    const vatTax = taxes.find(t => t.taxType === 'vat')
+                    const eoriTax = taxes.find(t => t.taxType === 'eori')
+                    const otherTaxes = taxes.filter(t => t.taxType === 'other')
+                    const firstTax = taxes[0]
+                    
+                    return (
+                      <div key={companyName} className="border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition-colors">
+                        {/* 公司名称和操作按钮 */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="font-medium text-sm text-gray-900">{companyName}</div>
+                            {firstTax?.country && (
+                              <div className="text-xs text-gray-500">{firstTax.country}</div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => { 
+                                setEditingCompanyTaxes(taxes)
+                                setTaxModalVisible(true) 
+                              }}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-primary-600"
+                              title="编辑"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCompanyTaxes(taxes)}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"
+                              title="删除"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* 税号列表 */}
+                        <div className="space-y-1.5">
+                          {vatTax && (
+                            <div className="flex items-center gap-2">
+                              <span className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 w-12 text-center">VAT</span>
+                              <span 
+                                className={`w-2.5 h-2.5 rounded-full inline-block flex-shrink-0 ${vatTax.isVerified ? 'bg-green-500' : 'bg-red-500'}`}
+                                title={vatTax.isVerified ? '验证通过' : '未验证或验证失败'}
+                              />
+                              <span className="text-xs text-gray-700">{vatTax.taxNumber}</span>
+                            </div>
+                          )}
+                          {eoriTax && (
+                            <div className="flex items-center gap-2">
+                              <span className="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700 w-12 text-center">EORI</span>
+                              <span 
+                                className={`w-2.5 h-2.5 rounded-full inline-block flex-shrink-0 ${eoriTax.isVerified ? 'bg-green-500' : 'bg-red-500'}`}
+                                title={eoriTax.isVerified ? '验证通过' : '未验证或验证失败'}
+                              />
+                              <span className="text-xs text-gray-700">{eoriTax.taxNumber}</span>
+                            </div>
+                          )}
+                          {otherTaxes.map((tax) => (
+                            <div key={tax.id} className="flex items-center gap-2">
+                              <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600 w-12 text-center">其他</span>
+                              <span className="w-2.5 h-2.5 rounded-full inline-block flex-shrink-0 bg-gray-300" />
+                              <span className="text-xs text-gray-700">{tax.taxNumber}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => { setEditingTax(tax); setTaxModalVisible(true) }}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-primary-600"
-                          title="编辑"
-                        >
-                          <Edit className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => tax.id && handleDeleteTax(tax.id)}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"
-                          title="删除"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* EORI号 */}
-                  {taxNumbers.filter(t => t.taxType === 'eori').map((tax) => (
-                    <div key={tax.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700 w-16 text-center">EORI</span>
-                        <span 
-                          className={`w-3 h-3 rounded-full inline-block flex-shrink-0 ${tax.isVerified ? 'bg-green-500' : 'bg-red-500'}`}
-                          title={tax.isVerified ? '验证通过' : '未验证或验证失败'}
-                        />
-                        <span className="font-medium text-sm text-gray-900">{tax.taxNumber}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => { setEditingTax(tax); setTaxModalVisible(true) }}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-primary-600"
-                          title="编辑"
-                        >
-                          <Edit className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => tax.id && handleDeleteTax(tax.id)}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"
-                          title="删除"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {/* 其他税号 */}
-                  {taxNumbers.filter(t => t.taxType === 'other').map((tax) => (
-                    <div key={tax.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600 w-16 text-center">其他</span>
-                        <span className="w-3 h-3 rounded-full inline-block flex-shrink-0 bg-gray-300" title="不支持验证" />
-                        <span className="font-medium text-sm text-gray-900">{tax.taxNumber}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => { setEditingTax(tax); setTaxModalVisible(true) }}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-primary-600"
-                          title="编辑"
-                        >
-                          <Edit className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => tax.id && handleDeleteTax(tax.id)}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-600"
-                          title="删除"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
-                
-                {/* 公司信息 - 显示第一个有公司名称的税号的公司信息 */}
-                {(() => {
-                  const taxWithCompany = taxNumbers.find(t => t.companyName)
-                  return taxWithCompany && (
-                    <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-600">
-                      {taxWithCompany.companyName && <div>公司: {taxWithCompany.companyName}</div>}
-                      {taxWithCompany.country && <div>国家: {taxWithCompany.country}</div>}
-                    </div>
-                  )
-                })()}
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
       </div>
@@ -818,9 +815,10 @@ export default function CRMCustomerDetail() {
           onClose={() => {
             setTaxModalVisible(false)
             setEditingTax(null)
+            setEditingCompanyTaxes(null)
           }}
           onSave={handleSaveTax}
-          initialData={editingTax}
+          initialCompanyTaxes={editingCompanyTaxes}
         />
       )}
     </div>
@@ -1268,13 +1266,18 @@ function TaxModal({
   visible, 
   onClose, 
   onSave, 
-  initialData 
+  initialCompanyTaxes 
 }: { 
   visible: boolean
   onClose: () => void
   onSave: (data: CustomerTaxNumber, closeAfterSave?: boolean) => Promise<void>
-  initialData: CustomerTaxNumber | null
+  initialCompanyTaxes: CustomerTaxNumber[] | null
 }) {
+  // 从公司税号列表中提取各类型税号
+  const existingVat = initialCompanyTaxes?.find(t => t.taxType === 'vat')
+  const existingEori = initialCompanyTaxes?.find(t => t.taxType === 'eori')
+  const existingOther = initialCompanyTaxes?.find(t => t.taxType === 'other')
+  const isEditMode = initialCompanyTaxes && initialCompanyTaxes.length > 0
   const [formData, setFormData] = useState<TaxFormData>({
     companyName: '',
     companyAddress: '',
@@ -1306,29 +1309,28 @@ function TaxModal({
   }, [])
 
   useEffect(() => {
-    if (initialData) {
-      // 编辑模式：根据现有数据设置对应类型
-      const vatIsVerified = initialData.taxType === 'vat' && initialData.isVerified === true
-      const eoriIsVerified = initialData.taxType === 'eori' && initialData.isVerified === true
+    if (isEditMode && initialCompanyTaxes) {
+      // 编辑模式：从公司的所有税号中提取数据
+      const firstTax = initialCompanyTaxes[0]
       setFormData({
-        companyName: initialData.companyName || '',
-        companyAddress: initialData.companyAddress || '',
-        country: initialData.country || '',
-        isDefault: initialData.isDefault || false,
-        vatEnabled: initialData.taxType === 'vat',
-        vatNumber: initialData.taxType === 'vat' ? initialData.taxNumber : '',
-        vatVerified: vatIsVerified,
-        vatValidationStatus: initialData.taxType === 'vat' ? (vatIsVerified ? 'valid' : (initialData.taxNumber ? 'invalid' : 'none')) : 'none',
+        companyName: firstTax?.companyName || '',
+        companyAddress: firstTax?.companyAddress || '',
+        country: firstTax?.country || '',
+        isDefault: initialCompanyTaxes.some(t => t.isDefault) || false,
+        vatEnabled: !!existingVat,
+        vatNumber: existingVat?.taxNumber || '',
+        vatVerified: existingVat?.isVerified || false,
+        vatValidationStatus: existingVat ? (existingVat.isVerified ? 'valid' : 'invalid') : 'none',
         vatValidationError: '',
-        eoriEnabled: initialData.taxType === 'eori',
-        eoriNumber: initialData.taxType === 'eori' ? initialData.taxNumber : '',
-        eoriVerified: eoriIsVerified,
-        eoriValidationStatus: initialData.taxType === 'eori' ? (eoriIsVerified ? 'valid' : (initialData.taxNumber ? 'invalid' : 'none')) : 'none',
+        eoriEnabled: !!existingEori,
+        eoriNumber: existingEori?.taxNumber || '',
+        eoriVerified: existingEori?.isVerified || false,
+        eoriValidationStatus: existingEori ? (existingEori.isVerified ? 'valid' : 'invalid') : 'none',
         eoriValidationError: '',
-        otherEnabled: initialData.taxType === 'other',
-        otherNumber: initialData.taxType === 'other' ? initialData.taxNumber : ''
+        otherEnabled: !!existingOther,
+        otherNumber: existingOther?.taxNumber || ''
       })
-      setCountrySearch(initialData.country || '')
+      setCountrySearch(firstTax?.country || '')
     } else {
       // 新增模式：清空所有字段
       setFormData({
@@ -1352,7 +1354,8 @@ function TaxModal({
       setCountrySearch('')
     }
     setValidationError(null)
-  }, [initialData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCompanyTaxes])
 
   const loadCountries = async () => {
     try {
@@ -1526,44 +1529,78 @@ function TaxModal({
       return
     }
 
+    // 检查公司名称
+    if (!formData.companyName.trim()) {
+      alert('请填写公司名称')
+      return
+    }
+
     setSaving(true)
     try {
-      // 如果是编辑模式
-      if (initialData) {
-        // 找到与原始数据相同类型的税号进行更新
-        const sameTypeTax = taxNumbers.find(t => t.taxType === initialData.taxType)
-        // 新增其他类型的税号
-        const newTaxes = taxNumbers.filter(t => t.taxType !== initialData.taxType)
+      if (isEditMode && initialCompanyTaxes) {
+        // 编辑模式：更新、新增或删除税号
+        const { deleteCustomerTaxNumber } = await import('../utils/api')
         
-        if (sameTypeTax) {
-          // 更新原有记录
-          const shouldClose = newTaxes.length === 0 // 如果没有新增，更新后就关闭
-          await onSave({
-            ...initialData,
-            taxType: sameTypeTax.taxType,
-            taxNumber: sameTypeTax.taxNumber,
-            companyName: sameTypeTax.companyName,
-            companyAddress: sameTypeTax.companyAddress,
-            isVerified: sameTypeTax.isVerified,
-            country: formData.country,
-            isDefault: formData.isDefault
-          }, shouldClose)
+        // 处理VAT
+        if (existingVat) {
+          const newVat = taxNumbers.find(t => t.taxType === 'vat')
+          if (newVat) {
+            // 更新
+            await onSave({ ...existingVat, ...newVat, country: formData.country, isDefault: formData.isDefault }, false)
+          } else {
+            // 删除（用户取消勾选了）
+            // 注意：这里需要获取customerId，从URL中获取
+            const customerId = window.location.pathname.split('/').pop()
+            if (customerId && existingVat.id) {
+              await deleteCustomerTaxNumber(customerId, existingVat.id)
+            }
+          }
+        } else {
+          const newVat = taxNumbers.find(t => t.taxType === 'vat')
+          if (newVat) {
+            // 新增
+            await onSave({ ...newVat, country: formData.country, isDefault: formData.isDefault }, false)
+          }
         }
         
-        // 新增其他类型的税号
-        for (let i = 0; i < newTaxes.length; i++) {
-          const tax = newTaxes[i]
-          const isLast = i === newTaxes.length - 1
-          await onSave({
-            taxType: tax.taxType,
-            taxNumber: tax.taxNumber,
-            companyName: tax.companyName,
-            companyAddress: tax.companyAddress,
-            isVerified: tax.isVerified,
-            country: formData.country,
-            isDefault: false
-          }, isLast) // 最后一个新增后关闭弹窗
+        // 处理EORI
+        if (existingEori) {
+          const newEori = taxNumbers.find(t => t.taxType === 'eori')
+          if (newEori) {
+            await onSave({ ...existingEori, ...newEori, country: formData.country, isDefault: false }, false)
+          } else {
+            const customerId = window.location.pathname.split('/').pop()
+            if (customerId && existingEori.id) {
+              await deleteCustomerTaxNumber(customerId, existingEori.id)
+            }
+          }
+        } else {
+          const newEori = taxNumbers.find(t => t.taxType === 'eori')
+          if (newEori) {
+            await onSave({ ...newEori, country: formData.country, isDefault: false }, false)
+          }
         }
+        
+        // 处理其他
+        if (existingOther) {
+          const newOther = taxNumbers.find(t => t.taxType === 'other')
+          if (newOther) {
+            await onSave({ ...existingOther, ...newOther, country: formData.country, isDefault: false }, false)
+          } else {
+            const customerId = window.location.pathname.split('/').pop()
+            if (customerId && existingOther.id) {
+              await deleteCustomerTaxNumber(customerId, existingOther.id)
+            }
+          }
+        } else {
+          const newOther = taxNumbers.find(t => t.taxType === 'other')
+          if (newOther) {
+            await onSave({ ...newOther, country: formData.country, isDefault: false }, false)
+          }
+        }
+        
+        // 完成后关闭
+        onClose()
       } else {
         // 新增模式：依次保存每个税号
         for (let i = 0; i < taxNumbers.length; i++) {
@@ -1576,8 +1613,8 @@ function TaxModal({
             companyAddress: tax.companyAddress,
             isVerified: tax.isVerified,
             country: formData.country,
-            isDefault: i === 0 ? formData.isDefault : false // 只有第一个可以设为默认
-          }, isLast) // 只有最后一个保存后才关闭弹窗
+            isDefault: i === 0 ? formData.isDefault : false
+          }, isLast)
         }
       }
     } catch (error) {
@@ -1595,7 +1632,7 @@ function TaxModal({
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h3 className="text-sm font-medium text-gray-900">
-            {initialData ? '编辑税号' : '添加税号'}
+            {isEditMode ? '编辑公司税号' : '添加公司税号'}
           </h3>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
             <X className="w-4 h-4 text-gray-500" />
