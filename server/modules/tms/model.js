@@ -60,7 +60,7 @@ export async function getCMRList(params = {}) {
       break
     case 'delivering':
       // 派送中
-      query += " AND (delivery_status = '派送中' OR delivery_status = '配送中')"
+      query += " AND delivery_status = '派送中'"
       break
     case 'exception':
       // 订单异常
@@ -134,7 +134,7 @@ export async function getCMRStats() {
              AND status != '草稿'
         THEN 1 ELSE 0 END) as undelivered,
       SUM(CASE 
-        WHEN (delivery_status = '派送中' OR delivery_status = '配送中')
+        WHEN delivery_status = '派送中'
              AND (is_void = 0 OR is_void IS NULL)
              AND status != '草稿'
         THEN 1 ELSE 0 END) as delivering,
