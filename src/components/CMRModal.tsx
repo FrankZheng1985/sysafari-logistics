@@ -64,7 +64,7 @@ interface CMRModalProps {
 }
 
 // 步骤定义
-type CMRStep = 'pickup' | 'arrival' | 'delivered' | 'unloading' | 'confirm'
+type CMRStep = 'pickup' | 'delivering' | 'arrival' | 'delivered' | 'unloading' | 'confirm'
 type ModalMode = 'normal' | 'exception' | 'exception_handle'
 
 export default function CMRModal({
@@ -218,22 +218,39 @@ export default function CMRModal({
     
     switch (step) {
       case 'pickup': return '第一步：预计提货时间'
-      case 'arrival': return '第二步：预计到达时间'
-      case 'delivered': return '第三步：送达时间'
-      case 'unloading': return '第四步：卸货完成'
-      case 'confirm': return '第五步：确认送达'
+      case 'delivering': return '第二步：派送中'
+      case 'arrival': return '第三步：预计到达时间'
+      case 'delivered': return '第四步：送达时间'
+      case 'unloading': return '第五步：卸货完成'
+      case 'confirm': return '第六步：确认送达'
       default: return '派送'
     }
   }
 
   // 获取步骤状态
   const getStepStatus = (s: CMRStep) => {
-    const steps: CMRStep[] = ['pickup', 'arrival', 'delivered', 'unloading', 'confirm']
-    const currentIndex = steps.indexOf(step)
-    const stepIndex = steps.indexOf(s)
+    // 用于显示的完整步骤（包含派送中）
+    const displaySteps: CMRStep[] = ['pickup', 'delivering', 'arrival', 'delivered', 'unloading', 'confirm']
+    // 实际业务步骤（不包含派送中）
+    const businessSteps: CMRStep[] = ['pickup', 'arrival', 'delivered', 'unloading', 'confirm']
     
-    if (stepIndex < currentIndex) return 'completed'
-    if (stepIndex === currentIndex) return 'active'
+    const stepIndex = displaySteps.indexOf(s)
+    const currentBusinessIndex = businessSteps.indexOf(step)
+    
+    // 派送中是 pickup 和 arrival 之间的过渡状态
+    if (s === 'delivering') {
+      // 如果当前步骤是 arrival 或更后面，派送中已完成
+      if (currentBusinessIndex >= 1) return 'completed'
+      // 如果当前步骤是 pickup，派送中显示为待处理
+      return 'pending'
+    }
+    
+    // 对于其他步骤，正常计算
+    // 将业务步骤映射到显示步骤的索引
+    const displayIndex = displaySteps.indexOf(step)
+    
+    if (stepIndex < displayIndex) return 'completed'
+    if (stepIndex === displayIndex) return 'active'
     return 'pending'
   }
 
@@ -484,10 +501,10 @@ export default function CMRModal({
         {mode === 'normal' && (
           <div className="px-4 py-2 bg-gray-50 border-b">
             <div className="flex items-center">
-              {(['pickup', 'arrival', 'delivered', 'unloading', 'confirm'] as CMRStep[]).map((s, index) => {
-                const stepLabels = ['提货', '到达', '送达', '卸货', '确认']
+              {(['pickup', 'delivering', 'arrival', 'delivered', 'unloading', 'confirm'] as CMRStep[]).map((s, index) => {
+                const stepLabels = ['提货', '派送中', '到达', '送达', '卸货', '确认']
                 const status = getStepStatus(s)
-                const isLastStep = index === 4
+                const isLastStep = index === 5
                 return (
                   <div key={s} className={`flex items-center ${isLastStep ? '' : 'flex-1'}`}>
                     <div className={`flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-medium flex-shrink-0 ${
