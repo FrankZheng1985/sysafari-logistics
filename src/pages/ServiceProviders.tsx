@@ -80,6 +80,7 @@ export default function ServiceProviders() {
     { label: 'TMS管理', path: '/cmr-manage' },
     { label: '服务商管理', path: '/tms/service-providers' },
     { label: '运费管理', path: '/tms/pricing' },
+    { label: '条件管理', path: '/tms/conditions' },
   ]
 
   useEffect(() => {

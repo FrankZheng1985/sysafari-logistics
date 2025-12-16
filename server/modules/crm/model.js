@@ -226,7 +226,7 @@ export async function createCustomer(data) {
       bank_name, bank_account, credit_limit, payment_terms,
       assigned_to, assigned_name, tags, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.customerCode,
@@ -304,7 +304,7 @@ export async function updateCustomer(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -326,7 +326,7 @@ export async function deleteCustomer(id) {
 export async function updateCustomerStatus(id, status) {
   const db = getDatabase()
   const result = await db.prepare(`
-    UPDATE customers SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?
+    UPDATE customers SET status = ?, updated_at = NOW() WHERE id = ?
   `).run(status, id)
   return result.changes > 0
 }
@@ -338,7 +338,7 @@ export async function assignCustomer(id, assignedTo, assignedName) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE customers 
-    SET assigned_to = ?, assigned_name = ?, updated_at = datetime('now', 'localtime') 
+    SET assigned_to = ?, assigned_name = ?, updated_at = NOW() 
     WHERE id = ?
   `).run(assignedTo, assignedName, id)
   return result.changes > 0
@@ -385,7 +385,7 @@ export async function createContact(data) {
       phone, mobile, email, wechat, qq,
       is_primary, is_decision_maker, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.customerId,
@@ -454,7 +454,7 @@ export async function updateContact(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_contacts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -538,7 +538,7 @@ export async function createFollowUp(data) {
       content, result, next_follow_up_time, next_action,
       operator_id, operator_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.customerId,
@@ -555,7 +555,7 @@ export async function createFollowUp(data) {
   
   // 更新客户最后跟进时间
   await db.prepare(`
-    UPDATE customers SET last_follow_up_time = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?
+    UPDATE customers SET last_follow_up_time = NOW(), updated_at = NOW() WHERE id = ?
   `).run(data.customerId)
   
   return { id }
@@ -587,7 +587,7 @@ export async function updateFollowUp(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_follow_ups SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -846,7 +846,7 @@ export async function createOpportunity(data) {
       stage, expected_amount, probability, expected_close_date,
       source, description, assigned_to, assigned_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.opportunityName,
@@ -901,7 +901,7 @@ export async function updateOpportunity(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE sales_opportunities SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -924,7 +924,7 @@ export async function updateOpportunityStage(id, stage, lostReason = '') {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE sales_opportunities 
-    SET stage = ?, lost_reason = ?, updated_at = datetime('now', 'localtime')
+    SET stage = ?, lost_reason = ?, updated_at = NOW()
     WHERE id = ?
   `).run(stage, stage === 'closed_lost' ? lostReason : '', id)
   return result.changes > 0
@@ -1035,7 +1035,7 @@ export async function createQuotation(data) {
       subtotal, discount, tax_amount, total_amount, currency,
       terms, notes, items, status, created_by, created_by_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     quoteNumber,
@@ -1099,7 +1099,7 @@ export async function updateQuotation(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE quotations SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1215,7 +1215,7 @@ export async function createContract(data) {
       start_date, end_date, sign_date, terms, notes, status,
       created_by, created_by_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     contractNumber,
@@ -1270,7 +1270,7 @@ export async function updateContract(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE contracts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1437,7 +1437,7 @@ export async function createFeedback(data) {
       feedback_type, subject, content, priority, source,
       bill_id, bill_number, assigned_to, assigned_name, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     feedbackNumber,
@@ -1489,7 +1489,7 @@ export async function updateFeedback(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_feedbacks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1503,7 +1503,7 @@ export async function resolveFeedback(id, resolution) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE customer_feedbacks 
-    SET status = 'resolved', resolution = ?, resolved_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
+    SET status = 'resolved', resolution = ?, resolved_at = NOW(), updated_at = NOW()
     WHERE id = ?
   `).run(resolution, id)
   return result.changes > 0

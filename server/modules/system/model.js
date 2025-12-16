@@ -106,7 +106,7 @@ export async function createUser(data) {
     INSERT INTO users (
       username, password_hash, name, email, phone,
       avatar, role, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     data.username,
     passwordHash,
@@ -156,7 +156,7 @@ export async function updateUser(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -169,7 +169,7 @@ export async function updateUser(id, data) {
 export async function updateUserStatus(id, status) {
   const db = getDatabase()
   const result = await db.prepare(`
-    UPDATE users SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?
+    UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?
   `).run(status, id)
   
   return result.changes > 0
@@ -183,7 +183,7 @@ export async function changePassword(id, newPassword) {
   const passwordHash = hashPassword(newPassword)
   
   const result = await db.prepare(`
-    UPDATE users SET password_hash = ?, updated_at = datetime('now', 'localtime') WHERE id = ?
+    UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?
   `).run(passwordHash, id)
   
   return result.changes > 0
@@ -211,13 +211,16 @@ export async function deleteUser(id) {
  */
 export async function updateLoginInfo(id, ip) {
   const db = getDatabase()
+  // 生成当前时间字符串 YYYY-MM-DD HH:MM:SS
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
+  
   await db.prepare(`
     UPDATE users 
-    SET last_login_time = datetime('now', 'localtime'),
+    SET last_login_time = ?,
         last_login_ip = ?,
         login_count = COALESCE(login_count, 0) + 1
     WHERE id = ?
-  `).run(ip, id)
+  `).run(now, ip, id)
 }
 
 /**
@@ -247,7 +250,7 @@ export async function getRecentFailedAttempts(username, minutes = 15) {
     const result = await db.prepare(`
       SELECT COUNT(*) as count FROM login_attempts 
       WHERE username = ? AND success = 0 
-      AND attempt_time > datetime('now', '-${minutes} minutes')
+      AND attempt_time > NOW() - INTERVAL '${minutes} minutes'
     `).get(username)
     return result?.count || 0
   } catch (error) {
@@ -310,7 +313,7 @@ export async function createRole(data) {
   
   const result = await db.prepare(`
     INSERT INTO roles (role_code, role_name, description, color_code, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    VALUES (?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     data.roleCode,
     data.roleName,
@@ -349,7 +352,7 @@ export async function updateRole(roleCode, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(roleCode)
   
   const result = await db.prepare(`UPDATE roles SET ${fields.join(', ')} WHERE role_code = ?`).run(...values)
@@ -503,10 +506,10 @@ export async function updateSystemSettings(settings) {
   
   const upsertStmt = await db.prepare(`
     INSERT INTO system_settings (setting_key, setting_value, updated_at)
-    VALUES (?, ?, datetime('now', 'localtime'))
+    VALUES (?, ?, NOW())
     ON CONFLICT(setting_key) DO UPDATE SET 
       setting_value = excluded.setting_value,
-      updated_at = datetime('now', 'localtime')
+      updated_at = NOW()
   `)
   
   for (const [key, value] of Object.entries(settings)) {
@@ -547,7 +550,7 @@ export async function updateSecuritySettings(settings) {
   
   const updateStmt = await db.prepare(`
     UPDATE security_settings 
-    SET setting_value = ?, updated_at = datetime('now', 'localtime')
+    SET setting_value = ?, updated_at = NOW()
     WHERE setting_key = ?
   `)
   
@@ -571,7 +574,7 @@ export async function addLoginLog(data) {
       INSERT INTO login_logs (
         user_id, username, login_time, ip_address,
         user_agent, status, failure_reason
-      ) VALUES (?, ?, datetime('now', 'localtime'), ?, ?, ?, ?)
+      ) VALUES (?, ?, NOW(), ?, ?, ?, ?)
     `).run(
       data.userId || null,
       data.username,
@@ -783,7 +786,7 @@ export async function saveSystemSetting(key, value, type, description) {
   
   await db.prepare(`
     INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
-    VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
+    VALUES (?, ?, ?, ?, NOW())
   `).run(key, stringValue, settingType, description || '')
 }
 
@@ -795,7 +798,7 @@ export async function saveSystemSettingsBatch(settings) {
   
   const upsertStmt = await db.prepare(`
     INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
-    VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
+    VALUES (?, ?, ?, ?, NOW())
   `)
   
   for (const { key, value, type, description } of settings) {

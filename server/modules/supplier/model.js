@@ -79,8 +79,8 @@ export async function initSupplierTable() {
       remark TEXT,
       
       -- 时间戳
-      created_at TEXT DEFAULT (datetime('now', 'localtime')),
-      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+      created_at TEXT DEFAULT (NOW()),
+      updated_at TEXT DEFAULT (NOW()),
       created_by TEXT,
       updated_by TEXT
     )
@@ -295,7 +295,7 @@ export async function updateSupplier(id, data) {
   if (fields.length === 0) return false
   
   // 更新时间
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE suppliers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -328,7 +328,7 @@ export async function updateSupplierStatus(id, status, updatedBy) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE suppliers 
-    SET status = ?, updated_at = datetime('now', 'localtime'), updated_by = ?
+    SET status = ?, updated_at = NOW(), updated_by = ?
     WHERE id = ?
   `).run(status, updatedBy || '', id)
   return result.changes > 0

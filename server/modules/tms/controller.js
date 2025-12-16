@@ -700,3 +700,215 @@ export async function getTMSLogs(req, res) {
   }
 }
 
+// ==================== 考核条件管理 ====================
+
+/**
+ * 获取考核条件列表
+ */
+export async function getConditions(req, res) {
+  try {
+    const { type, status, search, page, pageSize } = req.query
+    
+    const result = await model.getConditions({
+      type,
+      status,
+      search,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取考核条件列表失败:', error)
+    return serverError(res, '获取考核条件列表失败')
+  }
+}
+
+/**
+ * 获取考核条件详情
+ */
+export async function getConditionById(req, res) {
+  try {
+    const condition = await model.getConditionById(req.params.id)
+    if (!condition) {
+      return notFound(res, '考核条件不存在')
+    }
+    return success(res, condition)
+  } catch (error) {
+    console.error('获取考核条件详情失败:', error)
+    return serverError(res, '获取考核条件详情失败')
+  }
+}
+
+/**
+ * 创建考核条件
+ */
+export async function createCondition(req, res) {
+  try {
+    const { conditionCode, conditionName, conditionType } = req.body
+    
+    if (!conditionCode || !conditionName || !conditionType) {
+      return badRequest(res, '条件编码、名称和类型为必填项')
+    }
+    
+    const result = await model.createCondition(req.body)
+    const newCondition = await model.getConditionById(result.id)
+    
+    return success(res, newCondition, '创建成功')
+  } catch (error) {
+    console.error('创建考核条件失败:', error)
+    if (error.message?.includes('条件编码已存在')) {
+      return badRequest(res, '条件编码已存在')
+    }
+    return serverError(res, '创建考核条件失败')
+  }
+}
+
+/**
+ * 更新考核条件
+ */
+export async function updateCondition(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getConditionById(id)
+    if (!existing) {
+      return notFound(res, '考核条件不存在')
+    }
+    
+    const updated = await model.updateCondition(id, req.body)
+    if (!updated) {
+      return badRequest(res, '没有需要更新的字段')
+    }
+    
+    const updatedCondition = await model.getConditionById(id)
+    return success(res, updatedCondition, '更新成功')
+  } catch (error) {
+    console.error('更新考核条件失败:', error)
+    return serverError(res, '更新考核条件失败')
+  }
+}
+
+/**
+ * 删除考核条件
+ */
+export async function deleteCondition(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getConditionById(id)
+    if (!existing) {
+      return notFound(res, '考核条件不存在')
+    }
+    
+    await model.deleteCondition(id)
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除考核条件失败:', error)
+    return serverError(res, '删除考核条件失败')
+  }
+}
+
+/**
+ * 匹配适用的考核条件
+ */
+export async function matchConditions(req, res) {
+  try {
+    const { type, providerId, routeCode, serviceType } = req.query
+    
+    const conditions = await model.matchConditions({
+      type,
+      providerId,
+      routeCode,
+      serviceType
+    })
+    
+    return success(res, conditions)
+  } catch (error) {
+    console.error('匹配考核条件失败:', error)
+    return serverError(res, '匹配考核条件失败')
+  }
+}
+
+/**
+ * 获取考核条件统计
+ */
+export async function getConditionStats(req, res) {
+  try {
+    const stats = await model.getConditionStats()
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取考核条件统计失败:', error)
+    return serverError(res, '获取考核条件统计失败')
+  }
+}
+
+// ==================== 考核报表 ====================
+
+/**
+ * 获取考核报表
+ */
+export async function getAssessmentReport(req, res) {
+  try {
+    const { providerId, conditionType, period, startDate, endDate, page, pageSize } = req.query
+    
+    const result = await model.getAssessmentReport({
+      providerId: providerId ? parseInt(providerId) : null,
+      conditionType,
+      period,
+      startDate,
+      endDate,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取考核报表失败:', error)
+    return serverError(res, '获取考核报表失败')
+  }
+}
+
+/**
+ * 获取服务商排名
+ */
+export async function getProviderRanking(req, res) {
+  try {
+    const { conditionType, period, limit } = req.query
+    
+    const rankings = await model.getProviderRanking({
+      conditionType,
+      period,
+      limit: parseInt(limit) || 10
+    })
+    
+    return success(res, rankings)
+  } catch (error) {
+    console.error('获取服务商排名失败:', error)
+    return serverError(res, '获取服务商排名失败')
+  }
+}
+
+/**
+ * 获取考核汇总统计
+ */
+export async function getAssessmentSummary(req, res) {
+  try {
+    const { period } = req.query
+    
+    const summary = await model.getAssessmentSummary({ period })
+    return success(res, summary)
+  } catch (error) {
+    console.error('获取考核汇总失败:', error)
+    return serverError(res, '获取考核汇总失败')
+  }
+}
+

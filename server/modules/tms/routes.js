@@ -79,5 +79,39 @@ router.put('/service-providers/:id', controller.updateServiceProvider)
 // 删除服务商
 router.delete('/service-providers/:id', controller.deleteServiceProvider)
 
+// ==================== 考核条件管理路由 ====================
+
+// 获取条件统计
+router.get('/conditions/stats', controller.getConditionStats)
+
+// 匹配适用条件
+router.get('/conditions/match', controller.matchConditions)
+
+// 获取条件列表
+router.get('/conditions', controller.getConditions)
+
+// 获取单个条件
+router.get('/conditions/:id', controller.getConditionById)
+
+// 创建条件
+router.post('/conditions', controller.createCondition)
+
+// 更新条件
+router.put('/conditions/:id', controller.updateCondition)
+
+// 删除条件
+router.delete('/conditions/:id', controller.deleteCondition)
+
+// ==================== 考核报表路由 ====================
+
+// 获取考核汇总
+router.get('/assessment/summary', controller.getAssessmentSummary)
+
+// 获取服务商排名
+router.get('/assessment/provider-rank', controller.getProviderRanking)
+
+// 获取考核报表
+router.get('/assessment/report', controller.getAssessmentReport)
+
 export default router
 

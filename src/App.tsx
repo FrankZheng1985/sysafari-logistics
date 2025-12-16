@@ -57,6 +57,7 @@ import TMSDashboard from './pages/TMSDashboard'
 import ServiceProviders from './pages/ServiceProviders'
 import TransportPricing from './pages/TransportPricing'
 import CMRExceptionManage from './pages/CMRExceptionManage'
+import TMSConditions from './pages/TMSConditions'
 // 工具模块
 import ToolsDashboard from './pages/ToolsDashboard'
 // 系统模块
@@ -116,6 +117,7 @@ function AppRoutes() {
         <Route path="/tms/exceptions" element={<CMRExceptionManage />} />
         <Route path="/tms/service-providers" element={<ServiceProviders />} />
         <Route path="/tms/pricing" element={<TransportPricing />} />
+        <Route path="/tms/conditions" element={<TMSConditions />} />
         <Route path="/cmr-manage" element={<CMRManage />} />
         <Route path="/cmr-manage/delivering" element={<CMRManage />} />
         <Route path="/cmr-manage/exception" element={<CMRManage />} />

@@ -181,7 +181,7 @@ export async function createBill(data) {
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
-      datetime('now', 'localtime'), datetime('now', 'localtime')
+      NOW(), NOW()
     )
   `).run(
     id,
@@ -270,7 +270,7 @@ export async function updateBill(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -282,14 +282,15 @@ export async function updateBill(id, data) {
  */
 export async function voidBill(id, reason, operator) {
   const db = getDatabase()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET is_void = 1, 
         void_reason = ?, 
-        void_time = datetime('now', 'localtime'),
-        updated_at = datetime('now', 'localtime')
+        void_time = ?,
+        updated_at = NOW()
     WHERE id = ?
-  `).run(reason, id)
+  `).run(reason, now, id)
   
   return result.changes > 0
 }
@@ -304,7 +305,7 @@ export async function restoreBill(id) {
     SET is_void = 0, 
         void_reason = NULL, 
         void_time = NULL,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(id)
   
@@ -331,7 +332,7 @@ export async function updateBillShipStatus(id, shipStatus, actualArrivalDate = n
   let query = `
     UPDATE bills_of_lading 
     SET ship_status = ?,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
   `
   const params = [shipStatus]
   
@@ -340,7 +341,7 @@ export async function updateBillShipStatus(id, shipStatus, actualArrivalDate = n
       UPDATE bills_of_lading 
       SET ship_status = ?,
           actual_arrival_date = ?,
-          updated_at = datetime('now', 'localtime')
+          updated_at = NOW()
     `
     params.push(actualArrivalDate)
   }
@@ -360,8 +361,8 @@ export async function updateBillDocSwapStatus(id, docSwapStatus) {
   
   // PostgreSQL 需要将 NOW() 转换为 TEXT 类型以匹配 doc_swap_time 列
   const isPostgres = db.isPostgres
-  const nowExpr = isPostgres ? "TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS')" : "datetime('now', 'localtime')"
-  const updatedAtExpr = isPostgres ? "NOW()" : "datetime('now', 'localtime')"
+  const nowExpr = isPostgres ? "TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS')" : "NOW()"
+  const updatedAtExpr = isPostgres ? "NOW()" : "NOW()"
   
   const sql = `
     UPDATE bills_of_lading 
@@ -383,7 +384,7 @@ export async function updateBillCustomsStatus(id, customsStatus) {
   const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET customs_status = ?,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(customsStatus, id)
   
@@ -395,7 +396,7 @@ export async function updateBillCustomsStatus(id, customsStatus) {
  */
 export async function updateBillInspection(id, inspectionData) {
   const db = getDatabase()
-  const fields = ['inspection = ?', "updated_at = datetime('now', 'localtime')"]
+  const fields = ['inspection = ?', "updated_at = NOW()"]
   const values = [inspectionData.inspection]
   
   if (inspectionData.inspectionDetail !== undefined) {
@@ -444,7 +445,7 @@ export async function updateBillInspection(id, inspectionData) {
  */
 export async function updateBillDelivery(id, deliveryData) {
   const db = getDatabase()
-  const fields = ['delivery_status = ?', "updated_at = datetime('now', 'localtime')"]
+  const fields = ['delivery_status = ?', "updated_at = NOW()"]
   const values = [deliveryData.deliveryStatus]
   
   // CMR详细字段 - 前端发送的字段名带 "cmr" 前缀
@@ -507,6 +508,7 @@ export async function getOperationLogs(billId, module = null) {
  */
 export async function addOperationLog(data) {
   const db = getDatabase()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   
   const result = await db.prepare(`
     INSERT INTO operation_logs (
@@ -514,7 +516,7 @@ export async function addOperationLog(data) {
       old_value, new_value, remark,
       operator, operator_id, module,
       operation_time
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.billId,
     data.operationType,
@@ -524,7 +526,8 @@ export async function addOperationLog(data) {
     data.remark || null,
     data.operator || '系统',
     data.operatorId || null,
-    data.module || 'order'
+    data.module || 'order',
+    now
   )
   
   return { id: result.lastInsertRowid }
@@ -546,12 +549,13 @@ export async function getBillFiles(billId) {
  */
 export async function addBillFile(data) {
   const db = getDatabase()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   
   const result = await db.prepare(`
     INSERT INTO bill_files (
       bill_id, file_name, file_path, file_type,
       original_size, compressed_size, upload_by, upload_time
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.billId,
     data.fileName,
@@ -559,7 +563,8 @@ export async function addBillFile(data) {
     data.fileType,
     data.originalSize,
     data.compressedSize || data.originalSize,
-    data.uploadBy || '系统'
+    data.uploadBy || '系统',
+    now
   )
   
   return { id: result.lastInsertRowid }
@@ -1072,7 +1077,7 @@ export async function setSystemConfig(key, value, description) {
   const db = getDatabase()
   await db.prepare(`
     INSERT OR REPLACE INTO system_configs (key, value, description, updated_at)
-    VALUES (?, ?, COALESCE(?, (SELECT description FROM system_configs WHERE key = ?)), datetime('now', 'localtime'))
+    VALUES (?, ?, COALESCE(?, (SELECT description FROM system_configs WHERE key = ?)), NOW())
   `).run(key, value, description, key)
   return true
 }

@@ -218,7 +218,7 @@ export async function createInvoice(data) {
       subtotal, tax_amount, total_amount, paid_amount,
       currency, exchange_rate, description, notes,
       status, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     invoiceNumber,
@@ -278,7 +278,7 @@ export async function updateInvoice(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE invoices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -326,7 +326,7 @@ export async function updateInvoicePaidAmount(id) {
   // 更新发票
   await db.prepare(`
     UPDATE invoices 
-    SET paid_amount = ?, status = ?, updated_at = datetime('now', 'localtime')
+    SET paid_amount = ?, status = ?, updated_at = NOW()
     WHERE id = ?
   `).run(paidAmount, status, id)
   
@@ -486,7 +486,7 @@ export async function createPayment(data) {
       amount, currency, exchange_rate, bank_account, reference_number,
       description, notes, status, created_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     paymentNumber,
@@ -550,7 +550,7 @@ export async function updatePayment(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE payments SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -717,7 +717,7 @@ export async function createFee(data) {
       category, fee_name, amount, currency, exchange_rate,
       fee_date, description, notes, created_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.billId || null,
@@ -766,7 +766,7 @@ export async function updateFee(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE fees SET ${fields.join(', ')} WHERE id = ?`).run(...values)

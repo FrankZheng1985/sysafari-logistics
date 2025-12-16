@@ -283,7 +283,7 @@ export async function createClearanceDocument(data) {
       ?, ?, ?,
       ?, ?,
       ?, ?, ?, ?,
-      ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime')
+      ?, ?, NOW(), NOW()
     )
   `).run(
     id, documentNo, data.billId || null, data.billNumber || null,
@@ -315,7 +315,7 @@ export async function createClearanceDocument(data) {
         quantity, quantity_unit, unit_price, total_price,
         gross_weight, net_weight, volume, country_of_origin, remark,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `)
     
     data.items.forEach((item, index) => {
@@ -402,7 +402,7 @@ export async function updateClearanceDocument(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = db.prepare(`UPDATE clearance_documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -418,7 +418,7 @@ export async function updateClearanceDocument(id, data) {
           quantity, quantity_unit, unit_price, total_price,
           gross_weight, net_weight, volume, country_of_origin, remark,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
       `)
       
       data.items.forEach((item, index) => {
@@ -456,11 +456,12 @@ export async function deleteClearanceDocument(id) {
  */
 export async function reviewClearanceDocument(id, reviewStatus, reviewNote, reviewer) {
   const db = getDatabase()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   const result = db.prepare(`
     UPDATE clearance_documents 
-    SET review_status = ?, review_note = ?, reviewer = ?, review_time = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
+    SET review_status = ?, review_note = ?, reviewer = ?, review_time = ?, updated_at = NOW()
     WHERE id = ?
-  `).run(reviewStatus, reviewNote || '', reviewer || '', id)
+  `).run(reviewStatus, reviewNote || '', reviewer || '', now, id)
   return result.changes > 0
 }
 
@@ -471,7 +472,7 @@ export async function updateClearanceDocumentStatus(id, status) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE clearance_documents 
-    SET status = ?, updated_at = datetime('now', 'localtime')
+    SET status = ?, updated_at = NOW()
     WHERE id = ?
   `).run(status, id)
   return result.changes > 0

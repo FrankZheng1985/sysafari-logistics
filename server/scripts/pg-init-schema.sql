@@ -1132,6 +1132,60 @@ CREATE TABLE IF NOT EXISTS auth0_pending_users (
 CREATE INDEX IF NOT EXISTS idx_auth0_pending_auth0_id ON auth0_pending_users(auth0_id);
 CREATE INDEX IF NOT EXISTS idx_auth0_pending_is_bound ON auth0_pending_users(is_bound);
 
+-- ==================== TMS考核条件表 ====================
+CREATE TABLE IF NOT EXISTS tms_assessment_conditions (
+    id SERIAL PRIMARY KEY,
+    condition_code TEXT UNIQUE NOT NULL,
+    condition_name TEXT NOT NULL,
+    condition_type TEXT NOT NULL,
+    metric_name TEXT,
+    operator TEXT DEFAULT '<=',
+    threshold_value NUMERIC,
+    threshold_value2 NUMERIC,
+    unit TEXT,
+    weight INTEGER DEFAULT 100,
+    scope_type TEXT DEFAULT 'global',
+    scope_values TEXT,
+    alert_enabled INTEGER DEFAULT 0,
+    alert_level TEXT DEFAULT 'warning',
+    description TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_code ON tms_assessment_conditions(condition_code);
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_type ON tms_assessment_conditions(condition_type);
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_status ON tms_assessment_conditions(status);
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_scope ON tms_assessment_conditions(scope_type);
+
+-- ==================== TMS考核结果表 ====================
+CREATE TABLE IF NOT EXISTS tms_assessment_results (
+    id SERIAL PRIMARY KEY,
+    provider_id INTEGER,
+    provider_name TEXT,
+    bill_id TEXT,
+    bill_number TEXT,
+    condition_id INTEGER,
+    condition_code TEXT,
+    condition_type TEXT,
+    actual_value NUMERIC,
+    threshold_value NUMERIC,
+    is_passed INTEGER DEFAULT 0,
+    score NUMERIC DEFAULT 0,
+    assessment_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    period TEXT,
+    remark TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tms_results_provider ON tms_assessment_results(provider_id);
+CREATE INDEX IF NOT EXISTS idx_tms_results_bill ON tms_assessment_results(bill_id);
+CREATE INDEX IF NOT EXISTS idx_tms_results_condition ON tms_assessment_results(condition_id);
+CREATE INDEX IF NOT EXISTS idx_tms_results_type ON tms_assessment_results(condition_type);
+CREATE INDEX IF NOT EXISTS idx_tms_results_period ON tms_assessment_results(period);
+CREATE INDEX IF NOT EXISTS idx_tms_results_passed ON tms_assessment_results(is_passed);
+
 -- 完成提示
 DO $$
 BEGIN

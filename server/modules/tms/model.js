@@ -182,7 +182,7 @@ export async function startDelivery(id, data) {
         cmr_estimated_pickup_time = ?,
         cmr_service_provider = ?,
         cmr_current_step = 1,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     data.estimatedPickupTime,
@@ -204,7 +204,7 @@ export async function updateDestination(id, data) {
     SET cmr_delivery_address = ?,
         cmr_estimated_arrival_time = ?,
         cmr_current_step = 2,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     data.deliveryAddress,
@@ -225,7 +225,7 @@ export async function recordDeliveryTime(id, data) {
     UPDATE bills_of_lading 
     SET cmr_actual_arrival_time = ?,
         cmr_current_step = 3,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     data.actualArrivalTime,
@@ -245,7 +245,7 @@ export async function completeUnloading(id, data) {
     UPDATE bills_of_lading 
     SET cmr_unloading_complete_time = ?,
         cmr_current_step = 4,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     data.unloadingCompleteTime,
@@ -266,7 +266,7 @@ export async function confirmDelivery(id, data) {
     SET delivery_status = '已送达',
         cmr_confirmed_time = ?,
         cmr_current_step = 5,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     data.confirmedTime || new Date().toISOString(),
@@ -342,7 +342,7 @@ export async function updateCMRDetail(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -379,18 +379,21 @@ export async function markException(id, data) {
     step: data.currentStep || null
   })
   
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
+
   const result = await db.prepare(`
     UPDATE bills_of_lading 
     SET delivery_status = '订单异常',
         cmr_has_exception = 1,
         cmr_exception_note = ?,
-        cmr_exception_time = datetime('now', 'localtime'),
+        cmr_exception_time = ?,
         cmr_exception_status = 'open',
         cmr_exception_records = ?,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     data.exceptionNote,
+    now,
     JSON.stringify(records),
     id
   )
@@ -429,7 +432,7 @@ export async function followUpException(id, data) {
     UPDATE bills_of_lading 
     SET cmr_exception_status = 'following',
         cmr_exception_records = ?,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     JSON.stringify(records),
@@ -472,7 +475,7 @@ export async function resolveAndContinue(id, data) {
         cmr_has_exception = 0,
         cmr_exception_status = 'resolved',
         cmr_exception_records = ?,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     JSON.stringify(records),
@@ -513,7 +516,7 @@ export async function markResolved(id, data) {
     UPDATE bills_of_lading 
     SET cmr_exception_status = 'resolved',
         cmr_exception_records = ?,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     JSON.stringify(records),
@@ -555,7 +558,7 @@ export async function closeOrder(id, data) {
     SET delivery_status = '异常关闭',
         cmr_exception_status = 'closed',
         cmr_exception_records = ?,
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
     WHERE id = ?
   `).run(
     JSON.stringify(records),
@@ -649,8 +652,9 @@ export async function createServiceProvider(data) {
       provider_code, provider_name, service_type, contact_person,
       contact_phone, contact_email, address, description, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
-  `).run(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    RETURNING id
+  `).get(
     data.providerCode,
     data.providerName,
     data.serviceType || 'delivery',
@@ -662,7 +666,7 @@ export async function createServiceProvider(data) {
     data.status || 'active'
   )
   
-  return { id: result.lastInsertRowid }
+  return { id: result.id }
 }
 
 /**
@@ -694,7 +698,7 @@ export async function updateServiceProvider(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE service_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -717,6 +721,7 @@ export async function deleteServiceProvider(id) {
  */
 export async function addTMSLog(data) {
   const db = getDatabase()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   
   try {
     await db.prepare(`
@@ -725,7 +730,7 @@ export async function addTMSLog(data) {
         old_value, new_value, remark,
         operator, operator_id, module,
         operation_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'tms', datetime('now', 'localtime'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'tms', ?)
     `).run(
       data.billId,
       data.operationType,
@@ -734,7 +739,8 @@ export async function addTMSLog(data) {
       data.newValue || null,
       data.remark || null,
       data.operator || '系统',
-      data.operatorId || null
+      data.operatorId || null,
+      now
     )
   } catch (error) {
     console.error('记录TMS日志失败:', error.message)
@@ -839,11 +845,528 @@ export function convertServiceProviderToCamelCase(row) {
   }
 }
 
+// ==================== 考核条件管理 ====================
+
+/**
+ * 考核条件类型常量
+ */
+export const CONDITION_TYPES = {
+  TIME_LIMIT: 'time_limit',        // 时效考核
+  PRICE_STANDARD: 'price_standard', // 价格标准
+  EFFICIENCY: 'efficiency',         // 效率指标
+  PROVIDER_SCORE: 'provider_score'  // 服务商评分
+}
+
+/**
+ * 比较操作符常量
+ */
+export const OPERATORS = {
+  LTE: '<=',      // 小于等于
+  GTE: '>=',      // 大于等于
+  EQ: '=',        // 等于
+  BETWEEN: 'between' // 范围
+}
+
+/**
+ * 预警级别常量
+ */
+export const ALERT_LEVELS = {
+  WARNING: 'warning',   // 警告
+  ERROR: 'error',       // 错误
+  CRITICAL: 'critical'  // 严重
+}
+
+/**
+ * 适用范围类型常量
+ */
+export const SCOPE_TYPES = {
+  GLOBAL: 'global',           // 全局
+  ROUTE: 'route',             // 按路线
+  PROVIDER: 'provider',       // 按服务商
+  SERVICE_TYPE: 'service_type' // 按服务类型
+}
+
+/**
+ * 获取考核条件列表
+ */
+export async function getConditions(params = {}) {
+  const db = getDatabase()
+  const { type, status, search, page = 1, pageSize = 20 } = params
+  
+  let query = 'SELECT * FROM tms_assessment_conditions WHERE 1=1'
+  const queryParams = []
+  
+  if (type) {
+    query += ' AND condition_type = ?'
+    queryParams.push(type)
+  }
+  
+  if (status) {
+    query += ' AND status = ?'
+    queryParams.push(status)
+  }
+  
+  if (search) {
+    query += ' AND (condition_code LIKE ? OR condition_name LIKE ? OR metric_name LIKE ?)'
+    const searchPattern = `%${search}%`
+    queryParams.push(searchPattern, searchPattern, searchPattern)
+  }
+  
+  // 获取总数
+  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
+  
+  // 分页
+  query += ' ORDER BY condition_type, created_at DESC LIMIT ? OFFSET ?'
+  queryParams.push(pageSize, (page - 1) * pageSize)
+  
+  const list = await db.prepare(query).all(...queryParams)
+  
+  return {
+    list: list.map(convertConditionToCamelCase),
+    total: totalResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 根据ID获取考核条件
+ */
+export async function getConditionById(id) {
+  const db = getDatabase()
+  const condition = await db.prepare('SELECT * FROM tms_assessment_conditions WHERE id = ?').get(id)
+  return condition ? convertConditionToCamelCase(condition) : null
+}
+
+/**
+ * 创建考核条件
+ */
+export async function createCondition(data) {
+  const db = getDatabase()
+  
+  // 检查条件编码是否已存在
+  const existing = await db.prepare('SELECT id FROM tms_assessment_conditions WHERE condition_code = ?').get(data.conditionCode)
+  if (existing) {
+    throw new Error('条件编码已存在')
+  }
+  
+  const result = await db.prepare(`
+    INSERT INTO tms_assessment_conditions (
+      condition_code, condition_name, condition_type, metric_name,
+      operator, threshold_value, threshold_value2, unit,
+      weight, scope_type, scope_values, alert_enabled,
+      alert_level, description, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    RETURNING id
+  `).get(
+    data.conditionCode,
+    data.conditionName,
+    data.conditionType,
+    data.metricName || '',
+    data.operator || '<=',
+    data.thresholdValue || 0,
+    data.thresholdValue2 || null,
+    data.unit || '',
+    data.weight || 100,
+    data.scopeType || 'global',
+    data.scopeValues ? JSON.stringify(data.scopeValues) : null,
+    data.alertEnabled ? 1 : 0,
+    data.alertLevel || 'warning',
+    data.description || '',
+    data.status || 'active'
+  )
+  
+  return { id: result.id }
+}
+
+/**
+ * 更新考核条件
+ */
+export async function updateCondition(id, data) {
+  const db = getDatabase()
+  const fields = []
+  const values = []
+  
+  const fieldMap = {
+    conditionCode: 'condition_code',
+    conditionName: 'condition_name',
+    conditionType: 'condition_type',
+    metricName: 'metric_name',
+    operator: 'operator',
+    thresholdValue: 'threshold_value',
+    thresholdValue2: 'threshold_value2',
+    unit: 'unit',
+    weight: 'weight',
+    scopeType: 'scope_type',
+    alertEnabled: 'alert_enabled',
+    alertLevel: 'alert_level',
+    description: 'description',
+    status: 'status'
+  }
+  
+  Object.entries(fieldMap).forEach(([jsField, dbField]) => {
+    if (data[jsField] !== undefined) {
+      fields.push(`${dbField} = ?`)
+      if (jsField === 'alertEnabled') {
+        values.push(data[jsField] ? 1 : 0)
+      } else {
+        values.push(data[jsField])
+      }
+    }
+  })
+  
+  // 特殊处理 scopeValues (需要JSON序列化)
+  if (data.scopeValues !== undefined) {
+    fields.push('scope_values = ?')
+    values.push(data.scopeValues ? JSON.stringify(data.scopeValues) : null)
+  }
+  
+  if (fields.length === 0) return false
+  
+  fields.push("updated_at = NOW()")
+  values.push(id)
+  
+  const result = await db.prepare(`UPDATE tms_assessment_conditions SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  return result.changes > 0
+}
+
+/**
+ * 删除考核条件
+ */
+export async function deleteCondition(id) {
+  const db = getDatabase()
+  const result = await db.prepare('DELETE FROM tms_assessment_conditions WHERE id = ?').run(id)
+  return result.changes > 0
+}
+
+/**
+ * 匹配适用的考核条件
+ * @param {Object} params - 匹配参数
+ * @param {string} params.type - 条件类型
+ * @param {string} params.providerId - 服务商ID
+ * @param {string} params.routeCode - 路线编码
+ * @param {string} params.serviceType - 服务类型
+ */
+export async function matchConditions(params = {}) {
+  const db = getDatabase()
+  const { type, providerId, routeCode, serviceType } = params
+  
+  let query = "SELECT * FROM tms_assessment_conditions WHERE status = 'active'"
+  const queryParams = []
+  
+  if (type) {
+    query += ' AND condition_type = ?'
+    queryParams.push(type)
+  }
+  
+  const allConditions = await db.prepare(query).all(...queryParams)
+  
+  // 过滤匹配的条件
+  const matchedConditions = allConditions.filter(condition => {
+    const scopeType = condition.scope_type
+    
+    // 全局条件总是匹配
+    if (scopeType === 'global') return true
+    
+    // 解析scopeValues
+    let scopeValues = []
+    if (condition.scope_values) {
+      try {
+        scopeValues = JSON.parse(condition.scope_values)
+      } catch (e) {
+        scopeValues = []
+      }
+    }
+    
+    // 按范围类型匹配
+    switch (scopeType) {
+      case 'provider':
+        return providerId && scopeValues.includes(String(providerId))
+      case 'route':
+        return routeCode && scopeValues.includes(routeCode)
+      case 'service_type':
+        return serviceType && scopeValues.includes(serviceType)
+      default:
+        return true
+    }
+  })
+  
+  return matchedConditions.map(convertConditionToCamelCase)
+}
+
+/**
+ * 获取考核条件统计
+ */
+export async function getConditionStats() {
+  const db = getDatabase()
+  
+  const stats = await db.prepare(`
+    SELECT 
+      condition_type,
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
+      SUM(CASE WHEN alert_enabled = 1 THEN 1 ELSE 0 END) as alert_count
+    FROM tms_assessment_conditions
+    GROUP BY condition_type
+  `).all()
+  
+  return stats.map(row => ({
+    conditionType: row.condition_type,
+    total: row.total,
+    activeCount: row.active_count,
+    alertCount: row.alert_count
+  }))
+}
+
+// ==================== 考核结果管理 ====================
+
+/**
+ * 记录考核结果
+ */
+export async function recordAssessmentResult(data) {
+  const db = getDatabase()
+  
+  const result = await db.prepare(`
+    INSERT INTO tms_assessment_results (
+      provider_id, provider_name, bill_id, bill_number,
+      condition_id, condition_code, condition_type,
+      actual_value, threshold_value, is_passed, score,
+      assessment_time, period, remark, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, NOW())
+    RETURNING id
+  `).get(
+    data.providerId || null,
+    data.providerName || '',
+    data.billId || null,
+    data.billNumber || '',
+    data.conditionId,
+    data.conditionCode || '',
+    data.conditionType,
+    data.actualValue,
+    data.thresholdValue,
+    data.isPassed ? 1 : 0,
+    data.score || 0,
+    data.period || new Date().toISOString().slice(0, 7), // 默认当前月份
+    data.remark || ''
+  )
+  
+  return { id: result.id }
+}
+
+/**
+ * 获取考核报表
+ */
+export async function getAssessmentReport(params = {}) {
+  const db = getDatabase()
+  const { providerId, conditionType, period, startDate, endDate, page = 1, pageSize = 20 } = params
+  
+  let query = 'SELECT * FROM tms_assessment_results WHERE 1=1'
+  const queryParams = []
+  
+  if (providerId) {
+    query += ' AND provider_id = ?'
+    queryParams.push(providerId)
+  }
+  
+  if (conditionType) {
+    query += ' AND condition_type = ?'
+    queryParams.push(conditionType)
+  }
+  
+  if (period) {
+    query += ' AND period = ?'
+    queryParams.push(period)
+  }
+  
+  if (startDate) {
+    query += ' AND assessment_time >= ?'
+    queryParams.push(startDate)
+  }
+  
+  if (endDate) {
+    query += ' AND assessment_time <= ?'
+    queryParams.push(endDate)
+  }
+  
+  // 获取总数
+  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
+  
+  // 分页
+  query += ' ORDER BY assessment_time DESC LIMIT ? OFFSET ?'
+  queryParams.push(pageSize, (page - 1) * pageSize)
+  
+  const list = await db.prepare(query).all(...queryParams)
+  
+  return {
+    list: list.map(convertAssessmentResultToCamelCase),
+    total: totalResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 获取服务商排名
+ */
+export async function getProviderRanking(params = {}) {
+  const db = getDatabase()
+  const { conditionType, period, limit = 10 } = params
+  
+  let query = `
+    SELECT 
+      provider_id,
+      provider_name,
+      COUNT(*) as total_assessments,
+      SUM(CASE WHEN is_passed = 1 THEN 1 ELSE 0 END) as passed_count,
+      ROUND(AVG(score), 2) as avg_score,
+      ROUND(SUM(CASE WHEN is_passed = 1 THEN 1.0 ELSE 0 END) / COUNT(*) * 100, 2) as pass_rate
+    FROM tms_assessment_results
+    WHERE provider_id IS NOT NULL
+  `
+  const queryParams = []
+  
+  if (conditionType) {
+    query += ' AND condition_type = ?'
+    queryParams.push(conditionType)
+  }
+  
+  if (period) {
+    query += ' AND period = ?'
+    queryParams.push(period)
+  }
+  
+  query += `
+    GROUP BY provider_id, provider_name
+    ORDER BY avg_score DESC, pass_rate DESC
+    LIMIT ?
+  `
+  queryParams.push(limit)
+  
+  const rankings = await db.prepare(query).all(...queryParams)
+  
+  return rankings.map((row, index) => ({
+    rank: index + 1,
+    providerId: row.provider_id,
+    providerName: row.provider_name,
+    totalAssessments: row.total_assessments,
+    passedCount: row.passed_count,
+    avgScore: row.avg_score,
+    passRate: row.pass_rate
+  }))
+}
+
+/**
+ * 获取考核汇总统计
+ */
+export async function getAssessmentSummary(params = {}) {
+  const db = getDatabase()
+  const { period } = params
+  
+  let query = `
+    SELECT 
+      condition_type,
+      COUNT(*) as total,
+      SUM(CASE WHEN is_passed = 1 THEN 1 ELSE 0 END) as passed,
+      ROUND(AVG(score), 2) as avg_score
+    FROM tms_assessment_results
+    WHERE 1=1
+  `
+  const queryParams = []
+  
+  if (period) {
+    query += ' AND period = ?'
+    queryParams.push(period)
+  }
+  
+  query += ' GROUP BY condition_type'
+  
+  const summary = await db.prepare(query).all(...queryParams)
+  
+  return summary.map(row => ({
+    conditionType: row.condition_type,
+    total: row.total,
+    passed: row.passed,
+    failed: row.total - row.passed,
+    passRate: row.total > 0 ? ((row.passed / row.total) * 100).toFixed(2) : 0,
+    avgScore: row.avg_score
+  }))
+}
+
+/**
+ * 转换考核条件为驼峰命名
+ */
+export function convertConditionToCamelCase(row) {
+  if (!row) return null
+  
+  // 解析scopeValues
+  let scopeValues = null
+  if (row.scope_values) {
+    try {
+      scopeValues = JSON.parse(row.scope_values)
+    } catch (e) {
+      scopeValues = null
+    }
+  }
+  
+  return {
+    id: row.id,
+    conditionCode: row.condition_code,
+    conditionName: row.condition_name,
+    conditionType: row.condition_type,
+    metricName: row.metric_name,
+    operator: row.operator,
+    thresholdValue: row.threshold_value,
+    thresholdValue2: row.threshold_value2,
+    unit: row.unit,
+    weight: row.weight,
+    scopeType: row.scope_type,
+    scopeValues: scopeValues,
+    alertEnabled: row.alert_enabled === 1,
+    alertLevel: row.alert_level,
+    description: row.description,
+    status: row.status,
+    createTime: row.created_at,
+    updateTime: row.updated_at
+  }
+}
+
+/**
+ * 转换考核结果为驼峰命名
+ */
+export function convertAssessmentResultToCamelCase(row) {
+  if (!row) return null
+  
+  return {
+    id: row.id,
+    providerId: row.provider_id,
+    providerName: row.provider_name,
+    billId: row.bill_id,
+    billNumber: row.bill_number,
+    conditionId: row.condition_id,
+    conditionCode: row.condition_code,
+    conditionType: row.condition_type,
+    actualValue: row.actual_value,
+    thresholdValue: row.threshold_value,
+    isPassed: row.is_passed === 1,
+    score: row.score,
+    assessmentTime: row.assessment_time,
+    period: row.period,
+    remark: row.remark,
+    createTime: row.created_at
+  }
+}
+
 export default {
   // 常量
   CMR_STATUS,
   CMR_STEPS,
   EXCEPTION_STATUS,
+  CONDITION_TYPES,
+  OPERATORS,
+  ALERT_LEVELS,
+  SCOPE_TYPES,
   
   // CMR列表
   getCMRList,
@@ -873,12 +1396,29 @@ export default {
   updateServiceProvider,
   deleteServiceProvider,
   
+  // 考核条件管理
+  getConditions,
+  getConditionById,
+  createCondition,
+  updateCondition,
+  deleteCondition,
+  matchConditions,
+  getConditionStats,
+  
+  // 考核结果管理
+  recordAssessmentResult,
+  getAssessmentReport,
+  getProviderRanking,
+  getAssessmentSummary,
+  
   // 日志
   addTMSLog,
   getTMSLogs,
   
   // 转换函数
   convertCMRToCamelCase,
-  convertServiceProviderToCamelCase
+  convertServiceProviderToCamelCase,
+  convertConditionToCamelCase,
+  convertAssessmentResultToCamelCase
 }
 

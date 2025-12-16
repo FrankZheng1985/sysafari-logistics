@@ -187,6 +187,7 @@ export async function getDocumentById(id) {
 export async function createDocument(data) {
   const db = getDatabase()
   const id = generateId()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   
   const result = await db.prepare(`
     INSERT INTO documents (
@@ -195,7 +196,7 @@ export async function createDocument(data) {
       description, tags, version, status,
       uploaded_by, uploaded_by_name, upload_time,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.documentName,
@@ -212,7 +213,8 @@ export async function createDocument(data) {
     data.version || 1,
     data.status || 'approved',
     data.uploadedBy || null,
-    data.uploadedByName || ''
+    data.uploadedByName || '',
+    now
   )
   
   return { id }
@@ -248,7 +250,7 @@ export async function updateDocument(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -287,11 +289,12 @@ export async function deleteDocument(id) {
  */
 export async function updateDocumentStatus(id, status, reviewNote = '') {
   const db = getDatabase()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   const result = await db.prepare(`
     UPDATE documents 
-    SET status = ?, review_note = ?, review_time = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
+    SET status = ?, review_note = ?, review_time = ?, updated_at = NOW()
     WHERE id = ?
-  `).run(status, reviewNote, id)
+  `).run(status, reviewNote, now, id)
   return result.changes > 0
 }
 
@@ -318,7 +321,7 @@ export async function linkDocumentToEntity(documentId, entityType, entityId, ent
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE documents 
-    SET entity_type = ?, entity_id = ?, entity_number = ?, updated_at = datetime('now', 'localtime')
+    SET entity_type = ?, entity_id = ?, entity_number = ?, updated_at = NOW()
     WHERE id = ?
   `).run(entityType, entityId, entityNumber, documentId)
   return result.changes > 0
@@ -331,7 +334,7 @@ export async function unlinkDocumentFromEntity(documentId) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE documents 
-    SET entity_type = NULL, entity_id = NULL, entity_number = '', updated_at = datetime('now', 'localtime')
+    SET entity_type = NULL, entity_id = NULL, entity_number = '', updated_at = NOW()
     WHERE id = ?
   `).run(documentId)
   return result.changes > 0
@@ -404,7 +407,7 @@ export async function createTemplate(data) {
       id, template_name, template_type, file_path, file_name,
       description, variables, sort_order, status,
       created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.templateName,
@@ -454,7 +457,7 @@ export async function updateTemplate(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now', 'localtime')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE document_templates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -502,6 +505,7 @@ export async function getDocumentVersions(documentId) {
 export async function createDocumentVersion(data) {
   const db = getDatabase()
   const id = generateId()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   
   // 获取当前最高版本
   const latest = await db.prepare(`
@@ -514,7 +518,7 @@ export async function createDocumentVersion(data) {
     INSERT INTO document_versions (
       id, document_id, version, file_path, file_size,
       change_note, uploaded_by, uploaded_by_name, upload_time
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     data.documentId,
@@ -523,13 +527,14 @@ export async function createDocumentVersion(data) {
     data.fileSize || 0,
     data.changeNote || '',
     data.uploadedBy || null,
-    data.uploadedByName || ''
+    data.uploadedByName || '',
+    now
   )
   
   // 更新主文档版本号和文件路径
   await db.prepare(`
     UPDATE documents 
-    SET version = ?, file_path = ?, file_size = ?, updated_at = datetime('now', 'localtime')
+    SET version = ?, file_path = ?, file_size = ?, updated_at = NOW()
     WHERE id = ?
   `).run(newVersion, data.filePath, data.fileSize || 0, data.documentId)
   
