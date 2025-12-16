@@ -3,8 +3,33 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { useAuth0 } from '@auth0/auth0-react'
 import { type User } from '../utils/api'
 
-// API 基础地址（生产环境使用相对路径，通过 Vercel rewrites 转发到后端）
-const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api'
+// API 基础地址 - 根据域名自动选择
+function getApiBaseUrl(): string {
+  // 开发环境
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3001/api'
+  }
+  
+  // 根据当前域名自动选择 API
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    
+    // 演示环境 -> 演示 API
+    if (hostname === 'demo.xianfeng-eu.com') {
+      return 'https://sysafari-logistics-demo-api.onrender.com/api'
+    }
+    
+    // 生产环境 -> 生产 API
+    if (hostname === 'erp.xianfeng-eu.com') {
+      return 'https://sysafari-logistics-api.onrender.com/api'
+    }
+  }
+  
+  // 默认使用相对路径（通过 Vercel rewrites 转发）
+  return '/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 interface AuthState {
   user: User | null
