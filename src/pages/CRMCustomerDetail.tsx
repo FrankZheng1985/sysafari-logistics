@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
-  ArrowLeft, Building, User, Phone, Mail, MapPin,
+  ArrowLeft, Building, Building2, User, Phone, Mail, MapPin,
   Package, TrendingUp, Ship, Plus, Trash2, Star,
-  Edit, ExternalLink, RefreshCw, FileText, X
+  Edit, ExternalLink, RefreshCw, FileText, X, CheckCircle
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -1322,10 +1322,96 @@ function TaxModal({
   const [vatValidating, setVatValidating] = useState(false)
   const [eoriValidating, setEoriValidating] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+  
+  // 共享税号选择相关状态
+  const [taxSource, setTaxSource] = useState<'self' | 'shared'>('self')
+  const [sharedTaxList, setSharedTaxList] = useState<Array<{
+    id: number
+    taxType: 'vat' | 'eori' | 'other'
+    taxNumber: string
+    country?: string
+    companyShortName?: string
+    companyName?: string
+    companyAddress?: string
+    isVerified: boolean
+  }>>([])
+  const [sharedTaxSearch, setSharedTaxSearch] = useState('')
+  const [loadingSharedTax, setLoadingSharedTax] = useState(false)
 
   useEffect(() => {
     loadCountries()
   }, [])
+
+  // 加载共享税号列表
+  const loadSharedTaxNumbers = async () => {
+    setLoadingSharedTax(true)
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/crm/shared-tax-numbers?status=active`)
+      const data = await response.json()
+      if (data.errCode === 200 && data.data) {
+        setSharedTaxList(data.data)
+      }
+    } catch (error) {
+      console.error('加载共享税号失败:', error)
+    } finally {
+      setLoadingSharedTax(false)
+    }
+  }
+
+  useEffect(() => {
+    if (taxSource === 'shared' && sharedTaxList.length === 0) {
+      loadSharedTaxNumbers()
+    }
+  }, [taxSource])
+
+  // 选择共享税号填充表单
+  const handleSelectSharedTax = (sharedTax: typeof sharedTaxList[0]) => {
+    if (sharedTax.taxType === 'vat') {
+      setFormData(prev => ({
+        ...prev,
+        vatEnabled: true,
+        vatNumber: sharedTax.taxNumber,
+        vatVerified: sharedTax.isVerified,
+        vatValidationStatus: sharedTax.isVerified ? 'valid' : 'none',
+        companyShortName: prev.companyShortName || sharedTax.companyShortName || '',
+        companyName: prev.companyName || sharedTax.companyName || '',
+        companyAddress: prev.companyAddress || sharedTax.companyAddress || '',
+        country: prev.country || sharedTax.country || ''
+      }))
+      if (sharedTax.country) setCountrySearch(sharedTax.country)
+    } else if (sharedTax.taxType === 'eori') {
+      setFormData(prev => ({
+        ...prev,
+        eoriEnabled: true,
+        eoriNumber: sharedTax.taxNumber,
+        eoriVerified: sharedTax.isVerified,
+        eoriValidationStatus: sharedTax.isVerified ? 'valid' : 'none',
+        companyShortName: prev.companyShortName || sharedTax.companyShortName || '',
+        companyName: prev.companyName || sharedTax.companyName || '',
+        companyAddress: prev.companyAddress || sharedTax.companyAddress || '',
+        country: prev.country || sharedTax.country || ''
+      }))
+      if (sharedTax.country) setCountrySearch(sharedTax.country)
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        otherEnabled: true,
+        otherNumber: sharedTax.taxNumber,
+        companyShortName: prev.companyShortName || sharedTax.companyShortName || '',
+        companyName: prev.companyName || sharedTax.companyName || '',
+        companyAddress: prev.companyAddress || sharedTax.companyAddress || '',
+        country: prev.country || sharedTax.country || ''
+      }))
+      if (sharedTax.country) setCountrySearch(sharedTax.country)
+    }
+  }
+
+  // 过滤共享税号列表
+  const filteredSharedTaxList = sharedTaxList.filter(tax => 
+    tax.taxNumber.toLowerCase().includes(sharedTaxSearch.toLowerCase()) ||
+    (tax.companyName || '').toLowerCase().includes(sharedTaxSearch.toLowerCase()) ||
+    (tax.companyShortName || '').toLowerCase().includes(sharedTaxSearch.toLowerCase())
+  )
 
   useEffect(() => {
     if (isEditMode && initialCompanyTaxes) {
@@ -1373,6 +1459,8 @@ function TaxModal({
         otherNumber: ''
       })
       setCountrySearch('')
+      setTaxSource('self')  // 重置为自建模式
+      setSharedTaxSearch('')
     }
     setValidationError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1688,6 +1776,90 @@ function TaxModal({
           </button>
         </div>
         <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+          {/* 新增模式下显示来源选择 */}
+          {!isEditMode && (
+            <div className="mb-3">
+              <label className="block text-xs font-medium text-gray-700 mb-2">税号来源</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="taxSource"
+                    value="self"
+                    checked={taxSource === 'self'}
+                    onChange={() => setTaxSource('self')}
+                    className="w-4 h-4 text-primary-600"
+                  />
+                  <span className="text-xs text-gray-700">自建税号</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="taxSource"
+                    value="shared"
+                    checked={taxSource === 'shared'}
+                    onChange={() => setTaxSource('shared')}
+                    className="w-4 h-4 text-primary-600"
+                  />
+                  <span className="text-xs text-gray-700">从共享库选择</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* 共享税号选择 */}
+          {!isEditMode && taxSource === 'shared' && (
+            <div className="mb-3 p-3 border border-amber-200 rounded-lg bg-amber-50">
+              <div className="flex items-center gap-2 mb-2">
+                <Building2 className="w-4 h-4 text-amber-600" />
+                <span className="text-xs font-medium text-amber-800">共享税号库</span>
+              </div>
+              <input
+                type="text"
+                value={sharedTaxSearch}
+                onChange={(e) => setSharedTaxSearch(e.target.value)}
+                placeholder="搜索税号或公司名称..."
+                className="w-full px-2.5 py-1.5 text-xs border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-500 mb-2"
+              />
+              <div className="max-h-40 overflow-y-auto space-y-1">
+                {loadingSharedTax ? (
+                  <div className="text-xs text-gray-400 text-center py-2">加载中...</div>
+                ) : filteredSharedTaxList.length === 0 ? (
+                  <div className="text-xs text-gray-400 text-center py-2">暂无共享税号</div>
+                ) : (
+                  filteredSharedTaxList.map(tax => (
+                    <div
+                      key={tax.id}
+                      onClick={() => handleSelectSharedTax(tax)}
+                      className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-white cursor-pointer"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 text-[10px] rounded ${
+                            tax.taxType === 'vat' ? 'bg-blue-100 text-blue-700' : 
+                            tax.taxType === 'eori' ? 'bg-green-100 text-green-700' : 
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {tax.taxType.toUpperCase()}
+                          </span>
+                          <span className="text-xs font-mono truncate">{tax.taxNumber}</span>
+                          {tax.isVerified && <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />}
+                        </div>
+                        <div className="text-[10px] text-gray-500 truncate mt-0.5">
+                          {tax.companyShortName || tax.companyName || '-'}
+                        </div>
+                      </div>
+                      <Plus className="w-4 h-4 text-amber-600 flex-shrink-0 ml-2" />
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="text-[10px] text-amber-600 mt-2">
+                💡 点击税号添加到下方表单，可同时选择多个
+              </div>
+            </div>
+          )}
+
           {/* 税号类型多选 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">税号类型 *</label>
