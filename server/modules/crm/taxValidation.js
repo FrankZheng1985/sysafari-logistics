@@ -241,21 +241,30 @@ export async function validateVAT(vatNumber, countryCode = null) {
 }
 
 /**
- * 调用欧盟EORI验证API
+ * 调用欧盟EORI验证SOAP API
  */
 async function callEoriApi(eoriNumber) {
+  // EORI SOAP请求XML
+  const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:eor="http://eori.ws.eos.dds.s/">
+   <soapenv:Header/>
+   <soapenv:Body>
+      <eor:validateEORI>
+         <eor:eori>${eoriNumber}</eor:eori>
+      </eor:validateEORI>
+   </soapenv:Body>
+</soapenv:Envelope>`
+
   return new Promise((resolve, reject) => {
-    // 使用欧盟官方EORI验证服务
-    const url = `https://ec.europa.eu/taxation_customs/dds2/eos/validation/services/validation?eori=${encodeURIComponent(eoriNumber)}`
-    
     const options = {
       hostname: 'ec.europa.eu',
       port: 443,
-      path: `/taxation_customs/dds2/eos/validation/services/validation?eori=${encodeURIComponent(eoriNumber)}`,
-      method: 'GET',
+      path: '/taxation_customs/dds2/eos/validation/services/validation',
+      method: 'POST',
       headers: {
-        'Accept': 'application/xml',
-        'User-Agent': 'Mozilla/5.0'
+        'Content-Type': 'text/xml;charset=UTF-8',
+        'Content-Length': Buffer.byteLength(soapRequest),
+        'SOAPAction': ''
       },
       timeout: 30000
     }
@@ -269,36 +278,64 @@ async function callEoriApi(eoriNumber) {
       
       res.on('end', () => {
         try {
-          console.log('[EORI响应]', data.substring(0, 500)) // 记录响应便于调试
+          console.log('[EORI响应]', data.substring(0, 800)) // 记录响应便于调试
           
-          // 解析响应 - EORI验证返回XML，支持带命名空间前缀
-          const statusMatch = data.match(/<(?:\w+:)?status(?:Code)?>(\d+)<\/(?:\w+:)?status(?:Code)?>/i)
-          const resultMatch = data.match(/<(?:\w+:)?result>(\w+)<\/(?:\w+:)?result>/i)
+          // 解析SOAP响应 - 支持带命名空间前缀
+          // EORI验证响应格式: <result><eori>...</eori><status>0</status><statusDescr>Valid</statusDescr><name>...</name></result>
+          const statusMatch = data.match(/<(?:\w+:)?status>(\d+)<\/(?:\w+:)?status>/i)
+          const statusDescrMatch = data.match(/<(?:\w+:)?statusDescr>([^<]*)<\/(?:\w+:)?statusDescr>/i)
           const nameMatch = data.match(/<(?:\w+:)?name>([^<]*)<\/(?:\w+:)?name>/i)
           const addressMatch = data.match(/<(?:\w+:)?address>([^<]*)<\/(?:\w+:)?address>/i)
+          const streetMatch = data.match(/<(?:\w+:)?street>([^<]*)<\/(?:\w+:)?street>/i)
+          const cityMatch = data.match(/<(?:\w+:)?city>([^<]*)<\/(?:\w+:)?city>/i)
+          const postalCodeMatch = data.match(/<(?:\w+:)?postalCode>([^<]*)<\/(?:\w+:)?postalCode>/i)
+          const countryMatch = data.match(/<(?:\w+:)?country>([^<]*)<\/(?:\w+:)?country>/i)
+          const faultMatch = data.match(/<(?:\w+:)?faultstring>([^<]*)<\/(?:\w+:)?faultstring>/i)
           
-          // 状态码 0 = 有效, 1 = 无效；确保返回布尔值
+          if (faultMatch) {
+            resolve({
+              valid: false,
+              error: faultMatch[1],
+              eoriNumber,
+              rawResponse: data
+            })
+            return
+          }
+          
+          // 状态码 0 = 有效
           const isValid = statusMatch ? statusMatch[1] === '0' : false
+          
+          // 组合地址
+          let fullAddress = ''
+          if (addressMatch) {
+            fullAddress = decodeXmlEntities(addressMatch[1].trim())
+          } else {
+            const parts = []
+            if (streetMatch) parts.push(decodeXmlEntities(streetMatch[1].trim()))
+            if (postalCodeMatch) parts.push(decodeXmlEntities(postalCodeMatch[1].trim()))
+            if (cityMatch) parts.push(decodeXmlEntities(cityMatch[1].trim()))
+            if (countryMatch) parts.push(decodeXmlEntities(countryMatch[1].trim()))
+            fullAddress = parts.join(', ')
+          }
           
           resolve({
             valid: isValid,
             eoriNumber,
             companyName: nameMatch ? decodeXmlEntities(nameMatch[1].trim()) : '',
-            companyAddress: addressMatch ? decodeXmlEntities(addressMatch[1].trim()) : '',
+            companyAddress: fullAddress,
+            statusDescription: statusDescrMatch ? statusDescrMatch[1] : '',
             requestDate: new Date().toISOString(),
             rawResponse: data
           })
         } catch (error) {
-          // 如果解析失败，尝试简单判断
-          const isValid = data.includes('<status>0</status>') || data.toLowerCase().includes('valid')
           resolve({
-            valid: isValid,
+            valid: false,
             eoriNumber,
             companyName: '',
             companyAddress: '',
             requestDate: new Date().toISOString(),
             rawResponse: data,
-            error: `响应解析不完整: ${error.message}`
+            error: `响应解析失败: ${error.message}`
           })
         }
       })
@@ -313,6 +350,7 @@ async function callEoriApi(eoriNumber) {
       reject(new Error('EORI API请求超时'))
     })
 
+    req.write(soapRequest)
     req.end()
   })
 }
