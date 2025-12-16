@@ -245,7 +245,7 @@ export default function CRMCustomerDetail() {
       width: 140,
       render: (item) => (
         <button
-          onClick={() => navigate(`/bookings/bills/${item.id}`)}
+          onClick={() => navigate(`/bookings/bill/${item.id}`)}
           className="text-primary-600 hover:text-primary-800 hover:underline font-medium"
         >
           {item.billNumber}
@@ -317,7 +317,7 @@ export default function CRMCustomerDetail() {
       width: 60,
       render: (item) => (
         <button
-          onClick={() => navigate(`/bookings/bills/${item.id}`)}
+          onClick={() => navigate(`/bookings/bill/${item.id}`)}
           className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
           title="查看详情"
         >
