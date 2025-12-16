@@ -844,14 +844,14 @@ export default function BillDetails() {
                     <span className="text-xs text-gray-500">派送状态</span>
                   </div>
                   <div className={`text-xs font-semibold ${
-                    billDetail.deliveryStatus === '未派送' ? 'text-gray-600' :
+                    billDetail.deliveryStatus === '待派送' ? 'text-gray-600' :
                     billDetail.deliveryStatus === '派送中' ? 'text-blue-600' :
                     billDetail.deliveryStatus === '已送达' ? 'text-green-600' :
                     billDetail.deliveryStatus === '订单异常' ? 'text-red-600' :
                     billDetail.deliveryStatus === '异常关闭' ? 'text-gray-500' :
                     'text-gray-600'
                   }`}>
-                    {billDetail.deliveryStatus || '未派送'}
+                    {billDetail.deliveryStatus || '待派送'}
                   </div>
                 </div>
 
@@ -1452,7 +1452,7 @@ export default function BillDetails() {
                             <span className="ml-1 text-amber-500">✓</span>
                           )}
                         </button>
-                        {billDetail.deliveryStatus === '未派送' && (
+                        {billDetail.deliveryStatus === '待派送' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要开始派送吗？')) return
@@ -1480,7 +1480,7 @@ export default function BillDetails() {
                           onClick={() => {
                             // 根据派送状态决定跳转到哪个标签页
                             let path = '/cmr-manage'
-                            const status = billDetail.deliveryStatus || '未派送'
+                            const status = billDetail.deliveryStatus || '待派送'
                             if (status === '派送中') {
                               path = '/cmr-manage/delivering'
                             } else if (status === '订单异常' || status === '异常关闭') {
@@ -1496,13 +1496,13 @@ export default function BillDetails() {
                         </button>
                         <div className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded">
                           当前状态: <span className={`font-medium ${
-                            billDetail.deliveryStatus === '未派送' ? 'text-gray-600' :
+                            billDetail.deliveryStatus === '待派送' ? 'text-gray-600' :
                             billDetail.deliveryStatus === '派送中' ? 'text-blue-600' :
                             billDetail.deliveryStatus === '已送达' ? 'text-green-600' :
                             billDetail.deliveryStatus === '订单异常' ? 'text-red-600' :
                             billDetail.deliveryStatus === '异常关闭' ? 'text-gray-500' :
                             'text-gray-600'
-                          }`}>{billDetail.deliveryStatus || '未派送'}</span>
+                          }`}>{billDetail.deliveryStatus || '待派送'}</span>
                         </div>
                       </div>
                     </ModuleWrapper>
@@ -2042,7 +2042,7 @@ export default function BillDetails() {
                     // 保持当前派送状态不变，只更新 CMR 详情
                     const response = await updateBillDelivery(
                       String(billDetail.id),
-                      billDetail.deliveryStatus || '未派送',
+                      billDetail.deliveryStatus || '待派送',
                       undefined,
                       cmrDetail
                     )

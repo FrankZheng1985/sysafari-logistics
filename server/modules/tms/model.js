@@ -8,7 +8,7 @@ import { getDatabase, generateId } from '../../config/database.js'
 // ==================== CMR派送状态常量 ====================
 
 export const CMR_STATUS = {
-  NOT_DELIVERED: '未派送',
+  NOT_DELIVERED: '待派送',
   DELIVERING: '派送中',
   DELIVERED: '已送达',
   EXCEPTION: '订单异常',
@@ -36,7 +36,7 @@ export const EXCEPTION_STATUS = {
  * 获取CMR管理列表
  * 
  * 订单流转规则:
- * - undelivered（未派送）: 已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为未派送
+ * - undelivered（待派送）: 已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为待派送
  * - delivering（派送中）: 派送状态为派送中
  * - exception（订单异常）: 派送状态为订单异常或异常关闭
  * - archived（已归档）: 派送状态为已送达或已完成
@@ -52,11 +52,11 @@ export async function getCMRList(params = {}) {
   switch (type) {
     case 'undelivered':
     case 'pending':
-      // 未派送: 必须已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为未派送
+      // 待派送: 必须已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为待派送
       query += ` AND ship_status = '已到港' 
                  AND customs_status = '已放行' 
                  AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-                 AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')`
+                 AND delivery_status = '待派送'`
       break
     case 'delivering':
       // 派送中
@@ -75,11 +75,11 @@ export async function getCMRList(params = {}) {
       // 所有订单（用于搜索等场景）
       break
     default:
-      // 默认显示未派送
+      // 默认显示待派送
       query += ` AND ship_status = '已到港' 
                  AND customs_status = '已放行' 
                  AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-                 AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')`
+                 AND delivery_status = '待派送'`
   }
   
   // 搜索
@@ -115,7 +115,7 @@ export async function getCMRList(params = {}) {
  * 获取CMR统计数据
  * 
  * 统计规则（遵循订单流转规则）:
- * - undelivered: 已到港 + 清关放行 + 查验通过 + 未派送
+ * - undelivered: 已到港 + 清关放行 + 查验通过 + 待派送
  * - delivering: 派送中
  * - exception: 订单异常 + 异常关闭
  * - archived: 已送达 + 已完成
@@ -129,7 +129,7 @@ export async function getCMRStats() {
         WHEN ship_status = '已到港' 
              AND customs_status = '已放行' 
              AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-             AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')
+             AND delivery_status = '待派送'
              AND (is_void = 0 OR is_void IS NULL)
              AND status != '草稿'
         THEN 1 ELSE 0 END) as undelivered,

@@ -86,7 +86,7 @@ export const INSPECTION_STATUS = {
 
 // 派送状态
 export const DELIVERY_STATUS = {
-  NOT_DELIVERED: '未派送',
+  NOT_DELIVERED: '待派送',
   DELIVERING: '派送中',
   DELIVERED: '已送达',
   EXCEPTION: '订单异常',

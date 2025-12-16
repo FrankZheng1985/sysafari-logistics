@@ -168,7 +168,7 @@ export default function CMRExceptionManage() {
       key: 'deliveryStatus',
       label: '派送状态',
       render: (item) => {
-        const status = item.deliveryStatus || '未派送'
+        const status = item.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (

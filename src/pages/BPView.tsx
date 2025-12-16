@@ -266,16 +266,16 @@ export default function BPView() {
       key: 'deliveryStatus',
       label: '派送状态',
       filters: [
-        { text: '未派送', value: '未派送' },
+        { text: '待派送', value: '待派送' },
         { text: '派送中', value: '派送中' },
         { text: '订单异常', value: '订单异常' },
         { text: '已送达', value: '已送达' },
       ],
-      onFilter: (value, record) => (record.deliveryStatus || '未派送') === value,
+      onFilter: (value, record) => (record.deliveryStatus || '待派送') === value,
       render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '未派送'
+        const status = item.deliveryStatus || '待派送'
         const statusStyles: Record<string, string> = {
-          '未派送': 'bg-gray-400',
+          '待派送': 'bg-gray-400',
           '派送中': 'bg-orange-500',
           '已送达': 'bg-green-500',
           '订单异常': 'bg-red-500',

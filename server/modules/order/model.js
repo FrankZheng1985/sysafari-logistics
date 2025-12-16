@@ -205,7 +205,7 @@ export async function createBill(data) {
     data.shipStatus || '未到港',
     data.customsStatus || '未放行',
     data.inspection || '-',
-    data.deliveryStatus || '未派送',
+    data.deliveryStatus || '待派送',
     data.remark || '',
     data.operator || '系统',
     data.customerId || null,
@@ -614,7 +614,7 @@ export async function getBillStats() {
  * 获取CMR管理列表（按派送状态分类）
  * 
  * CMR管理显示规则：
- * - undelivered（未派送）: 已到港且清关放行，查验通过（无查验或已放行），派送状态为未派送
+ * - undelivered（待派送）: 已到港且清关放行，查验通过（无查验或已放行），派送状态为待派送
  * - delivering（派送中）: 派送状态为派送中
  * - exception（订单异常）: 派送状态为订单异常或异常关闭
  * - archived（已归档）: 派送状态为已送达
@@ -629,11 +629,11 @@ export async function getCMRList(type = 'delivering', params = {}) {
   // 根据类型筛选
   switch (type) {
     case 'undelivered':
-      // 未派送: 已到港、清关放行、查验通过（无查验或已放行），派送状态为未派送
+      // 待派送: 已到港、清关放行、查验通过（无查验或已放行），派送状态为待派送
       query += ` AND ship_status = '已到港' 
                  AND customs_status = '已放行' 
                  AND (inspection = '-' OR inspection = '已放行')
-                 AND (delivery_status IS NULL OR delivery_status = '未派送')`
+                 AND delivery_status = '待派送'`
       break
     case 'delivering':
       // 派送中
@@ -648,8 +648,8 @@ export async function getCMRList(type = 'delivering', params = {}) {
       query += " AND delivery_status = '已送达'"
       break
     default:
-      // 默认显示所有非未派送的订单
-      query += " AND delivery_status IS NOT NULL AND delivery_status != '未派送'"
+      // 默认显示所有非待派送的订单
+      query += " AND delivery_status != '待派送'"
   }
   
   // 搜索

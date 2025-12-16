@@ -140,13 +140,13 @@ export default function TMSDashboard() {
 
   const getStatusConfig = (status: string) => {
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof Truck }> = {
-      '未派送': { label: '待派送', color: 'text-gray-600', bg: 'bg-gray-100', icon: Clock },
+      '待派送': { label: '待派送', color: 'text-gray-600', bg: 'bg-gray-100', icon: Clock },
       '派送中': { label: '派送中', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
       '已送达': { label: '已送达', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
       '订单异常': { label: '异常', color: 'text-red-600', bg: 'bg-red-100', icon: AlertTriangle },
       '异常关闭': { label: '已关闭', color: 'text-gray-400', bg: 'bg-gray-50', icon: XCircle },
     }
-    return configs[status] || configs['未派送']
+    return configs[status] || configs['待派送']
   }
 
   if (loading) {

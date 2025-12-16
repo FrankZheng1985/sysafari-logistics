@@ -3722,7 +3722,7 @@ app.put('/api/bills/:id/inspection', (req, res) => {
 
 // 获取 CMR 列表（基于派送状态分类）
 // 订单流转规则:
-// - undelivered（未派送）: 已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为未派送
+// - undelivered（待派送）: 已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为待派送
 // - delivering（派送中）: 派送状态为派送中
 // - exception（订单异常）: 派送状态为订单异常或异常关闭
 // - archived（已归档）: 派送状态为已送达
@@ -3736,11 +3736,11 @@ app.get('/api/cmr', (req, res) => {
     
     // 根据类型过滤（按照订单流转规则）
     if (type === 'undelivered') {
-      // 未派送: 必须已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为未派送
+      // 待派送: 必须已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为待派送
       query += ` AND ship_status = '已到港' 
                  AND customs_status = '已放行' 
                  AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-                 AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')`
+                 AND delivery_status = '待派送'`
     } else if (type === 'delivering') {
       // 派送中
       query += ' AND delivery_status = ?'
@@ -3770,14 +3770,14 @@ app.get('/api/cmr', (req, res) => {
     
     // 统计各状态数量（按照订单流转规则）
     const stats = {
-      // 未派送: 已到港 + 清关放行 + 查验通过 + 未派送
+      // 待派送: 已到港 + 清关放行 + 查验通过 + 待派送
       undelivered: db.prepare(`
         SELECT COUNT(*) as count FROM bills_of_lading 
         WHERE status != '草稿' AND (is_void = 0 OR is_void IS NULL)
         AND ship_status = '已到港' 
         AND customs_status = '已放行' 
         AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-        AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')
+        AND delivery_status = '待派送'
       `).get().count,
       // 派送中
       delivering: db.prepare("SELECT COUNT(*) as count FROM bills_of_lading WHERE status != '草稿' AND (is_void = 0 OR is_void IS NULL) AND delivery_status = '派送中'").get().count,
@@ -3909,7 +3909,7 @@ app.put('/api/bills/:id/delivery', (req, res) => {
     
     // 记录操作日志
     const operationNameMap = {
-      '未派送': '设为未派送',
+      '待派送': '设为待派送',
       '派送中': '开始派送',
       '已送达': '确认送达',
       '订单异常': '标记订单异常',
@@ -10586,14 +10586,14 @@ app.get('/api/payments', (req, res) => {
 // 获取CMR统计数据
 app.get('/api/cmr/stats', (req, res) => {
   try {
-    // 待派送: 需要满足完整的订单流转条件（已到港 + 清关放行 + 查验通过）
+    // 待派送: 需要满足完整的订单流转条件（已到港 + 清关放行 + 查验通过）+ 派送状态为待派送
     const pending = db.prepare(`
       SELECT COUNT(*) as count FROM bills_of_lading 
       WHERE status != '草稿' AND (is_void = 0 OR is_void IS NULL)
       AND ship_status = '已到港' 
       AND customs_status = '已放行' 
       AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-      AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送' OR delivery_status = '待派送')
+      AND delivery_status = '待派送'
     `).get()
     
     const stats = db.prepare(`
@@ -10933,18 +10933,33 @@ async function migrateDeliveryStatus() {
   try {
     const db = getDatabase()
     
-    // 检查是否有"配送中"状态的记录
-    const count = await db.prepare(`
+    // 1. 将"配送中"更新为"派送中"
+    const count1 = await db.prepare(`
       SELECT COUNT(*) as count FROM bills_of_lading WHERE delivery_status = '配送中'
     `).get()
     
-    if (count && count.count > 0) {
-      console.log(`🔄 正在统一派送状态：发现 ${count.count} 条"配送中"记录，更新为"派送中"...`)
-      
+    if (count1 && count1.count > 0) {
+      console.log(`🔄 正在统一派送状态：发现 ${count1.count} 条"配送中"记录，更新为"派送中"...`)
       await db.prepare(`
         UPDATE bills_of_lading SET delivery_status = '派送中' WHERE delivery_status = '配送中'
       `).run()
-      
+    }
+    
+    // 2. 将 NULL、''、'未派送' 更新为 '待派送'
+    const count2 = await db.prepare(`
+      SELECT COUNT(*) as count FROM bills_of_lading 
+      WHERE delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送'
+    `).get()
+    
+    if (count2 && count2.count > 0) {
+      console.log(`🔄 正在统一待派送状态：发现 ${count2.count} 条空值或"未派送"记录，更新为"待派送"...`)
+      await db.prepare(`
+        UPDATE bills_of_lading SET delivery_status = '待派送' 
+        WHERE delivery_status IS NULL OR delivery_status = '' OR delivery_status = '未派送'
+      `).run()
+    }
+    
+    if ((count1 && count1.count > 0) || (count2 && count2.count > 0)) {
       console.log('✅ 派送状态统一完成')
     }
   } catch (error) {

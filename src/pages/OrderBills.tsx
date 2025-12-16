@@ -187,7 +187,7 @@ export default function OrderBills() {
       return { text: '已作废', color: 'text-gray-500', bgColor: 'bg-gray-100', dotColor: 'bg-gray-400' }
     }
     
-    const deliveryStatus = bill.deliveryStatus || '未派送'
+    const deliveryStatus = bill.deliveryStatus || '待派送'
     if (deliveryStatus === '订单异常') {
       return { text: '订单异常', color: 'text-red-600', bgColor: 'bg-red-50', dotColor: 'bg-red-500' }
     }
@@ -221,7 +221,7 @@ export default function OrderBills() {
       }
     }
     
-    if (deliveryStatus === '未派送') {
+    if (deliveryStatus === '待派送') {
       return { text: '待派送', color: 'text-gray-600', bgColor: 'bg-gray-100', dotColor: 'bg-gray-500' }
     }
     if (deliveryStatus === '派送中') {

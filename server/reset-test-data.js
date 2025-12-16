@@ -175,7 +175,7 @@ const bills = [
     shipStatus: '未到港',
     customsStatus: '未放行',
     inspection: '待查验',
-    deliveryStatus: '未派送',
+    deliveryStatus: '待派送',
     customerId: 'cust003',
     customerName: '顺丰国际',
     customerCode: 'C20250003'
@@ -198,7 +198,7 @@ const bills = [
     shipStatus: '已到港',
     customsStatus: '未放行',
     inspection: '查验中',
-    deliveryStatus: '未派送',
+    deliveryStatus: '待派送',
     customerId: 'cust005',
     customerName: '中远海运',
     customerCode: 'C20250005'
@@ -244,7 +244,7 @@ const bills = [
     shipStatus: '未到港',
     customsStatus: '未放行',
     inspection: '-',
-    deliveryStatus: '未派送',
+    deliveryStatus: '待派送',
     customerId: 'cust003',
     customerName: '顺丰国际',
     customerCode: 'C20250003'

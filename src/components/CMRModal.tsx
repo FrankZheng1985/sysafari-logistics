@@ -53,7 +53,7 @@ interface CMRModalProps {
   visible: boolean
   onClose: () => void
   billNumber: string
-  currentStatus: string // 未派送, 派送中, 订单异常, 已送达
+  currentStatus: string // 待派送, 派送中, 订单异常, 已送达
   cmrDetail?: CMRDetail
   onSubmit: (data: {
     status: string
@@ -135,7 +135,7 @@ export default function CMRModal({
     } else {
       setMode('normal')
       // 根据当前状态和已填写的数据设置初始步骤
-      if (currentStatus === '未派送') {
+      if (currentStatus === '待派送') {
         setStep('pickup')
       } else if (currentStatus === '派送中') {
         // 根据已完成的数据判断下一步

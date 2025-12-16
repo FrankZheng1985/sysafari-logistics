@@ -31,7 +31,7 @@ const companies = ['中远海运', '地中海航运', '马士基', '达飞轮船
 const shipStatuses = ['未到港', '已到港', '已到港', '已到港', '已到港', '跳港'];
 const customsStatuses = ['未放行', '已放行', '已放行', '已放行', '已放行'];
 const inspectionStatuses = ['-', '-', '待查验', '查验中', '已查验', '查验放行', '已放行'];
-const deliveryStatuses = ['未派送', '未派送', '派送中', '派送中', '已送达', '订单异常'];
+const deliveryStatuses = ['待派送', '待派送', '派送中', '派送中', '已送达', '订单异常'];
 
 // 获取当前最大序号
 const maxSeq = db.prepare('SELECT MAX(order_seq) as maxSeq FROM bills_of_lading').get();
@@ -79,12 +79,12 @@ for (let i = 0; i < 20; i++) {
     shipStatus = '未到港';
     customsStatus = '未放行';
     inspection = '-';
-    deliveryStatus = '未派送';
+    deliveryStatus = '待派送';
   } else if (etaOffset > 0) {
     shipStatus = '未到港';
     customsStatus = '未放行';
     inspection = '-';
-    deliveryStatus = '未派送';
+    deliveryStatus = '待派送';
   } else {
     shipStatus = shipStatuses[Math.floor(Math.random() * shipStatuses.length)];
     if (shipStatus === '已到港') {
@@ -94,16 +94,16 @@ for (let i = 0; i < 20; i++) {
         if (inspection === '已放行' || inspection === '-') {
           deliveryStatus = deliveryStatuses[Math.floor(Math.random() * deliveryStatuses.length)];
         } else {
-          deliveryStatus = '未派送';
+          deliveryStatus = '待派送';
         }
       } else {
         inspection = i % 5 === 0 ? '待查验' : '-';
-        deliveryStatus = '未派送';
+        deliveryStatus = '待派送';
       }
     } else {
       customsStatus = '未放行';
       inspection = '-';
-      deliveryStatus = '未派送';
+      deliveryStatus = '待派送';
     }
   }
   

@@ -172,7 +172,7 @@ export default function CMRBillDetails() {
   // 获取派送状态样式
   const getDeliveryStatusStyle = (status: string) => {
     switch (status) {
-      case '未派送':
+      case '待派送':
         return { bg: 'bg-gray-100', text: 'text-gray-700', icon: <Clock className="w-3 h-3" /> }
       case '派送中':
         return { bg: 'bg-orange-100', text: 'text-orange-700', icon: <Truck className="w-3 h-3" /> }
@@ -284,7 +284,7 @@ export default function CMRBillDetails() {
     )
   }
   
-  const deliveryStatus = getDeliveryStatusStyle(billDetail.deliveryStatus || '未派送')
+  const deliveryStatus = getDeliveryStatusStyle(billDetail.deliveryStatus || '待派送')
   const cmrDetail = parseCMRDetail()
   
   return (
@@ -310,7 +310,7 @@ export default function CMRBillDetails() {
         <div className="flex items-center gap-2">
           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${deliveryStatus.bg} ${deliveryStatus.text}`}>
             {deliveryStatus.icon}
-            {billDetail.deliveryStatus || '未派送'}
+            {billDetail.deliveryStatus || '待派送'}
           </span>
           {billDetail.deliveryStatus !== '已送达' && billDetail.deliveryStatus !== '已完成' && (
             <button
@@ -319,7 +319,7 @@ export default function CMRBillDetails() {
             >
               <Truck className="w-3 h-3" />
               {/* 根据步骤显示不同的按钮文字 */}
-              {billDetail.deliveryStatus === '未派送' ? '开始派送' :
+              {billDetail.deliveryStatus === '待派送' ? '开始派送' :
                billDetail.cmrUnloadingCompleteTime ? '完成派送' :
                billDetail.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
             </button>
@@ -406,7 +406,7 @@ export default function CMRBillDetails() {
                   <label className="block text-[10px] text-gray-500 mb-0.5">当前状态</label>
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${deliveryStatus.bg} ${deliveryStatus.text}`}>
                     {deliveryStatus.icon}
-                    {billDetail.deliveryStatus || '未派送'}
+                    {billDetail.deliveryStatus || '待派送'}
                   </span>
                 </div>
                 <div>
@@ -727,7 +727,7 @@ export default function CMRBillDetails() {
           visible={cmrModalVisible}
           onClose={() => setCmrModalVisible(false)}
           billNumber={billDetail.billNumber}
-          currentStatus={billDetail.deliveryStatus || '未派送'}
+          currentStatus={billDetail.deliveryStatus || '待派送'}
           cmrDetail={cmrDetail}
           onSubmit={handleCMRSubmit}
         />

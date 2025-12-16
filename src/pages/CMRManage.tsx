@@ -305,15 +305,15 @@ export default function CMRManage() {
       key: 'deliveryStatus',
       label: '派送状态',
       filters: [
-        { text: '未派送', value: '未派送' },
+        { text: '待派送', value: '待派送' },
         { text: '派送中', value: '派送中' },
         { text: '订单异常', value: '订单异常' },
         { text: '异常关闭', value: '异常关闭' },
         { text: '已送达', value: '已送达' },
       ],
-      onFilter: (value, record) => (record.deliveryStatus || '未派送') === value,
+      onFilter: (value, record) => (record.deliveryStatus || '待派送') === value,
       render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '未派送'
+        const status = item.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (
@@ -325,7 +325,7 @@ export default function CMRManage() {
             ) : (
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  status === '未派送' ? 'bg-gray-500' :
+                  status === '待派送' ? 'bg-gray-500' :
                   status === '派送中' ? 'bg-orange-500' :
                   status === '已送达' ? 'bg-green-500' :
                   'bg-gray-500'
@@ -371,7 +371,7 @@ export default function CMRManage() {
       key: 'actions',
       label: '操作',
       render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '未派送'
+        const status = item.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (
@@ -386,7 +386,7 @@ export default function CMRManage() {
               <Eye className="w-3 h-3" />
               详情
             </button>
-            {status === '未派送' && (
+            {status === '待派送' && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -453,11 +453,11 @@ export default function CMRManage() {
 
   const getTabTitle = () => {
     switch (tabType) {
-      case 'undelivered': return '未派送'
+      case 'undelivered': return '待派送'
       case 'delivering': return '派送中'
       case 'exception': return '订单异常'
       case 'archived': return '已归档'
-      default: return '未派送'
+      default: return '待派送'
     }
   }
   
@@ -473,7 +473,7 @@ export default function CMRManage() {
   
   const getEmptyText = () => {
     switch (tabType) {
-      case 'undelivered': return '暂无未派送的柜子'
+      case 'undelivered': return '暂无待派送的柜子'
       case 'delivering': return '暂无派送中的柜子'
       case 'exception': return '暂无异常订单'
       case 'archived': return '暂无已归档的柜子'
@@ -487,7 +487,7 @@ export default function CMRManage() {
         title="TMS管理"
         icon={<Truck className="w-6 h-6 text-primary-600" />}
         tabs={[
-          { label: '未派送', path: '/cmr-manage', count: stats.undelivered },
+          { label: '待派送', path: '/cmr-manage', count: stats.undelivered },
           { label: '派送中', path: '/cmr-manage/delivering', count: stats.delivering },
           { label: '订单异常', path: '/cmr-manage/exception', count: stats.exception || 0 },
           { label: '归档', path: '/cmr-manage/archived', count: stats.archived },
@@ -548,7 +548,7 @@ export default function CMRManage() {
           visible={cmrModalVisible}
           onClose={() => setCmrModalVisible(false)}
           billNumber={selectedBill.billNumber}
-          currentStatus={selectedBill.deliveryStatus || '未派送'}
+          currentStatus={selectedBill.deliveryStatus || '待派送'}
           cmrDetail={parseCMRDetail(selectedBill)}
           onSubmit={handleCMRSubmit}
         />

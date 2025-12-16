@@ -623,7 +623,7 @@ export async function getCMRList(req, res) {
         SUM(CASE WHEN ship_status = '已到港' 
                  AND customs_status = '已放行' 
                  AND (inspection = '-' OR inspection = '已放行')
-                 AND (delivery_status IS NULL OR delivery_status = '未派送') 
+                 AND delivery_status = '待派送' 
                  AND is_void = 0 THEN 1 ELSE 0 END) as undelivered,
         SUM(CASE WHEN delivery_status = '派送中' AND is_void = 0 THEN 1 ELSE 0 END) as delivering,
         SUM(CASE WHEN delivery_status = '已送达' AND is_void = 0 THEN 1 ELSE 0 END) as archived,
