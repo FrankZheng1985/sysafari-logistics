@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { X, Truck, MapPin, DollarSign, Calendar, FileText } from 'lucide-react'
+import { X, Truck, MapPin, DollarSign, FileText } from 'lucide-react'
 import { getTransportMethodNames } from '../utils/api'
+import DatePicker from './DatePicker'
 
 // 运输价格项目类型
 export interface TransportPriceItem {
@@ -363,31 +364,24 @@ export default function TransportPriceModal({ visible, onClose, onSave, editData
 
           {/* 有效期和备注 */}
           <div className="bg-orange-50 rounded p-3">
-            <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-orange-600" />
+            <h3 className="text-xs font-semibold text-gray-900 mb-3">
               有效期与备注
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">生效日期</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={formData.validFrom || ''}
-                  onChange={(e) => setFormData({ ...formData, validFrom: e.target.value })}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                  title="生效日期"
-                  aria-label="生效日期"
+                  onChange={(value) => setFormData({ ...formData, validFrom: value })}
+                  placeholder="选择生效日期"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">失效日期</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={formData.validTo || ''}
-                  onChange={(e) => setFormData({ ...formData, validTo: e.target.value })}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                  title="失效日期"
-                  aria-label="失效日期"
+                  onChange={(value) => setFormData({ ...formData, validTo: value })}
+                  placeholder="选择失效日期"
                 />
               </div>
               <div className="col-span-2">

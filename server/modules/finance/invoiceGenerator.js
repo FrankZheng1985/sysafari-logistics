@@ -7,7 +7,7 @@
 import puppeteer from 'puppeteer'
 import ExcelJS from 'exceljs'
 import { generateInvoiceHTML, COMPANY_INFO, getLogoBase64, getStampBase64 } from './invoiceTemplate.js'
-import { getDatabase } from '../../config/db-adapter.js'
+import { db } from '../../config/db-adapter.js'
 import * as cosStorage from './cosStorage.js'
 import { generateId } from '../../utils/id.js'
 
@@ -17,7 +17,6 @@ import { generateId } from '../../utils/id.js'
  * 每年1月1日重置序号
  */
 export async function generateInvoiceNumber() {
-  const db = getDatabase()
   const year = new Date().getFullYear()
   const prefix = `INV${year}`
   
@@ -232,8 +231,6 @@ export async function generateExcel(data) {
  * 从费用记录生成发票数据
  */
 export async function prepareInvoiceData(feeIds, customerId) {
-  const db = getDatabase()
-  
   // 获取费用记录
   const placeholders = feeIds.map(() => '?').join(',')
   const fees = await db.prepare(`
@@ -289,8 +286,6 @@ export async function prepareInvoiceData(feeIds, customerId) {
  * 5. 保存发票记录
  */
 export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
-  const db = getDatabase()
-  
   // 1. 生成发票编号
   const invoiceNumber = await generateInvoiceNumber()
   const invoiceDate = new Date().toISOString().split('T')[0]
@@ -410,8 +405,6 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
  * 重新生成发票文件（不创建新发票）
  */
 export async function regenerateInvoiceFiles(invoiceId) {
-  const db = getDatabase()
-  
   // 获取发票记录
   const invoice = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId)
   if (!invoice) {
@@ -504,8 +497,6 @@ export async function regenerateInvoiceFiles(invoiceId) {
  * 获取发票文件的临时下载URL
  */
 export async function getInvoiceDownloadUrl(invoiceId, fileType = 'pdf') {
-  const db = getDatabase()
-  
   const invoice = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId)
   if (!invoice) {
     throw new Error('发票不存在')

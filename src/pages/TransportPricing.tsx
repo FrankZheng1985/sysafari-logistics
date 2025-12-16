@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, Edit, Trash2, Calculator,
-  Truck, MapPin, Calendar
+  Truck, MapPin
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DatePicker from '../components/DatePicker'
 
 interface TransportPrice {
   id: string
@@ -697,20 +698,18 @@ export default function TransportPricing() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">生效日期</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.effectiveDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, effectiveDate: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData(prev => ({ ...prev, effectiveDate: value }))}
+                    placeholder="选择生效日期"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">失效日期</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.expiryDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, expiryDate: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData(prev => ({ ...prev, expiryDate: value }))}
+                    placeholder="选择失效日期"
                   />
                 </div>
               </div>

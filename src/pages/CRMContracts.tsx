@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DatePicker from '../components/DatePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -533,29 +534,26 @@ export default function CRMContracts() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">开始日期</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.startDate}
-                    onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData({...formData, startDate: value})}
+                    placeholder="选择开始日期"
                   />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">结束日期</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.endDate}
-                    onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData({...formData, endDate: value})}
+                    placeholder="选择结束日期"
                   />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">签署日期</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.signDate}
-                    onChange={(e) => setFormData({...formData, signDate: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData({...formData, signDate: value})}
+                    placeholder="选择签署日期"
                   />
                 </div>
               </div>

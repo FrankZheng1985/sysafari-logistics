@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Receipt, Truck, Building2, Shield, Package, FileText, Settings } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
+import DatePicker from './DatePicker'
 
 const API_BASE = getApiBaseUrl()
 
@@ -422,13 +423,10 @@ export default function FeeModal({
             <label className="block text-xs font-medium text-gray-700 mb-1">
               费用日期 <span className="text-red-500">*</span>
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={formData.feeDate}
-              onChange={(e) => setFormData(prev => ({ ...prev, feeDate: e.target.value }))}
-              className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white ${
-                errors.feeDate ? 'border-red-500' : 'border-gray-300'
-              }`}
+              onChange={(value) => setFormData(prev => ({ ...prev, feeDate: value }))}
+              placeholder="选择费用日期"
             />
             {errors.feeDate && <p className="mt-1 text-xs text-red-500">{errors.feeDate}</p>}
           </div>

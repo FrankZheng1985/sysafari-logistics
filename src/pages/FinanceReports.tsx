@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
-  Calendar, Download, TrendingUp, TrendingDown, 
+  Download, TrendingUp, TrendingDown, 
   DollarSign, PieChart, BarChart3, FileText,
   ArrowUpRight, ArrowDownRight, RefreshCw, Package
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import DatePicker from '../components/DatePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -307,19 +308,16 @@ export default function FinanceReports() {
         <div className="flex items-center gap-4">
           {/* 日期范围选择 */}
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            <input
-              type="date"
+            <DatePicker
               value={dateRange.startDate}
-              onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              onChange={(value) => setDateRange(prev => ({ ...prev, startDate: value }))}
+              placeholder="开始日期"
             />
-            <span className="text-gray-400">至</span>
-            <input
-              type="date"
+            <span className="text-gray-400 text-xs">至</span>
+            <DatePicker
               value={dateRange.endDate}
-              onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              onChange={(value) => setDateRange(prev => ({ ...prev, endDate: value }))}
+              placeholder="结束日期"
             />
           </div>
 

@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-import { Calendar, ChevronLeft, ChevronsLeft, ChevronRight, ChevronsRight } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Calendar, ChevronLeft, ChevronsLeft, ChevronRight, ChevronsRight, X } from 'lucide-react'
 
 interface DatePickerProps {
   value: string // YYYY-MM-DD 格式
@@ -21,7 +21,9 @@ export default function DatePicker({
   const [selectedDate, setSelectedDate] = useState<Date | null>(
     value ? new Date(value) : null
   )
-  const pickerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
 
   // 当外部value变化时更新selectedDate
   useEffect(() => {
@@ -36,20 +38,44 @@ export default function DatePicker({
     }
   }, [value])
 
-  // 点击外部关闭
+  // 点击外部关闭 - 使用更可靠的方式
+  const handleClickOutside = useCallback((event: MouseEvent) => {
+    const target = event.target as Node
+    
+    // 检查点击是否在触发按钮或弹出层内
+    const isInsideTrigger = triggerRef.current?.contains(target)
+    const isInsidePopup = popupRef.current?.contains(target)
+    
+    if (!isInsideTrigger && !isInsidePopup) {
+      setIsOpen(false)
+    }
+  }, [])
+
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+    if (isOpen) {
+      // 延迟添加事件监听，避免立即触发
+      const timer = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside)
+      }, 10)
+      
+      return () => {
+        clearTimeout(timer)
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [isOpen, handleClickOutside])
+
+  // ESC 键关闭
+  useEffect(() => {
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
         setIsOpen(false)
       }
     }
-
+    
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEsc)
+      return () => document.removeEventListener('keydown', handleEsc)
     }
   }, [isOpen])
 
@@ -68,7 +94,7 @@ export default function DatePicker({
     const month = currentMonth.getMonth()
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
-    const firstDayOfWeek = firstDay.getDay() === 0 ? 7 : firstDay.getDay() // 周一为1
+    const firstDayOfWeek = firstDay.getDay() === 0 ? 7 : firstDay.getDay()
     const daysInMonth = lastDay.getDate()
 
     const dates: (Date | null)[] = []
@@ -110,19 +136,23 @@ export default function DatePicker({
   }
 
   // 月份导航
-  const handlePrevMonth = () => {
+  const handlePrevMonth = (e: React.MouseEvent) => {
+    e.stopPropagation()
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))
   }
 
-  const handleNextMonth = () => {
+  const handleNextMonth = (e: React.MouseEvent) => {
+    e.stopPropagation()
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))
   }
 
-  const handlePrevYear = () => {
+  const handlePrevYear = (e: React.MouseEvent) => {
+    e.stopPropagation()
     setCurrentMonth(new Date(currentMonth.getFullYear() - 1, currentMonth.getMonth(), 1))
   }
 
-  const handleNextYear = () => {
+  const handleNextYear = (e: React.MouseEvent) => {
+    e.stopPropagation()
     setCurrentMonth(new Date(currentMonth.getFullYear() + 1, currentMonth.getMonth(), 1))
   }
 
@@ -159,48 +189,49 @@ export default function DatePicker({
   const weekDays = ['一', '二', '三', '四', '五', '六', '日']
 
   return (
-    <div ref={pickerRef} className="relative">
-      {/* 输入框 */}
-      <div className="relative">
-        <input
-          id={id}
-          type="text"
-          readOnly
-          value={formatDisplayDate(selectedDate)}
-          placeholder={placeholder}
-          onClick={() => setIsOpen(!isOpen)}
-          className={`w-full px-2 py-1 pr-6 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900 cursor-pointer ${className}`}
-        />
-        <label
-          htmlFor={id}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 cursor-pointer"
-        >
-          <Calendar className="w-3 h-3 text-gray-400 hover:text-primary-600 transition-colors" />
-        </label>
-      </div>
+    <div ref={containerRef} className="relative" style={{ display: 'inline-block' }}>
+      {/* 触发按钮 - 只有点击这个按钮才会打开日期选择器 */}
+      <button
+        ref={triggerRef}
+        type="button"
+        id={id}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`inline-flex items-center gap-1 px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 ${className}`}
+        style={{ minWidth: '110px' }}
+      >
+        <Calendar className="w-3 h-3 text-gray-400 flex-shrink-0" />
+        <span className="flex-1 text-left truncate">
+          {formatDisplayDate(selectedDate) || placeholder}
+        </span>
+      </button>
 
       {/* 日期选择器弹窗 */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 w-64">
-          {/* 输入框区域 */}
-          <div className="p-3 border-b border-gray-200">
-            <div className="relative">
-              <input
-                type="text"
-                readOnly
-                value={formatDisplayDate(selectedDate)}
-                placeholder={placeholder}
-                className="w-full px-2 py-1 pr-6 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-              />
-              <Calendar className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
-            </div>
+        <div 
+          ref={popupRef}
+          className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-[9999] w-64"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 弹窗头部 - 带关闭按钮 */}
+          <div className="flex items-center justify-between p-2 border-b border-gray-200 bg-gray-50 rounded-t-lg">
+            <span className="text-xs font-medium text-gray-600">选择日期</span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              title="关闭"
+              aria-label="关闭日期选择器"
+            >
+              <X className="w-3 h-3 text-gray-500" />
+            </button>
           </div>
 
           {/* 日历头部 */}
-          <div className="p-3 border-b border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1">
+          <div className="p-3">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-0.5">
                 <button
+                  type="button"
                   onClick={handlePrevYear}
                   className="p-1 hover:bg-gray-100 rounded transition-colors"
                   title="上一年"
@@ -208,6 +239,7 @@ export default function DatePicker({
                   <ChevronsLeft className="w-4 h-4 text-gray-600" />
                 </button>
                 <button
+                  type="button"
                   onClick={handlePrevMonth}
                   className="p-1 hover:bg-gray-100 rounded transition-colors"
                   title="上一月"
@@ -218,8 +250,9 @@ export default function DatePicker({
               <div className="text-sm font-medium text-gray-900">
                 {currentMonth.getFullYear()}年 {monthNames[currentMonth.getMonth()]}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <button
+                  type="button"
                   onClick={handleNextMonth}
                   className="p-1 hover:bg-gray-100 rounded transition-colors"
                   title="下一月"
@@ -227,6 +260,7 @@ export default function DatePicker({
                   <ChevronRight className="w-4 h-4 text-gray-600" />
                 </button>
                 <button
+                  type="button"
                   onClick={handleNextYear}
                   className="p-1 hover:bg-gray-100 rounded transition-colors"
                   title="下一年"
@@ -241,7 +275,7 @@ export default function DatePicker({
               {weekDays.map((day) => (
                 <div
                   key={day}
-                  className="text-center text-xs font-medium text-gray-600 py-1"
+                  className="text-center text-xs font-medium text-gray-500 py-1"
                 >
                   {day}
                 </div>
@@ -259,6 +293,7 @@ export default function DatePicker({
 
                 return (
                   <button
+                    type="button"
                     key={index}
                     onClick={() => handleDateSelect(date)}
                     className={`
@@ -280,10 +315,11 @@ export default function DatePicker({
           </div>
 
           {/* 底部按钮 */}
-          <div className="p-3 border-t border-gray-200">
+          <div className="p-2 border-t border-gray-200 bg-gray-50 rounded-b-lg">
             <button
+              type="button"
               onClick={handleToday}
-              className="w-full px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+              className="w-full px-3 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
             >
               今天
             </button>
@@ -293,4 +329,3 @@ export default function DatePicker({
     </div>
   )
 }
-
