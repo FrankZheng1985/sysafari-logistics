@@ -312,6 +312,7 @@ CREATE TABLE IF NOT EXISTS cities (
     city_code TEXT,
     city_name_cn TEXT NOT NULL,
     city_name_en TEXT,
+    city_name_pinyin TEXT,
     parent_id INTEGER DEFAULT 0,
     level INTEGER DEFAULT 2,
     postal_code TEXT,
@@ -1238,6 +1239,11 @@ CREATE TABLE IF NOT EXISTS customer_tax_numbers (
     tax_type TEXT NOT NULL,
     tax_number TEXT NOT NULL,
     country TEXT,
+    company_name TEXT,
+    company_address TEXT,
+    is_verified INTEGER DEFAULT 0,
+    verified_at TIMESTAMP,
+    verification_data TEXT,
     is_default INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1246,6 +1252,7 @@ CREATE TABLE IF NOT EXISTS customer_tax_numbers (
 CREATE INDEX IF NOT EXISTS idx_customer_tax_customer ON customer_tax_numbers(customer_id);
 CREATE INDEX IF NOT EXISTS idx_customer_tax_type ON customer_tax_numbers(tax_type);
 CREATE INDEX IF NOT EXISTS idx_customer_tax_default ON customer_tax_numbers(is_default);
+CREATE INDEX IF NOT EXISTS idx_customer_tax_verified ON customer_tax_numbers(is_verified);
 
 -- 完成提示
 DO $$

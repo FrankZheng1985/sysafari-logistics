@@ -860,6 +860,11 @@ export async function getCustomerTaxNumbers(customerId) {
     taxType: row.tax_type,
     taxNumber: row.tax_number,
     country: row.country,
+    companyName: row.company_name,
+    companyAddress: row.company_address,
+    isVerified: row.is_verified === 1,
+    verifiedAt: row.verified_at,
+    verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -882,14 +887,21 @@ export async function createCustomerTaxNumber(customerId, data) {
   
   const result = await db.prepare(`
     INSERT INTO customer_tax_numbers (
-      customer_id, tax_type, tax_number, country, is_default
-    ) VALUES (?, ?, ?, ?, ?)
+      customer_id, tax_type, tax_number, country, 
+      company_name, company_address, is_verified, verified_at, verification_data,
+      is_default
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).get(
     customerId,
     data.taxType,
     data.taxNumber,
     data.country || null,
+    data.companyName || null,
+    data.companyAddress || null,
+    data.isVerified ? 1 : 0,
+    data.verifiedAt || null,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
     data.isDefault ? 1 : 0
   )
   
@@ -919,6 +931,11 @@ export async function updateCustomerTaxNumber(taxId, data) {
       tax_type = COALESCE(?, tax_type),
       tax_number = COALESCE(?, tax_number),
       country = COALESCE(?, country),
+      company_name = COALESCE(?, company_name),
+      company_address = COALESCE(?, company_address),
+      is_verified = COALESCE(?, is_verified),
+      verified_at = COALESCE(?, verified_at),
+      verification_data = COALESCE(?, verification_data),
       is_default = ?,
       updated_at = NOW()
     WHERE id = ?
@@ -926,6 +943,11 @@ export async function updateCustomerTaxNumber(taxId, data) {
     data.taxType,
     data.taxNumber,
     data.country,
+    data.companyName,
+    data.companyAddress,
+    data.isVerified !== undefined ? (data.isVerified ? 1 : 0) : null,
+    data.verifiedAt,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
     data.isDefault ? 1 : 0,
     taxId
   )

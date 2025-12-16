@@ -1275,3 +1275,108 @@ export async function getCustomerActivityRanking(req, res) {
   }
 }
 
+// ==================== 税号验证 ====================
+
+import * as taxValidation from './taxValidation.js'
+
+/**
+ * VAT税号验证
+ */
+export async function validateVAT(req, res) {
+  try {
+    const { vatNumber, countryCode } = req.body
+    
+    if (!vatNumber) {
+      return badRequest(res, 'VAT税号为必填项')
+    }
+    
+    console.log(`[VAT验证] 开始验证: ${vatNumber}, 国家: ${countryCode || '自动识别'}`)
+    
+    const result = await taxValidation.validateVAT(vatNumber, countryCode)
+    
+    console.log(`[VAT验证] 验证结果:`, {
+      valid: result.valid,
+      companyName: result.companyName,
+      error: result.error
+    })
+    
+    if (result.valid) {
+      return success(res, {
+        valid: true,
+        vatNumber: result.vatNumber,
+        countryCode: result.countryCode,
+        companyName: result.companyName,
+        companyAddress: result.companyAddress,
+        verifiedAt: result.verifiedAt
+      }, 'VAT税号验证通过')
+    } else {
+      return success(res, {
+        valid: false,
+        vatNumber: result.vatNumber,
+        countryCode: result.countryCode,
+        error: result.error
+      }, 'VAT税号验证失败')
+    }
+  } catch (error) {
+    console.error('VAT税号验证失败:', error)
+    return serverError(res, `VAT验证服务暂时不可用: ${error.message}`)
+  }
+}
+
+/**
+ * EORI号码验证
+ */
+export async function validateEORI(req, res) {
+  try {
+    const { eoriNumber } = req.body
+    
+    if (!eoriNumber) {
+      return badRequest(res, 'EORI号码为必填项')
+    }
+    
+    console.log(`[EORI验证] 开始验证: ${eoriNumber}`)
+    
+    const result = await taxValidation.validateEORI(eoriNumber)
+    
+    console.log(`[EORI验证] 验证结果:`, {
+      valid: result.valid,
+      companyName: result.companyName,
+      error: result.error
+    })
+    
+    if (result.valid) {
+      return success(res, {
+        valid: true,
+        eoriNumber: result.eoriNumber,
+        countryCode: result.countryCode,
+        companyName: result.companyName,
+        companyAddress: result.companyAddress,
+        verifiedAt: result.verifiedAt
+      }, 'EORI号码验证通过')
+    } else {
+      return success(res, {
+        valid: false,
+        eoriNumber: result.eoriNumber,
+        countryCode: result.countryCode,
+        error: result.error
+      }, 'EORI号码验证失败')
+    }
+  } catch (error) {
+    console.error('EORI号码验证失败:', error)
+    return serverError(res, `EORI验证服务暂时不可用: ${error.message}`)
+  }
+}
+
+/**
+ * 获取支持的VAT国家列表
+ */
+export async function getSupportedVatCountries(req, res) {
+  try {
+    const countries = taxValidation.getSupportedVatCountries()
+    return success(res, countries)
+  } catch (error) {
+    console.error('获取支持的VAT国家列表失败:', error)
+    return serverError(res, '获取支持的VAT国家列表失败')
+  }
+}
+

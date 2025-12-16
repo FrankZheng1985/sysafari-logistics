@@ -103,6 +103,17 @@ router.put('/customers/:customerId/tax-numbers/:taxId', controller.updateCustome
 // 删除客户税号
 router.delete('/customers/:customerId/tax-numbers/:taxId', controller.deleteCustomerTaxNumber)
 
+// ==================== 税号验证路由 ====================
+
+// VAT税号验证
+router.post('/tax/validate-vat', controller.validateVAT)
+
+// EORI号码验证
+router.post('/tax/validate-eori', controller.validateEORI)
+
+// 获取支持的VAT国家列表
+router.get('/tax/supported-countries', controller.getSupportedVatCountries)
+
 // ==================== 销售机会路由 ====================
 
 // 获取销售机会统计

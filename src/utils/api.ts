@@ -4017,9 +4017,32 @@ export interface CustomerTaxNumber {
   taxType: 'vat' | 'eori' | 'other'
   taxNumber: string
   country?: string
+  companyName?: string
+  companyAddress?: string
+  isVerified?: boolean
+  verifiedAt?: string
+  verificationData?: {
+    source: string
+    requestDate: string
+    valid: boolean
+    companyName?: string
+    companyAddress?: string
+  }
   isDefault?: boolean
   createdAt?: string
   updatedAt?: string
+}
+
+// 税号验证结果接口
+export interface TaxValidationResult {
+  valid: boolean
+  vatNumber?: string
+  eoriNumber?: string
+  countryCode?: string
+  companyName?: string
+  companyAddress?: string
+  verifiedAt?: string
+  error?: string
 }
 
 /**
@@ -4092,6 +4115,64 @@ export async function deleteCustomerTaxNumber(customerId: string, taxId: number)
     return await response.json()
   } catch (error) {
     console.error('删除客户税号失败:', error)
+    throw error
+  }
+}
+
+// ==================== 税号验证 API 接口 ====================
+
+/**
+ * 验证VAT税号
+ */
+export async function validateVATNumber(vatNumber: string, countryCode?: string): Promise<ApiResponse<TaxValidationResult>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/crm/tax/validate-vat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vatNumber, countryCode })
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('VAT税号验证失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 验证EORI号码
+ */
+export async function validateEORINumber(eoriNumber: string): Promise<ApiResponse<TaxValidationResult>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/crm/tax/validate-eori`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eoriNumber })
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('EORI号码验证失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取支持的VAT国家列表
+ */
+export async function getSupportedVatCountries(): Promise<ApiResponse<Array<{ code: string; pattern: string }>>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/crm/tax/supported-countries`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取VAT国家列表失败:', error)
     throw error
   }
 }

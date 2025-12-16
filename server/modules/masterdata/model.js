@@ -608,6 +608,7 @@ function convertCityToCamelCase(row) {
     cityCode: row.city_code,
     cityNameCn: row.city_name_cn,
     cityNameEn: row.city_name_en,
+    cityNamePinyin: row.city_name_pinyin,
     parentId: row.parent_id,
     level: row.level,
     postalCode: row.postal_code,
