@@ -39,6 +39,7 @@ interface OrderStats {
   completedOrders: number
   totalPieces: number
   totalWeight: number
+  totalVolume: number
 }
 
 export default function CRMCustomerDetail() {
@@ -464,22 +465,30 @@ export default function CRMCustomerDetail() {
             订单统计
           </h3>
           {orderStats ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-blue-50 rounded-lg p-2 text-center">
-                <div className="text-lg font-semibold text-blue-700">{orderStats.totalOrders}</div>
-                <div className="text-xs text-blue-600">总订单数</div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-blue-50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-semibold text-blue-700">{orderStats.totalOrders}</div>
+                  <div className="text-xs text-blue-600">总订单数</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-semibold text-green-700">{orderStats.activeOrders}</div>
+                  <div className="text-xs text-green-600">进行中</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-semibold text-gray-700">{orderStats.completedOrders}</div>
+                  <div className="text-xs text-gray-600">已完成</div>
+                </div>
               </div>
-              <div className="bg-green-50 rounded-lg p-2 text-center">
-                <div className="text-lg font-semibold text-green-700">{orderStats.activeOrders}</div>
-                <div className="text-xs text-green-600">进行中</div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-2 text-center">
-                <div className="text-lg font-semibold text-gray-700">{orderStats.completedOrders}</div>
-                <div className="text-xs text-gray-600">已完成</div>
-              </div>
-              <div className="bg-orange-50 rounded-lg p-2 text-center">
-                <div className="text-lg font-semibold text-orange-700">{orderStats.totalWeight ? Number(orderStats.totalWeight).toFixed(0) : 0}</div>
-                <div className="text-xs text-orange-600">总重量(KG)</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-orange-50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-semibold text-orange-700">{orderStats.totalWeight ? Number(orderStats.totalWeight).toFixed(0) : 0}</div>
+                  <div className="text-xs text-orange-600">总重量(KG)</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-2 text-center">
+                  <div className="text-lg font-semibold text-purple-700">{orderStats.totalVolume ? Number(orderStats.totalVolume).toFixed(2) : 0}</div>
+                  <div className="text-xs text-purple-600">总立方(CBM)</div>
+                </div>
               </div>
             </div>
           ) : (

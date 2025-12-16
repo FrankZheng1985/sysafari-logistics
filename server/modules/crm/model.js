@@ -624,7 +624,8 @@ export async function getCustomerOrderStats(customerId) {
       SUM(CASE WHEN delivery_status = '已送达' OR delivery_status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
       SUM(CASE WHEN delivery_status NOT IN ('已送达', '已完成') OR delivery_status IS NULL THEN 1 ELSE 0 END) as active_orders,
       COALESCE(SUM(pieces), 0) as total_pieces,
-      COALESCE(SUM(weight), 0) as total_weight
+      COALESCE(SUM(weight), 0) as total_weight,
+      COALESCE(SUM(volume), 0) as total_volume
     FROM bills_of_lading
     WHERE (is_void = 0 OR is_void IS NULL)
       AND (
@@ -639,7 +640,8 @@ export async function getCustomerOrderStats(customerId) {
     activeOrders: Number(stats?.active_orders || 0),
     completedOrders: Number(stats?.completed_orders || 0),
     totalPieces: Number(stats?.total_pieces || 0),
-    totalWeight: Number(stats?.total_weight || 0)
+    totalWeight: Number(stats?.total_weight || 0),
+    totalVolume: Number(stats?.total_volume || 0)
   }
 }
 
