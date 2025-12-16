@@ -878,10 +878,33 @@ function AddressModal({
     loadCities(country.countryCode)
   }
 
+  // 当国家输入框失去焦点时，尝试匹配国家并加载城市
+  const handleCountryBlur = () => {
+    setTimeout(() => {
+      setShowCountryDropdown(false)
+      // 如果输入的内容能精确匹配到一个国家，自动选择它
+      const exactMatch = countries.find(c => 
+        c.countryNameCn === countrySearch || 
+        c.countryCode.toUpperCase() === countrySearch.toUpperCase()
+      )
+      if (exactMatch && exactMatch.countryCode !== selectedCountryCode) {
+        setFormData({ ...formData, country: exactMatch.countryNameCn, city: '' })
+        setSelectedCountryCode(exactMatch.countryCode)
+        setCitySearch('')
+        loadCities(exactMatch.countryCode)
+      }
+    }, 200)
+  }
+
   const handleSelectCity = (city: { cityNameCn: string }) => {
     setFormData({ ...formData, city: city.cityNameCn })
     setCitySearch(city.cityNameCn)
     setShowCityDropdown(false)
+  }
+
+  // 当城市输入框失去焦点时关闭下拉
+  const handleCityBlur = () => {
+    setTimeout(() => setShowCityDropdown(false), 200)
   }
 
   const getLevelLabel = (level: number) => {
@@ -954,6 +977,7 @@ function AddressModal({
                   }
                 }}
                 onFocus={() => setShowCountryDropdown(true)}
+                onBlur={handleCountryBlur}
                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder="搜索国家..."
               />
@@ -962,6 +986,7 @@ function AddressModal({
                   {filteredCountries.slice(0, 20).map((country) => (
                     <div
                       key={country.id}
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleSelectCountry(country)}
                       className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
                     >
@@ -987,22 +1012,34 @@ function AddressModal({
                   }
                 }}
                 onFocus={() => setShowCityDropdown(true)}
+                onBlur={handleCityBlur}
                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder={selectedCountryCode ? '搜索城市...' : '请先选择国家'}
                 disabled={!selectedCountryCode}
               />
-              {showCityDropdown && filteredCities.length > 0 && (
+              {showCityDropdown && selectedCountryCode && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredCities.slice(0, 30).map((city) => (
-                    <div
-                      key={city.id}
-                      onClick={() => handleSelectCity(city)}
-                      className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
-                    >
-                      <span>{city.cityNameCn}</span>
-                      <span className="text-gray-400 text-[10px]">{getLevelLabel(city.level)}</span>
+                  {filteredCities.length > 0 ? (
+                    filteredCities.slice(0, 30).map((city) => (
+                      <div
+                        key={city.id}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSelectCity(city)}
+                        className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
+                      >
+                        <span>{city.cityNameCn}</span>
+                        <span className="text-gray-400 text-[10px]">{getLevelLabel(city.level)}</span>
+                      </div>
+                    ))
+                  ) : cities.length === 0 ? (
+                    <div className="px-2.5 py-2 text-xs text-gray-400 text-center">
+                      该国家暂无城市数据，可直接输入
                     </div>
-                  ))}
+                  ) : (
+                    <div className="px-2.5 py-2 text-xs text-gray-400 text-center">
+                      未找到匹配的城市
+                    </div>
+                  )}
                 </div>
               )}
             </div>
