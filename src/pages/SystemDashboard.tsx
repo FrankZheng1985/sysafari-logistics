@@ -144,7 +144,9 @@ export default function SystemDashboard() {
           receivable: Number(financeRes.data?.summary?.receivable || 0),
           payable: Number(financeRes.data?.summary?.payable || 0),
           netCashFlow: Number(financeRes.data?.summary?.netCashFlow || 0),
-          totalFees: Number(financeRes.data?.summary?.totalFees || 0)
+          totalFees: Number(financeRes.data?.summary?.totalFees || 0),
+          monthlyIncome: Number(financeRes.data?.summary?.monthlyIncome || 0),
+          currentMonth: Number(financeRes.data?.summary?.currentMonth || new Date().getMonth() + 1)
         }
       }
 
