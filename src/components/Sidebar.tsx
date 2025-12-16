@@ -29,6 +29,9 @@ import {
 import { useState, useEffect } from 'react'
 import clsx from 'clsx'
 import { loadMenuSettingsAsync } from '../utils/menuSettings'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface MenuItem {
   path: string
@@ -191,9 +194,19 @@ export default function Sidebar() {
 
   // 加载 Logo
   useEffect(() => {
-    const loadLogo = () => {
-      const savedLogo = localStorage.getItem('systemLogo')
-      setLogoUrl(savedLogo)
+    const loadLogo = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/system-settings?key=systemLogo`)
+        const data = await res.json()
+        if (data.errCode === 200 && data.data?.systemLogo) {
+          setLogoUrl(data.data.systemLogo)
+        } else {
+          setLogoUrl(null)
+        }
+      } catch (error) {
+        console.error('加载Logo失败:', error)
+        setLogoUrl(null)
+      }
     }
 
     loadLogo()

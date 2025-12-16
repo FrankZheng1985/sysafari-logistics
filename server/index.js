@@ -7654,7 +7654,7 @@ app.get('/api/tariff-rates/stats', (req, res) => {
 // ==================== 系统设置 API ====================
 
 // 获取系统设置
-app.get('/api/system-settings', (req, res) => {
+app.get('/api/system-settings', async (req, res) => {
   try {
     const { key } = req.query
     let query = 'SELECT * FROM system_settings'
@@ -7665,7 +7665,7 @@ app.get('/api/system-settings', (req, res) => {
       params.push(key)
     }
 
-    const settings = db.prepare(query).all(...params)
+    const settings = await db.prepare(query).all(...params)
     
     // 转换为键值对格式
     const settingsMap = {}
@@ -7701,7 +7701,7 @@ app.get('/api/system-settings', (req, res) => {
 })
 
 // 保存系统设置
-app.post('/api/system-settings', (req, res) => {
+app.post('/api/system-settings', async (req, res) => {
   try {
     const { key, value, type, description } = req.body
 
@@ -7726,11 +7726,25 @@ app.post('/api/system-settings', (req, res) => {
       settingType = 'number'
     }
 
-    // 使用 INSERT OR REPLACE 来实现 upsert
-    db.prepare(`
-      INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
-      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(key, stringValue, settingType, description || '')
+    // 先检查是否存在
+    const existing = await db.prepare(
+      'SELECT id FROM system_settings WHERE setting_key = ?'
+    ).get(key)
+
+    if (existing) {
+      // 更新
+      await db.prepare(`
+        UPDATE system_settings 
+        SET setting_value = ?, setting_type = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE setting_key = ?
+      `).run(stringValue, settingType, description || '', key)
+    } else {
+      // 插入
+      await db.prepare(`
+        INSERT INTO system_settings (setting_key, setting_value, setting_type, description, created_at, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(key, stringValue, settingType, description || '')
+    }
 
     res.json({
       errCode: 200,
@@ -7747,7 +7761,7 @@ app.post('/api/system-settings', (req, res) => {
 })
 
 // 批量保存系统设置
-app.post('/api/system-settings/batch', (req, res) => {
+app.post('/api/system-settings/batch', async (req, res) => {
   try {
     const { settings } = req.body
 
@@ -7758,30 +7772,37 @@ app.post('/api/system-settings/batch', (req, res) => {
       })
     }
 
-    const insertStmt = db.prepare(`
-      INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, updated_at)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    `)
-
-    const transaction = db.transaction((settingsObj) => {
-      for (const [key, value] of Object.entries(settingsObj)) {
-        let stringValue = value
-        let settingType = 'string'
-        if (typeof value === 'object') {
-          stringValue = JSON.stringify(value)
-          settingType = 'json'
-        } else if (typeof value === 'boolean') {
-          stringValue = value.toString()
-          settingType = 'boolean'
-        } else if (typeof value === 'number') {
-          stringValue = value.toString()
-          settingType = 'number'
-        }
-        insertStmt.run(key, stringValue, settingType)
+    for (const [key, value] of Object.entries(settings)) {
+      let stringValue = value
+      let settingType = 'string'
+      if (typeof value === 'object') {
+        stringValue = JSON.stringify(value)
+        settingType = 'json'
+      } else if (typeof value === 'boolean') {
+        stringValue = value.toString()
+        settingType = 'boolean'
+      } else if (typeof value === 'number') {
+        stringValue = value.toString()
+        settingType = 'number'
       }
-    })
 
-    transaction(settings)
+      const existing = await db.prepare(
+        'SELECT id FROM system_settings WHERE setting_key = ?'
+      ).get(key)
+
+      if (existing) {
+        await db.prepare(`
+          UPDATE system_settings 
+          SET setting_value = ?, setting_type = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE setting_key = ?
+        `).run(stringValue, settingType, key)
+      } else {
+        await db.prepare(`
+          INSERT INTO system_settings (setting_key, setting_value, setting_type, created_at, updated_at)
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `).run(key, stringValue, settingType)
+      }
+    }
 
     res.json({
       errCode: 200,
@@ -7792,6 +7813,25 @@ app.post('/api/system-settings/batch', (req, res) => {
     res.status(500).json({
       errCode: 500,
       msg: '批量保存系统设置失败',
+      error: error.message,
+    })
+  }
+})
+
+// 删除系统设置
+app.delete('/api/system-settings/:key', async (req, res) => {
+  try {
+    const { key } = req.params
+    await db.prepare('DELETE FROM system_settings WHERE setting_key = ?').run(key)
+    res.json({
+      errCode: 200,
+      msg: '删除成功',
+    })
+  } catch (error) {
+    console.error('删除系统设置失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: '删除系统设置失败',
       error: error.message,
     })
   }
