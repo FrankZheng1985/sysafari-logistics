@@ -461,11 +461,11 @@ export default function CMRModal({
   const getSubmitButtonText = () => {
     switch (step) {
       case 'pickup': return '下一步'
-      case 'arrival': return '开始派送'
-      case 'delivered': return '确认送达'
-      case 'unloading': return '确认卸货完成'
-      case 'confirm': return '完成派送'
-      default: return '提交'
+      case 'arrival': return '下一步'
+      case 'delivered': return '下一步'
+      case 'unloading': return '下一步'
+      case 'confirm': return '完成'
+      default: return '下一步'
     }
   }
 
