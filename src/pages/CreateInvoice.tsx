@@ -206,13 +206,13 @@ export default function CreateInvoice() {
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setBillFees(data.data.list)
-        // 自动将费用转换为发票明细
+        // 自动将费用转换为发票明细（确保金额是数字类型）
         const items: InvoiceItem[] = data.data.list.map((fee: Fee, index: number) => ({
           id: (index + 1).toString(),
           description: fee.feeName || feeCategoryMap[fee.category] || '费用',
           quantity: 1,
-          unitPrice: fee.amount,
-          amount: fee.amount,
+          unitPrice: Number(fee.amount) || 0,
+          amount: Number(fee.amount) || 0,
           taxRate: 0,
           taxAmount: 0,
           feeId: fee.id
@@ -234,10 +234,13 @@ export default function CreateInvoice() {
     }
   }
 
-  // 计算单行金额
+  // 计算单行金额（确保数值类型正确）
   const calculateItemAmount = (item: InvoiceItem) => {
-    const amount = item.quantity * item.unitPrice
-    const taxAmount = amount * (item.taxRate / 100)
+    const quantity = Number(item.quantity) || 0
+    const unitPrice = Number(item.unitPrice) || 0
+    const taxRate = Number(item.taxRate) || 0
+    const amount = quantity * unitPrice
+    const taxAmount = amount * (taxRate / 100)
     return { amount, taxAmount }
   }
 
@@ -287,10 +290,10 @@ export default function CreateInvoice() {
     }))
   }
 
-  // 计算合计
+  // 计算合计（确保所有数值都是数字类型）
   const calculateTotals = () => {
-    const subtotal = formData.items.reduce((sum, item) => sum + item.amount, 0)
-    const taxAmount = formData.items.reduce((sum, item) => sum + item.taxAmount, 0)
+    const subtotal = formData.items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+    const taxAmount = formData.items.reduce((sum, item) => sum + (Number(item.taxAmount) || 0), 0)
     const totalAmount = subtotal + taxAmount
     return { subtotal, taxAmount, totalAmount }
   }
