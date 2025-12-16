@@ -138,7 +138,9 @@ export default function SharedTaxManage() {
       const data = await response.json()
       
       if (data.errCode === 200) {
-        setTaxNumbers(data.data || [])
+        // API返回分页对象 {list: [], total: ...}
+        const list = Array.isArray(data.data) ? data.data : (data.data?.list || [])
+        setTaxNumbers(list)
       }
     } catch (error) {
       console.error('加载共享税号失败:', error)
@@ -570,7 +572,7 @@ export default function SharedTaxManage() {
                   </td>
                 </tr>
               ) : (
-                taxNumbers.map((tax) => (
+                (taxNumbers || []).map((tax) => (
                   <tr key={tax.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 text-xs rounded ${getTaxTypeBgColor(tax.taxType)}`}>
