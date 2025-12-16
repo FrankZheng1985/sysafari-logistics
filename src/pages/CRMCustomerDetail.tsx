@@ -847,11 +847,17 @@ function AddressModal({
   }
 
   const loadCities = async (countryCode: string) => {
+    if (!countryCode) {
+      setCities([])
+      return
+    }
     try {
       const { getCitiesByCountry } = await import('../utils/api')
       const response = await getCitiesByCountry(countryCode)
       if (response.errCode === 200 && response.data) {
         setCities(response.data)
+      } else {
+        setCities([])
       }
     } catch (error) {
       console.error('加载城市列表失败:', error)
@@ -1011,7 +1017,13 @@ function AddressModal({
                     setFormData({ ...formData, city: e.target.value })
                   }
                 }}
-                onFocus={() => setShowCityDropdown(true)}
+                onFocus={() => {
+                  setShowCityDropdown(true)
+                  // 如果已选择国家但城市列表为空，尝试重新加载
+                  if (selectedCountryCode && cities.length === 0) {
+                    loadCities(selectedCountryCode)
+                  }
+                }}
                 onBlur={handleCityBlur}
                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                 placeholder={selectedCountryCode ? '搜索城市...' : '请先选择国家'}
