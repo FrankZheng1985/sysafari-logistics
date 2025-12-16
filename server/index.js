@@ -6645,7 +6645,7 @@ function parseDate(dateStr) {
 // ==================== 服务费类别 API ====================
 
 // 获取所有服务费类别
-app.get('/api/service-fee-categories', (req, res) => {
+app.get('/api/service-fee-categories', async (req, res) => {
   try {
     const { search, status } = req.query
     let query = 'SELECT * FROM service_fee_categories WHERE 1=1'
@@ -6664,7 +6664,7 @@ app.get('/api/service-fee-categories', (req, res) => {
 
     query += ' ORDER BY sort_order, name'
 
-    const categories = db.prepare(query).all(...params)
+    const categories = await db.prepare(query).all(...params)
     
     res.json({
       errCode: 200,
@@ -6690,9 +6690,9 @@ app.get('/api/service-fee-categories', (req, res) => {
 })
 
 // 获取启用的服务费类别名称列表
-app.get('/api/service-fee-categories/names', (req, res) => {
+app.get('/api/service-fee-categories/names', async (req, res) => {
   try {
-    const categories = db.prepare(
+    const categories = await db.prepare(
       'SELECT name FROM service_fee_categories WHERE status = ? ORDER BY sort_order'
     ).all('active')
     
@@ -6750,12 +6750,12 @@ app.post('/api/service-fee-categories', (req, res) => {
 })
 
 // 更新服务费类别
-app.put('/api/service-fee-categories/:id', (req, res) => {
+app.put('/api/service-fee-categories/:id', async (req, res) => {
   try {
     const { id } = req.params
     const { name, code, description, sortOrder, status } = req.body
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       UPDATE service_fee_categories 
       SET name = ?, code = ?, description = ?, sort_order = ?, status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -6783,10 +6783,10 @@ app.put('/api/service-fee-categories/:id', (req, res) => {
 })
 
 // 删除服务费类别
-app.delete('/api/service-fee-categories/:id', (req, res) => {
+app.delete('/api/service-fee-categories/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const result = db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(id)
+    const result = await db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(id)
 
     if (result.changes === 0) {
       return res.status(404).json({
@@ -6812,7 +6812,7 @@ app.delete('/api/service-fee-categories/:id', (req, res) => {
 // ==================== 服务费项目 API ====================
 
 // 获取所有服务费项目
-app.get('/api/service-fees', (req, res) => {
+app.get('/api/service-fees', async (req, res) => {
   try {
     const { search, category } = req.query
     let query = 'SELECT * FROM service_fees WHERE 1=1'
@@ -6831,7 +6831,7 @@ app.get('/api/service-fees', (req, res) => {
 
     query += ' ORDER BY category, name'
 
-    const fees = db.prepare(query).all(...params)
+    const fees = await db.prepare(query).all(...params)
     
     res.json({
       errCode: 200,
@@ -6858,7 +6858,7 @@ app.get('/api/service-fees', (req, res) => {
 })
 
 // 创建服务费项目
-app.post('/api/service-fees', (req, res) => {
+app.post('/api/service-fees', async (req, res) => {
   try {
     const { name, category, unit, price, currency, description, isActive } = req.body
 
@@ -6869,7 +6869,7 @@ app.post('/api/service-fees', (req, res) => {
       })
     }
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO service_fees (name, category, unit, price, currency, description, is_active)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(name, category, unit, price, currency || 'EUR', description || '', isActive !== false ? 1 : 0)
@@ -6890,12 +6890,12 @@ app.post('/api/service-fees', (req, res) => {
 })
 
 // 更新服务费项目
-app.put('/api/service-fees/:id', (req, res) => {
+app.put('/api/service-fees/:id', async (req, res) => {
   try {
     const { id } = req.params
     const { name, category, unit, price, currency, description, isActive } = req.body
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       UPDATE service_fees 
       SET name = ?, category = ?, unit = ?, price = ?, currency = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -6923,10 +6923,10 @@ app.put('/api/service-fees/:id', (req, res) => {
 })
 
 // 删除服务费项目
-app.delete('/api/service-fees/:id', (req, res) => {
+app.delete('/api/service-fees/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const result = db.prepare('DELETE FROM service_fees WHERE id = ?').run(id)
+    const result = await db.prepare('DELETE FROM service_fees WHERE id = ?').run(id)
 
     if (result.changes === 0) {
       return res.status(404).json({
@@ -6952,7 +6952,7 @@ app.delete('/api/service-fees/:id', (req, res) => {
 // ==================== 运输价格 API ====================
 
 // 获取所有运输价格
-app.get('/api/transport-prices', (req, res) => {
+app.get('/api/transport-prices', async (req, res) => {
   try {
     const { search, origin, destination } = req.query
     let query = 'SELECT * FROM transport_prices WHERE 1=1'
@@ -6976,7 +6976,7 @@ app.get('/api/transport-prices', (req, res) => {
 
     query += ' ORDER BY name'
 
-    const prices = db.prepare(query).all(...params)
+    const prices = await db.prepare(query).all(...params)
     
     res.json({
       errCode: 200,
@@ -7008,7 +7008,7 @@ app.get('/api/transport-prices', (req, res) => {
 })
 
 // 创建运输价格
-app.post('/api/transport-prices', (req, res) => {
+app.post('/api/transport-prices', async (req, res) => {
   try {
     const { name, origin, destination, transportType, distance, pricePerKm, totalPrice, currency, validFrom, validTo, description, isActive } = req.body
 
@@ -7030,7 +7030,7 @@ app.post('/api/transport-prices', (req, res) => {
       finalPricePerKm = finalTotalPrice / finalDistance
     }
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       INSERT INTO transport_prices (name, origin, destination, transport_type, distance, price_per_km, total_price, currency, valid_from, valid_to, description, is_active)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(name, origin, destination, transportType || '卡车', finalDistance, finalPricePerKm, finalTotalPrice, currency || 'EUR', validFrom || '', validTo || '', description || '', isActive !== false ? 1 : 0)
@@ -7051,7 +7051,7 @@ app.post('/api/transport-prices', (req, res) => {
 })
 
 // 更新运输价格
-app.put('/api/transport-prices/:id', (req, res) => {
+app.put('/api/transport-prices/:id', async (req, res) => {
   try {
     const { id } = req.params
     const { name, origin, destination, transportType, distance, pricePerKm, totalPrice, currency, validFrom, validTo, description, isActive } = req.body
@@ -7067,7 +7067,7 @@ app.put('/api/transport-prices/:id', (req, res) => {
       finalPricePerKm = finalTotalPrice / finalDistance
     }
 
-    const result = db.prepare(`
+    const result = await db.prepare(`
       UPDATE transport_prices 
       SET name = ?, origin = ?, destination = ?, transport_type = ?, distance = ?, price_per_km = ?, total_price = ?, currency = ?, valid_from = ?, valid_to = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -7095,10 +7095,10 @@ app.put('/api/transport-prices/:id', (req, res) => {
 })
 
 // 删除运输价格
-app.delete('/api/transport-prices/:id', (req, res) => {
+app.delete('/api/transport-prices/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const result = db.prepare('DELETE FROM transport_prices WHERE id = ?').run(id)
+    const result = await db.prepare('DELETE FROM transport_prices WHERE id = ?').run(id)
 
     if (result.changes === 0) {
       return res.status(404).json({
