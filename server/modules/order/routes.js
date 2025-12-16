@@ -13,9 +13,7 @@ const router = express.Router()
 router.get('/bills/stats', controller.getBillStats)
 
 // ==================== CMR管理 ====================
-
-// 获取CMR管理列表
-router.get('/cmr/list', controller.getCMRList)
+// 注意: CMR列表API已移至 tms/routes.js，使用 tmsRoutes 中的实现
 
 // ==================== 查验管理 ====================
 

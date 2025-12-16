@@ -473,6 +473,8 @@ export default function CMRModal({
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label="关闭"
+            title="关闭"
           >
             <X className="w-4 h-4" />
           </button>
@@ -686,6 +688,7 @@ export default function CMRModal({
                         type="datetime-local"
                         value={estimatedPickupTime}
                         onChange={(e) => setEstimatedPickupTime(e.target.value)}
+                        title="预计提货时间"
                         className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                       />
                       <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -717,6 +720,8 @@ export default function CMRModal({
                           type="button"
                           onClick={() => setShowProviderDropdown(!showProviderDropdown)}
                           className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600"
+                          aria-label="展开服务商列表"
+                          title="展开服务商列表"
                         >
                           <ChevronDown className={`w-4 h-4 transition-transform ${showProviderDropdown ? 'rotate-180' : ''}`} />
                         </button>
@@ -798,6 +803,7 @@ export default function CMRModal({
                         type="datetime-local"
                         value={estimatedArrivalTime}
                         onChange={(e) => setEstimatedArrivalTime(e.target.value)}
+                        title="预计到达时间"
                         className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                       />
                       <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -829,6 +835,7 @@ export default function CMRModal({
                         type="datetime-local"
                         value={actualArrivalTime}
                         onChange={(e) => setActualArrivalTime(e.target.value)}
+                        title="实际送达时间"
                         className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                       />
                       <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -877,6 +884,7 @@ export default function CMRModal({
                         type="datetime-local"
                         value={unloadingCompleteTime}
                         onChange={(e) => setUnloadingCompleteTime(e.target.value)}
+                        title="卸货完成时间"
                         className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                       />
                       <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
