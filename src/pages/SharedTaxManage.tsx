@@ -543,85 +543,106 @@ export default function SharedTaxManage() {
           </button>
         </div>
 
-        {/* 税号列表 */}
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">类型</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">税号</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">公司简称</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">公司全称</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">国家</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">状态</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                    加载中...
-                  </td>
-                </tr>
-              ) : taxNumbers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                    <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    暂无共享税号
-                  </td>
-                </tr>
-              ) : (
-                (taxNumbers || []).map((tax) => (
-                  <tr key={tax.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded ${getTaxTypeBgColor(tax.taxType)}`}>
-                        {getTaxTypeLabel(tax.taxType)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
+        {/* 税号卡片列表 */}
+        <div className="space-y-4">
+          {loading ? (
+            <div className="text-center py-8 text-gray-400">加载中...</div>
+          ) : (taxNumbers || []).length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              暂无共享税号
+            </div>
+          ) : (
+            // 按公司名称分组
+            Object.entries(
+              (taxNumbers || []).reduce((groups: Record<string, SharedTaxNumber[]>, tax) => {
+                const key = tax.companyName || tax.companyShortName || '未知公司'
+                if (!groups[key]) groups[key] = []
+                groups[key].push(tax)
+                return groups
+              }, {})
+            ).map(([companyName, companyTaxes]) => {
+              const firstTax = companyTaxes[0]
+              const vatTax = companyTaxes.find(t => t.taxType === 'vat')
+              const eoriTax = companyTaxes.find(t => t.taxType === 'eori')
+              const otherTaxes = companyTaxes.filter(t => t.taxType === 'other')
+              
+              return (
+                <div key={companyName} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  {/* 公司信息头部 */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-medium text-gray-900">{companyName}</h3>
+                      <p className="text-sm text-gray-500">{firstTax.country || '未知国家'}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleEdit(firstTax)}
+                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"
+                        title="编辑"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          // 删除该公司所有税号
+                          if (confirm(`确定删除 ${companyName} 的所有税号吗？`)) {
+                            companyTaxes.forEach(tax => handleDelete(tax.id))
+                          }
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
+                        title="删除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* 税号列表 */}
+                  <div className="space-y-2">
+                    {/* VAT税号 */}
+                    {vatTax && (
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm">{tax.taxNumber}</span>
-                        {tax.isVerified ? (
-                          <span title="已验证"><CheckCircle className="w-4 h-4 text-green-500" /></span>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-700 w-12 text-center">VAT</span>
+                        {vatTax.isVerified ? (
+                          <span className="w-2 h-2 rounded-full bg-green-500" title="已验证"></span>
                         ) : (
-                          <span title="未验证"><XCircle className="w-4 h-4 text-red-400" /></span>
+                          <span className="w-2 h-2 rounded-full bg-red-400" title="未验证"></span>
                         )}
+                        <span className="font-mono text-sm text-gray-700">{vatTax.taxNumber}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{tax.companyShortName || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{tax.companyName || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{tax.country || '-'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded ${
-                        tax.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {tax.status === 'active' ? '启用' : '停用'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
+                    )}
+                    
+                    {/* EORI号 */}
+                    {eoriTax && (
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleEdit(tax)}
-                          className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"
-                          title="编辑"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(tax.id)}
-                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
-                          title="删除"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700 w-12 text-center">EORI</span>
+                        {eoriTax.isVerified ? (
+                          <span className="w-2 h-2 rounded-full bg-green-500" title="已验证"></span>
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-red-400" title="未验证"></span>
+                        )}
+                        <span className="font-mono text-sm text-gray-700">{eoriTax.taxNumber}</span>
                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    )}
+                    
+                    {/* 其他税号 */}
+                    {otherTaxes.map(tax => (
+                      <div key={tax.id} className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700 w-12 text-center">其他</span>
+                        {tax.isVerified ? (
+                          <span className="w-2 h-2 rounded-full bg-green-500" title="已验证"></span>
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-red-400" title="未验证"></span>
+                        )}
+                        <span className="font-mono text-sm text-gray-700">{tax.taxNumber}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })
+          )}
         </div>
       </div>
 
