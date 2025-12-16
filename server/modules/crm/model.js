@@ -878,6 +878,19 @@ export async function getCustomerTaxNumbers(customerId) {
 export async function createCustomerTaxNumber(customerId, data) {
   const db = getDatabase()
   
+  // 检查VAT或EORI号码是否已存在（全局唯一）
+  if (data.taxType === 'vat' || data.taxType === 'eori') {
+    const existing = await db.prepare(`
+      SELECT id, customer_id FROM customer_tax_numbers 
+      WHERE tax_type = ? AND tax_number = ?
+    `).get(data.taxType, data.taxNumber)
+    
+    if (existing) {
+      const taxTypeName = data.taxType === 'vat' ? 'VAT税号' : 'EORI号码'
+      throw new Error(`该${taxTypeName}已存在，不能重复添加`)
+    }
+  }
+  
   // 如果设为默认，先取消同类型的其他默认
   if (data.isDefault) {
     await db.prepare(`
@@ -917,8 +930,23 @@ export async function updateCustomerTaxNumber(taxId, data) {
   const db = getDatabase()
   
   // 获取当前税号信息
-  const current = await db.prepare('SELECT customer_id, tax_type FROM customer_tax_numbers WHERE id = ?').get(taxId)
+  const current = await db.prepare('SELECT customer_id, tax_type, tax_number FROM customer_tax_numbers WHERE id = ?').get(taxId)
   if (!current) return null
+  
+  // 如果修改了税号，检查VAT或EORI号码是否已存在（排除当前记录）
+  const newTaxType = data.taxType || current.tax_type
+  const newTaxNumber = data.taxNumber || current.tax_number
+  if ((newTaxType === 'vat' || newTaxType === 'eori') && newTaxNumber !== current.tax_number) {
+    const existing = await db.prepare(`
+      SELECT id FROM customer_tax_numbers 
+      WHERE tax_type = ? AND tax_number = ? AND id != ?
+    `).get(newTaxType, newTaxNumber, taxId)
+    
+    if (existing) {
+      const taxTypeName = newTaxType === 'vat' ? 'VAT税号' : 'EORI号码'
+      throw new Error(`该${taxTypeName}已存在，不能重复添加`)
+    }
+  }
   
   // 如果设为默认，先取消同类型的其他默认
   if (data.isDefault) {

@@ -620,6 +620,10 @@ export async function createCustomerTaxNumber(req, res) {
     return success(res, result, '税号创建成功')
   } catch (error) {
     console.error('创建客户税号失败:', error)
+    // 如果是重复错误，返回具体信息
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
     return serverError(res, '创建客户税号失败')
   }
 }
@@ -639,6 +643,10 @@ export async function updateCustomerTaxNumber(req, res) {
     return success(res, result, '税号更新成功')
   } catch (error) {
     console.error('更新客户税号失败:', error)
+    // 如果是重复错误，返回具体信息
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
     return serverError(res, '更新客户税号失败')
   }
 }
