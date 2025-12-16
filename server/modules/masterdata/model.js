@@ -414,6 +414,212 @@ export function convertVatRateToCamelCase(row) {
   }
 }
 
+// ==================== 城市相关 ====================
+
+/**
+ * 获取城市列表
+ */
+export async function getCities(params = {}) {
+  const db = getDatabase()
+  const { countryCode, parentId, level, status = 'active', search, page = 1, pageSize = 500 } = params
+  
+  let query = 'SELECT * FROM cities WHERE 1=1'
+  const queryParams = []
+  
+  if (status) {
+    query += ' AND status = ?'
+    queryParams.push(status)
+  }
+  
+  if (countryCode) {
+    query += ' AND country_code = ?'
+    queryParams.push(countryCode.toUpperCase())
+  }
+  
+  if (parentId !== undefined) {
+    query += ' AND parent_id = ?'
+    queryParams.push(parentId)
+  }
+  
+  if (level) {
+    query += ' AND level = ?'
+    queryParams.push(level)
+  }
+  
+  if (search) {
+    query += ' AND (city_name_cn LIKE ? OR city_name_en LIKE ? OR city_code LIKE ?)'
+    const searchPattern = `%${search}%`
+    queryParams.push(searchPattern, searchPattern, searchPattern)
+  }
+  
+  // 获取总数
+  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
+  
+  // 分页
+  query += ' ORDER BY level, city_name_cn LIMIT ? OFFSET ?'
+  queryParams.push(pageSize, (page - 1) * pageSize)
+  
+  const list = await db.prepare(query).all(...queryParams)
+  
+  return {
+    list: list.map(convertCityToCamelCase),
+    total: totalResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 根据国家代码获取城市列表（简化版，用于下拉选择）
+ */
+export async function getCitiesByCountry(countryCode, search = '') {
+  const db = getDatabase()
+  
+  let query = 'SELECT * FROM cities WHERE country_code = ? AND status = ?'
+  const queryParams = [countryCode.toUpperCase(), 'active']
+  
+  if (search) {
+    query += ' AND (city_name_cn LIKE ? OR city_name_en LIKE ?)'
+    const searchPattern = `%${search}%`
+    queryParams.push(searchPattern, searchPattern)
+  }
+  
+  query += ' ORDER BY level, city_name_cn LIMIT 100'
+  
+  const list = await db.prepare(query).all(...queryParams)
+  return list.map(convertCityToCamelCase)
+}
+
+/**
+ * 获取城市详情
+ */
+export async function getCityById(id) {
+  const db = getDatabase()
+  const city = await db.prepare('SELECT * FROM cities WHERE id = ?').get(id)
+  return city ? convertCityToCamelCase(city) : null
+}
+
+/**
+ * 创建城市
+ */
+export async function createCity(data) {
+  const db = getDatabase()
+  const result = await db.prepare(`
+    INSERT INTO cities (
+      country_code, city_code, city_name_cn, city_name_en,
+      parent_id, level, postal_code, latitude, longitude,
+      description, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    data.countryCode.toUpperCase(),
+    data.cityCode || null,
+    data.cityNameCn,
+    data.cityNameEn || '',
+    data.parentId || 0,
+    data.level || 2,
+    data.postalCode || null,
+    data.latitude || null,
+    data.longitude || null,
+    data.description || '',
+    data.status || 'active'
+  )
+  
+  return { id: result.id }
+}
+
+/**
+ * 批量创建城市
+ */
+export async function createCitiesBatch(cities) {
+  const db = getDatabase()
+  const results = []
+  
+  for (const data of cities) {
+    const result = await db.prepare(`
+      INSERT INTO cities (
+        country_code, city_code, city_name_cn, city_name_en,
+        parent_id, level, postal_code, description, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING id
+    `).get(
+      data.countryCode.toUpperCase(),
+      data.cityCode || null,
+      data.cityNameCn,
+      data.cityNameEn || '',
+      data.parentId || 0,
+      data.level || 2,
+      data.postalCode || null,
+      data.description || '',
+      data.status || 'active'
+    )
+    results.push({ id: result.id, cityNameCn: data.cityNameCn })
+  }
+  
+  return results
+}
+
+/**
+ * 更新城市
+ */
+export async function updateCity(id, data) {
+  const db = getDatabase()
+  const fields = []
+  const values = []
+  
+  if (data.countryCode !== undefined) { fields.push('country_code = ?'); values.push(data.countryCode.toUpperCase()) }
+  if (data.cityCode !== undefined) { fields.push('city_code = ?'); values.push(data.cityCode) }
+  if (data.cityNameCn !== undefined) { fields.push('city_name_cn = ?'); values.push(data.cityNameCn) }
+  if (data.cityNameEn !== undefined) { fields.push('city_name_en = ?'); values.push(data.cityNameEn) }
+  if (data.parentId !== undefined) { fields.push('parent_id = ?'); values.push(data.parentId) }
+  if (data.level !== undefined) { fields.push('level = ?'); values.push(data.level) }
+  if (data.postalCode !== undefined) { fields.push('postal_code = ?'); values.push(data.postalCode) }
+  if (data.latitude !== undefined) { fields.push('latitude = ?'); values.push(data.latitude) }
+  if (data.longitude !== undefined) { fields.push('longitude = ?'); values.push(data.longitude) }
+  if (data.description !== undefined) { fields.push('description = ?'); values.push(data.description) }
+  if (data.status !== undefined) { fields.push('status = ?'); values.push(data.status) }
+  
+  if (fields.length === 0) return false
+  
+  fields.push('updated_at = NOW()')
+  values.push(id)
+  
+  const result = await db.prepare(`UPDATE cities SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  return result.changes > 0
+}
+
+/**
+ * 删除城市
+ */
+export async function deleteCity(id) {
+  const db = getDatabase()
+  const result = await db.prepare('DELETE FROM cities WHERE id = ?').run(id)
+  return result.changes > 0
+}
+
+/**
+ * 城市数据转换
+ */
+function convertCityToCamelCase(row) {
+  return {
+    id: row.id,
+    countryCode: row.country_code,
+    cityCode: row.city_code,
+    cityNameCn: row.city_name_cn,
+    cityNameEn: row.city_name_en,
+    parentId: row.parent_id,
+    level: row.level,
+    postalCode: row.postal_code,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    description: row.description,
+    status: row.status,
+    createTime: row.created_at,
+    updateTime: row.updated_at
+  }
+}
+
 export default {
   // 国家
   getCountries,
@@ -422,6 +628,15 @@ export default {
   createCountry,
   updateCountry,
   deleteCountry,
+  
+  // 城市
+  getCities,
+  getCitiesByCountry,
+  getCityById,
+  createCity,
+  createCitiesBatch,
+  updateCity,
+  deleteCity,
   
   // 港口
   getPortsOfLoading,
@@ -438,5 +653,6 @@ export default {
   convertCountryToCamelCase,
   convertPortToCamelCase,
   convertShippingCompanyToCamelCase,
-  convertVatRateToCamelCase
+  convertVatRateToCamelCase,
+  convertCityToCamelCase
 }

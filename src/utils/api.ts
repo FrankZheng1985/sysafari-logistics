@@ -2528,6 +2528,47 @@ export async function getCountriesList(params?: GetCountriesListParams): Promise
   }
 }
 
+// ==================== 城市 API 接口 ====================
+
+export interface CityItem {
+  id: number
+  countryCode: string
+  cityCode?: string
+  cityNameCn: string
+  cityNameEn?: string
+  parentId: number
+  level: number // 1=省/州, 2=市, 3=区/县, 4=镇/乡
+  postalCode?: string
+  latitude?: number
+  longitude?: number
+  status: string
+}
+
+/**
+ * 根据国家代码获取城市列表
+ * @param countryCode 国家代码
+ * @param search 搜索关键词
+ * @returns 城市列表
+ */
+export async function getCitiesByCountry(countryCode: string, search?: string): Promise<ApiResponse<CityItem[]>> {
+  try {
+    const queryParams = new URLSearchParams()
+    if (search) queryParams.append('search', search)
+    
+    const url = `${API_BASE_URL}/api/cities/country/${countryCode}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const response = await fetch(url)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    return await response.json()
+  } catch (error) {
+    console.error('获取城市列表失败:', error)
+    throw error
+  }
+}
+
 /**
  * 获取国家详情
  * @param id 国家ID

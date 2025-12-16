@@ -305,6 +305,29 @@ CREATE TABLE IF NOT EXISTS countries (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==================== 城市/地区表 ====================
+CREATE TABLE IF NOT EXISTS cities (
+    id SERIAL PRIMARY KEY,
+    country_code TEXT NOT NULL,
+    city_code TEXT,
+    city_name_cn TEXT NOT NULL,
+    city_name_en TEXT,
+    parent_id INTEGER DEFAULT 0,
+    level INTEGER DEFAULT 2,
+    postal_code TEXT,
+    latitude NUMERIC,
+    longitude NUMERIC,
+    description TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_cities_country ON cities(country_code);
+CREATE INDEX IF NOT EXISTS idx_cities_parent ON cities(parent_id);
+CREATE INDEX IF NOT EXISTS idx_cities_level ON cities(level);
+CREATE INDEX IF NOT EXISTS idx_cities_name ON cities(city_name_cn);
+
 -- ==================== 服务费类别表 ====================
 CREATE TABLE IF NOT EXISTS service_fee_categories (
     id SERIAL PRIMARY KEY,

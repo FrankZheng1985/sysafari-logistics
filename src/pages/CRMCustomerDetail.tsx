@@ -783,6 +783,12 @@ function AddressModal({
   const [countries, setCountries] = useState<Array<{ id: string; countryNameCn: string; countryCode: string }>>([])
   const [countrySearch, setCountrySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+  const [selectedCountryCode, setSelectedCountryCode] = useState('')
+  
+  // 城市相关状态
+  const [cities, setCities] = useState<Array<{ id: number; cityNameCn: string; cityNameEn?: string; level: number }>>([])
+  const [citySearch, setCitySearch] = useState('')
+  const [showCityDropdown, setShowCityDropdown] = useState(false)
 
   useEffect(() => {
     loadCountries()
@@ -792,6 +798,13 @@ function AddressModal({
     if (initialData) {
       setFormData(initialData)
       setCountrySearch(initialData.country || '')
+      setCitySearch(initialData.city || '')
+      // 尝试找到对应的国家代码
+      const matchedCountry = countries.find(c => c.countryNameCn === initialData.country)
+      if (matchedCountry) {
+        setSelectedCountryCode(matchedCountry.countryCode)
+        loadCities(matchedCountry.countryCode)
+      }
     } else {
       setFormData({
         companyName: '',
@@ -806,8 +819,11 @@ function AddressModal({
         addressType: 'both'
       })
       setCountrySearch('')
+      setCitySearch('')
+      setSelectedCountryCode('')
+      setCities([])
     }
-  }, [initialData])
+  }, [initialData, countries])
 
   const loadCountries = async () => {
     try {
@@ -821,15 +837,52 @@ function AddressModal({
     }
   }
 
+  const loadCities = async (countryCode: string) => {
+    try {
+      const { getCitiesByCountry } = await import('../utils/api')
+      const response = await getCitiesByCountry(countryCode)
+      if (response.errCode === 200 && response.data) {
+        setCities(response.data)
+      }
+    } catch (error) {
+      console.error('加载城市列表失败:', error)
+      setCities([])
+    }
+  }
+
   const filteredCountries = countries.filter(c => 
     c.countryNameCn.toLowerCase().includes(countrySearch.toLowerCase()) ||
     c.countryCode.toLowerCase().includes(countrySearch.toLowerCase())
   )
 
+  const filteredCities = cities.filter(c => 
+    c.cityNameCn.toLowerCase().includes(citySearch.toLowerCase()) ||
+    (c.cityNameEn && c.cityNameEn.toLowerCase().includes(citySearch.toLowerCase()))
+  )
+
   const handleSelectCountry = (country: { countryNameCn: string; countryCode: string }) => {
-    setFormData({ ...formData, country: country.countryNameCn })
+    setFormData({ ...formData, country: country.countryNameCn, city: '' })
     setCountrySearch(country.countryNameCn)
+    setSelectedCountryCode(country.countryCode)
     setShowCountryDropdown(false)
+    setCitySearch('')
+    loadCities(country.countryCode)
+  }
+
+  const handleSelectCity = (city: { cityNameCn: string }) => {
+    setFormData({ ...formData, city: city.cityNameCn })
+    setCitySearch(city.cityNameCn)
+    setShowCityDropdown(false)
+  }
+
+  const getLevelLabel = (level: number) => {
+    switch (level) {
+      case 1: return '省/州'
+      case 2: return '市'
+      case 3: return '区/县'
+      case 4: return '镇/乡'
+      default: return ''
+    }
   }
 
   if (!visible) return null
@@ -910,15 +963,39 @@ function AddressModal({
                 </div>
               )}
             </div>
-            <div>
+            <div className="relative">
               <label className="block text-xs font-medium text-gray-700 mb-1">城市</label>
               <input
                 type="text"
-                value={formData.city || ''}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                value={citySearch}
+                onChange={(e) => {
+                  setCitySearch(e.target.value)
+                  setShowCityDropdown(true)
+                  if (!e.target.value) {
+                    setFormData({ ...formData, city: '' })
+                  } else {
+                    setFormData({ ...formData, city: e.target.value })
+                  }
+                }}
+                onFocus={() => setShowCityDropdown(true)}
                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="城市"
+                placeholder={selectedCountryCode ? '搜索城市...' : '请先选择国家'}
+                disabled={!selectedCountryCode}
               />
+              {showCityDropdown && filteredCities.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {filteredCities.slice(0, 30).map((city) => (
+                    <div
+                      key={city.id}
+                      onClick={() => handleSelectCity(city)}
+                      className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
+                    >
+                      <span>{city.cityNameCn}</span>
+                      <span className="text-gray-400 text-[10px]">{getLevelLabel(city.level)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div>

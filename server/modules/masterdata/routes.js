@@ -27,6 +27,29 @@ router.put('/countries/:id', controller.updateCountry)
 // 删除国家
 router.delete('/countries/:id', controller.deleteCountry)
 
+// ==================== 城市相关路由 ====================
+
+// 获取城市列表
+router.get('/cities', controller.getCities)
+
+// 根据国家获取城市列表
+router.get('/cities/country/:countryCode', controller.getCitiesByCountry)
+
+// 批量创建城市
+router.post('/cities/batch', controller.createCitiesBatch)
+
+// 获取单个城市
+router.get('/cities/:id', controller.getCityById)
+
+// 创建城市
+router.post('/cities', controller.createCity)
+
+// 更新城市
+router.put('/cities/:id', controller.updateCity)
+
+// 删除城市
+router.delete('/cities/:id', controller.deleteCity)
+
 // ==================== 起运港相关路由 ====================
 
 // 获取起运港国家列表 (需要在 :id 路由之前)

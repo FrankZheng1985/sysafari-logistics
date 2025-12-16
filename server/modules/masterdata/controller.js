@@ -132,6 +132,144 @@ export async function deleteCountry(req, res) {
   }
 }
 
+// ==================== 城市相关 ====================
+
+/**
+ * 获取城市列表
+ */
+export async function getCities(req, res) {
+  try {
+    const { countryCode, parentId, level, status, search, page, pageSize } = req.query
+    const result = await model.getCities({
+      countryCode,
+      parentId: parentId !== undefined ? parseInt(parentId) : undefined,
+      level: level ? parseInt(level) : undefined,
+      status,
+      search,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 500
+    })
+    
+    return success(res, result.list)
+  } catch (error) {
+    console.error('获取城市列表失败:', error)
+    return serverError(res, '获取城市列表失败')
+  }
+}
+
+/**
+ * 根据国家获取城市列表（简化版）
+ */
+export async function getCitiesByCountry(req, res) {
+  try {
+    const { countryCode } = req.params
+    const { search } = req.query
+    
+    const cities = await model.getCitiesByCountry(countryCode, search || '')
+    return success(res, cities)
+  } catch (error) {
+    console.error('获取国家城市列表失败:', error)
+    return serverError(res, '获取国家城市列表失败')
+  }
+}
+
+/**
+ * 获取城市详情
+ */
+export async function getCityById(req, res) {
+  try {
+    const { id } = req.params
+    const city = await model.getCityById(id)
+    
+    if (!city) {
+      return notFound(res, '城市不存在')
+    }
+    
+    return success(res, city)
+  } catch (error) {
+    console.error('获取城市详情失败:', error)
+    return serverError(res, '获取城市详情失败')
+  }
+}
+
+/**
+ * 创建城市
+ */
+export async function createCity(req, res) {
+  try {
+    const { countryCode, cityNameCn } = req.body
+    
+    if (!countryCode || !cityNameCn) {
+      return badRequest(res, '国家代码和城市名称为必填项')
+    }
+    
+    const result = await model.createCity(req.body)
+    return success(res, result, '创建成功')
+  } catch (error) {
+    console.error('创建城市失败:', error)
+    return serverError(res, '创建城市失败')
+  }
+}
+
+/**
+ * 批量创建城市
+ */
+export async function createCitiesBatch(req, res) {
+  try {
+    const { cities } = req.body
+    
+    if (!cities || !Array.isArray(cities) || cities.length === 0) {
+      return badRequest(res, '请提供城市数据数组')
+    }
+    
+    const results = await model.createCitiesBatch(cities)
+    return success(res, { created: results.length, cities: results }, '批量创建成功')
+  } catch (error) {
+    console.error('批量创建城市失败:', error)
+    return serverError(res, '批量创建城市失败')
+  }
+}
+
+/**
+ * 更新城市
+ */
+export async function updateCity(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getCityById(id)
+    if (!existing) {
+      return notFound(res, '城市不存在')
+    }
+    
+    await model.updateCity(id, req.body)
+    return success(res, null, '更新成功')
+  } catch (error) {
+    console.error('更新城市失败:', error)
+    return serverError(res, '更新城市失败')
+  }
+}
+
+/**
+ * 删除城市
+ */
+export async function deleteCity(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getCityById(id)
+    if (!existing) {
+      return notFound(res, '城市不存在')
+    }
+    
+    await model.deleteCity(id)
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除城市失败:', error)
+    return serverError(res, '删除城市失败')
+  }
+}
+
 // ==================== 起运港相关 ====================
 
 export async function getPortsOfLoading(req, res) {
