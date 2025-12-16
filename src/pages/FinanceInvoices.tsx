@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Search, Plus, FileText, Edit2, Trash2, Eye,
-  CheckCircle, Clock, AlertTriangle, XCircle
+  CheckCircle, Clock, AlertTriangle, XCircle,
+  Download, FileSpreadsheet, RefreshCw
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -28,6 +29,8 @@ interface Invoice {
   status: string
   description: string
   createTime: string
+  pdfUrl?: string
+  excelUrl?: string
 }
 
 interface InvoiceStats {
@@ -265,7 +268,7 @@ export default function FinanceInvoices() {
     {
       key: 'actions',
       label: '操作',
-      width: 120,
+      width: 180,
       render: (item) => (
         <div className="flex items-center gap-1">
           <button
@@ -275,6 +278,24 @@ export default function FinanceInvoices() {
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
+          {item.pdfUrl && (
+            <button
+              onClick={() => window.open(`${API_BASE}/api/invoices/${item.id}/pdf`, '_blank')}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+              title="下载PDF发票"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {item.excelUrl && (
+            <button
+              onClick={() => window.open(`${API_BASE}/api/invoices/${item.id}/excel`, '_blank')}
+              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+              title="下载Excel对账单"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={() => {
               setEditingInvoice(item)

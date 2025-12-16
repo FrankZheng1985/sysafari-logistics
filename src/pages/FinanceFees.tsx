@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Search, Plus, Edit2, Trash2, Receipt,
-  Truck, Shield, Building2, FileText, Package, Settings
+  Truck, Shield, Building2, FileText, Package, Settings,
+  CheckSquare, Square, Loader2
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -24,6 +25,7 @@ interface Fee {
   feeDate: string
   description: string
   createTime: string
+  invoiceStatus?: string
 }
 
 interface FeeStats {
@@ -47,6 +49,10 @@ export default function FinanceFees() {
   
   const [modalVisible, setModalVisible] = useState(false)
   const [editingFee, setEditingFee] = useState<Fee | null>(null)
+  
+  // 选择的费用ID（用于生成发票）
+  const [selectedFeeIds, setSelectedFeeIds] = useState<string[]>([])
+  const [generatingInvoice, setGeneratingInvoice] = useState(false)
   
   // 从URL获取筛选/预填信息（从订单详情页面跳转过来时）
   const filterBillId = searchParams.get('billId') || ''
@@ -133,6 +139,62 @@ export default function FinanceFees() {
     }
   }
 
+  // 切换单个费用的选择状态
+  const toggleFeeSelection = (feeId: string) => {
+    setSelectedFeeIds(prev => 
+      prev.includes(feeId) 
+        ? prev.filter(id => id !== feeId)
+        : [...prev, feeId]
+    )
+  }
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedFeeIds.length === fees.length) {
+      setSelectedFeeIds([])
+    } else {
+      // 只选择未开票的费用
+      setSelectedFeeIds(fees.filter(f => f.invoiceStatus !== 'invoiced').map(f => f.id))
+    }
+  }
+
+  // 生成发票
+  const handleGenerateInvoice = async () => {
+    if (selectedFeeIds.length === 0) {
+      alert('请先选择要生成发票的费用')
+      return
+    }
+
+    if (!confirm(`确定要为选中的 ${selectedFeeIds.length} 条费用生成发票吗？`)) {
+      return
+    }
+
+    setGeneratingInvoice(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/invoices/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feeIds: selectedFeeIds })
+      })
+      const data = await response.json()
+
+      if (data.errCode === 200) {
+        alert(`发票生成成功！\n发票号：${data.data.invoiceNumber}`)
+        setSelectedFeeIds([])
+        fetchFees()
+        // 跳转到发票详情页
+        navigate(`/finance/invoices`)
+      } else {
+        alert(data.msg || '生成发票失败')
+      }
+    } catch (error) {
+      console.error('生成发票失败:', error)
+      alert('生成发票失败')
+    } finally {
+      setGeneratingInvoice(false)
+    }
+  }
+
   const formatCurrency = (amount: number, currency = 'EUR') => {
     return new Intl.NumberFormat('de-DE', {
       style: 'currency',
@@ -155,6 +217,34 @@ export default function FinanceFees() {
   }
 
   const columns: Column<Fee>[] = useMemo(() => [
+    {
+      key: 'select',
+      label: (
+        <button onClick={toggleSelectAll} className="p-1 hover:bg-gray-100 rounded">
+          {selectedFeeIds.length === fees.filter(f => f.invoiceStatus !== 'invoiced').length && fees.length > 0 ? (
+            <CheckSquare className="w-4 h-4 text-primary-600" />
+          ) : (
+            <Square className="w-4 h-4 text-gray-400" />
+          )}
+        </button>
+      ) as unknown as string,
+      width: 40,
+      render: (item) => (
+        <button
+          onClick={() => toggleFeeSelection(item.id)}
+          className="p-1 hover:bg-gray-100 rounded"
+          disabled={item.invoiceStatus === 'invoiced'}
+        >
+          {item.invoiceStatus === 'invoiced' ? (
+            <CheckSquare className="w-4 h-4 text-gray-300" />
+          ) : selectedFeeIds.includes(item.id) ? (
+            <CheckSquare className="w-4 h-4 text-primary-600" />
+          ) : (
+            <Square className="w-4 h-4 text-gray-400" />
+          )}
+        </button>
+      )
+    },
     {
       key: 'feeName',
       label: '费用名称',
@@ -253,7 +343,7 @@ export default function FinanceFees() {
       )
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [])
+  ], [selectedFeeIds, fees])
 
   return (
     <div className="p-4 space-y-4">
@@ -367,16 +457,32 @@ export default function FinanceFees() {
           )}
         </div>
 
-        <button
-          onClick={() => {
-            setEditingFee(null)
-            setModalVisible(true)
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          新增费用
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedFeeIds.length > 0 && (
+            <button
+              onClick={handleGenerateInvoice}
+              disabled={generatingInvoice}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {generatingInvoice ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Receipt className="w-4 h-4" />
+              )}
+              生成发票 ({selectedFeeIds.length})
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setEditingFee(null)
+              setModalVisible(true)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            新增费用
+          </button>
+        </div>
       </div>
 
       {/* 数据表格 */}

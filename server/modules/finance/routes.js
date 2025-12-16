@@ -17,11 +17,26 @@ router.get('/finance/overview', controller.getFinanceOverview)
 // 获取发票统计
 router.get('/invoices/stats', controller.getInvoiceStats)
 
+// 检查COS存储状态
+router.get('/invoices/cos-status', controller.checkCosStatus)
+
+// 从费用记录生成发票
+router.post('/invoices/generate', controller.generateInvoiceFromFees)
+
 // 获取发票列表
 router.get('/invoices', controller.getInvoices)
 
 // 获取发票详情
 router.get('/invoices/:id', controller.getInvoiceById)
+
+// 下载发票PDF
+router.get('/invoices/:id/pdf', controller.downloadInvoicePDF)
+
+// 下载发票Excel对账单
+router.get('/invoices/:id/excel', controller.downloadInvoiceExcel)
+
+// 重新生成发票文件
+router.post('/invoices/:id/regenerate', controller.regenerateInvoice)
 
 // 创建发票
 router.post('/invoices', controller.createInvoice)

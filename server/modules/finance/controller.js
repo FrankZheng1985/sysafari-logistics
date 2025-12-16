@@ -4,6 +4,7 @@
 
 import { success, successWithPagination, badRequest, notFound, serverError } from '../../utils/response.js'
 import * as model from './model.js'
+import * as invoiceGenerator from './invoiceGenerator.js'
 
 // ==================== 发票管理 ====================
 
@@ -530,6 +531,101 @@ export async function getCustomerFeeReport(req, res) {
   } catch (error) {
     console.error('获取客户费用报表失败:', error)
     return serverError(res, '获取客户费用报表失败')
+  }
+}
+
+// ==================== 发票生成和下载 ====================
+
+/**
+ * 从费用记录生成发票
+ */
+export async function generateInvoiceFromFees(req, res) {
+  try {
+    const { feeIds, customerId } = req.body
+    
+    if (!feeIds || !Array.isArray(feeIds) || feeIds.length === 0) {
+      return badRequest(res, '请选择要生成发票的费用记录')
+    }
+    
+    const result = await invoiceGenerator.createInvoiceWithFiles(feeIds, customerId)
+    
+    return success(res, result, '发票生成成功')
+  } catch (error) {
+    console.error('生成发票失败:', error)
+    return serverError(res, error.message || '生成发票失败')
+  }
+}
+
+/**
+ * 下载发票PDF
+ */
+export async function downloadInvoicePDF(req, res) {
+  try {
+    const { id } = req.params
+    
+    const downloadUrl = await invoiceGenerator.getInvoiceDownloadUrl(id, 'pdf')
+    
+    // 重定向到下载URL
+    return res.redirect(downloadUrl)
+  } catch (error) {
+    console.error('下载发票PDF失败:', error)
+    return serverError(res, error.message || '下载失败')
+  }
+}
+
+/**
+ * 下载发票Excel对账单
+ */
+export async function downloadInvoiceExcel(req, res) {
+  try {
+    const { id } = req.params
+    
+    const downloadUrl = await invoiceGenerator.getInvoiceDownloadUrl(id, 'excel')
+    
+    // 重定向到下载URL
+    return res.redirect(downloadUrl)
+  } catch (error) {
+    console.error('下载发票Excel失败:', error)
+    return serverError(res, error.message || '下载失败')
+  }
+}
+
+/**
+ * 重新生成发票文件
+ */
+export async function regenerateInvoice(req, res) {
+  try {
+    const { id } = req.params
+    
+    const result = await invoiceGenerator.regenerateInvoiceFiles(id)
+    
+    return success(res, result, '发票文件重新生成成功')
+  } catch (error) {
+    console.error('重新生成发票失败:', error)
+    return serverError(res, error.message || '重新生成失败')
+  }
+}
+
+/**
+ * 检查COS存储配置状态
+ */
+export async function checkCosStatus(req, res) {
+  try {
+    const { checkCosConfig } = await import('./cosStorage.js')
+    const config = checkCosConfig()
+    return success(res, {
+      available: config.configured,
+      message: config.configured ? 'COS存储已配置' : 'COS存储未配置',
+      details: {
+        hasSecretId: config.hasSecretId,
+        hasSecretKey: config.hasSecretKey,
+        hasBucket: config.hasBucket,
+        region: config.region
+      }
+    })
+  } catch (error) {
+    console.error('检查COS状态失败:', error)
+    return serverError(res, '检查COS状态失败')
   }
 }
 
