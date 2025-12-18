@@ -875,14 +875,14 @@ export async function getOrderFeeReport(params = {}) {
   let dateFilter = ''
   const queryParams = []
   
-  // 日期过滤：如果 fee_date 为 null，则使用 create_time 进行过滤
+  // 日期过滤：如果 fee_date 为 null，则使用 created_at 进行过滤
   if (startDate) {
-    dateFilter += ' AND (f.fee_date >= ? OR (f.fee_date IS NULL AND DATE(f.create_time) >= ?))'
+    dateFilter += ' AND (f.fee_date >= ? OR (f.fee_date IS NULL AND DATE(f.created_at) >= ?))'
     queryParams.push(startDate, startDate)
   }
   
   if (endDate) {
-    dateFilter += ' AND (f.fee_date <= ? OR (f.fee_date IS NULL AND DATE(f.create_time) <= ?))'
+    dateFilter += ' AND (f.fee_date <= ? OR (f.fee_date IS NULL AND DATE(f.created_at) <= ?))'
     queryParams.push(endDate, endDate)
   }
   
@@ -964,14 +964,14 @@ export async function getCustomerFeeReport(params = {}) {
   let dateFilter = ''
   const queryParams = []
   
-  // 日期过滤：如果 fee_date 为 null，则使用 create_time 进行过滤
+  // 日期过滤：如果 fee_date 为 null，则使用 created_at 进行过滤
   if (startDate) {
-    dateFilter += ' AND (f.fee_date >= ? OR (f.fee_date IS NULL AND DATE(f.create_time) >= ?))'
+    dateFilter += ' AND (f.fee_date >= ? OR (f.fee_date IS NULL AND DATE(f.created_at) >= ?))'
     queryParams.push(startDate, startDate)
   }
   
   if (endDate) {
-    dateFilter += ' AND (f.fee_date <= ? OR (f.fee_date IS NULL AND DATE(f.create_time) <= ?))'
+    dateFilter += ' AND (f.fee_date <= ? OR (f.fee_date IS NULL AND DATE(f.created_at) <= ?))'
     queryParams.push(endDate, endDate)
   }
   
