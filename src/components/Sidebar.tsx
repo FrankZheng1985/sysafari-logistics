@@ -80,7 +80,6 @@ const menuItems: MenuItem[] = [
     children: [
       { path: '/tms', label: 'TMS概览', icon: ClipboardList },
       { path: '/cmr-manage', label: 'TMS管理', icon: Truck },
-      { path: '/tms/service-providers', label: '服务商管理', icon: UserCircle },
       { path: '/tms/pricing', label: '运费管理', icon: Wallet },
       { path: '/tms/conditions', label: '条件管理', icon: ClipboardCheck },
       { path: '/last-mile', label: '最后里程', icon: Truck },
@@ -125,14 +124,9 @@ const menuItems: MenuItem[] = [
     label: '工具',
     icon: Settings,
     children: [
-      { path: '/tools/inquiry', label: '报价管理', icon: FileText },
+      { path: '/tools/product-pricing', label: '报价管理', icon: FileText },
       { path: '/tools/tariff-calculator', label: '关税计算', icon: FileText },
-      { path: '/tools/payment', label: '付款&发票', icon: FileText },
-            { path: '/tools/commodity-code', label: '海关编码', icon: FileText },
-            { path: '/tools/shared-tax', label: '共享税号库', icon: FileText },
-            { path: '/tools/productCare', label: '品类库', icon: Package },
-            { path: '/tools/editable-table', label: '可编辑表格', icon: FileText },
-            { path: '/tools/components-demo', label: '组件示例', icon: FileText },
+      { path: '/tools/shared-tax', label: '共享税号库', icon: FileText },
     ],
   },
   {

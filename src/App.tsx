@@ -24,11 +24,6 @@ import CMRBillDetails from './pages/CMRBillDetails'
 import LastMile from './pages/LastMile'
 import Inquiry from './pages/Inquiry'
 import TariffCalculator from './pages/TariffCalculator'
-import PaymentInvoice from './pages/PaymentInvoice'
-import CommodityCode from './pages/CommodityCode'
-import ProductCategory from './pages/ProductCategory'
-import EditableTableDemo from './pages/EditableTableDemo'
-import ComponentsDemo from './pages/ComponentsDemo'
 import MenuSettings from './pages/MenuSettings'
 import UserManage from './pages/UserManage'
 import RolePermissions from './pages/RolePermissions'
@@ -47,19 +42,24 @@ import CRMFeedbacks from './pages/CRMFeedbacks'
 // 财务模块
 import FinanceDashboard from './pages/FinanceDashboard'
 import FinanceInvoices from './pages/FinanceInvoices'
+import InvoiceDetail from './pages/InvoiceDetail'
+import EditInvoice from './pages/EditInvoice'
+import RegisterPayment from './pages/RegisterPayment'
 import FinancePayments from './pages/FinancePayments'
 import FinanceFees from './pages/FinanceFees'
 import FinanceReports from './pages/FinanceReports'
+import FinanceOrderReport from './pages/FinanceOrderReport'
+import BankAccounts from './pages/BankAccounts'
 import CreateInvoice from './pages/CreateInvoice'
 // TMS模块
 import TMSDashboard from './pages/TMSDashboard'
-import ServiceProviders from './pages/ServiceProviders'
 import TransportPricing from './pages/TransportPricing'
 import CMRExceptionManage from './pages/CMRExceptionManage'
 import TMSConditions from './pages/TMSConditions'
 // 工具模块
 import ToolsDashboard from './pages/ToolsDashboard'
 import SharedTaxManage from './pages/SharedTaxManage'
+import ProductPricing from './pages/ProductPricing'
 // 系统模块
 import SystemManageDashboard from './pages/SystemManageDashboard'
 import ActivityLogs from './pages/ActivityLogs'
@@ -67,6 +67,8 @@ import ApprovalList from './pages/ApprovalList'
 import Auth0UserBinding from './pages/Auth0UserBinding'
 import SupplierDashboard from './pages/SupplierDashboard'
 import SupplierManage from './pages/SupplierManage'
+import SupplierPrices from './pages/SupplierPrices'
+import SupplierPriceImport from './pages/SupplierPriceImport'
 import { initMenuSettings } from './utils/menuSettings'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Loader2 } from 'lucide-react'
@@ -115,7 +117,6 @@ function AppRoutes() {
         {/* TMS运输管理 */}
         <Route path="/tms" element={<TMSDashboard />} />
         <Route path="/tms/exceptions" element={<CMRExceptionManage />} />
-        <Route path="/tms/service-providers" element={<ServiceProviders />} />
         <Route path="/tms/pricing" element={<TransportPricing />} />
         <Route path="/tms/conditions" element={<TMSConditions />} />
         <Route path="/cmr-manage" element={<CMRManage />} />
@@ -145,15 +146,14 @@ function AppRoutes() {
         {/* 供应商管理模块 */}
         <Route path="/suppliers" element={<SupplierDashboard />} />
         <Route path="/suppliers/list" element={<SupplierManage />} />
+        <Route path="/suppliers/manage" element={<SupplierManage />} />
+        <Route path="/suppliers/prices" element={<SupplierPrices />} />
+        <Route path="/suppliers/import" element={<SupplierPriceImport />} />
         <Route path="/tools" element={<ToolsDashboard />} />
         <Route path="/tools/inquiry" element={<Inquiry />} />
         <Route path="/tools/tariff-calculator" element={<TariffCalculator />} />
-        <Route path="/tools/payment" element={<PaymentInvoice />} />
-        <Route path="/tools/commodity-code" element={<CommodityCode />} />
         <Route path="/tools/shared-tax" element={<SharedTaxManage />} />
-        <Route path="/tools/productCare" element={<ProductCategory />} />
-        <Route path="/tools/editable-table" element={<EditableTableDemo />} />
-        <Route path="/tools/components-demo" element={<ComponentsDemo />} />
+        <Route path="/tools/product-pricing" element={<ProductPricing />} />
         {/* CRM 客户关系管理 */}
         <Route path="/crm" element={<CRMDashboard />} />
         <Route path="/crm/customers" element={<CRMCustomers />} />
@@ -166,10 +166,14 @@ function AppRoutes() {
         <Route path="/finance" element={<FinanceDashboard />} />
         <Route path="/finance/invoices" element={<FinanceInvoices />} />
         <Route path="/finance/invoices/create" element={<CreateInvoice />} />
-        <Route path="/finance/invoices/:id" element={<FinanceInvoices />} />
+        <Route path="/finance/invoices/:id/edit" element={<EditInvoice />} />
+        <Route path="/finance/invoices/:id/payment" element={<RegisterPayment />} />
+        <Route path="/finance/invoices/:id" element={<InvoiceDetail />} />
         <Route path="/finance/payments" element={<FinancePayments />} />
         <Route path="/finance/fees" element={<FinanceFees />} />
         <Route path="/finance/reports" element={<FinanceReports />} />
+        <Route path="/finance/order-report" element={<FinanceOrderReport />} />
+        <Route path="/finance/bank-accounts" element={<BankAccounts />} />
       </Routes>
     </Layout>
   )

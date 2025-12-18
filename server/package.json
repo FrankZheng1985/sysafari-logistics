@@ -7,19 +7,9 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
-    "init-db": "node scripts/init-db.js",
-    "init-shipping": "node scripts/init-shipping-companies.js",
-    "init-chinese-ports": "node scripts/init-chinese-ports.js",
-    "init-european-ports": "node scripts/init-european-ports.js",
-    "init-countries": "node scripts/init-countries.js",
-    "init-airports": "node scripts/init-airports.js",
-    "init-ports-with-terminals": "node scripts/init-chinese-ports-with-terminals.js",
-    "init-railway-stations": "node scripts/init-chinese-railway-stations.js",
-    "init-truck-ports": "node scripts/init-truck-ports.js",
-    "init-hs-codes": "node scripts/init-hs-codes.js",
-    "import-taric": "node scripts/import-taric-excel.js",
-    "check-sources": "node scripts/check-alternative-sources.js",
-    "init-production-db": "node scripts/init-production-db.js"
+    "init-production-db": "node scripts/init-production-db.js",
+    "sync-to-demo": "node scripts/sync-to-demo.js",
+    "add-production-users": "node scripts/add-production-users.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

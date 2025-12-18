@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, Edit, Trash2, Calculator,
-  Truck, MapPin
+  Truck, MapPin, Calendar
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -184,7 +184,7 @@ export default function TransportPricing() {
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
     { label: 'TMS管理', path: '/cmr-manage' },
-    { label: '服务商管理', path: '/tms/service-providers' },
+    { label: '运输供应商', path: '/supplier-manage?type=transport' },
     { label: '运费管理', path: '/tms/pricing' },
     { label: '条件管理', path: '/tms/conditions' },
   ]

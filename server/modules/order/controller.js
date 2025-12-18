@@ -53,11 +53,11 @@ async function generateNextBillNumber() {
  */
 export async function getBills(req, res) {
   try {
-    const { 
+    const {
       type, status, shipStatus, customsStatus, inspection, deliveryStatus,
-      search, page, pageSize, sortField, sortOrder 
+      search, page, pageSize, sortField, sortOrder, forInvoiceType
     } = req.query
-    
+
     const result = await model.getBills({
       type,
       status,
@@ -69,7 +69,8 @@ export async function getBills(req, res) {
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20,
       sortField,
-      sortOrder
+      sortOrder,
+      forInvoiceType  // 用于新建发票时过滤已完成财务流程的订单
     })
     
     return successWithPagination(res, result.list, {
@@ -504,6 +505,59 @@ export async function updateDelivery(req, res) {
   }
 }
 
+/**
+ * 标记提单为已完成
+ * 将订单状态标记为"已完成"，完成后不可更改
+ */
+export async function markBillComplete(req, res) {
+  try {
+    const { id } = req.params
+    const { completeNote } = req.body
+
+    const existing = await model.getBillById(id)
+    if (!existing) {
+      return notFound(res, '提单不存在')
+    }
+
+    // 检查是否已经完成
+    if (existing.status === '已完成') {
+      return badRequest(res, '该提单已经标记为完成')
+    }
+
+    const oldStatus = existing.status
+    
+    // 更新状态为已完成
+    const updated = await model.updateBill(id, {
+      status: '已完成',
+      completeNote: completeNote || null,
+      completeTime: new Date().toISOString()
+    })
+
+    if (!updated) {
+      return serverError(res, '标记失败')
+    }
+
+    // 记录操作日志
+    await model.addOperationLog({
+      billId: id,
+      operationType: 'status_change',
+      operationName: '标记已完成',
+      oldValue: oldStatus,
+      newValue: '已完成',
+      operator: req.user?.name || '系统',
+      operatorId: req.user?.id,
+      module: 'order',
+      remark: completeNote || ''
+    })
+
+    const updatedBill = await model.getBillById(id)
+    return success(res, updatedBill, '标记成功')
+  } catch (error) {
+    console.error('标记完成失败:', error)
+    return serverError(res, '标记完成失败')
+  }
+}
+
 // ==================== 操作日志 ====================
 
 /**
@@ -656,7 +710,7 @@ export async function getInspectionList(req, res) {
     
     // 获取各状态统计（遵循订单流转规则）
     const db = getDatabase()
-    const statsResult = db.prepare(`
+    const statsResult = await db.prepare(`
       SELECT 
         SUM(CASE WHEN inspection IN ('待查验', '查验中', '已查验', '查验放行') 
             AND (is_void = 0 OR is_void IS NULL) 
@@ -673,8 +727,8 @@ export async function getInspectionList(req, res) {
     return success(res, {
       ...result,
       stats: {
-        pending: statsResult.pending || 0,
-        released: statsResult.released || 0
+        pending: parseInt(statsResult?.pending) || 0,
+        released: parseInt(statsResult?.released) || 0
       }
     })
   } catch (error) {

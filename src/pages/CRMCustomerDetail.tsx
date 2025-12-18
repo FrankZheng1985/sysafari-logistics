@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Building, Building2, User, Phone, Mail, MapPin,
   Package, TrendingUp, Ship, Plus, Trash2, Star,
-  Edit, ExternalLink, RefreshCw, FileText, X, CheckCircle
+  Edit, ExternalLink, RefreshCw, FileText, X, CheckCircle, ChevronDown
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -1228,6 +1228,126 @@ function AddressModal({
 // 验证状态: 'none' = 未验证, 'valid' = 有效(绿灯), 'invalid' = 无效(红灯)
 type ValidationStatus = 'none' | 'valid' | 'invalid'
 
+// VAT格式规则（按国家代码）
+const vatFormatRules: Record<string, { format: string; regex: RegExp; example: string; description: string }> = {
+  'AT': { format: 'ATU + 8位数字', regex: /^ATU\d{8}$/, example: 'ATU12345678', description: '奥地利VAT以ATU开头，后跟8位数字' },
+  'BE': { format: 'BE + 10位数字', regex: /^BE[01]\d{9}$/, example: 'BE0123456789', description: '比利时VAT以BE开头，后跟10位数字（首位0或1）' },
+  'BG': { format: 'BG + 9或10位数字', regex: /^BG\d{9,10}$/, example: 'BG123456789', description: '保加利亚VAT以BG开头，后跟9-10位数字' },
+  'HR': { format: 'HR + 11位数字', regex: /^HR\d{11}$/, example: 'HR12345678901', description: '克罗地亚VAT以HR开头，后跟11位数字' },
+  'CY': { format: 'CY + 8位字符 + L', regex: /^CY\d{8}[A-Z]$/, example: 'CY12345678L', description: '塞浦路斯VAT以CY开头，8位数字+1位字母' },
+  'CZ': { format: 'CZ + 8-10位数字', regex: /^CZ\d{8,10}$/, example: 'CZ12345678', description: '捷克VAT以CZ开头，后跟8-10位数字' },
+  'DK': { format: 'DK + 8位数字', regex: /^DK\d{8}$/, example: 'DK12345678', description: '丹麦VAT以DK开头，后跟8位数字' },
+  'EE': { format: 'EE + 9位数字', regex: /^EE\d{9}$/, example: 'EE123456789', description: '爱沙尼亚VAT以EE开头，后跟9位数字' },
+  'FI': { format: 'FI + 8位数字', regex: /^FI\d{8}$/, example: 'FI12345678', description: '芬兰VAT以FI开头，后跟8位数字' },
+  'FR': { format: 'FR + 2位字符 + 9位数字', regex: /^FR[A-Z0-9]{2}\d{9}$/, example: 'FRXX123456789', description: '法国VAT以FR开头，2位字母/数字+9位数字' },
+  'DE': { format: 'DE + 9位数字', regex: /^DE\d{9}$/, example: 'DE123456789', description: '德国VAT以DE开头，后跟9位数字' },
+  'EL': { format: 'EL + 9位数字', regex: /^EL\d{9}$/, example: 'EL123456789', description: '希腊VAT以EL开头，后跟9位数字' },
+  'GR': { format: 'EL + 9位数字', regex: /^EL\d{9}$/, example: 'EL123456789', description: '希腊VAT以EL开头，后跟9位数字' },
+  'HU': { format: 'HU + 8位数字', regex: /^HU\d{8}$/, example: 'HU12345678', description: '匈牙利VAT以HU开头，后跟8位数字' },
+  'IE': { format: 'IE + 7位数字 + 1-2位字母', regex: /^IE\d{7}[A-Z]{1,2}$/, example: 'IE1234567X', description: '爱尔兰VAT以IE开头，7位数字+1-2位字母' },
+  'IT': { format: 'IT + 11位数字', regex: /^IT\d{11}$/, example: 'IT12345678901', description: '意大利VAT以IT开头，后跟11位数字' },
+  'LV': { format: 'LV + 11位数字', regex: /^LV\d{11}$/, example: 'LV12345678901', description: '拉脱维亚VAT以LV开头，后跟11位数字' },
+  'LT': { format: 'LT + 9或12位数字', regex: /^LT(\d{9}|\d{12})$/, example: 'LT123456789', description: '立陶宛VAT以LT开头，后跟9或12位数字' },
+  'LU': { format: 'LU + 8位数字', regex: /^LU\d{8}$/, example: 'LU12345678', description: '卢森堡VAT以LU开头，后跟8位数字' },
+  'MT': { format: 'MT + 8位数字', regex: /^MT\d{8}$/, example: 'MT12345678', description: '马耳他VAT以MT开头，后跟8位数字' },
+  'NL': { format: 'NL + 9位数字 + B + 2位数字', regex: /^NL\d{9}B\d{2}$/, example: 'NL123456789B01', description: '荷兰VAT以NL开头，9位数字+B+2位数字' },
+  'PL': { format: 'PL + 10位数字', regex: /^PL\d{10}$/, example: 'PL1234567890', description: '波兰VAT以PL开头，后跟10位数字' },
+  'PT': { format: 'PT + 9位数字', regex: /^PT\d{9}$/, example: 'PT123456789', description: '葡萄牙VAT以PT开头，后跟9位数字' },
+  'RO': { format: 'RO + 2-10位数字', regex: /^RO\d{2,10}$/, example: 'RO1234567890', description: '罗马尼亚VAT以RO开头，后跟2-10位数字' },
+  'SK': { format: 'SK + 10位数字', regex: /^SK\d{10}$/, example: 'SK1234567890', description: '斯洛伐克VAT以SK开头，后跟10位数字' },
+  'SI': { format: 'SI + 8位数字', regex: /^SI\d{8}$/, example: 'SI12345678', description: '斯洛文尼亚VAT以SI开头，后跟8位数字' },
+  'ES': { format: 'ES + 字母 + 7位数字 + 字母', regex: /^ES[A-Z]\d{7}[A-Z]$|^ES\d{8}[A-Z]$|^ES[A-Z]\d{8}$/, example: 'ESX1234567X', description: '西班牙VAT以ES开头，格式多样' },
+  'SE': { format: 'SE + 12位数字', regex: /^SE\d{12}$/, example: 'SE123456789012', description: '瑞典VAT以SE开头，后跟12位数字' },
+  'GB': { format: 'GB + 9或12位数字', regex: /^GB(\d{9}|\d{12})$/, example: 'GB123456789', description: '英国VAT以GB开头，后跟9或12位数字' },
+  'XI': { format: 'XI + 9或12位数字', regex: /^XI(\d{9}|\d{12})$/, example: 'XI123456789', description: '北爱尔兰VAT以XI开头，后跟9或12位数字' },
+}
+
+// EORI格式规则（按国家代码）
+const eoriFormatRules: Record<string, { format: string; regex: RegExp; example: string; description: string }> = {
+  'AT': { format: 'AT + 数字', regex: /^AT\d+$/, example: 'AT1234567', description: '奥地利EORI以AT开头，后跟数字' },
+  'BE': { format: 'BE + 10位数字', regex: /^BE\d{10}$/, example: 'BE0123456789', description: '比利时EORI以BE开头，后跟10位数字' },
+  'BG': { format: 'BG + 数字', regex: /^BG\d+$/, example: 'BG123456789', description: '保加利亚EORI以BG开头，后跟数字' },
+  'HR': { format: 'HR + 11位数字', regex: /^HR\d{11}$/, example: 'HR12345678901', description: '克罗地亚EORI以HR开头，后跟11位数字' },
+  'CY': { format: 'CY + 数字', regex: /^CY\d+$/, example: 'CY12345678', description: '塞浦路斯EORI以CY开头，后跟数字' },
+  'CZ': { format: 'CZ + 数字', regex: /^CZ\d+$/, example: 'CZ12345678', description: '捷克EORI以CZ开头，后跟数字' },
+  'DK': { format: 'DK + 10位数字', regex: /^DK\d{10}$/, example: 'DK1234567890', description: '丹麦EORI以DK开头，后跟10位数字' },
+  'EE': { format: 'EE + 数字', regex: /^EE\d+$/, example: 'EE123456789', description: '爱沙尼亚EORI以EE开头，后跟数字' },
+  'FI': { format: 'FI + 数字', regex: /^FI\d+$/, example: 'FI12345678', description: '芬兰EORI以FI开头，后跟数字' },
+  'FR': { format: 'FR + 14位字符', regex: /^FR[A-Z0-9]{14}$/, example: 'FR12345678901234', description: '法国EORI以FR开头，后跟14位字符' },
+  'DE': { format: 'DE + 15位数字', regex: /^DE\d{15}$/, example: 'DE123456789012345', description: '德国EORI以DE开头，后跟15位数字' },
+  'EL': { format: 'EL/GR + 9位数字', regex: /^(EL|GR)\d{9}$/, example: 'EL123456789', description: '希腊EORI以EL或GR开头，后跟9位数字' },
+  'GR': { format: 'EL/GR + 9位数字', regex: /^(EL|GR)\d{9}$/, example: 'GR123456789', description: '希腊EORI以EL或GR开头，后跟9位数字' },
+  'HU': { format: 'HU + 数字', regex: /^HU\d+$/, example: 'HU12345678', description: '匈牙利EORI以HU开头，后跟数字' },
+  'IE': { format: 'IE + 数字', regex: /^IE\d+$/, example: 'IE1234567', description: '爱尔兰EORI以IE开头，后跟数字' },
+  'IT': { format: 'IT + 11-16位数字', regex: /^IT\d{11,16}$/, example: 'IT12345678901', description: '意大利EORI以IT开头，后跟11-16位数字' },
+  'LV': { format: 'LV + 11位数字', regex: /^LV\d{11}$/, example: 'LV12345678901', description: '拉脱维亚EORI以LV开头，后跟11位数字' },
+  'LT': { format: 'LT + 9-12位数字', regex: /^LT\d{9,12}$/, example: 'LT123456789', description: '立陶宛EORI以LT开头，后跟9-12位数字' },
+  'LU': { format: 'LU + 数字', regex: /^LU\d+$/, example: 'LU12345678', description: '卢森堡EORI以LU开头，后跟数字' },
+  'MT': { format: 'MT + 数字', regex: /^MT\d+$/, example: 'MT12345678', description: '马耳他EORI以MT开头，后跟数字' },
+  'NL': { format: 'NL + 9位数字 + 6位字符', regex: /^NL\d{9}[A-Z0-9]{6}$/, example: 'NL123456789ABCDEF', description: '荷兰EORI以NL开头，9位数字+6位字符' },
+  'PL': { format: 'PL + 10位数字', regex: /^PL\d{10}$/, example: 'PL1234567890', description: '波兰EORI以PL开头，后跟10位数字' },
+  'PT': { format: 'PT + 9位数字', regex: /^PT\d{9}$/, example: 'PT123456789', description: '葡萄牙EORI以PT开头，后跟9位数字' },
+  'RO': { format: 'RO + 数字', regex: /^RO\d+$/, example: 'RO1234567890', description: '罗马尼亚EORI以RO开头，后跟数字' },
+  'SK': { format: 'SK + 10位数字', regex: /^SK\d{10}$/, example: 'SK1234567890', description: '斯洛伐克EORI以SK开头，后跟10位数字' },
+  'SI': { format: 'SI + 8位数字', regex: /^SI\d{8}$/, example: 'SI12345678', description: '斯洛文尼亚EORI以SI开头，后跟8位数字' },
+  'ES': { format: 'ES + 字母 + 数字 + 字母', regex: /^ES[A-Z0-9]+$/, example: 'ESX1234567X', description: '西班牙EORI以ES开头' },
+  'SE': { format: 'SE + 10位数字', regex: /^SE\d{10}$/, example: 'SE1234567890', description: '瑞典EORI以SE开头，后跟10位数字' },
+  'GB': { format: 'GB + 12位数字', regex: /^GB\d{12}$/, example: 'GB123456789012', description: '英国EORI以GB开头，后跟12位数字' },
+  'XI': { format: 'XI + 12位数字', regex: /^XI\d{12}$/, example: 'XI123456789012', description: '北爱尔兰EORI以XI开头，后跟12位数字' },
+}
+
+// 验证VAT格式并返回提示
+function validateVatFormat(vatNumber: string): { isValid: boolean; hint: string } {
+  if (!vatNumber || vatNumber.length < 2) {
+    return { isValid: false, hint: '请输入VAT税号，以国家代码开头（如DE、FR、NL等）' }
+  }
+  
+  const countryCode = vatNumber.substring(0, 2).toUpperCase()
+  const rule = vatFormatRules[countryCode]
+  
+  if (!rule) {
+    return { 
+      isValid: false, 
+      hint: `未识别的国家代码"${countryCode}"。支持的国家：${Object.keys(vatFormatRules).join(', ')}` 
+    }
+  }
+  
+  if (rule.regex.test(vatNumber)) {
+    return { isValid: true, hint: `✓ ${rule.description}` }
+  }
+  
+  return { 
+    isValid: false, 
+    hint: `格式错误！${rule.description}。正确示例：${rule.example}` 
+  }
+}
+
+// 验证EORI格式并返回提示
+function validateEoriFormat(eoriNumber: string): { isValid: boolean; hint: string } {
+  if (!eoriNumber || eoriNumber.length < 2) {
+    return { isValid: false, hint: '请输入EORI号码，以国家代码开头（如DE、FR、NL等）' }
+  }
+  
+  const countryCode = eoriNumber.substring(0, 2).toUpperCase()
+  const rule = eoriFormatRules[countryCode]
+  
+  if (!rule) {
+    return { 
+      isValid: false, 
+      hint: `未识别的国家代码"${countryCode}"。支持的国家：${Object.keys(eoriFormatRules).join(', ')}` 
+    }
+  }
+  
+  if (rule.regex.test(eoriNumber)) {
+    return { isValid: true, hint: `✓ ${rule.description}` }
+  }
+  
+  return { 
+    isValid: false, 
+    hint: `格式错误！${rule.description}。正确示例：${rule.example}` 
+  }
+}
+
 interface TaxFormData {
   // 公司信息（公共）
   companyShortName: string
@@ -1337,6 +1457,8 @@ function TaxModal({
   }>>([])
   const [sharedTaxSearch, setSharedTaxSearch] = useState('')
   const [loadingSharedTax, setLoadingSharedTax] = useState(false)
+  const [showSharedTaxDropdown, setShowSharedTaxDropdown] = useState(false)
+  const [selectedSharedCompany, setSelectedSharedCompany] = useState<string>('')
 
   useEffect(() => {
     loadCountries()
@@ -1346,10 +1468,12 @@ function TaxModal({
   const loadSharedTaxNumbers = async () => {
     setLoadingSharedTax(true)
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/crm/shared-tax-numbers?status=active`)
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/shared-tax-numbers?status=active`)
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
-        setSharedTaxList(data.data)
+        // API返回的是 {list: [...], total: ...} 格式
+        const list = Array.isArray(data.data) ? data.data : (data.data.list || [])
+        setSharedTaxList(list)
       }
     } catch (error) {
       console.error('加载共享税号失败:', error)
@@ -1364,54 +1488,79 @@ function TaxModal({
     }
   }, [taxSource])
 
-  // 选择共享税号填充表单
-  const handleSelectSharedTax = (sharedTax: typeof sharedTaxList[0]) => {
-    if (sharedTax.taxType === 'vat') {
-      setFormData(prev => ({
-        ...prev,
-        vatEnabled: true,
-        vatNumber: sharedTax.taxNumber,
-        vatVerified: sharedTax.isVerified,
-        vatValidationStatus: sharedTax.isVerified ? 'valid' : 'none',
-        companyShortName: prev.companyShortName || sharedTax.companyShortName || '',
-        companyName: prev.companyName || sharedTax.companyName || '',
-        companyAddress: prev.companyAddress || sharedTax.companyAddress || '',
-        country: prev.country || sharedTax.country || ''
-      }))
-      if (sharedTax.country) setCountrySearch(sharedTax.country)
-    } else if (sharedTax.taxType === 'eori') {
-      setFormData(prev => ({
-        ...prev,
-        eoriEnabled: true,
-        eoriNumber: sharedTax.taxNumber,
-        eoriVerified: sharedTax.isVerified,
-        eoriValidationStatus: sharedTax.isVerified ? 'valid' : 'none',
-        companyShortName: prev.companyShortName || sharedTax.companyShortName || '',
-        companyName: prev.companyName || sharedTax.companyName || '',
-        companyAddress: prev.companyAddress || sharedTax.companyAddress || '',
-        country: prev.country || sharedTax.country || ''
-      }))
-      if (sharedTax.country) setCountrySearch(sharedTax.country)
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        otherEnabled: true,
-        otherNumber: sharedTax.taxNumber,
-        companyShortName: prev.companyShortName || sharedTax.companyShortName || '',
-        companyName: prev.companyName || sharedTax.companyName || '',
-        companyAddress: prev.companyAddress || sharedTax.companyAddress || '',
-        country: prev.country || sharedTax.country || ''
-      }))
-      if (sharedTax.country) setCountrySearch(sharedTax.country)
-    }
+  // 按公司分组的共享税号（一个公司一条记录，包含VAT和EORI）
+  interface GroupedSharedTax {
+    companyKey: string
+    companyShortName: string
+    companyName: string
+    companyAddress: string
+    country: string
+    vatNumber?: string
+    vatVerified?: boolean
+    eoriNumber?: string
+    eoriVerified?: boolean
   }
+  
+  const groupedSharedTaxList: GroupedSharedTax[] = useMemo(() => {
+    const grouped: Record<string, GroupedSharedTax> = {}
+    
+    sharedTaxList.forEach(tax => {
+      // 使用公司名称或公司简称作为分组键
+      const key = tax.companyName || tax.companyShortName || tax.taxNumber
+      
+      if (!grouped[key]) {
+        grouped[key] = {
+          companyKey: key,
+          companyShortName: tax.companyShortName || '',
+          companyName: tax.companyName || '',
+          companyAddress: tax.companyAddress || '',
+          country: tax.country || ''
+        }
+      }
+      
+      if (tax.taxType === 'vat' || tax.taxType === 'VAT') {
+        grouped[key].vatNumber = tax.taxNumber
+        grouped[key].vatVerified = tax.isVerified
+      } else if (tax.taxType === 'eori' || tax.taxType === 'EORI') {
+        grouped[key].eoriNumber = tax.taxNumber
+        grouped[key].eoriVerified = tax.isVerified
+      }
+    })
+    
+    return Object.values(grouped)
+  }, [sharedTaxList])
 
-  // 过滤共享税号列表
-  const filteredSharedTaxList = sharedTaxList.filter(tax => 
-    tax.taxNumber.toLowerCase().includes(sharedTaxSearch.toLowerCase()) ||
-    (tax.companyName || '').toLowerCase().includes(sharedTaxSearch.toLowerCase()) ||
-    (tax.companyShortName || '').toLowerCase().includes(sharedTaxSearch.toLowerCase())
+  // 过滤分组后的共享税号列表
+  const filteredGroupedSharedTaxList = groupedSharedTaxList.filter(company => 
+    (company.vatNumber || '').toLowerCase().includes(sharedTaxSearch.toLowerCase()) ||
+    (company.eoriNumber || '').toLowerCase().includes(sharedTaxSearch.toLowerCase()) ||
+    company.companyName.toLowerCase().includes(sharedTaxSearch.toLowerCase()) ||
+    company.companyShortName.toLowerCase().includes(sharedTaxSearch.toLowerCase())
   )
+
+  // 选择共享公司，填充该公司的所有税号
+  const handleSelectSharedCompany = (company: GroupedSharedTax) => {
+    setFormData(prev => ({
+      ...prev,
+      companyShortName: company.companyShortName || prev.companyShortName,
+      companyName: company.companyName || prev.companyName,
+      companyAddress: company.companyAddress || prev.companyAddress,
+      country: company.country || prev.country,
+      vatEnabled: !!company.vatNumber,
+      vatNumber: company.vatNumber || '',
+      vatVerified: company.vatVerified || false,
+      vatValidationStatus: company.vatVerified ? 'valid' : 'none',
+      vatValidationError: '',
+      eoriEnabled: !!company.eoriNumber,
+      eoriNumber: company.eoriNumber || '',
+      eoriVerified: company.eoriVerified || false,
+      eoriValidationStatus: company.eoriVerified ? 'valid' : 'none',
+      eoriValidationError: ''
+    }))
+    if (company.country) setCountrySearch(company.country)
+    setSelectedSharedCompany(company.companyShortName || company.companyName)
+    setShowSharedTaxDropdown(false)
+  }
 
   useEffect(() => {
     if (isEditMode && initialCompanyTaxes) {
@@ -1807,55 +1956,79 @@ function TaxModal({
             </div>
           )}
 
-          {/* 共享税号选择 */}
+          {/* 共享税号选择 - 下拉菜单形式 */}
           {!isEditMode && taxSource === 'shared' && (
-            <div className="mb-3 p-3 border border-amber-200 rounded-lg bg-amber-50">
+            <div className="mb-3">
               <div className="flex items-center gap-2 mb-2">
                 <Building2 className="w-4 h-4 text-amber-600" />
                 <span className="text-xs font-medium text-amber-800">共享税号库</span>
               </div>
-              <input
-                type="text"
-                value={sharedTaxSearch}
-                onChange={(e) => setSharedTaxSearch(e.target.value)}
-                placeholder="搜索税号或公司名称..."
-                className="w-full px-2.5 py-1.5 text-xs border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-500 mb-2"
-              />
-              <div className="max-h-40 overflow-y-auto space-y-1">
-                {loadingSharedTax ? (
-                  <div className="text-xs text-gray-400 text-center py-2">加载中...</div>
-                ) : filteredSharedTaxList.length === 0 ? (
-                  <div className="text-xs text-gray-400 text-center py-2">暂无共享税号</div>
-                ) : (
-                  filteredSharedTaxList.map(tax => (
-                    <div
-                      key={tax.id}
-                      onClick={() => handleSelectSharedTax(tax)}
-                      className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-white cursor-pointer"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`px-1.5 py-0.5 text-[10px] rounded ${
-                            tax.taxType === 'vat' ? 'bg-blue-100 text-blue-700' : 
-                            tax.taxType === 'eori' ? 'bg-green-100 text-green-700' : 
-                            'bg-gray-100 text-gray-600'
-                          }`}>
-                            {tax.taxType.toUpperCase()}
-                          </span>
-                          <span className="text-xs font-mono truncate">{tax.taxNumber}</span>
-                          {tax.isVerified && <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />}
-          </div>
-                        <div className="text-[10px] text-gray-500 truncate mt-0.5">
-                          {tax.companyShortName || tax.companyName || '-'}
-                        </div>
-                      </div>
-                      <Plus className="w-4 h-4 text-amber-600 flex-shrink-0 ml-2" />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSharedTaxDropdown(!showSharedTaxDropdown)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs border border-amber-300 rounded-lg bg-amber-50 hover:bg-amber-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <span className={selectedSharedCompany ? 'text-gray-900' : 'text-gray-500'}>
+                    {selectedSharedCompany || '请选择共享税号公司...'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-amber-600 transition-transform ${showSharedTaxDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {showSharedTaxDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                    <div className="p-2 border-b border-gray-100">
+                      <input
+                        type="text"
+                        value={sharedTaxSearch}
+                        onChange={(e) => setSharedTaxSearch(e.target.value)}
+                        placeholder="搜索税号或公司名称..."
+                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     </div>
-                  ))
+                    <div className="max-h-48 overflow-y-auto">
+                      {loadingSharedTax ? (
+                        <div className="text-xs text-gray-400 text-center py-4">加载中...</div>
+                      ) : filteredGroupedSharedTaxList.length === 0 ? (
+                        <div className="text-xs text-gray-400 text-center py-4">暂无共享税号</div>
+                      ) : (
+                        filteredGroupedSharedTaxList.map(company => (
+                          <div
+                            key={company.companyKey}
+                            onClick={() => handleSelectSharedCompany(company)}
+                            className="flex items-center justify-between p-3 hover:bg-amber-50 cursor-pointer border-b border-gray-50 last:border-b-0"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-medium text-gray-900 truncate">
+                                {company.companyShortName || company.companyName}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                {company.vatNumber && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-100 text-blue-700">VAT</span>
+                                    <span className="text-[10px] font-mono text-gray-600">{company.vatNumber}</span>
+                                    {company.vatVerified && <CheckCircle className="w-3 h-3 text-green-500" />}
+                                  </div>
+                                )}
+                                {company.eoriNumber && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="px-1.5 py-0.5 text-[10px] rounded bg-green-100 text-green-700">EORI</span>
+                                    <span className="text-[10px] font-mono text-gray-600">{company.eoriNumber}</span>
+                                    {company.eoriVerified && <CheckCircle className="w-3 h-3 text-green-500" />}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="text-[10px] text-amber-600 mt-2">
-                💡 点击税号添加到下方表单，可同时选择多个
+                💡 选择公司后，将自动填充该公司的所有税号信息
               </div>
             </div>
           )}
@@ -1882,10 +2055,10 @@ function TaxModal({
                 {formData.vatEnabled && (
                   <div className="space-y-2 ml-6">
                     <div className="flex items-center gap-2">
-            <input
-              type="text"
+                      <input
+                        type="text"
                         value={formData.vatNumber}
-                        onChange={(e) => setFormData({ ...formData, vatNumber: e.target.value, vatVerified: false, vatValidationStatus: 'none', vatValidationError: '' })}
+                        onChange={(e) => setFormData({ ...formData, vatNumber: e.target.value.toUpperCase(), vatVerified: false, vatValidationStatus: 'none', vatValidationError: '' })}
                         className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                         placeholder="例如: DE123456789"
                       />
@@ -1898,6 +2071,15 @@ function TaxModal({
                         {vatValidating ? '验证中...' : '验证'}
                       </button>
                     </div>
+                    {/* 格式提示 */}
+                    {formData.vatNumber && formData.vatValidationStatus === 'none' && (() => {
+                      const formatResult = validateVatFormat(formData.vatNumber)
+                      return (
+                        <div className={`text-xs px-2 py-1 rounded ${formatResult.isValid ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
+                          {formatResult.hint}
+                        </div>
+                      )
+                    })()}
                     {/* VAT验证状态提示 */}
                     {formData.vatValidationStatus === 'invalid' && formData.vatValidationError && (
                       <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
@@ -1934,7 +2116,7 @@ function TaxModal({
                       <input
                         type="text"
                         value={formData.eoriNumber}
-                        onChange={(e) => setFormData({ ...formData, eoriNumber: e.target.value, eoriVerified: false, eoriValidationStatus: 'none', eoriValidationError: '' })}
+                        onChange={(e) => setFormData({ ...formData, eoriNumber: e.target.value.toUpperCase(), eoriVerified: false, eoriValidationStatus: 'none', eoriValidationError: '' })}
                         className="flex-1 px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                         placeholder="例如: DE123456789012345"
                       />
@@ -1947,6 +2129,15 @@ function TaxModal({
                         {eoriValidating ? '验证中...' : '验证'}
                       </button>
                     </div>
+                    {/* 格式提示 */}
+                    {formData.eoriNumber && formData.eoriValidationStatus === 'none' && (() => {
+                      const formatResult = validateEoriFormat(formData.eoriNumber)
+                      return (
+                        <div className={`text-xs px-2 py-1 rounded ${formatResult.isValid ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
+                          {formatResult.hint}
+                        </div>
+                      )
+                    })()}
                     {/* EORI验证状态提示 */}
                     {formData.eoriValidationStatus === 'invalid' && formData.eoriValidationError && (
                       <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">

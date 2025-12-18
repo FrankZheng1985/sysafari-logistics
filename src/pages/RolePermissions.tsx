@@ -22,6 +22,30 @@ const permissionGroups = [
     description: '提单的查看、创建、编辑、删除等权限'
   },
   { 
+    key: 'crm', 
+    label: 'CRM客户管理', 
+    icon: '👥',
+    description: '客户、商机、报价等CRM功能权限'
+  },
+  { 
+    key: 'supplier', 
+    label: '供应商管理', 
+    icon: '🏭',
+    description: '供应商信息、报价导入等权限'
+  },
+  { 
+    key: 'finance', 
+    label: '财务管理', 
+    icon: '💰',
+    description: '发票、收付款、费用、财务报表等权限'
+  },
+  { 
+    key: 'product', 
+    label: '产品定价', 
+    icon: '🏷️',
+    description: '产品和定价管理权限'
+  },
+  { 
     key: 'inspection', 
     label: '查验管理', 
     icon: '🔍',
@@ -37,7 +61,7 @@ const permissionGroups = [
     key: 'tool', 
     label: '工具箱', 
     icon: '🔧',
-    description: '报价、关税计算、海关编码等工具的访问权限'
+    description: '报价、关税计算等工具的访问权限'
   },
   { 
     key: 'system', 

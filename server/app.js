@@ -145,7 +145,7 @@ function startServer() {
     console.log('║   🚀 ERP物流管理系统 - 模块化架构 v2.0                      ║')
     console.log('║                                                            ║')
     console.log(`║   📡 服务地址: http://localhost:${PORT}                       ║`)
-    console.log('║   📦 数据库: SQLite (WAL模式)                              ║')
+    console.log('║   📦 数据库: PostgreSQL                                    ║')
     console.log('║                                                            ║')
     console.log('║   📁 模块结构:                                             ║')
     console.log('║   [基础数据] /api/countries, vat-rates, shipping-companies║')

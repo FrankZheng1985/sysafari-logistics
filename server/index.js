@@ -16,6 +16,7 @@ import crmRoutes from './modules/crm/routes.js'
 import financeRoutes from './modules/finance/routes.js'
 import masterdataRoutes from './modules/masterdata/routes.js'
 import orderRoutes from './modules/order/routes.js'
+import productRoutes from './modules/product/routes.js'
 import supplierRoutes from './modules/supplier/routes.js'
 import systemRoutes from './modules/system/routes.js'
 import tmsRoutes from './modules/tms/routes.js'
@@ -74,6 +75,7 @@ app.use('/api', crmRoutes)
 app.use('/api', financeRoutes)
 app.use('/api', masterdataRoutes)
 app.use('/api', orderRoutes)
+app.use('/api', productRoutes)
 app.use('/api', supplierRoutes)
 app.use('/api', systemRoutes)
 app.use('/api', tmsRoutes)

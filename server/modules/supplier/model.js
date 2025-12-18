@@ -107,7 +107,8 @@ export async function getSupplierList(params = {}) {
   const db = getDatabase()
   const { 
     search, 
-    type, 
+    type,
+    types,  // 支持多类型过滤（逗号分隔）
     status, 
     level,
     page = 1, 
@@ -130,10 +131,20 @@ export async function getSupplierList(params = {}) {
     queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
-  // 类型筛选
+  // 单类型筛选
   if (type) {
     query += ' AND supplier_type = ?'
     queryParams.push(type)
+  }
+  
+  // 多类型筛选（用于运输供应商等场景）
+  if (types && !type) {
+    const typeArray = types.split(',').map(t => t.trim()).filter(Boolean)
+    if (typeArray.length > 0) {
+      const placeholders = typeArray.map(() => '?').join(',')
+      query += ` AND supplier_type IN (${placeholders})`
+      queryParams.push(...typeArray)
+    }
   }
   
   // 状态筛选
@@ -472,6 +483,295 @@ function convertToCamelCase(row) {
   }
 }
 
+// ==================== 供应商采购价管理 ====================
+
+/**
+ * 获取供应商的采购价列表
+ */
+export async function getSupplierPrices(supplierId, options = {}) {
+  const db = getDatabase()
+  const { category, isActive, search } = options
+  
+  let sql = `
+    SELECT * FROM supplier_prices 
+    WHERE supplier_id = ?
+  `
+  const params = [supplierId]
+  
+  if (category) {
+    sql += ` AND category = ?`
+    params.push(category)
+  }
+  
+  if (isActive !== undefined) {
+    sql += ` AND is_active = ?`
+    params.push(isActive ? 1 : 0)
+  }
+  
+  if (search) {
+    sql += ` AND (name LIKE ? OR name_en LIKE ?)`
+    params.push(`%${search}%`, `%${search}%`)
+  }
+  
+  sql += ` ORDER BY category, name`
+  
+  const rows = db.prepare(sql).all(...params)
+  return rows.map(formatSupplierPrice)
+}
+
+/**
+ * 获取单个采购价
+ */
+export async function getSupplierPriceById(id) {
+  const db = getDatabase()
+  const row = db.prepare('SELECT * FROM supplier_prices WHERE id = ?').get(id)
+  return row ? formatSupplierPrice(row) : null
+}
+
+/**
+ * 创建采购价
+ */
+export async function createSupplierPrice(data) {
+  const db = getDatabase()
+  
+  const result = db.prepare(`
+    INSERT INTO supplier_prices (
+      supplier_id, category, name, name_en, unit, unit_price, 
+      currency, valid_from, valid_until, is_active, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    data.supplierId,
+    data.category,
+    data.name,
+    data.nameEn || null,
+    data.unit || '次',
+    data.unitPrice,
+    data.currency || 'EUR',
+    data.validFrom || null,
+    data.validUntil || null,
+    data.isActive !== false ? 1 : 0,
+    data.notes || null
+  )
+  
+  return { id: result.lastInsertRowid, ...data }
+}
+
+/**
+ * 更新采购价
+ */
+export async function updateSupplierPrice(id, data) {
+  const db = getDatabase()
+  
+  const fields = []
+  const values = []
+  
+  if (data.category !== undefined) {
+    fields.push('category = ?')
+    values.push(data.category)
+  }
+  if (data.name !== undefined) {
+    fields.push('name = ?')
+    values.push(data.name)
+  }
+  if (data.nameEn !== undefined) {
+    fields.push('name_en = ?')
+    values.push(data.nameEn)
+  }
+  if (data.unit !== undefined) {
+    fields.push('unit = ?')
+    values.push(data.unit)
+  }
+  if (data.unitPrice !== undefined) {
+    fields.push('unit_price = ?')
+    values.push(data.unitPrice)
+  }
+  if (data.currency !== undefined) {
+    fields.push('currency = ?')
+    values.push(data.currency)
+  }
+  if (data.validFrom !== undefined) {
+    fields.push('valid_from = ?')
+    values.push(data.validFrom)
+  }
+  if (data.validUntil !== undefined) {
+    fields.push('valid_until = ?')
+    values.push(data.validUntil)
+  }
+  if (data.isActive !== undefined) {
+    fields.push('is_active = ?')
+    values.push(data.isActive ? 1 : 0)
+  }
+  if (data.notes !== undefined) {
+    fields.push('notes = ?')
+    values.push(data.notes)
+  }
+  
+  fields.push('updated_at = CURRENT_TIMESTAMP')
+  values.push(id)
+  
+  db.prepare(`UPDATE supplier_prices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  
+  return getSupplierPriceById(id)
+}
+
+/**
+ * 删除采购价
+ */
+export async function deleteSupplierPrice(id) {
+  const db = getDatabase()
+  db.prepare('DELETE FROM supplier_prices WHERE id = ?').run(id)
+  return { success: true }
+}
+
+/**
+ * 根据费用名称查找采购价（用于发票生成时获取英文名称）
+ */
+export async function findSupplierPriceByName(supplierId, feeName) {
+  const db = getDatabase()
+  const row = db.prepare(`
+    SELECT * FROM supplier_prices 
+    WHERE supplier_id = ? AND name = ? AND is_active = 1
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(supplierId, feeName)
+  return row ? formatSupplierPrice(row) : null
+}
+
+/**
+ * 格式化采购价数据
+ */
+function formatSupplierPrice(row) {
+  return {
+    id: row.id,
+    supplierId: row.supplier_id,
+    category: row.category,
+    name: row.name,
+    nameEn: row.name_en,
+    unit: row.unit,
+    unitPrice: parseFloat(row.unit_price) || 0,
+    currency: row.currency,
+    validFrom: row.valid_from,
+    validUntil: row.valid_until,
+    isActive: row.is_active === 1,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+// ==================== 批量导入相关 ====================
+
+/**
+ * 批量创建供应商报价
+ */
+export async function batchCreateSupplierPrices(supplierId, items, options = {}) {
+  const db = getDatabase()
+  const { supplierName, importBatchId, fileName } = options
+  
+  let successCount = 0
+  let failCount = 0
+  
+  for (const item of items) {
+    try {
+      const id = generateId()
+      
+      await db.prepare(`
+        INSERT INTO supplier_price_items (
+          id, supplier_id, supplier_name, fee_name, fee_name_en,
+          fee_category, unit, price, currency,
+          effective_date, expiry_date, route_from, route_to,
+          remark, import_batch_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(
+        id,
+        supplierId,
+        supplierName || '',
+        item.feeName || '',
+        item.feeNameEn || '',
+        item.feeCategory || 'other',
+        item.unit || '',
+        item.price || 0,
+        item.currency || 'EUR',
+        item.effectiveDate || null,
+        item.expiryDate || null,
+        item.routeFrom || '',
+        item.routeTo || '',
+        item.remark || '',
+        importBatchId
+      )
+      
+      successCount++
+    } catch (error) {
+      console.error('创建报价失败:', error)
+      failCount++
+    }
+  }
+  
+  return { successCount, failCount }
+}
+
+/**
+ * 创建导入记录
+ */
+export async function createImportRecord(data) {
+  const db = getDatabase()
+  
+  try {
+    await db.prepare(`
+      INSERT INTO import_records (
+        supplier_id, supplier_name, file_name, file_type,
+        record_count, status, created_by, created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      data.supplierId,
+      data.supplierName || '',
+      data.fileName || '',
+      data.fileType || '',
+      data.recordCount || 0,
+      data.status || 'completed',
+      data.createdBy || null
+    )
+    
+    return { success: true }
+  } catch (error) {
+    console.error('创建导入记录失败:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 获取导入记录
+ */
+export async function getImportRecords(supplierId, options = {}) {
+  const db = getDatabase()
+  const { page = 1, pageSize = 20 } = options
+  
+  let query = 'SELECT * FROM import_records WHERE 1=1'
+  const params = []
+  
+  if (supplierId) {
+    query += ' AND supplier_id = ?'
+    params.push(supplierId)
+  }
+  
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  params.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(query).all(...params)
+  
+  return (rows || []).map(row => ({
+    id: row.id,
+    supplierId: row.supplier_id,
+    supplierName: row.supplier_name,
+    fileName: row.file_name,
+    fileType: row.file_type,
+    recordCount: row.record_count,
+    status: row.status,
+    createdAt: row.created_at,
+    completedAt: row.completed_at
+  }))
+}
+
 export default {
   // 常量
   SUPPLIER_TYPES,
@@ -495,5 +795,18 @@ export default {
   checkSupplierCodeExists,
   getSupplierStats,
   generateSupplierCode,
-  getActiveSuppliers
+  getActiveSuppliers,
+  
+  // 采购价管理
+  getSupplierPrices,
+  getSupplierPriceById,
+  createSupplierPrice,
+  updateSupplierPrice,
+  deleteSupplierPrice,
+  findSupplierPriceByName,
+  
+  // 批量导入
+  batchCreateSupplierPrices,
+  createImportRecord,
+  getImportRecords
 }

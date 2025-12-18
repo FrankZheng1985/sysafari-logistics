@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
-  Search, ArrowUpRight, ArrowDownRight, Edit2, Trash2,
-  CreditCard, Building2, Banknote, Wallet
+  Search, ArrowUpRight, ArrowDownRight, Trash2,
+  CreditCard, Building2, Banknote, Wallet, X, FileText, Loader2
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -49,10 +49,11 @@ export default function FinancePayments() {
   const [filterType, setFilterType] = useState('')
   const [filterMethod, setFilterMethod] = useState('')
   
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [modalVisible, setModalVisible] = useState(false) // modalVisible reserved for edit functionality
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [editingPayment, setEditingPayment] = useState<Payment | null>(null) // editingPayment reserved for edit functionality
+  const [showInvoiceSelector, setShowInvoiceSelector] = useState(false)
+  const [paymentMode, setPaymentMode] = useState<'income' | 'expense'>('income')
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [invoiceLoading, setInvoiceLoading] = useState(false)
+  const [invoiceSearch, setInvoiceSearch] = useState('')
 
   const tabs = [
     { label: '财务概览', path: '/finance' },
@@ -60,6 +61,8 @@ export default function FinancePayments() {
     { label: '收付款', path: '/finance/payments' },
     { label: '费用管理', path: '/finance/fees' },
     { label: '财务报表', path: '/finance/reports' },
+    { label: '订单报表', path: '/finance/order-report' },
+    { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
    
@@ -105,6 +108,45 @@ export default function FinancePayments() {
       console.error('获取付款统计失败:', error)
     }
   }
+
+  const fetchInvoices = async (type: 'sales' | 'purchase') => {
+    setInvoiceLoading(true)
+    try {
+      // 获取所有未付清的发票 (status=unpaid_all 查询 unpaid 和 partial 状态，包含逾期)
+      const response = await fetch(`${API_BASE}/api/invoices?type=${type}&status=unpaid_all&pageSize=100`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setInvoices(data.data?.list || [])
+      }
+    } catch (error) {
+      console.error('获取发票列表失败:', error)
+    } finally {
+      setInvoiceLoading(false)
+    }
+  }
+
+  const handleOpenPaymentModal = (mode: 'income' | 'expense') => {
+    setPaymentMode(mode)
+    setInvoiceSearch('')
+    setShowInvoiceSelector(true)
+    // 收款 -> 销售发票; 付款 -> 采购发票
+    fetchInvoices(mode === 'income' ? 'sales' : 'purchase')
+  }
+
+  const handleSelectInvoice = (invoiceId: string) => {
+    setShowInvoiceSelector(false)
+    navigate(`/finance/invoices/${invoiceId}/payment`)
+  }
+
+  const filteredInvoices = invoices.filter(inv => {
+    if (!invoiceSearch) return true
+    const search = invoiceSearch.toLowerCase()
+    return (
+      inv.invoiceNumber?.toLowerCase().includes(search) ||
+      inv.customerName?.toLowerCase().includes(search) ||
+      inv.supplierName?.toLowerCase().includes(search)
+    )
+  })
 
   const handleDelete = async (id: string) => {
     if (!confirm('确定要删除这条付款记录吗？')) return
@@ -238,19 +280,9 @@ export default function FinancePayments() {
     {
       key: 'actions',
       label: '操作',
-      width: 100,
+      width: 80,
       render: (item) => (
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => {
-              setEditingPayment(item)
-              setModalVisible(true)
-            }}
-            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-            title="编辑"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
           <button
             onClick={() => handleDelete(item.id)}
             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -364,20 +396,14 @@ export default function FinancePayments() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => {
-              setEditingPayment(null)
-              setModalVisible(true)
-            }}
+            onClick={() => handleOpenPaymentModal('income')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
           >
             <ArrowUpRight className="w-4 h-4" />
             记录收款
           </button>
           <button
-            onClick={() => {
-              setEditingPayment(null)
-              setModalVisible(true)
-            }}
+            onClick={() => handleOpenPaymentModal('expense')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
           >
             <ArrowDownRight className="w-4 h-4" />
@@ -420,6 +446,109 @@ export default function FinancePayments() {
             >
               下一页
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 发票选择模态框 */}
+      {showInvoiceSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowInvoiceSelector(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden">
+            {/* 标题栏 */}
+            <div className={`flex items-center justify-between px-4 py-3 border-b ${
+              paymentMode === 'income' ? 'bg-green-50' : 'bg-red-50'
+            }`}>
+              <div className="flex items-center gap-2">
+                {paymentMode === 'income' ? (
+                  <ArrowUpRight className="w-5 h-5 text-green-600" />
+                ) : (
+                  <ArrowDownRight className="w-5 h-5 text-red-600" />
+                )}
+                <h3 className={`text-base font-semibold ${
+                  paymentMode === 'income' ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  {paymentMode === 'income' ? '选择发票进行收款' : '选择发票进行付款'}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setShowInvoiceSelector(false)}
+                className="p-1 hover:bg-white/50 rounded transition-colors"
+                title="关闭"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* 搜索框 */}
+            <div className="p-4 border-b border-gray-100">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="搜索发票号、客户名..."
+                  value={invoiceSearch}
+                  onChange={(e) => setInvoiceSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                />
+              </div>
+            </div>
+
+            {/* 发票列表 */}
+            <div className="overflow-y-auto max-h-[50vh] p-4">
+              {invoiceLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                  <span className="ml-2 text-sm text-gray-500">加载中...</span>
+                </div>
+              ) : filteredInvoices.length > 0 ? (
+                <div className="space-y-2">
+                  {filteredInvoices.map(invoice => {
+                    const unpaid = Number(invoice.totalAmount || 0) - Number(invoice.paidAmount || 0)
+                    return (
+                      <button
+                        key={invoice.id}
+                        onClick={() => handleSelectInvoice(invoice.id)}
+                        className="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium text-gray-900">{invoice.invoiceNumber}</span>
+                          </div>
+                          <span className={`text-sm font-semibold ${
+                            paymentMode === 'income' ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            待{paymentMode === 'income' ? '收' : '付'}: {formatCurrency(unpaid, invoice.currency)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <span>{invoice.customerName || invoice.supplierName || '-'}</span>
+                          <span>总额: {formatCurrency(invoice.totalAmount, invoice.currency)}</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">
+                    {paymentMode === 'income' ? '暂无待收款的销售发票' : '暂无待付款的采购发票'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    请先在发票管理中创建发票
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 底部提示 */}
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+              <p className="text-xs text-gray-500 text-center">
+                选择一张发票后，将跳转到收款登记页面
+              </p>
+            </div>
           </div>
         </div>
       )}

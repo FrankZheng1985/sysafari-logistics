@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import DraggableModal, { ModalContent, ModalButton } from './DraggableModal'
+import DatePicker from './DatePicker'
 
 interface ATAModalProps {
   visible: boolean
@@ -78,19 +79,13 @@ export default function ATAModal({
       <ModalContent>
         <div className="space-y-4">
           <div>
-            <label htmlFor="ata-date-input" className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               ATA <span className="text-red-500">*</span>
             </label>
-            <input
-              id="ata-date-input"
-              type="date"
+            <DatePicker
               value={ata}
-              onChange={(e) => setAta(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900"
-              title="选择 ATA 日期"
-              aria-label="ATA 日期"
-              aria-required="true"
-              required
+              onChange={(value) => setAta(value)}
+              placeholder="选择 ATA 日期"
             />
           </div>
         </div>

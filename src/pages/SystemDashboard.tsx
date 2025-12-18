@@ -367,7 +367,7 @@ export default function SystemDashboard() {
               { label: '客户管理', path: '/crm/customers', icon: Users, color: 'bg-purple-50 text-purple-600', module: 'crm' as const },
               { label: '财务报表', path: '/finance/reports', icon: BarChart3, color: 'bg-amber-50 text-amber-600', module: 'finance' as const },
               { label: '查验明细', path: '/inspection-overview', icon: CheckCircle, color: 'bg-cyan-50 text-cyan-600', module: 'inspection' as const },
-              { label: '服务商', path: '/tms/service-providers', icon: Package, color: 'bg-pink-50 text-pink-600', module: 'tms' as const },
+              { label: '运输供应商', path: '/supplier-manage?type=transport', icon: Package, color: 'bg-pink-50 text-pink-600', module: 'tms' as const },
             ].filter(item => canAccessModule(item.module)).map(item => {
               const Icon = item.icon
               return (

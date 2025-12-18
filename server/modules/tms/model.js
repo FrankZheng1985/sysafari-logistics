@@ -618,20 +618,24 @@ export async function getExceptionHistory(id) {
   }
 }
 
-// ==================== 服务商管理 ====================
+// ==================== 运输供应商管理（原服务商功能，现已合并到供应商模块） ====================
+
+// 运输相关的供应商类型
+const TRANSPORT_SUPPLIER_TYPES = ['delivery', 'trucking', 'shipping', 'forwarder', 'terminal', 'depot']
 
 /**
- * 获取服务商列表
+ * 获取运输供应商列表（从供应商表获取运输相关类型）
  */
 export async function getServiceProviders(params = {}) {
   const db = getDatabase()
   const { type, status = 'active', search, page = 1, pageSize = 20 } = params
   
-  let query = 'SELECT * FROM service_providers WHERE 1=1'
-  const queryParams = []
+  // 只获取运输相关类型的供应商
+  let query = `SELECT * FROM suppliers WHERE supplier_type IN (${TRANSPORT_SUPPLIER_TYPES.map(() => '?').join(',')})`
+  const queryParams = [...TRANSPORT_SUPPLIER_TYPES]
   
   if (type) {
-    query += ' AND service_type = ?'
+    query += ' AND supplier_type = ?'
     queryParams.push(type)
   }
   
@@ -641,7 +645,7 @@ export async function getServiceProviders(params = {}) {
   }
   
   if (search) {
-    query += ' AND (provider_name LIKE ? OR provider_code LIKE ? OR contact_person LIKE ?)'
+    query += ' AND (supplier_name LIKE ? OR supplier_code LIKE ? OR contact_person LIKE ?)'
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern, searchPattern)
   }
@@ -651,13 +655,13 @@ export async function getServiceProviders(params = {}) {
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
-  query += ' ORDER BY provider_name LIMIT ? OFFSET ?'
+  query += ' ORDER BY supplier_name LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
   
   return {
-    list: list.map(convertServiceProviderToCamelCase),
+    list: list.map(convertSupplierToServiceProvider),
     total: totalResult?.total || 0,
     page,
     pageSize
@@ -665,30 +669,32 @@ export async function getServiceProviders(params = {}) {
 }
 
 /**
- * 根据ID获取服务商
+ * 根据ID获取运输供应商
  */
 export async function getServiceProviderById(id) {
   const db = getDatabase()
-  const provider = await db.prepare('SELECT * FROM service_providers WHERE id = ?').get(id)
-  return provider ? convertServiceProviderToCamelCase(provider) : null
+  const provider = await db.prepare('SELECT * FROM suppliers WHERE id = ?').get(id)
+  return provider ? convertSupplierToServiceProvider(provider) : null
 }
 
 /**
- * 创建服务商
+ * 创建运输供应商（写入供应商表）
  */
 export async function createServiceProvider(data) {
   const db = getDatabase()
+  const id = generateId('sup')
   
-  const result = await db.prepare(`
-    INSERT INTO service_providers (
-      provider_code, provider_name, service_type, contact_person,
-      contact_phone, contact_email, address, description, status,
+  await db.prepare(`
+    INSERT INTO suppliers (
+      id, supplier_code, supplier_name, short_name, supplier_type, contact_person,
+      contact_phone, contact_email, address, remark, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    RETURNING id
-  `).get(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+  `).run(
+    id,
     data.providerCode,
     data.providerName,
+    data.providerName?.substring(0, 10) || '',
     data.serviceType || 'delivery',
     data.contactPerson || '',
     data.contactPhone || '',
@@ -698,11 +704,11 @@ export async function createServiceProvider(data) {
     data.status || 'active'
   )
   
-  return { id: result.id }
+  return { id }
 }
 
 /**
- * 更新服务商
+ * 更新运输供应商
  */
 export async function updateServiceProvider(id, data) {
   const db = getDatabase()
@@ -710,14 +716,14 @@ export async function updateServiceProvider(id, data) {
   const values = []
   
   const fieldMap = {
-    providerCode: 'provider_code',
-    providerName: 'provider_name',
-    serviceType: 'service_type',
+    providerCode: 'supplier_code',
+    providerName: 'supplier_name',
+    serviceType: 'supplier_type',
     contactPerson: 'contact_person',
     contactPhone: 'contact_phone',
     contactEmail: 'contact_email',
     address: 'address',
-    description: 'description',
+    description: 'remark',
     status: 'status'
   }
   
@@ -733,17 +739,37 @@ export async function updateServiceProvider(id, data) {
   fields.push("updated_at = NOW()")
   values.push(id)
   
-  const result = await db.prepare(`UPDATE service_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  const result = await db.prepare(`UPDATE suppliers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
   return result.changes > 0
 }
 
 /**
- * 删除服务商
+ * 删除运输供应商
  */
 export async function deleteServiceProvider(id) {
   const db = getDatabase()
-  const result = await db.prepare('DELETE FROM service_providers WHERE id = ?').run(id)
+  const result = await db.prepare('DELETE FROM suppliers WHERE id = ?').run(id)
   return result.changes > 0
+}
+
+/**
+ * 将供应商数据转换为服务商格式（保持API兼容性）
+ */
+function convertSupplierToServiceProvider(row) {
+  return {
+    id: String(row.id),
+    providerCode: row.supplier_code,
+    providerName: row.supplier_name,
+    serviceType: row.supplier_type,
+    contactPerson: row.contact_person,
+    contactPhone: row.contact_phone,
+    contactEmail: row.contact_email,
+    address: row.address,
+    description: row.remark,
+    status: row.status,
+    createTime: row.created_at,
+    updateTime: row.updated_at
+  }
 }
 
 // ==================== 操作日志 ====================
@@ -831,8 +857,9 @@ export function convertCMRToCamelCase(row) {
     placeOfDelivery: row.place_of_delivery,
     pieces: row.pieces,
     weight: row.weight,
-    
+
     // 状态信息
+    status: row.status,  // 订单状态（已完成等）
     deliveryStatus: row.delivery_status,
     customsStatus: row.customs_status,
     
@@ -860,22 +887,7 @@ export function convertCMRToCamelCase(row) {
   }
 }
 
-export function convertServiceProviderToCamelCase(row) {
-  return {
-    id: String(row.id),
-    providerCode: row.provider_code,
-    providerName: row.provider_name,
-    serviceType: row.service_type,
-    contactPerson: row.contact_person,
-    contactPhone: row.contact_phone,
-    contactEmail: row.contact_email,
-    address: row.address,
-    description: row.description,
-    status: row.status,
-    createTime: row.created_at,
-    updateTime: row.updated_at
-  }
-}
+// convertServiceProviderToCamelCase 已移除，使用 convertSupplierToServiceProvider 替代
 
 // ==================== 考核条件管理 ====================
 
@@ -1449,7 +1461,6 @@ export default {
   
   // 转换函数
   convertCMRToCamelCase,
-  convertServiceProviderToCamelCase,
   convertConditionToCamelCase,
   convertAssessmentResultToCamelCase
 }

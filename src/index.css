@@ -124,16 +124,11 @@ textarea::placeholder {
 }
 
 /* ============================================
-   日期/时间输入框日历图标样式 - 隐藏浏览器原生图标
+   日期/时间输入框日历图标样式
    ============================================ */
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
-  opacity: 0 !important;
-  position: absolute;
-  right: 0;
-  width: 100%;
-  height: 100%;
   cursor: pointer;
 }
 

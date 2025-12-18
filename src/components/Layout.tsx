@@ -40,7 +40,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         )}
         <Header />
-        <main className="flex-1 overflow-y-auto bg-white" style={{ backgroundColor: '#ffffff' }}>
+        <main className="flex-1 overflow-y-auto bg-gray-50 overscroll-none">
           {children}
         </main>
       </div>

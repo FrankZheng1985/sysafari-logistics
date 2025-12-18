@@ -68,8 +68,20 @@ export async function getInvoices(params = {}) {
   }
   
   if (status) {
-    query += ' AND status = ?'
-    queryParams.push(status)
+    // 支持特殊筛选条件
+    if (status === 'pending') {
+      // 待收/待付：issued、unpaid 或 partial，且未逾期
+      query += ` AND status IN ('issued', 'unpaid', 'partial') AND (due_date IS NULL OR due_date >= CURRENT_DATE)`
+    } else if (status === 'overdue') {
+      // 逾期：due_date < 当前日期 且 status 不是 paid/cancelled
+      query += ` AND due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled')`
+    } else if (status === 'unpaid_all') {
+      // 所有未付清的发票（包括逾期的）- issued、unpaid、partial 都算未付清
+      query += ` AND status IN ('issued', 'unpaid', 'partial')`
+    } else {
+      query += ' AND status = ?'
+      queryParams.push(status)
+    }
   }
   
   if (customerId) {
@@ -137,29 +149,35 @@ export async function getInvoiceStats(params = {}) {
   }
   
   // 销售发票统计
+  // 状态说明: paid=已收, unpaid=未收, partial=部分收款, cancelled=已取消
+  // 待收 = unpaid + partial (不含逾期)
+  // 逾期 = due_date < 当前日期 且 status 不是 paid/cancelled
   const salesStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_count,
       COALESCE(SUM(total_amount), 0) as total_amount,
       COALESCE(SUM(paid_amount), 0) as paid_amount,
       COALESCE(SUM(total_amount - paid_amount), 0) as unpaid_amount,
-      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+      SUM(CASE WHEN status IN ('unpaid', 'partial') AND (due_date IS NULL OR due_date >= CURRENT_DATE) THEN 1 ELSE 0 END) as pending_count,
       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
-      SUM(CASE WHEN status = 'overdue' THEN 1 ELSE 0 END) as overdue_count
+      SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled') THEN 1 ELSE 0 END) as overdue_count
     FROM invoices 
     WHERE invoice_type = 'sales' ${dateFilter}
   `).get(...queryParams)
   
   // 采购发票统计
+  // 状态说明: paid=已付, unpaid=未付, partial=部分付款, cancelled=已取消
+  // 待付 = unpaid + partial (不含逾期)
+  // 逾期 = due_date < 当前日期 且 status 不是 paid/cancelled
   const purchaseStats = await db.prepare(`
     SELECT 
       COUNT(*) as total_count,
       COALESCE(SUM(total_amount), 0) as total_amount,
       COALESCE(SUM(paid_amount), 0) as paid_amount,
       COALESCE(SUM(total_amount - paid_amount), 0) as unpaid_amount,
-      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+      SUM(CASE WHEN status IN ('unpaid', 'partial') AND (due_date IS NULL OR due_date >= CURRENT_DATE) THEN 1 ELSE 0 END) as pending_count,
       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
-      SUM(CASE WHEN status = 'overdue' THEN 1 ELSE 0 END) as overdue_count
+      SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled') THEN 1 ELSE 0 END) as overdue_count
     FROM invoices 
     WHERE invoice_type = 'purchase' ${dateFilter}
   `).get(...queryParams)
@@ -218,7 +236,7 @@ export async function createInvoice(data) {
       subtotal, tax_amount, total_amount, paid_amount,
       currency, exchange_rate, description, notes,
       status, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `).run(
     id,
     invoiceNumber,
@@ -237,7 +255,7 @@ export async function createInvoice(data) {
     data.exchangeRate || 1,
     data.description || '',
     data.notes || '',
-    data.status || 'pending',
+    data.status || 'issued',
     data.createdBy || null
   )
   
@@ -278,7 +296,7 @@ export async function updateInvoice(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = NOW()")
+  fields.push("updated_at = datetime('now')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE invoices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -326,7 +344,7 @@ export async function updateInvoicePaidAmount(id) {
   // 更新发票
   await db.prepare(`
     UPDATE invoices 
-    SET paid_amount = ?, status = ?, updated_at = NOW()
+    SET paid_amount = ?, status = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(paidAmount, status, id)
   
@@ -486,7 +504,7 @@ export async function createPayment(data) {
       amount, currency, exchange_rate, bank_account, reference_number,
       description, notes, status, created_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `).run(
     id,
     paymentNumber,
@@ -538,7 +556,8 @@ export async function updatePayment(id, data) {
     referenceNumber: 'reference_number',
     description: 'description',
     notes: 'notes',
-    status: 'status'
+    status: 'status',
+    receiptUrl: 'receipt_url'
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
@@ -550,7 +569,7 @@ export async function updatePayment(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = NOW()")
+  fields.push("updated_at = datetime('now')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE payments SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -590,13 +609,18 @@ export async function deletePayment(id) {
 export async function getFees(params = {}) {
   const db = getDatabase()
   const { 
-    category, billId, customerId,
+    category, billId, customerId, supplierId, feeType,
     startDate, endDate, search,
     page = 1, pageSize = 20 
   } = params
   
   let query = 'SELECT * FROM fees WHERE 1=1'
   const queryParams = []
+  
+  if (feeType) {
+    query += ' AND fee_type = ?'
+    queryParams.push(feeType)
+  }
   
   if (category) {
     query += ' AND category = ?'
@@ -611,6 +635,11 @@ export async function getFees(params = {}) {
   if (customerId) {
     query += ' AND customer_id = ?'
     queryParams.push(customerId)
+  }
+  
+  if (supplierId) {
+    query += ' AND supplier_id = ?'
+    queryParams.push(supplierId)
   }
   
   if (startDate) {
@@ -714,16 +743,20 @@ export async function createFee(data) {
   const result = await db.prepare(`
     INSERT INTO fees (
       id, bill_id, bill_number, customer_id, customer_name,
+      supplier_id, supplier_name, fee_type,
       category, fee_name, amount, currency, exchange_rate,
       fee_date, description, notes, created_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `).run(
     id,
     data.billId || null,
     data.billNumber || '',
     data.customerId || null,
     data.customerName || '',
+    data.supplierId || null,
+    data.supplierName || '',
+    data.feeType || 'receivable',
     data.category || 'other',
     data.feeName,
     data.amount,
@@ -747,6 +780,9 @@ export async function updateFee(id, data) {
   const values = []
   
   const fieldMap = {
+    feeType: 'fee_type',
+    supplierId: 'supplier_id',
+    supplierName: 'supplier_name',
     category: 'category',
     feeName: 'fee_name',
     amount: 'amount',
@@ -766,7 +802,7 @@ export async function updateFee(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = NOW()")
+  fields.push("updated_at = datetime('now')")
   values.push(id)
   
   const result = await db.prepare(`UPDATE fees SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -984,26 +1020,29 @@ export async function getCustomerFeeReport(params = {}) {
 
 /**
  * 生成发票号
+ * 格式：INV + 年份 + 7位序号，如 INV20250000001
  */
 async function generateInvoiceNumber(type) {
   const db = getDatabase()
+  const year = new Date().getFullYear()
   const prefix = type === 'sales' ? 'INV' : 'PINV'
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  
-  // 获取今日最大序号
+
+  // 获取该年度最大序号
   const result = await db.prepare(`
-    SELECT invoice_number FROM invoices 
-    WHERE invoice_number LIKE ? 
+    SELECT invoice_number FROM invoices
+    WHERE invoice_number LIKE ?
     ORDER BY invoice_number DESC LIMIT 1
-  `).get(`${prefix}${date}%`)
-  
+  `).get(`${prefix}${year}%`)
+
   let seq = 1
   if (result) {
-    const lastSeq = parseInt(result.invoice_number.slice(-4))
+    // 提取序号部分（年份后的7位数字）
+    const numPart = result.invoice_number.replace(`${prefix}${year}`, '')
+    const lastSeq = parseInt(numPart) || 0
     seq = lastSeq + 1
   }
-  
-  return `${prefix}${date}${String(seq).padStart(4, '0')}`
+
+  return `${prefix}${year}${String(seq).padStart(7, '0')}`
 }
 
 /**
@@ -1085,6 +1124,7 @@ export function convertPaymentToCamelCase(row) {
     description: row.description,
     notes: row.notes,
     status: row.status,
+    receiptUrl: row.receipt_url,
     createdBy: row.created_by,
     createTime: row.created_at,
     updateTime: row.updated_at
@@ -1098,6 +1138,9 @@ export function convertFeeToCamelCase(row) {
     billNumber: row.bill_number,
     customerId: row.customer_id,
     customerName: row.customer_name,
+    supplierId: row.supplier_id,
+    supplierName: row.supplier_name,
+    feeType: row.fee_type || 'receivable',
     category: row.category,
     feeName: row.fee_name,
     amount: row.amount,
@@ -1155,6 +1198,163 @@ export default {
   // 转换函数
   convertInvoiceToCamelCase,
   convertPaymentToCamelCase,
-  convertFeeToCamelCase
+  convertFeeToCamelCase,
+  
+  // 银行账户管理
+  getBankAccounts,
+  getBankAccountById,
+  createBankAccount,
+  updateBankAccount,
+  deleteBankAccount
+}
+
+// ==================== 银行账户管理 ====================
+
+/**
+ * 获取银行账户列表
+ */
+export async function getBankAccounts(options = {}) {
+  const db = getDatabase()
+  const { isActive, currency } = options
+  
+  let sql = 'SELECT * FROM bank_accounts WHERE 1=1'
+  const params = []
+  
+  if (isActive !== undefined) {
+    sql += ' AND is_active = ?'
+    params.push(isActive ? 1 : 0)
+  }
+  
+  if (currency) {
+    sql += ' AND currency = ?'
+    params.push(currency)
+  }
+  
+  sql += ' ORDER BY is_default DESC, account_name'
+  
+  const rows = await db.prepare(sql).all(...params)
+  return (rows || []).map(formatBankAccount)
+}
+
+/**
+ * 获取单个银行账户
+ */
+export async function getBankAccountById(id) {
+  const db = getDatabase()
+  const row = await db.prepare('SELECT * FROM bank_accounts WHERE id = ?').get(id)
+  return row ? formatBankAccount(row) : null
+}
+
+/**
+ * 创建银行账户
+ */
+export async function createBankAccount(data) {
+  const db = getDatabase()
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare('UPDATE bank_accounts SET is_default = 0').run()
+  }
+  
+  const result = await db.prepare(`
+    INSERT INTO bank_accounts (
+      account_name, account_number, bank_name, bank_branch,
+      swift_code, iban, currency, account_type, is_default, is_active, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    data.accountName,
+    data.accountNumber,
+    data.bankName,
+    data.bankBranch || '',
+    data.swiftCode || '',
+    data.iban || '',
+    data.currency || 'EUR',
+    data.accountType || 'current',
+    data.isDefault ? 1 : 0,
+    data.isActive !== false ? 1 : 0,
+    data.notes || ''
+  )
+  
+  return { id: result?.id || result?.lastInsertRowid }
+}
+
+/**
+ * 更新银行账户
+ */
+export async function updateBankAccount(id, data) {
+  const db = getDatabase()
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare('UPDATE bank_accounts SET is_default = 0 WHERE id != ?').run(id)
+  }
+  
+  const fields = []
+  const values = []
+  
+  const fieldMap = {
+    accountName: 'account_name',
+    accountNumber: 'account_number',
+    bankName: 'bank_name',
+    bankBranch: 'bank_branch',
+    swiftCode: 'swift_code',
+    iban: 'iban',
+    currency: 'currency',
+    accountType: 'account_type',
+    isDefault: 'is_default',
+    isActive: 'is_active',
+    notes: 'notes'
+  }
+  
+  Object.entries(fieldMap).forEach(([jsField, dbField]) => {
+    if (data[jsField] !== undefined) {
+      fields.push(`${dbField} = ?`)
+      if (jsField === 'isDefault' || jsField === 'isActive') {
+        values.push(data[jsField] ? 1 : 0)
+      } else {
+        values.push(data[jsField])
+      }
+    }
+  })
+  
+  if (fields.length === 0) return null
+  
+  fields.push('updated_at = CURRENT_TIMESTAMP')
+  values.push(id)
+  
+  await db.prepare(`UPDATE bank_accounts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  return await getBankAccountById(id)
+}
+
+/**
+ * 删除银行账户
+ */
+export async function deleteBankAccount(id) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM bank_accounts WHERE id = ?').run(id)
+  return { success: true }
+}
+
+/**
+ * 格式化银行账户数据
+ */
+function formatBankAccount(row) {
+  return {
+    id: row.id,
+    accountName: row.account_name,
+    accountNumber: row.account_number,
+    bankName: row.bank_name,
+    bankBranch: row.bank_branch,
+    swiftCode: row.swift_code,
+    iban: row.iban,
+    currency: row.currency,
+    accountType: row.account_type,
+    isDefault: row.is_default === 1,
+    isActive: row.is_active === 1,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
 }
 

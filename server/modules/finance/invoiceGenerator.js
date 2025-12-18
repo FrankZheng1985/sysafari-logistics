@@ -1,7 +1,7 @@
 /**
  * 发票生成器
  * 
- * 生成PDF发票和Excel明细，并上传到腾讯云COS
+ * 生成PDF发票和Excel明细，并上传到腾讯云COS或保存到本地
  */
 
 import puppeteer from 'puppeteer'
@@ -10,6 +10,32 @@ import { generateInvoiceHTML, COMPANY_INFO, getLogoBase64, getStampBase64 } from
 import { db } from '../../config/db-adapter.js'
 import * as cosStorage from './cosStorage.js'
 import { generateId } from '../../utils/id.js'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// 本地文件存储目录
+const LOCAL_STORAGE_DIR = path.join(__dirname, '../../uploads/invoices')
+
+// 确保本地存储目录存在
+function ensureLocalStorageDir() {
+  if (!fs.existsSync(LOCAL_STORAGE_DIR)) {
+    fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true })
+  }
+}
+
+/**
+ * 保存文件到本地
+ */
+async function saveFileLocally(buffer, filename) {
+  ensureLocalStorageDir()
+  const filePath = path.join(LOCAL_STORAGE_DIR, filename)
+  fs.writeFileSync(filePath, buffer)
+  return `/api/invoices/files/${filename}`
+}
 
 /**
  * 生成发票编号
@@ -53,6 +79,7 @@ export function summarizeFees(fees) {
     if (!summary[key]) {
       summary[key] = {
         description: key,
+        descriptionEn: fee.fee_name_en || fee.feeNameEn || null, // 保存英文名称
         quantity: 0,
         totalAmount: 0,
         items: []
@@ -66,6 +93,7 @@ export function summarizeFees(fees) {
   // 转换为数组，计算平均单价
   return Object.values(summary).map(item => ({
     description: item.description,
+    descriptionEn: item.descriptionEn, // 传递英文名称
     quantity: item.quantity,
     unitValue: item.quantity > 0 ? item.totalAmount / item.quantity : 0,
     amount: item.totalAmount
@@ -107,6 +135,73 @@ export async function generatePDF(invoiceData) {
   }
 }
 
+// 费用名称中英文映射
+const FEE_NAME_MAP = {
+  '堆场费': 'Terminal Handling Charge',
+  '拖车费': 'Trucking Fee',
+  '船公司运费': 'Ocean Freight',
+  '海运费': 'Ocean Freight',
+  '报关费': 'Customs Clearance Fee',
+  '清关费': 'Customs Clearance Fee',
+  '仓储费': 'Warehousing Fee',
+  '装卸费': 'Loading/Unloading Fee',
+  '保险费': 'Insurance Fee',
+  '文件费': 'Documentation Fee',
+  '操作费': 'Handling Fee',
+  '代理费': 'Agency Fee',
+  '港杂费': 'Port Charges',
+  '查验费': 'Inspection Fee',
+  '加班费': 'Overtime Fee',
+  '滞港费': 'Demurrage Fee',
+  '滞箱费': 'Detention Fee',
+  '换单费': 'B/L Release Fee',
+  '目的港费': 'Destination Charges',
+  '起运港费': 'Origin Charges',
+  '燃油附加费': 'Bunker Adjustment Factor',
+  '其他费用': 'Other Charges'
+}
+
+// 获取费用的英文名称
+// 优先级：1. fee_name_en 字段  2. FEE_NAME_MAP 映射  3. 原名
+function getFeeNameEnglish(chineseName, feeNameEn = null) {
+  // 如果已有英文名称字段，优先使用
+  if (feeNameEn && feeNameEn.trim()) {
+    return feeNameEn.trim()
+  }
+  
+  if (!chineseName) return 'Other Charges'
+  
+  // 尝试直接匹配映射表
+  if (FEE_NAME_MAP[chineseName]) {
+    return FEE_NAME_MAP[chineseName]
+  }
+  // 尝试部分匹配
+  for (const [cn, en] of Object.entries(FEE_NAME_MAP)) {
+    if (chineseName.includes(cn)) {
+      return en
+    }
+  }
+  // 如果已经是英文，直接返回
+  if (/^[a-zA-Z\s\/]+$/.test(chineseName)) {
+    return chineseName
+  }
+  return chineseName // 没有匹配则返回原名
+}
+
+// 格式化日期为简单格式
+function formatExcelDate(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const date = new Date(dateStr)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  } catch {
+    return dateStr
+  }
+}
+
 /**
  * 生成Excel明细（Statement of Account）
  */
@@ -116,8 +211,11 @@ export async function generateExcel(data) {
     date,
     items,
     total,
-    currency = 'EUR'
+    currency = 'EUR',
+    containerNo = ''  // 集装箱号
   } = data
+  
+  const formattedDate = formatExcelDate(date)
   
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Xianfeng International Logistics'
@@ -127,7 +225,7 @@ export async function generateExcel(data) {
   
   // 设置列宽
   worksheet.columns = [
-    { header: 'JOB NO', key: 'jobNo', width: 20 },
+    { header: 'CONTAINER NO', key: 'containerNo', width: 20 },
     { header: 'BILL NO', key: 'billNo', width: 20 },
     { header: 'FEE TYPE', key: 'feeType', width: 30 },
     { header: `Amount ${currency}`, key: 'amount', width: 15 }
@@ -142,16 +240,16 @@ export async function generateExcel(data) {
   
   // 客户信息行
   worksheet.mergeCells('A3:B3')
-  worksheet.getCell('A3').value = `客户名称 ${customerName}`
+  worksheet.getCell('A3').value = `Customer: ${customerName}`
   worksheet.getCell('A3').font = { bold: true }
   
   worksheet.mergeCells('C3:D3')
-  worksheet.getCell('C3').value = `日期 ${date}`
+  worksheet.getCell('C3').value = `Date: ${formattedDate}`
   worksheet.getCell('C3').font = { bold: true }
   
   // 表头行
   const headerRow = worksheet.getRow(5)
-  headerRow.values = ['JOB NO', 'BILL NO', 'FEE TYPE', `Amount ${currency}`]
+  headerRow.values = ['CONTAINER NO', 'BILL NO', 'FEE TYPE', `Amount ${currency}`]
   headerRow.font = { bold: true }
   headerRow.eachCell(cell => {
     cell.fill = {
@@ -169,23 +267,29 @@ export async function generateExcel(data) {
   
   // 数据行
   let rowIndex = 6
-  let currentJobNo = ''
+  let currentContainerNo = ''
   let currentBillNo = ''
   
   items.forEach(item => {
     const row = worksheet.getRow(rowIndex)
     
+    // 获取集装箱号（优先使用 actualContainerNo）
+    const itemContainerNo = item.actualContainerNo || item.containerNumber || containerNo || ''
+    
     // 如果是同一个柜号/提单，不重复显示
-    const showJobNo = item.containerNumber !== currentJobNo
+    const showContainerNo = itemContainerNo !== currentContainerNo
     const showBillNo = item.billNumber !== currentBillNo
     
-    if (showJobNo) currentJobNo = item.containerNumber
+    if (showContainerNo) currentContainerNo = itemContainerNo
     if (showBillNo) currentBillNo = item.billNumber
     
+    // 获取英文费用名称（优先使用 fee_name_en 字段）
+    const feeNameEn = getFeeNameEnglish(item.feeName || item.fee_name, item.fee_name_en || item.feeNameEn)
+
     row.values = [
-      showJobNo ? item.containerNumber : '',
+      showContainerNo ? itemContainerNo : '',
       showBillNo ? item.billNumber : '',
-      item.feeName || item.fee_name,
+      feeNameEn,
       parseFloat(item.amount) || 0
     ]
     
@@ -231,10 +335,10 @@ export async function generateExcel(data) {
  * 从费用记录生成发票数据
  */
 export async function prepareInvoiceData(feeIds, customerId) {
-  // 获取费用记录
+  // 获取费用记录（包含 fee_name_en 字段）
   const placeholders = feeIds.map(() => '?').join(',')
   const fees = await db.prepare(`
-    SELECT f.*, b.container_number, b.bill_number
+    SELECT f.*, f.fee_name_en, b.container_number, b.bill_number
     FROM fees f
     LEFT JOIN bills_of_lading b ON f.bill_id = b.id
     WHERE f.id IN (${placeholders})
@@ -302,11 +406,12 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
     items: invoiceData.summarizedItems,
     subtotal: invoiceData.total,
     total: invoiceData.total,
-    currency: invoiceData.currency
+    currency: invoiceData.currency,
+    exchangeRate: invoiceData.exchangeRate || 1
   }
-  
+
   const pdfBuffer = await generatePDF(pdfData)
-  
+
   // 4. 生成Excel
   const excelData = {
     customerName: invoiceData.customer.name,
@@ -410,58 +515,186 @@ export async function regenerateInvoiceFiles(invoiceId) {
   if (!invoice) {
     throw new Error('发票不存在')
   }
-  
-  // 解析fee_ids
+
+  // 尝试解析fee_ids
   let feeIds = []
   try {
     feeIds = JSON.parse(invoice.fee_ids || '[]')
   } catch {
-    throw new Error('发票费用数据无效')
+    feeIds = []
+  }
+
+  let items = []
+  let invoiceData = null
+
+  if (feeIds.length > 0) {
+    // 有关联费用记录，使用费用数据
+    invoiceData = await prepareInvoiceData(feeIds, invoice.customer_id)
+    items = invoiceData.summarizedItems
+  } else {
+    // 没有关联费用记录，优先从 items 字段读取
+    let parsedItems = []
+    try {
+      parsedItems = JSON.parse(invoice.items || '[]')
+    } catch {
+      parsedItems = []
+    }
+
+    if (parsedItems.length > 0) {
+      // 从 items 字段获取费用明细（包含实际金额）
+      // 按费用类型分组合并
+      const feeGroups = {}
+      parsedItems.forEach(item => {
+        const feeName = item.description?.trim() || '费用'
+        const amount = parseFloat(item.amount) || 0
+        if (!feeGroups[feeName]) {
+          feeGroups[feeName] = {
+            description: feeName,
+            quantity: 0,
+            totalAmount: 0
+          }
+        }
+        feeGroups[feeName].quantity += 1
+        feeGroups[feeName].totalAmount += amount
+      })
+
+      items = Object.values(feeGroups).map(group => ({
+        description: group.description,
+        quantity: group.quantity,
+        unitValue: group.totalAmount / group.quantity,
+        amount: group.totalAmount
+      }))
+    } else if (invoice.description) {
+      // 后备方案：从 description 字段分割，金额平均分配
+      const descriptions = invoice.description.split(';').filter(s => s.trim())
+      const total = parseFloat(invoice.total_amount) || 0
+      const amountPerItem = total / descriptions.length
+
+      // 按费用类型分组合并
+      const feeGroups = {}
+      descriptions.forEach(desc => {
+        const feeName = desc.trim()
+        if (!feeGroups[feeName]) {
+          feeGroups[feeName] = {
+            description: feeName,
+            quantity: 0,
+            totalAmount: 0
+          }
+        }
+        feeGroups[feeName].quantity += 1
+        feeGroups[feeName].totalAmount += amountPerItem
+      })
+
+      items = Object.values(feeGroups).map(group => ({
+        description: group.description,
+        quantity: group.quantity,
+        unitValue: group.totalAmount / group.quantity,
+        amount: group.totalAmount
+      }))
+    } else {
+      items = [{
+        description: '费用',
+        quantity: 1,
+        unitValue: parseFloat(invoice.total_amount) || 0,
+        amount: parseFloat(invoice.total_amount) || 0
+      }]
+    }
+  }
+
+  // 获取关联订单的柜号
+  let containerNumbers = []
+  try {
+    containerNumbers = JSON.parse(invoice.container_numbers || '[]')
+  } catch {
+    containerNumbers = []
   }
   
-  if (feeIds.length === 0) {
-    throw new Error('发票没有关联的费用记录')
+  if (containerNumbers.length === 0 && invoice.bill_id) {
+    const bill = await db.prepare('SELECT container_number, actual_container_no FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+    if (bill) {
+      // 只显示集装箱号（actual_container_no）
+      if (bill.actual_container_no) {
+        containerNumbers.push(bill.actual_container_no)
+      }
+    }
   }
-  
-  // 准备发票数据
-  const invoiceData = await prepareInvoiceData(feeIds, invoice.customer_id)
-  
+
   // 生成PDF
   const pdfData = {
     invoiceNumber: invoice.invoice_number,
     invoiceDate: invoice.invoice_date,
     customer: {
       name: invoice.customer_name,
-      address: invoice.customer_address
+      address: invoice.customer_address || ''
     },
-    containerNumbers: JSON.parse(invoice.container_numbers || '[]'),
-    items: invoiceData.summarizedItems,
-    subtotal: invoiceData.total,
-    total: invoiceData.total,
-    currency: invoice.currency
+    containerNumbers,
+    items,
+    subtotal: invoiceData ? invoiceData.total : (parseFloat(invoice.subtotal) || parseFloat(invoice.total_amount) || 0),
+    total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
+    currency: invoice.currency || 'EUR',
+    exchangeRate: parseFloat(invoice.exchange_rate) || 1
   }
-  
+
   const pdfBuffer = await generatePDF(pdfData)
-  
+
   // 生成Excel
-  const excelData = {
-    customerName: invoice.customer_name,
-    date: invoice.invoice_date,
-    items: invoiceData.fees.map(f => ({
-      containerNumber: f.container_number,
-      billNumber: f.bill_number,
-      feeName: f.fee_name,
-      amount: f.amount
-    })),
-    total: invoiceData.total,
-    currency: invoice.currency
+  // 获取集装箱号
+  let actualContainerNo = ''
+  if (containerNumbers && containerNumbers.length > 0) {
+    actualContainerNo = containerNumbers[0]
   }
-  
+
+  // 获取提单号（container_number）
+  let blNumber = ''
+  if (invoice.bill_id) {
+    const billInfo = await db.prepare('SELECT container_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+    if (billInfo) {
+      blNumber = billInfo.container_number || ''
+    }
+  }
+
+  // Excel 数据也按费用类型合并
+  let excelItems = []
+  if (invoiceData && invoiceData.fees) {
+    // 按费用类型分组合并
+    const feeGroups = {}
+    invoiceData.fees.forEach(f => {
+      const feeName = f.fee_name || 'Other'
+      if (!feeGroups[feeName]) {
+        feeGroups[feeName] = 0
+      }
+      feeGroups[feeName] += parseFloat(f.amount) || 0
+    })
+    excelItems = Object.entries(feeGroups).map(([feeName, amount]) => ({
+      actualContainerNo: actualContainerNo,
+      billNumber: blNumber,
+      feeName: feeName,
+      amount: amount
+    }))
+  } else {
+    // 使用已合并的 items
+    excelItems = items.map(item => ({
+      actualContainerNo: actualContainerNo,
+      billNumber: blNumber,
+      feeName: item.description,
+      amount: item.amount
+    }))
+  }
+
+  const excelData = {
+    customerName: invoice.customer_name || '',
+    date: invoice.invoice_date,
+    containerNo: actualContainerNo,
+    items: excelItems,
+    total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
+    currency: invoice.currency || 'EUR'
+  }
+
   const excelBuffer = await generateExcel(excelData)
-  
-  // 上传到COS
-  let pdfUrl = invoice.pdf_url
-  let excelUrl = invoice.excel_url
+
+  // 上传到COS或保存到本地
+  let pdfUrl = null
+  let excelUrl = null
   
   const cosConfig = cosStorage.checkCosConfig()
   if (cosConfig.configured) {
@@ -471,19 +704,30 @@ export async function regenerateInvoiceFiles(invoiceId) {
     } catch (error) {
       console.error('上传到COS失败:', error)
     }
+  } else {
+    // COS未配置，使用本地存储
+    try {
+      pdfUrl = await saveFileLocally(pdfBuffer, `${invoice.invoice_number}.pdf`)
+      excelUrl = await saveFileLocally(excelBuffer, `${invoice.invoice_number}_statement.xlsx`)
+    } catch (error) {
+      console.error('本地存储失败:', error)
+    }
   }
   
   // 更新发票记录
-  const now = new Date().toISOString()
-  await db.prepare(`
-    UPDATE invoices SET 
-      pdf_url = ?,
-      excel_url = ?,
-      pdf_generated_at = ?,
-      excel_generated_at = ?,
-      updated_at = ?
-    WHERE id = ?
-  `).run(pdfUrl, excelUrl, now, now, now, invoiceId)
+  if (pdfUrl || excelUrl) {
+    try {
+      if (pdfUrl && excelUrl) {
+        await db.prepare(`UPDATE invoices SET pdf_url = ?, excel_url = ? WHERE id = ?`).run(pdfUrl, excelUrl, invoiceId)
+      } else if (pdfUrl) {
+        await db.prepare(`UPDATE invoices SET pdf_url = ? WHERE id = ?`).run(pdfUrl, invoiceId)
+      } else if (excelUrl) {
+        await db.prepare(`UPDATE invoices SET excel_url = ? WHERE id = ?`).run(excelUrl, invoiceId)
+      }
+    } catch (dbError) {
+      console.error('更新数据库失败:', dbError)
+    }
+  }
   
   return {
     id: invoiceId,
@@ -501,12 +745,17 @@ export async function getInvoiceDownloadUrl(invoiceId, fileType = 'pdf') {
   if (!invoice) {
     throw new Error('发票不存在')
   }
-  
+
   const url = fileType === 'excel' ? invoice.excel_url : invoice.pdf_url
   if (!url) {
     throw new Error(`发票${fileType === 'excel' ? 'Excel' : 'PDF'}文件不存在`)
   }
-  
+
+  // 如果是本地文件路径（以/api/开头），返回相对路径
+  if (url.startsWith('/api/')) {
+    return url
+  }
+
   // 如果COS配置了，生成带签名的临时URL
   const cosConfig = cosStorage.checkCosConfig()
   if (cosConfig.configured) {
@@ -515,9 +764,233 @@ export async function getInvoiceDownloadUrl(invoiceId, fileType = 'pdf') {
       return await cosStorage.getSignedUrl(key, 3600) // 1小时有效
     }
   }
-  
+
   // 否则返回原始URL
   return url
+}
+
+/**
+ * 为新创建的发票生成PDF和Excel文件
+ * @param {string} invoiceId - 发票ID
+ * @param {object} invoiceData - 发票数据（从前端传入的创建数据）
+ * @returns {Promise<{pdfUrl: string|null, excelUrl: string|null}>}
+ */
+export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
+  console.log(`[发票文件生成] 开始为发票 ${invoiceId} 生成文件...`)
+  try {
+    // 获取完整的发票记录
+    const invoice = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId)
+    if (!invoice) {
+      console.error('[发票文件生成] 失败: 发票不存在', invoiceId)
+      return { pdfUrl: null, excelUrl: null }
+    }
+    console.log(`[发票文件生成] 找到发票: ${invoice.invoice_number}`)
+
+    // 解析 items 数据（从 description 字段或传入的 items）
+    // 按费用类型合并同类费用
+    let items = []
+    if (invoiceData.items && Array.isArray(invoiceData.items)) {
+      // 按费用类型分组合并
+      const feeGroups = {}
+      invoiceData.items.forEach(item => {
+        const feeName = item.description || 'Other'
+        if (!feeGroups[feeName]) {
+          feeGroups[feeName] = {
+            description: feeName,
+            quantity: 0,
+            totalAmount: 0
+          }
+        }
+        feeGroups[feeName].quantity += (item.quantity || 1)
+        feeGroups[feeName].totalAmount += parseFloat(item.amount) || 0
+      })
+      // 转换为数组
+      items = Object.values(feeGroups).map(group => ({
+        description: group.description,
+        quantity: group.quantity,
+        unitValue: group.totalAmount / group.quantity,
+        amount: group.totalAmount
+      }))
+    } else if (invoice.description) {
+      // 从 description 字段解析（格式：desc1; desc2; desc3）
+      const descriptions = invoice.description.split(';').filter(s => s.trim())
+      // 按费用类型分组
+      const feeGroups = {}
+      const amountPerItem = invoice.total_amount / descriptions.length
+      descriptions.forEach(desc => {
+        const feeName = desc.trim()
+        if (!feeGroups[feeName]) {
+          feeGroups[feeName] = {
+            description: feeName,
+            quantity: 0,
+            totalAmount: 0
+          }
+        }
+        feeGroups[feeName].quantity += 1
+        feeGroups[feeName].totalAmount += amountPerItem
+      })
+      items = Object.values(feeGroups).map(group => ({
+        description: group.description,
+        quantity: group.quantity,
+        unitValue: group.totalAmount / group.quantity,
+        amount: group.totalAmount
+      }))
+    }
+
+    // 获取关联订单的集装箱号
+    let containerNumbers = []
+    if (invoice.bill_id) {
+      const bill = await db.prepare('SELECT container_number, actual_container_no FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+      if (bill) {
+        // 只显示集装箱号（actual_container_no）
+        if (bill.actual_container_no) {
+          containerNumbers.push(bill.actual_container_no)
+        }
+      }
+    }
+
+    // 准备PDF数据
+    const pdfData = {
+      invoiceNumber: invoice.invoice_number,
+      invoiceDate: invoice.invoice_date,
+      customer: {
+        name: invoice.customer_name || '',
+        address: invoice.customer_address || ''
+      },
+      containerNumbers,
+      items,
+      subtotal: parseFloat(invoice.subtotal) || parseFloat(invoice.total_amount) || 0,
+      total: parseFloat(invoice.total_amount) || 0,
+      currency: invoice.currency || 'EUR',
+      exchangeRate: parseFloat(invoice.exchange_rate) || 1
+    }
+
+    // 生成PDF
+    let pdfBuffer = null
+    try {
+      console.log('[发票文件生成] 正在生成PDF...')
+      pdfBuffer = await generatePDF(pdfData)
+      console.log('[发票文件生成] PDF生成成功，大小:', pdfBuffer?.length || 0, 'bytes')
+    } catch (pdfError) {
+      console.error('[发票文件生成] 生成PDF失败:', pdfError.message || pdfError)
+    }
+
+    // 准备Excel数据
+    // 获取集装箱号和提单号
+    const actualContainerNo = containerNumbers.length > 0 ? containerNumbers[0] : ''
+    
+    // 获取提单号
+    let blNumber = ''
+    if (invoice.bill_id) {
+      const billInfo = await db.prepare('SELECT container_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+      if (billInfo) {
+        blNumber = billInfo.container_number || ''
+      }
+    }
+
+    // Excel 数据也按费用类型合并
+    let excelItems = []
+    if (invoiceData.items && Array.isArray(invoiceData.items)) {
+      const feeGroups = {}
+      invoiceData.items.forEach(item => {
+        const feeName = item.description || 'Other'
+        if (!feeGroups[feeName]) {
+          feeGroups[feeName] = 0
+        }
+        feeGroups[feeName] += parseFloat(item.amount) || 0
+      })
+      excelItems = Object.entries(feeGroups).map(([feeName, amount]) => ({
+        actualContainerNo: actualContainerNo,
+        billNumber: blNumber,
+        feeName: feeName,
+        amount: amount
+      }))
+    }
+
+    const excelData = {
+      customerName: invoice.customer_name || '',
+      date: invoice.invoice_date,
+      containerNo: actualContainerNo,
+      items: excelItems,
+      total: parseFloat(invoice.total_amount) || 0,
+      currency: invoice.currency || 'EUR'
+    }
+
+    // 生成Excel
+    let excelBuffer = null
+    try {
+      console.log('[发票文件生成] 正在生成Excel...')
+      excelBuffer = await generateExcel(excelData)
+      console.log('[发票文件生成] Excel生成成功，大小:', excelBuffer?.length || 0, 'bytes')
+    } catch (excelError) {
+      console.error('[发票文件生成] 生成Excel失败:', excelError.message || excelError)
+    }
+
+    // 上传到COS或保存到本地
+    let pdfUrl = null
+    let excelUrl = null
+
+    const cosConfig = cosStorage.checkCosConfig()
+    if (cosConfig.configured) {
+      // 使用COS云存储
+      try {
+        if (pdfBuffer) {
+          pdfUrl = await cosStorage.uploadInvoicePDF(pdfBuffer, invoice.invoice_number)
+        }
+        if (excelBuffer) {
+          excelUrl = await cosStorage.uploadStatementExcel(excelBuffer, invoice.invoice_number)
+        }
+      } catch (uploadError) {
+        console.error('上传到COS失败:', uploadError)
+      }
+    } else {
+      // COS未配置，使用本地存储
+      console.log('[发票文件生成] COS未配置，使用本地文件存储')
+      try {
+        if (pdfBuffer) {
+          pdfUrl = await saveFileLocally(pdfBuffer, `${invoice.invoice_number}.pdf`)
+          console.log('[发票文件生成] PDF已保存到本地:', pdfUrl)
+        }
+        if (excelBuffer) {
+          excelUrl = await saveFileLocally(excelBuffer, `${invoice.invoice_number}_statement.xlsx`)
+          console.log('[发票文件生成] Excel已保存到本地:', excelUrl)
+        }
+      } catch (localError) {
+        console.error('[发票文件生成] 本地存储失败:', localError.message || localError)
+      }
+    }
+
+    // 更新发票记录的文件URL
+    console.log('[发票文件生成] 准备更新数据库，pdfUrl:', pdfUrl, 'excelUrl:', excelUrl)
+    if (pdfUrl || excelUrl) {
+      try {
+        // 简化SQL，只更新URL字段
+        if (pdfUrl && excelUrl) {
+          await db.prepare(`
+            UPDATE invoices SET pdf_url = ?, excel_url = ? WHERE id = ?
+          `).run(pdfUrl, excelUrl, invoiceId)
+          console.log('[发票文件生成] PDF和Excel URL已更新到数据库')
+        } else if (pdfUrl) {
+          await db.prepare(`
+            UPDATE invoices SET pdf_url = ? WHERE id = ?
+          `).run(pdfUrl, invoiceId)
+          console.log('[发票文件生成] PDF URL已更新到数据库')
+        } else if (excelUrl) {
+          await db.prepare(`
+            UPDATE invoices SET excel_url = ? WHERE id = ?
+          `).run(excelUrl, invoiceId)
+          console.log('[发票文件生成] Excel URL已更新到数据库')
+        }
+      } catch (dbError) {
+        console.error('[发票文件生成] 更新数据库失败:', dbError.message || dbError)
+      }
+    }
+
+    return { pdfUrl, excelUrl }
+  } catch (error) {
+    console.error('生成发票文件失败:', error)
+    return { pdfUrl: null, excelUrl: null }
+  }
 }
 
 export default {
@@ -528,5 +1001,6 @@ export default {
   prepareInvoiceData,
   createInvoiceWithFiles,
   regenerateInvoiceFiles,
-  getInvoiceDownloadUrl
+  getInvoiceDownloadUrl,
+  generateFilesForNewInvoice
 }

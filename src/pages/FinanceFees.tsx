@@ -74,6 +74,8 @@ export default function FinanceFees() {
     { label: '收付款', path: '/finance/payments' },
     { label: '费用管理', path: '/finance/fees' },
     { label: '财务报表', path: '/finance/reports' },
+    { label: '订单报表', path: '/finance/order-report' },
+    { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
    

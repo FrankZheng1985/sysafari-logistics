@@ -61,6 +61,9 @@ router.put('/bills/:id/inspection', controller.updateInspection)
 // 更新派送状态
 router.put('/bills/:id/delivery', controller.updateDelivery)
 
+// 标记提单为已完成
+router.put('/bills/:id/complete', controller.markBillComplete)
+
 // ==================== 操作日志 ====================
 
 // 获取操作日志

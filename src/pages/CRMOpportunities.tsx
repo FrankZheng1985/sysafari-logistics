@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DatePicker from '../components/DatePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -574,11 +575,10 @@ export default function CRMOpportunities() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">预计成交日期</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.expectedCloseDate}
-                    onChange={(e) => setFormData({...formData, expectedCloseDate: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData({...formData, expectedCloseDate: value})}
+                    placeholder="选择预计成交日期"
                   />
                 </div>
                 <div>

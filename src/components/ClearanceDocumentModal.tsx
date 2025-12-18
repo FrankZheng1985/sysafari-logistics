@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, FileText, Package, User, Ship, DollarSign, Anchor, Search } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
+import DatePicker from './DatePicker'
 
 const API_BASE = getApiBaseUrl()
 
@@ -909,19 +910,17 @@ export default function ClearanceDocumentModal({
               <FormSection title="时间节点" icon={FileText}>
                 <FormRow cols={2}>
                   <FormItem label="预计离港 (ETD)">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={formData.etd}
-                      onChange={(e) => handleInputChange('etd', e.target.value)}
-                      className={inputClass}
+                      onChange={(value) => handleInputChange('etd', value)}
+                      placeholder="选择离港日期"
                     />
                   </FormItem>
                   <FormItem label="预计到港 (ETA)">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={formData.eta}
-                      onChange={(e) => handleInputChange('eta', e.target.value)}
-                      className={inputClass}
+                      onChange={(value) => handleInputChange('eta', value)}
+                      placeholder="选择到港日期"
                     />
                   </FormItem>
                 </FormRow>
@@ -955,11 +954,10 @@ export default function ClearanceDocumentModal({
                     </FormItem>
                   </FormRow>
                   <FormItem label="清关放行日期">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={formData.customsReleaseDate}
-                      onChange={(e) => handleInputChange('customsReleaseDate', e.target.value)}
-                      className={`${inputClass} w-1/3`}
+                      onChange={(value) => handleInputChange('customsReleaseDate', value)}
+                      placeholder="选择放行日期"
                     />
                   </FormItem>
                 </div>

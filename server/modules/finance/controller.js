@@ -5,6 +5,7 @@
 import { success, successWithPagination, badRequest, notFound, serverError } from '../../utils/response.js'
 import * as model from './model.js'
 import * as invoiceGenerator from './invoiceGenerator.js'
+import { getBOCExchangeRate } from '../../utils/exchangeRate.js'
 
 // ==================== 发票管理 ====================
 
@@ -53,6 +54,25 @@ export async function getInvoiceStats(req, res) {
 }
 
 /**
+ * 获取汇率
+ */
+export async function getExchangeRate(req, res) {
+  try {
+    const { from = 'EUR', to = 'CNY' } = req.query
+    const rate = await getBOCExchangeRate(from, to)
+    return success(res, {
+      from,
+      to,
+      rate,
+      date: new Date().toISOString().split('T')[0]
+    })
+  } catch (error) {
+    console.error('获取汇率失败:', error)
+    return serverError(res, '获取汇率失败')
+  }
+}
+
+/**
  * 获取发票详情
  */
 export async function getInvoiceById(req, res) {
@@ -80,7 +100,7 @@ export async function getInvoiceById(req, res) {
  */
 export async function createInvoice(req, res) {
   try {
-    const { invoiceType, totalAmount } = req.body
+    const { invoiceType, totalAmount, items } = req.body
     
     if (!totalAmount || totalAmount <= 0) {
       return badRequest(res, '发票金额必须大于0')
@@ -90,6 +110,17 @@ export async function createInvoice(req, res) {
       ...req.body,
       createdBy: req.user?.id
     })
+    
+    // 异步生成PDF和Excel文件（不阻塞响应）
+    invoiceGenerator.generateFilesForNewInvoice(result.id, { items })
+      .then(({ pdfUrl, excelUrl }) => {
+        if (pdfUrl || excelUrl) {
+          console.log(`发票 ${result.invoiceNumber} 文件生成成功: PDF=${!!pdfUrl}, Excel=${!!excelUrl}`)
+        }
+      })
+      .catch(err => {
+        console.error(`发票 ${result.invoiceNumber} 文件生成失败:`, err)
+      })
     
     const newInvoice = await model.getInvoiceById(result.id)
     return success(res, newInvoice, '创建成功')
@@ -105,22 +136,32 @@ export async function createInvoice(req, res) {
 export async function updateInvoice(req, res) {
   try {
     const { id } = req.params
-    
+
     const existing = await model.getInvoiceById(id)
     if (!existing) {
       return notFound(res, '发票不存在')
     }
-    
+
     // 已付款的发票不能修改
     if (existing.status === 'paid') {
       return badRequest(res, '已付款的发票不能修改')
     }
-    
+
     const updated = await model.updateInvoice(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
     }
-    
+
+    // 更新后重新生成 PDF 和 Excel 文件
+    try {
+      console.log(`[发票更新] 正在重新生成发票文件: ${id}`)
+      await invoiceGenerator.regenerateInvoiceFiles(id)
+      console.log(`[发票更新] 发票文件重新生成成功`)
+    } catch (genError) {
+      console.error('[发票更新] 重新生成发票文件失败:', genError.message)
+      // 不影响主流程，继续返回更新成功
+    }
+
     const updatedInvoice = await model.getInvoiceById(id)
     return success(res, updatedInvoice, '更新成功')
   } catch (error) {
@@ -286,17 +327,106 @@ export async function updatePayment(req, res) {
 export async function deletePayment(req, res) {
   try {
     const { id } = req.params
-    
+
     const existing = await model.getPaymentById(id)
     if (!existing) {
       return notFound(res, '付款记录不存在')
     }
-    
+
     model.deletePayment(id)
     return success(res, null, '删除成功')
   } catch (error) {
     console.error('删除付款记录失败:', error)
     return serverError(res, '删除付款记录失败')
+  }
+}
+
+/**
+ * 上传付款凭证
+ */
+export async function uploadPaymentReceipt(req, res) {
+  try {
+    const { id } = req.params
+    const file = req.file
+
+    if (!file) {
+      return badRequest(res, '请选择要上传的文件')
+    }
+
+    // 获取付款记录
+    const payment = await model.getPaymentById(id)
+    if (!payment) {
+      return notFound(res, '付款记录不存在')
+    }
+
+    // 动态导入 COS 存储模块和图片压缩模块
+    const cosStorage = await import('./cosStorage.js')
+    
+    let fileBuffer = file.buffer
+    let originalFilename = file.originalname
+    
+    // 如果是图片，进行压缩
+    if (file.mimetype.startsWith('image/')) {
+      try {
+        const sharp = (await import('sharp')).default
+        fileBuffer = await sharp(file.buffer)
+          .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer()
+        // 统一改为 jpg 扩展名
+        originalFilename = originalFilename.replace(/\.(png|gif|webp)$/i, '.jpg')
+      } catch (err) {
+        console.warn('图片压缩失败，使用原图:', err.message)
+      }
+    }
+
+    // 上传到 COS
+    const receiptUrl = await cosStorage.uploadPaymentReceipt(
+      fileBuffer, 
+      payment.paymentNumber, 
+      originalFilename
+    )
+
+    // 更新付款记录的凭证 URL
+    await model.updatePayment(id, { receiptUrl })
+
+    return success(res, { receiptUrl }, '上传成功')
+  } catch (error) {
+    console.error('上传付款凭证失败:', error)
+    return serverError(res, error.message || '上传付款凭证失败')
+  }
+}
+
+/**
+ * 查看付款凭证
+ */
+export async function viewPaymentReceipt(req, res) {
+  try {
+    const { id } = req.params
+
+    const payment = await model.getPaymentById(id)
+    if (!payment) {
+      return notFound(res, '付款记录不存在')
+    }
+
+    if (!payment.receiptUrl) {
+      return notFound(res, '该付款记录没有上传凭证')
+    }
+
+    // 如果是 COS 存储的 URL，生成临时访问链接
+    if (payment.receiptUrl.includes('.cos.')) {
+      const cosStorage = await import('./cosStorage.js')
+      const key = cosStorage.extractKeyFromUrl(payment.receiptUrl)
+      if (key) {
+        const signedUrl = await cosStorage.getSignedUrl(key, 7200) // 2小时有效期
+        return success(res, { url: signedUrl })
+      }
+    }
+
+    return success(res, { url: payment.receiptUrl })
+  } catch (error) {
+    console.error('获取付款凭证失败:', error)
+    return serverError(res, '获取付款凭证失败')
   }
 }
 
@@ -562,10 +692,17 @@ export async function generateInvoiceFromFees(req, res) {
 export async function downloadInvoicePDF(req, res) {
   try {
     const { id } = req.params
-    
+
     const downloadUrl = await invoiceGenerator.getInvoiceDownloadUrl(id, 'pdf')
-    
-    // 重定向到下载URL
+
+    // 如果是本地文件，直接从本地读取返回
+    if (downloadUrl.startsWith('/api/invoices/files/')) {
+      const filename = downloadUrl.replace('/api/invoices/files/', '')
+      req.params.filename = filename
+      return downloadLocalInvoiceFile(req, res)
+    }
+
+    // 重定向到下载URL（COS等外部存储）
     return res.redirect(downloadUrl)
   } catch (error) {
     console.error('下载发票PDF失败:', error)
@@ -579,14 +716,65 @@ export async function downloadInvoicePDF(req, res) {
 export async function downloadInvoiceExcel(req, res) {
   try {
     const { id } = req.params
-    
+
     const downloadUrl = await invoiceGenerator.getInvoiceDownloadUrl(id, 'excel')
-    
-    // 重定向到下载URL
+
+    // 如果是本地文件，直接从本地读取返回
+    if (downloadUrl.startsWith('/api/invoices/files/')) {
+      const filename = downloadUrl.replace('/api/invoices/files/', '')
+      req.params.filename = filename
+      return downloadLocalInvoiceFile(req, res)
+    }
+
+    // 重定向到下载URL（COS等外部存储）
     return res.redirect(downloadUrl)
   } catch (error) {
     console.error('下载发票Excel失败:', error)
     return serverError(res, error.message || '下载失败')
+  }
+}
+
+/**
+ * 下载本地存储的发票文件
+ */
+export async function downloadLocalInvoiceFile(req, res) {
+  try {
+    const { filename } = req.params
+    
+    // 安全检查：防止目录遍历攻击
+    if (filename.includes('..') || filename.includes('/')) {
+      return badRequest(res, '无效的文件名')
+    }
+    
+    const fs = await import('fs')
+    const path = await import('path')
+    const { fileURLToPath } = await import('url')
+    
+    const __filename = fileURLToPath(import.meta.url)
+    const __dirname = path.dirname(__filename)
+    const filePath = path.join(__dirname, '../../uploads/invoices', filename)
+    
+    if (!fs.existsSync(filePath)) {
+      return notFound(res, '文件不存在')
+    }
+    
+    // 设置响应头
+    const ext = path.extname(filename).toLowerCase()
+    let contentType = 'application/octet-stream'
+    if (ext === '.pdf') {
+      contentType = 'application/pdf'
+    } else if (ext === '.xlsx') {
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    }
+    
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`)
+    
+    const fileStream = fs.createReadStream(filePath)
+    fileStream.pipe(res)
+  } catch (error) {
+    console.error('下载本地文件失败:', error)
+    return serverError(res, '下载失败')
   }
 }
 
@@ -626,6 +814,101 @@ export async function checkCosStatus(req, res) {
   } catch (error) {
     console.error('检查COS状态失败:', error)
     return serverError(res, '检查COS状态失败')
+  }
+}
+
+// ==================== 银行账户管理 ====================
+
+/**
+ * 获取银行账户列表
+ */
+export async function getBankAccounts(req, res) {
+  try {
+    const { isActive, currency } = req.query
+    const accounts = await model.getBankAccounts({
+      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      currency
+    })
+    return success(res, accounts)
+  } catch (error) {
+    console.error('获取银行账户失败:', error)
+    return serverError(res, '获取银行账户失败')
+  }
+}
+
+/**
+ * 获取单个银行账户
+ */
+export async function getBankAccountById(req, res) {
+  try {
+    const account = await model.getBankAccountById(req.params.id)
+    if (!account) {
+      return notFound(res, '银行账户不存在')
+    }
+    return success(res, account)
+  } catch (error) {
+    console.error('获取银行账户失败:', error)
+    return serverError(res, '获取银行账户失败')
+  }
+}
+
+/**
+ * 创建银行账户
+ */
+export async function createBankAccount(req, res) {
+  try {
+    const { accountName, accountNumber, bankName } = req.body
+    
+    if (!accountName || !accountNumber || !bankName) {
+      return badRequest(res, '账户名称、账号和银行名称为必填项')
+    }
+    
+    const result = await model.createBankAccount(req.body)
+    const account = await model.getBankAccountById(result.id)
+    return success(res, account, '创建成功')
+  } catch (error) {
+    console.error('创建银行账户失败:', error)
+    return serverError(res, '创建银行账户失败')
+  }
+}
+
+/**
+ * 更新银行账户
+ */
+export async function updateBankAccount(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getBankAccountById(id)
+    if (!existing) {
+      return notFound(res, '银行账户不存在')
+    }
+    
+    const updated = await model.updateBankAccount(id, req.body)
+    return success(res, updated, '更新成功')
+  } catch (error) {
+    console.error('更新银行账户失败:', error)
+    return serverError(res, '更新银行账户失败')
+  }
+}
+
+/**
+ * 删除银行账户
+ */
+export async function deleteBankAccount(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getBankAccountById(id)
+    if (!existing) {
+      return notFound(res, '银行账户不存在')
+    }
+    
+    await model.deleteBankAccount(id)
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除银行账户失败:', error)
+    return serverError(res, '删除银行账户失败')
   }
 }
 

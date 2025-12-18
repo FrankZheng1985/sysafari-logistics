@@ -99,6 +99,32 @@ export async function uploadStatementExcel(excelBuffer, invoiceNumber) {
 }
 
 /**
+ * 上传付款单/收款凭证
+ * @param {Buffer} fileBuffer - 文件内容
+ * @param {string} paymentNumber - 付款单号
+ * @param {string} originalFilename - 原始文件名
+ * @returns {Promise<string>} 文件URL
+ */
+export async function uploadPaymentReceipt(fileBuffer, paymentNumber, originalFilename) {
+  const year = new Date().getFullYear()
+  const ext = originalFilename.split('.').pop()?.toLowerCase() || 'pdf'
+  const key = `payments/${year}/${paymentNumber}_receipt.${ext}`
+  
+  // 根据扩展名确定 MIME 类型
+  const mimeTypes = {
+    'pdf': 'application/pdf',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp'
+  }
+  const contentType = mimeTypes[ext] || 'application/octet-stream'
+  
+  return uploadFile(fileBuffer, key, contentType)
+}
+
+/**
  * 获取文件临时访问URL（带签名）
  * @param {string} key - 文件路径
  * @param {number} expires - 有效期（秒），默认1小时

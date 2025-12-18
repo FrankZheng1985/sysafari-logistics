@@ -3,14 +3,34 @@
  */
 
 import express from 'express'
+import multer from 'multer'
 import * as controller from './controller.js'
 
 const router = express.Router()
+
+// 配置 multer 用于付款单上传
+const paymentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('不支持的文件类型，请上传 PDF 或图片文件'))
+    }
+  }
+})
 
 // ==================== 财务概览 ====================
 
 // 获取财务概览
 router.get('/finance/overview', controller.getFinanceOverview)
+
+// 获取汇率
+router.get('/exchange-rate', controller.getExchangeRate)
 
 // ==================== 发票管理路由 ====================
 
@@ -34,6 +54,9 @@ router.get('/invoices/:id/pdf', controller.downloadInvoicePDF)
 
 // 下载发票Excel对账单
 router.get('/invoices/:id/excel', controller.downloadInvoiceExcel)
+
+// 下载本地存储的发票文件
+router.get('/invoices/files/:filename', controller.downloadLocalInvoiceFile)
 
 // 重新生成发票文件
 router.post('/invoices/:id/regenerate', controller.regenerateInvoice)
@@ -67,6 +90,12 @@ router.put('/payments/:id', controller.updatePayment)
 // 删除付款记录
 router.delete('/payments/:id', controller.deletePayment)
 
+// 上传付款凭证
+router.post('/payments/:id/receipt', paymentUpload.single('file'), controller.uploadPaymentReceipt)
+
+// 查看付款凭证
+router.get('/payments/:id/receipt', controller.viewPaymentReceipt)
+
 // ==================== 费用管理路由 ====================
 
 // 获取费用统计
@@ -99,6 +128,23 @@ router.get('/finance/reports/orders', controller.getOrderFeeReport)
 
 // 获取客户维度费用报表
 router.get('/finance/reports/customers', controller.getCustomerFeeReport)
+
+// ==================== 银行账户管理路由 ====================
+
+// 获取银行账户列表
+router.get('/bank-accounts', controller.getBankAccounts)
+
+// 获取银行账户详情
+router.get('/bank-accounts/:id', controller.getBankAccountById)
+
+// 创建银行账户
+router.post('/bank-accounts', controller.createBankAccount)
+
+// 更新银行账户
+router.put('/bank-accounts/:id', controller.updateBankAccount)
+
+// 删除银行账户
+router.delete('/bank-accounts/:id', controller.deleteBankAccount)
 
 export default router
 

@@ -29,7 +29,8 @@ export async function getBills(params = {}) {
     page = 1, 
     pageSize = 20,
     sortField = 'created_at',
-    sortOrder = 'DESC'
+    sortOrder = 'DESC',
+    forInvoiceType  // 用于新建发票时过滤已完成财务流程的订单：'sales' | 'purchase'
   } = params
   
   let query = 'SELECT * FROM bills_of_lading WHERE 1=1'
@@ -51,6 +52,16 @@ export async function getBills(params = {}) {
         query += ` AND is_void = 0 
                    AND (status IN ('已完成', '已归档', '已取消') 
                         OR delivery_status IN ('已送达', '异常关闭'))`
+        
+        // 如果是为新建发票筛选，排除已经开具发票并完成收付款的订单
+        if (forInvoiceType) {
+          // 排除该类型发票状态为 'paid' 的订单
+          query += ` AND id NOT IN (
+            SELECT DISTINCT bill_id FROM invoices 
+            WHERE invoice_type = ? AND status = 'paid' AND bill_id IS NOT NULL
+          )`
+          queryParams.push(forInvoiceType)
+        }
         break
       case 'draft':
         // Draft: 草稿订单

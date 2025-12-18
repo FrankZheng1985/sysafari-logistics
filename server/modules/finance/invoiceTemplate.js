@@ -67,6 +67,69 @@ export function getStampBase64() {
   return null
 }
 
+// 格式化日期为简单格式 (如: 2025-12-17)
+function formatInvoiceDate(dateStr) {
+  if (!dateStr) return ''
+  try {
+    const date = new Date(dateStr)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  } catch {
+    return dateStr
+  }
+}
+
+// 费用名称中英文映射
+const FEE_NAME_MAP = {
+  '堆场费': 'Terminal Handling Charge',
+  '拖车费': 'Trucking Fee',
+  '船公司运费': 'Ocean Freight',
+  '海运费': 'Ocean Freight',
+  '报关费': 'Customs Clearance Fee',
+  '清关费': 'Customs Clearance Fee',
+  '仓储费': 'Warehousing Fee',
+  '装卸费': 'Loading/Unloading Fee',
+  '保险费': 'Insurance Fee',
+  '文件费': 'Documentation Fee',
+  '操作费': 'Handling Fee',
+  '代理费': 'Agency Fee',
+  '港杂费': 'Port Charges',
+  '查验费': 'Inspection Fee',
+  '加班费': 'Overtime Fee',
+  '滞港费': 'Demurrage Fee',
+  '滞箱费': 'Detention Fee',
+  '换单费': 'B/L Release Fee',
+  '目的港费': 'Destination Charges',
+  '起运港费': 'Origin Charges',
+  '燃油附加费': 'Bunker Adjustment Factor',
+  '其他费用': 'Other Charges'
+}
+
+// 获取费用的英文名称
+// 优先级：1. descriptionEn 字段  2. FEE_NAME_MAP 映射  3. 原名
+function getFeeNameEnglish(chineseName, descriptionEn = null) {
+  // 如果已有英文名称字段，优先使用
+  if (descriptionEn && descriptionEn.trim()) {
+    return descriptionEn.trim()
+  }
+  
+  if (!chineseName) return 'Other Charges'
+  if (FEE_NAME_MAP[chineseName]) {
+    return FEE_NAME_MAP[chineseName]
+  }
+  for (const [cn, en] of Object.entries(FEE_NAME_MAP)) {
+    if (chineseName.includes(cn)) {
+      return en
+    }
+  }
+  if (/^[a-zA-Z\s\/]+$/.test(chineseName)) {
+    return chineseName
+  }
+  return chineseName
+}
+
 // PDF发票HTML模板
 export function generateInvoiceHTML(data) {
   const {
@@ -77,11 +140,18 @@ export function generateInvoiceHTML(data) {
     items,
     subtotal,
     total,
-    currency = 'EUR'
+    currency = 'EUR',
+    exchangeRate = 1
   } = data
 
   const logoBase64 = getLogoBase64()
   const stampBase64 = getStampBase64()
+  const formattedDate = formatInvoiceDate(invoiceDate)
+  
+  // 格式化汇率显示
+  const exchangeRateText = currency !== 'CNY' && exchangeRate !== 1 
+    ? `Exchange Rate: 1 ${currency} = ${exchangeRate.toFixed(4)} CNY`
+    : ''
 
   return `
 <!DOCTYPE html>
@@ -98,7 +168,7 @@ export function generateInvoiceHTML(data) {
       font-family: Arial, sans-serif;
       font-size: 12px;
       color: #333;
-      padding: 40px;
+      padding: 15px 40px 40px 40px;
       max-width: 800px;
       margin: 0 auto;
     }
@@ -108,9 +178,9 @@ export function generateInvoiceHTML(data) {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 30px;
+      margin-bottom: 15px;
       border-bottom: 2px solid ${COLORS.primary};
-      padding-bottom: 20px;
+      padding-bottom: 10px;
     }
     .header-left {
       display: flex;
@@ -303,8 +373,9 @@ export function generateInvoiceHTML(data) {
     </div>
     <div class="invoice-info">
       <div class="invoice-title">INVOICE</div>
-      <div class="invoice-detail">Invoice No:<br><span>${invoiceNumber}</span></div>
-      <div class="invoice-detail">Invoice Date: ${invoiceDate}</div>
+      <div class="invoice-detail">Invoice No: <span>${invoiceNumber}</span></div>
+      <div class="invoice-detail">Invoice Date: ${formattedDate}</div>
+      ${exchangeRateText ? `<div class="invoice-detail">${exchangeRateText}</div>` : ''}
     </div>
   </div>
   
@@ -321,7 +392,7 @@ export function generateInvoiceHTML(data) {
     <tbody>
       ${items.map(item => `
       <tr>
-        <td>${item.description}</td>
+        <td>${getFeeNameEnglish(item.description, item.descriptionEn)}</td>
         <td class="quantity">${item.quantity}</td>
         <td class="amount">${formatNumber(item.unitValue)}</td>
         <td class="amount">${formatNumber(item.amount)}</td>

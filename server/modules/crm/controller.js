@@ -1037,22 +1037,70 @@ export async function updateQuotation(req, res) {
 export async function deleteQuotation(req, res) {
   try {
     const { id } = req.params
-    
+
     const existing = await model.getQuotationById(id)
     if (!existing) {
       return notFound(res, '报价不存在')
     }
-    
+
     // 已接受的报价不能删除
     if (existing.status === 'accepted') {
       return badRequest(res, '已接受的报价不能删除')
     }
-    
+
     model.deleteQuotation(id)
     return success(res, null, '删除成功')
   } catch (error) {
     console.error('删除报价失败:', error)
     return serverError(res, '删除报价失败')
+  }
+}
+
+/**
+ * 生成报价单PDF
+ */
+export async function generateQuotationPdf(req, res) {
+  try {
+    const { id } = req.params
+
+    const quotation = await model.getQuotationById(id)
+    if (!quotation) {
+      return notFound(res, '报价不存在')
+    }
+
+    // 动态导入PDF生成器
+    const { generateQuotationHtml, generatePdfFromHtml } = await import('../quotation/pdfGenerator.js')
+    
+    // 公司信息（可从配置或数据库获取）
+    const company = {
+      companyName: 'BP Logistics',
+      companyNameEn: 'BP Logistics International',
+      registrationNo: '',
+      address: '',
+      phone: '',
+      email: ''
+    }
+
+    // 生成HTML
+    const html = generateQuotationHtml(quotation, company)
+    
+    // 尝试生成PDF
+    const pdfBuffer = await generatePdfFromHtml(html)
+    
+    if (pdfBuffer) {
+      // 返回PDF
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="Quotation_${quotation.quoteNumber}.pdf"`)
+      return res.send(pdfBuffer)
+    } else {
+      // 如果PDF生成失败，返回HTML（可在浏览器中打印为PDF）
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Content-Disposition', `inline; filename="Quotation_${quotation.quoteNumber}.html"`)
+      return res.send(html)
+    }
+  } catch (error) {
+    console.error('生成报价单PDF失败:', error)
+    return serverError(res, '生成报价单PDF失败')
   }
 }
 

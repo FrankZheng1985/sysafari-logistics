@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, FileText, Edit, Trash2, X, 
-  Send, CheckCircle, XCircle, Clock
+  Send, CheckCircle, XCircle, Clock, Languages, Loader2, Package, Download
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DatePicker from '../components/DatePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -30,11 +31,14 @@ interface Quotation {
 
 interface QuotationItem {
   name: string
+  nameEn?: string
   description?: string
   quantity: number
   unit?: string
   price: number
   amount: number
+  productId?: string
+  feeItemId?: number
 }
 
 interface Customer {
@@ -42,10 +46,30 @@ interface Customer {
   customerName: string
 }
 
+interface Product {
+  id: string
+  productCode: string
+  productName: string
+  productNameEn: string
+  category: string
+  feeItems?: ProductFeeItem[]
+}
+
+interface ProductFeeItem {
+  id: number
+  feeName: string
+  feeNameEn: string
+  unit: string
+  standardPrice: number
+  currency: string
+  isRequired: boolean
+}
+
 export default function CRMQuotations() {
   const navigate = useNavigate()
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -53,6 +77,8 @@ export default function CRMQuotations() {
   const [searchValue, setSearchValue] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
+  const [showProductModal, setShowProductModal] = useState(false)
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [editingItem, setEditingItem] = useState<Quotation | null>(null)
   const [formData, setFormData] = useState({
     customerId: '',
@@ -63,8 +89,10 @@ export default function CRMQuotations() {
     currency: 'EUR',
     terms: '',
     notes: '',
-    items: [{ name: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[]
+    items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[]
   })
+  const [translatingIndex, setTranslatingIndex] = useState<number | null>(null)
+  const [generatingPdf, setGeneratingPdf] = useState(false)
 
    
   useEffect(() => {
@@ -82,14 +110,16 @@ export default function CRMQuotations() {
       if (searchValue) params.append('search', searchValue)
       if (filterStatus) params.append('status', filterStatus)
 
-      const [quoteRes, custRes] = await Promise.all([
+      const [quoteRes, custRes, productRes] = await Promise.all([
         fetch(`${API_BASE}/api/quotations?${params}`),
-        fetch(`${API_BASE}/api/customers?pageSize=100`)
+        fetch(`${API_BASE}/api/customers?pageSize=100`),
+        fetch(`${API_BASE}/api/products?isActive=1&pageSize=100`)
       ])
 
-      const [quoteData, custData] = await Promise.all([
+      const [quoteData, custData, productData] = await Promise.all([
         quoteRes.json(),
-        custRes.json()
+        custRes.json(),
+        productRes.json()
       ])
       
       if (quoteData.errCode === 200) {
@@ -97,10 +127,94 @@ export default function CRMQuotations() {
         setTotal(quoteData.data.total || 0)
       }
       if (custData.errCode === 200) setCustomers(custData.data.list || [])
+      if (productData.errCode === 200) setProducts(productData.data.list || [])
     } catch (error) {
       console.error('加载数据失败:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 加载产品费用项
+  const loadProductFeeItems = async (productId: string): Promise<ProductFeeItem[]> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/products/${productId}`)
+      const data = await response.json()
+      if (data.errCode === 200 && data.data?.feeItems) {
+        return data.data.feeItems
+      }
+    } catch (error) {
+      console.error('加载产品费用项失败:', error)
+    }
+    return []
+  }
+
+  // 从产品导入费用项
+  const handleImportFromProducts = async () => {
+    if (selectedProducts.length === 0) {
+      alert('请选择至少一个产品')
+      return
+    }
+
+    const newItems: QuotationItem[] = []
+    
+    for (const productId of selectedProducts) {
+      const feeItems = await loadProductFeeItems(productId)
+      feeItems.forEach(item => {
+        newItems.push({
+          name: item.feeName,
+          nameEn: item.feeNameEn || '',
+          description: '',
+          quantity: 1,
+          unit: item.unit || '',
+          price: item.standardPrice,
+          amount: item.standardPrice,
+          productId,
+          feeItemId: item.id
+        })
+      })
+    }
+
+    if (newItems.length > 0) {
+      // 合并到现有项目（移除空白项）
+      const existingItems = formData.items.filter(item => item.name.trim())
+      setFormData(prev => ({
+        ...prev,
+        items: [...existingItems, ...newItems]
+      }))
+    }
+
+    setShowProductModal(false)
+    setSelectedProducts([])
+  }
+
+  // 生成PDF报价单
+  const handleGeneratePdf = async (quotation: Quotation) => {
+    setGeneratingPdf(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/quotations/${quotation.id}/pdf`, {
+        method: 'POST'
+      })
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `报价单_${quotation.quoteNumber}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } else {
+        const data = await response.json()
+        alert(data.msg || '生成PDF失败')
+      }
+    } catch (error) {
+      console.error('生成PDF失败:', error)
+      alert('生成PDF失败')
+    } finally {
+      setGeneratingPdf(false)
     }
   }
 
@@ -116,7 +230,7 @@ export default function CRMQuotations() {
         currency: item.currency || 'EUR',
         terms: '',
         notes: '',
-        items: item.items?.length > 0 ? item.items : [{ name: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
       })
     } else {
       setEditingItem(null)
@@ -129,7 +243,7 @@ export default function CRMQuotations() {
         currency: 'EUR',
         terms: '',
         notes: '',
-        items: [{ name: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
       })
     }
     setShowModal(true)
@@ -152,8 +266,32 @@ export default function CRMQuotations() {
   const addItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { name: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+      items: [...formData.items, { name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
     })
+  }
+
+  // 翻译费用名称
+  const handleTranslateItem = async (index: number) => {
+    const item = formData.items[index]
+    if (!item.name.trim()) return
+
+    setTranslatingIndex(index)
+    try {
+      const response = await fetch(`${API_BASE}/api/translate/fee`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: item.name })
+      })
+      const result = await response.json()
+      
+      if (result.errCode === 200 && result.data?.translated) {
+        handleItemChange(index, 'nameEn', result.data.translated)
+      }
+    } catch (error) {
+      console.error('翻译失败:', error)
+    } finally {
+      setTranslatingIndex(null)
+    }
   }
 
   const removeItem = (index: number) => {
@@ -349,6 +487,14 @@ export default function CRMQuotations() {
             </>
           )}
           <button 
+            onClick={() => handleGeneratePdf(item)}
+            disabled={generatingPdf}
+            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-orange-600"
+            title="下载报价单PDF"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button 
             onClick={() => handleOpenModal(item)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
             title="编辑"
@@ -366,7 +512,7 @@ export default function CRMQuotations() {
       )
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [])
+  ], [generatingPdf])
 
   const tabs = [
     { label: '仪表盘', path: '/crm' },
@@ -508,20 +654,18 @@ export default function CRMQuotations() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">报价日期</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.quoteDate}
-                    onChange={(e) => setFormData({...formData, quoteDate: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData({...formData, quoteDate: value})}
+                    placeholder="选择报价日期"
                   />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">有效期至</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.validUntil}
-                    onChange={(e) => setFormData({...formData, validUntil: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    onChange={(value) => setFormData({...formData, validUntil: value})}
+                    placeholder="选择有效期"
                   />
                 </div>
                 <div>
@@ -542,37 +686,69 @@ export default function CRMQuotations() {
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-medium text-gray-700">报价明细</h4>
-                  <button
-                    onClick={addItem}
-                    className="text-xs text-primary-600 hover:text-primary-700"
-                  >
-                    + 添加项目
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowProductModal(true)}
+                      className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      从产品导入
+                    </button>
+                    <button
+                      onClick={addItem}
+                      className="text-xs text-primary-600 hover:text-primary-700"
+                    >
+                      + 添加项目
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
                   <div className="grid grid-cols-12 gap-2 text-[10px] text-gray-500 font-medium">
-                    <div className="col-span-4">项目名称</div>
-                    <div className="col-span-2">数量</div>
+                    <div className="col-span-3">项目名称（中文）</div>
+                    <div className="col-span-3">英文名称</div>
+                    <div className="col-span-1">数量</div>
                     <div className="col-span-2">单价</div>
-                    <div className="col-span-3">金额</div>
+                    <div className="col-span-2">金额</div>
                     <div className="col-span-1"></div>
                   </div>
-                  
+
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-center">
                       <input
                         type="text"
                         value={item.name}
                         onChange={(e) => handleItemChange(index, 'name', e.target.value)}
-                        className="col-span-4 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                        placeholder="项目名称"
+                        className="col-span-3 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        placeholder="中文名称"
                       />
+                      <div className="col-span-3 flex gap-1">
+                        <input
+                          type="text"
+                          value={item.nameEn || ''}
+                          onChange={(e) => handleItemChange(index, 'nameEn', e.target.value)}
+                          className="flex-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                          placeholder="英文名称"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleTranslateItem(index)}
+                          disabled={translatingIndex === index || !item.name.trim()}
+                          className="px-1.5 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+                          title="翻译"
+                        >
+                          {translatingIndex === index ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Languages className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
                       <input
                         type="number"
                         value={item.quantity}
                         onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        className="col-span-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         min="0"
                       />
                       <input
@@ -583,7 +759,7 @@ export default function CRMQuotations() {
                         min="0"
                         step="0.01"
                       />
-                      <div className="col-span-3 text-xs text-gray-700 font-medium">
+                      <div className="col-span-2 text-xs text-gray-700 font-medium">
                         {formatCurrency(item.quantity * item.price, formData.currency)}
                       </div>
                       <button
@@ -620,6 +796,92 @@ export default function CRMQuotations() {
                 className="px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
               >
                 确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 产品选择模态框 */}
+      {showProductModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg w-[600px] max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <Package className="w-4 h-4 text-green-600" />
+                从产品库导入费用项
+              </h3>
+              <button onClick={() => { setShowProductModal(false); setSelectedProducts([]) }} className="p-1 hover:bg-gray-100 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 max-h-[50vh] overflow-y-auto">
+              <p className="text-xs text-gray-500 mb-3">选择产品后，将自动导入该产品下的所有费用项</p>
+              
+              {products.length > 0 ? (
+                <div className="space-y-2">
+                  {products.map(product => (
+                    <label
+                      key={product.id}
+                      className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                        selectedProducts.includes(product.id)
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedProducts.includes(product.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedProducts(prev => [...prev, product.id])
+                          } else {
+                            setSelectedProducts(prev => prev.filter(id => id !== product.id))
+                          }
+                        }}
+                        className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm text-gray-900">{product.productName}</span>
+                          <span className="text-xs text-gray-400">{product.productCode}</span>
+                        </div>
+                        {product.productNameEn && (
+                          <div className="text-xs text-gray-500">{product.productNameEn}</div>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-400">
+                  <Package className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">暂无可用产品</p>
+                  <button
+                    onClick={() => navigate('/tools/product-pricing')}
+                    className="mt-2 text-primary-600 hover:text-primary-700 text-xs"
+                  >
+                    去添加产品
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-4 border-t bg-gray-50">
+              <button
+                onClick={() => { setShowProductModal(false); setSelectedProducts([]) }}
+                className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleImportFromProducts}
+                disabled={selectedProducts.length === 0}
+                className="px-4 py-2 text-xs text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <Download className="w-3.5 h-3.5" />
+                导入 ({selectedProducts.length})
               </button>
             </div>
           </div>

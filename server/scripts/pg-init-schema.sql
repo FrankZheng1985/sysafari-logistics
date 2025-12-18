@@ -707,8 +707,11 @@ CREATE TABLE IF NOT EXISTS fees (
     bill_number TEXT,
     customer_id TEXT,
     customer_name TEXT,
+    supplier_id TEXT,
+    supplier_name TEXT,
     fee_type TEXT DEFAULT 'receivable',
     fee_category TEXT,
+    category TEXT,
     fee_name TEXT NOT NULL,
     amount NUMERIC NOT NULL DEFAULT 0,
     currency TEXT DEFAULT 'EUR',
@@ -779,6 +782,7 @@ CREATE TABLE IF NOT EXISTS payments (
     bank_account TEXT,
     reference_number TEXT,
     notes TEXT,
+    receipt_url TEXT,
     status TEXT DEFAULT 'pending',
     approved_by INTEGER,
     approved_by_name TEXT,
@@ -788,6 +792,14 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 添加 receipt_url 字段（如果不存在）
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'receipt_url') THEN
+        ALTER TABLE payments ADD COLUMN receipt_url TEXT;
+    END IF;
+END $$;
 
 -- ==================== 销售机会表 ====================
 CREATE TABLE IF NOT EXISTS sales_opportunities (
@@ -1291,9 +1303,94 @@ CREATE INDEX IF NOT EXISTS idx_shared_tax_type ON shared_tax_numbers(tax_type);
 CREATE INDEX IF NOT EXISTS idx_shared_tax_number ON shared_tax_numbers(tax_number);
 CREATE INDEX IF NOT EXISTS idx_shared_tax_status ON shared_tax_numbers(status);
 
+-- ==================== 产品表（应收费用基础） ====================
+CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    product_code TEXT UNIQUE,
+    product_name TEXT NOT NULL,
+    product_name_en TEXT,
+    category TEXT,
+    description TEXT,
+    is_active INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_code ON products(product_code);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active);
+
+-- ==================== 产品费用项表 ====================
+CREATE TABLE IF NOT EXISTS product_fee_items (
+    id SERIAL PRIMARY KEY,
+    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    fee_name TEXT NOT NULL,
+    fee_name_en TEXT,
+    fee_category TEXT DEFAULT 'other',
+    unit TEXT,
+    standard_price NUMERIC DEFAULT 0,
+    min_price NUMERIC,
+    max_price NUMERIC,
+    currency TEXT DEFAULT 'EUR',
+    is_required INTEGER DEFAULT 0,
+    description TEXT,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_fee_items_product ON product_fee_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_fee_items_category ON product_fee_items(fee_category);
+
+-- ==================== 供应商报价表 ====================
+CREATE TABLE IF NOT EXISTS supplier_price_items (
+    id SERIAL PRIMARY KEY,
+    supplier_id TEXT NOT NULL,
+    supplier_name TEXT,
+    fee_name TEXT NOT NULL,
+    fee_name_en TEXT,
+    fee_category TEXT DEFAULT 'other',
+    unit TEXT,
+    price NUMERIC DEFAULT 0,
+    currency TEXT DEFAULT 'EUR',
+    effective_date DATE,
+    expiry_date DATE,
+    route_from TEXT,
+    route_to TEXT,
+    remark TEXT,
+    import_batch_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_price_supplier ON supplier_price_items(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_category ON supplier_price_items(fee_category);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_batch ON supplier_price_items(import_batch_id);
+
+-- ==================== 报价导入记录表 ====================
+CREATE TABLE IF NOT EXISTS import_records (
+    id SERIAL PRIMARY KEY,
+    supplier_id TEXT,
+    supplier_name TEXT,
+    file_name TEXT,
+    file_type TEXT,
+    sheet_count INTEGER DEFAULT 0,
+    record_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending',
+    error_message TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_records_supplier ON import_records(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_import_records_status ON import_records(status);
+
 -- 完成提示
 DO $$
 BEGIN
     RAISE NOTICE '✅ PostgreSQL 数据库表结构初始化完成！';
-    RAISE NOTICE '📊 共创建 55 个数据表';
+    RAISE NOTICE '📊 共创建 59 个数据表';
 END $$;

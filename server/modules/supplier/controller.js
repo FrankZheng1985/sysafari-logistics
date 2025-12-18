@@ -4,6 +4,7 @@
 
 import { success, successWithPagination, badRequest, notFound, serverError } from '../../utils/response.js'
 import * as model from './model.js'
+import { translateText, translateFeeName } from '../../utils/translate.js'
 
 // ==================== 供应商列表 ====================
 
@@ -12,11 +13,12 @@ import * as model from './model.js'
  */
 export async function getSupplierList(req, res) {
   try {
-    const { search, type, status, level, page, pageSize } = req.query
-    
+    const { search, type, types, status, level, page, pageSize } = req.query
+
     const result = await model.getSupplierList({
       search,
       type,
+      types,  // 支持多类型过滤（逗号分隔）
       status,
       level,
       page: parseInt(page) || 1,
@@ -235,6 +237,293 @@ export async function updateSupplierStatus(req, res) {
   }
 }
 
+// ==================== 采购价管理 ====================
+
+/**
+ * 获取供应商采购价列表
+ */
+export async function getSupplierPrices(req, res) {
+  try {
+    const { id } = req.params
+    const { category, isActive, search } = req.query
+    
+    // 检查供应商是否存在
+    const supplier = await model.getSupplierById(id)
+    if (!supplier) {
+      return notFound(res, '供应商不存在')
+    }
+    
+    const prices = await model.getSupplierPrices(id, {
+      category,
+      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      search
+    })
+    
+    return success(res, prices)
+  } catch (error) {
+    console.error('获取采购价列表失败:', error)
+    return serverError(res, '获取采购价列表失败')
+  }
+}
+
+/**
+ * 创建采购价
+ */
+export async function createSupplierPrice(req, res) {
+  try {
+    const { id } = req.params
+    const { category, name, nameEn, unit, unitPrice, currency, validFrom, validUntil, notes } = req.body
+    
+    // 验证必填字段
+    if (!category || !name || unitPrice === undefined) {
+      return badRequest(res, '费用类别、名称和单价为必填项')
+    }
+    
+    // 检查供应商是否存在
+    const supplier = await model.getSupplierById(id)
+    if (!supplier) {
+      return notFound(res, '供应商不存在')
+    }
+    
+    const result = await model.createSupplierPrice({
+      supplierId: id,
+      category,
+      name,
+      nameEn,
+      unit,
+      unitPrice,
+      currency,
+      validFrom,
+      validUntil,
+      notes
+    })
+    
+    return success(res, result, '创建成功')
+  } catch (error) {
+    console.error('创建采购价失败:', error)
+    return serverError(res, '创建采购价失败')
+  }
+}
+
+/**
+ * 更新采购价
+ */
+export async function updateSupplierPrice(req, res) {
+  try {
+    const { id, priceId } = req.params
+    
+    // 检查供应商是否存在
+    const supplier = await model.getSupplierById(id)
+    if (!supplier) {
+      return notFound(res, '供应商不存在')
+    }
+    
+    // 检查采购价是否存在
+    const existing = await model.getSupplierPriceById(priceId)
+    if (!existing) {
+      return notFound(res, '采购价不存在')
+    }
+    
+    const updated = await model.updateSupplierPrice(priceId, req.body)
+    return success(res, updated, '更新成功')
+  } catch (error) {
+    console.error('更新采购价失败:', error)
+    return serverError(res, '更新采购价失败')
+  }
+}
+
+/**
+ * 删除采购价
+ */
+export async function deleteSupplierPrice(req, res) {
+  try {
+    const { id, priceId } = req.params
+    
+    // 检查供应商是否存在
+    const supplier = await model.getSupplierById(id)
+    if (!supplier) {
+      return notFound(res, '供应商不存在')
+    }
+    
+    // 检查采购价是否存在
+    const existing = await model.getSupplierPriceById(priceId)
+    if (!existing) {
+      return notFound(res, '采购价不存在')
+    }
+    
+    await model.deleteSupplierPrice(priceId)
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除采购价失败:', error)
+    return serverError(res, '删除采购价失败')
+  }
+}
+
+// ==================== 翻译 API ====================
+
+/**
+ * 翻译文本
+ */
+export async function translate(req, res) {
+  try {
+    const { text, from, to } = req.body
+    
+    if (!text) {
+      return badRequest(res, '翻译文本不能为空')
+    }
+    
+    const translated = await translateText(text, from || 'zh-CN', to || 'en')
+    return success(res, { original: text, translated })
+  } catch (error) {
+    console.error('翻译失败:', error)
+    return serverError(res, '翻译失败')
+  }
+}
+
+/**
+ * 翻译费用名称（带预设映射）
+ */
+export async function translateFee(req, res) {
+  try {
+    const { name } = req.body
+    
+    if (!name) {
+      return badRequest(res, '费用名称不能为空')
+    }
+    
+    const translated = await translateFeeName(name)
+    return success(res, { original: name, translated })
+  } catch (error) {
+    console.error('翻译费用名称失败:', error)
+    return serverError(res, '翻译费用名称失败')
+  }
+}
+
+// ==================== 供应商报价智能导入 ====================
+
+/**
+ * 解析上传的文件（预览阶段）
+ */
+export async function parseImportFile(req, res) {
+  try {
+    if (!req.file) {
+      return badRequest(res, '请上传文件')
+    }
+    
+    const { buffer, originalname } = req.file
+    
+    // 动态导入解析器
+    const { parseImportFile: parse, validateAndNormalizeData, mergeSheetData } = 
+      await import('../../utils/importRecognizer.js')
+    
+    // 解析文件
+    const parseResult = await parse(buffer, originalname)
+    
+    if (!parseResult.success) {
+      return badRequest(res, parseResult.error || parseResult.message || '文件解析失败')
+    }
+    
+    // 根据文件类型处理数据
+    let previewData
+    if (parseResult.fileType === 'excel' && parseResult.sheets) {
+      // Excel 文件 - 返回各 Sheet 的预览数据
+      previewData = {
+        fileType: 'excel',
+        sheetCount: parseResult.sheetCount,
+        sheets: parseResult.sheets.map(sheet => ({
+          name: sheet.name,
+          headers: sheet.headers,
+          fieldMapping: sheet.fieldMapping,
+          rowCount: sheet.rowCount,
+          preview: sheet.rawRows || [],
+          data: sheet.data
+        })),
+        totalRecords: parseResult.totalRecords
+      }
+    } else {
+      // PDF 或其他格式
+      const validated = validateAndNormalizeData(parseResult.data || [])
+      previewData = {
+        fileType: parseResult.fileType,
+        pageCount: parseResult.pageCount,
+        data: validated.data,
+        validCount: validated.validCount,
+        warningCount: validated.warningCount,
+        totalRecords: validated.totalCount
+      }
+    }
+    
+    return success(res, previewData)
+  } catch (error) {
+    console.error('解析导入文件失败:', error)
+    return serverError(res, '解析文件失败: ' + error.message)
+  }
+}
+
+/**
+ * 确认导入数据
+ */
+export async function confirmImport(req, res) {
+  try {
+    const { id: supplierId } = req.params
+    const { items, fileName } = req.body
+    
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return badRequest(res, '导入数据为空')
+    }
+    
+    // 获取供应商信息
+    const supplier = await model.getSupplierById(supplierId)
+    if (!supplier) {
+      return notFound(res, '供应商不存在')
+    }
+    
+    // 批量创建供应商报价
+    const importBatchId = `IMP${Date.now()}`
+    const results = await model.batchCreateSupplierPrices(supplierId, items, {
+      supplierName: supplier.supplierName,
+      importBatchId,
+      fileName
+    })
+    
+    // 记录导入历史
+    await model.createImportRecord({
+      supplierId,
+      supplierName: supplier.supplierName,
+      fileName,
+      recordCount: results.successCount,
+      status: 'completed',
+      importBatchId
+    })
+    
+    return success(res, {
+      message: '导入成功',
+      importBatchId,
+      successCount: results.successCount,
+      failCount: results.failCount
+    })
+  } catch (error) {
+    console.error('确认导入失败:', error)
+    return serverError(res, '导入失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取导入历史记录
+ */
+export async function getImportRecords(req, res) {
+  try {
+    const { id: supplierId } = req.params
+    const { page = 1, pageSize = 20 } = req.query
+    
+    const records = await model.getImportRecords(supplierId, { page, pageSize })
+    return success(res, records)
+  } catch (error) {
+    console.error('获取导入记录失败:', error)
+    return serverError(res, '获取导入记录失败')
+  }
+}
+
 export default {
   getSupplierList,
   getSupplierStats,
@@ -245,5 +534,17 @@ export default {
   updateSupplier,
   deleteSupplier,
   batchDeleteSuppliers,
-  updateSupplierStatus
+  updateSupplierStatus,
+  // 采购价管理
+  getSupplierPrices,
+  createSupplierPrice,
+  updateSupplierPrice,
+  deleteSupplierPrice,
+  // 翻译
+  translate,
+  translateFee,
+  // 智能导入
+  parseImportFile,
+  confirmImport,
+  getImportRecords
 }

@@ -3,9 +3,39 @@
  */
 
 import express from 'express'
+import multer from 'multer'
 import * as controller from './controller.js'
 
 const router = express.Router()
+
+// 文件上传配置
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'application/pdf',
+      'image/jpeg',
+      'image/png'
+    ]
+    if (allowedTypes.includes(file.mimetype) || 
+        file.originalname.match(/\.(xlsx|xls|pdf|jpg|jpeg|png)$/i)) {
+      cb(null, true)
+    } else {
+      cb(new Error('不支持的文件格式'))
+    }
+  }
+})
+
+// ==================== 翻译 API ====================
+
+// 翻译文本
+router.post('/translate', controller.translate)
+
+// 翻译费用名称（带预设映射）
+router.post('/translate/fee', controller.translateFee)
 
 // ==================== 供应商管理路由 ====================
 
@@ -38,5 +68,30 @@ router.patch('/suppliers/:id/status', controller.updateSupplierStatus)
 
 // 删除供应商
 router.delete('/suppliers/:id', controller.deleteSupplier)
+
+// ==================== 供应商采购价管理 ====================
+
+// 获取供应商采购价列表
+router.get('/suppliers/:id/prices', controller.getSupplierPrices)
+
+// 创建采购价
+router.post('/suppliers/:id/prices', controller.createSupplierPrice)
+
+// 更新采购价
+router.put('/suppliers/:id/prices/:priceId', controller.updateSupplierPrice)
+
+// 删除采购价
+router.delete('/suppliers/:id/prices/:priceId', controller.deleteSupplierPrice)
+
+// ==================== 供应商报价智能导入 ====================
+
+// 解析上传的文件（预览阶段）
+router.post('/suppliers/import/parse', upload.single('file'), controller.parseImportFile)
+
+// 确认导入数据
+router.post('/suppliers/:id/import/confirm', controller.confirmImport)
+
+// 获取导入历史记录
+router.get('/suppliers/:id/import-records', controller.getImportRecords)
 
 export default router

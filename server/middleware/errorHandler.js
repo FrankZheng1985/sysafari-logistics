@@ -43,8 +43,8 @@ export function globalErrorHandler(err, req, res, next) {
     })
   }
   
-  // 数据库错误
-  if (err.code === 'SQLITE_CONSTRAINT') {
+  // 数据库约束错误 (PostgreSQL: 23505=唯一约束, 23503=外键约束, 23502=非空约束)
+  if (err.code === '23505' || err.code === '23503' || err.code === '23502') {
     return res.status(409).json({
       errCode: 409,
       msg: '数据约束错误，可能存在重复数据',

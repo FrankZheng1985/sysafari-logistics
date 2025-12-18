@@ -47,6 +47,9 @@ function convertSQLiteToPG(sql) {
   // 1. datetime('now', 'localtime') 或 datetime("now", "localtime") → NOW()
   pgSql = pgSql.replace(/datetime\s*\(\s*['"]now['"]\s*,\s*['"]localtime['"]\s*\)/gi, 'NOW()')
   
+  // 1.5. datetime('now') 或 datetime("now") → NOW()
+  pgSql = pgSql.replace(/datetime\s*\(\s*['"]now['"]\s*\)/gi, 'NOW()')
+  
   // 2. CURRENT_TIMESTAMP → NOW() (PostgreSQL 兼容，但统一使用 NOW())
   pgSql = pgSql.replace(/CURRENT_TIMESTAMP/gi, 'NOW()')
   

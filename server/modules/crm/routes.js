@@ -154,6 +154,9 @@ router.put('/quotations/:id', controller.updateQuotation)
 // 删除报价
 router.delete('/quotations/:id', controller.deleteQuotation)
 
+// 生成报价单PDF
+router.post('/quotations/:id/pdf', controller.generateQuotationPdf)
+
 // ==================== 合同管理路由 ====================
 
 // 获取合同列表

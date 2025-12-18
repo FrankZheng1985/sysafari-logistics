@@ -67,7 +67,15 @@ export default function FinanceInvoices() {
   
   const [searchValue, setSearchValue] = useState('')
   const [filterType, setFilterType] = useState(searchParams.get('type') || '')
-  const [filterStatus, setFilterStatus] = useState('')
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
+  
+  // 当 URL 参数变化时更新筛选状态
+  useEffect(() => {
+    const type = searchParams.get('type') || ''
+    const status = searchParams.get('status') || ''
+    setFilterType(type)
+    setFilterStatus(status)
+  }, [searchParams])
   
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [modalVisible, setModalVisible] = useState(false) // modalVisible reserved for edit functionality
@@ -80,6 +88,8 @@ export default function FinanceInvoices() {
     { label: '收付款', path: '/finance/payments' },
     { label: '费用管理', path: '/finance/fees' },
     { label: '财务报表', path: '/finance/reports' },
+    { label: '订单报表', path: '/finance/order-report' },
+    { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
    
