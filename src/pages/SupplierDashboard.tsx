@@ -44,6 +44,14 @@ const SUPPLIER_TYPES: Record<string, string> = {
   trader: '贸易商',
   agent: '代理商',
   distributor: '分销商',
+  shipping: '船运公司',
+  trucking: '拖车公司',
+  delivery: '派送服务',
+  forwarder: '货代公司',
+  warehouse: '仓储服务',
+  customs: '报关服务',
+  terminal: '码头运营',
+  depot: '堆场服务',
   other: '其他',
 }
 
