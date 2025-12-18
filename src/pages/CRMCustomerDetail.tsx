@@ -1518,10 +1518,11 @@ function TaxModal({
         }
       }
       
-      if (tax.taxType === 'vat' || tax.taxType === 'VAT') {
+      const taxTypeLower = tax.taxType.toLowerCase()
+      if (taxTypeLower === 'vat') {
         grouped[key].vatNumber = tax.taxNumber
         grouped[key].vatVerified = tax.isVerified
-      } else if (tax.taxType === 'eori' || tax.taxType === 'EORI') {
+      } else if (taxTypeLower === 'eori') {
         grouped[key].eoriNumber = tax.taxNumber
         grouped[key].eoriVerified = tax.isVerified
       }

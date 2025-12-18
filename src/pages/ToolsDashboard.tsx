@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { 
   FileText, Calculator, ArrowRight,
-  TrendingUp, BarChart3, Building2
+  TrendingUp, BarChart3, Building2, Wrench, Settings
 } from 'lucide-react'
 
 interface ToolCard {

@@ -10,6 +10,17 @@ import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
+interface InvoiceItem {
+  id: string
+  feeName: string
+  feeNameEn?: string
+  description: string
+  quantity: number
+  unitPrice: number
+  amount: number
+  currency: string
+}
+
 interface Invoice {
   id: string
   invoiceNumber: string
@@ -31,6 +42,7 @@ interface Invoice {
   status: string
   createdBy: string | null
   createTime: string
+  items?: InvoiceItem[]
   updateTime: string
   pdfUrl?: string | null
   excelUrl?: string | null
@@ -61,6 +73,8 @@ interface BillInfo {
   portOfDischarge: string
   eta: string
   ata: string
+  deliveryStatus?: string      // 派送状态
+  status?: string              // 订单状态
 }
 
 export default function InvoiceDetail() {
