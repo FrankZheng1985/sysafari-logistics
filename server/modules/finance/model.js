@@ -875,14 +875,15 @@ export async function getOrderFeeReport(params = {}) {
   let dateFilter = ''
   const queryParams = []
   
+  // 日期过滤：如果 fee_date 为 null，则使用 create_time 进行过滤
   if (startDate) {
-    dateFilter += ' AND f.fee_date >= ?'
-    queryParams.push(startDate)
+    dateFilter += ' AND (f.fee_date >= ? OR (f.fee_date IS NULL AND DATE(f.create_time) >= ?))'
+    queryParams.push(startDate, startDate)
   }
   
   if (endDate) {
-    dateFilter += ' AND f.fee_date <= ?'
-    queryParams.push(endDate)
+    dateFilter += ' AND (f.fee_date <= ? OR (f.fee_date IS NULL AND DATE(f.create_time) <= ?))'
+    queryParams.push(endDate, endDate)
   }
   
   // 获取订单维度的费用汇总
@@ -963,14 +964,15 @@ export async function getCustomerFeeReport(params = {}) {
   let dateFilter = ''
   const queryParams = []
   
+  // 日期过滤：如果 fee_date 为 null，则使用 create_time 进行过滤
   if (startDate) {
-    dateFilter += ' AND f.fee_date >= ?'
-    queryParams.push(startDate)
+    dateFilter += ' AND (f.fee_date >= ? OR (f.fee_date IS NULL AND DATE(f.create_time) >= ?))'
+    queryParams.push(startDate, startDate)
   }
   
   if (endDate) {
-    dateFilter += ' AND f.fee_date <= ?'
-    queryParams.push(endDate)
+    dateFilter += ' AND (f.fee_date <= ? OR (f.fee_date IS NULL AND DATE(f.create_time) <= ?))'
+    queryParams.push(endDate, endDate)
   }
   
   // 获取客户维度的费用汇总

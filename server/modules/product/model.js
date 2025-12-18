@@ -377,6 +377,9 @@ export async function seedDemoData() {
       ON CONFLICT (id) DO UPDATE SET product_name = EXCLUDED.product_name, updated_at = CURRENT_TIMESTAMP
     `).run(p.id, p.code, p.name, p.nameEn, p.category, p.desc, 1, p.sort)
   }
+
+  // 清理测试产品的现有费用项（避免重复）
+  await db.prepare("DELETE FROM product_fee_items WHERE product_id LIKE 'prod-%'").run()
   
   // 产品费用项数据
   const productFeeItems = [
@@ -410,13 +413,14 @@ export async function seedDemoData() {
   ]
   
   for (const f of productFeeItems) {
-    const id = generateId()
     await db.prepare(`
-      INSERT INTO product_fee_items (id, product_id, fee_name, fee_name_en, fee_category, unit, standard_price, min_price, max_price, currency, is_required, description, sort_order, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EUR', ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT DO NOTHING
-    `).run(id, f.productId, f.name, f.nameEn, f.category, f.unit, f.price, f.minPrice || null, f.maxPrice || null, f.required ? 1 : 0, f.desc, f.sort)
+      INSERT INTO product_fee_items (product_id, fee_name, fee_name_en, fee_category, unit, standard_price, min_price, max_price, currency, is_required, description, sort_order, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EUR', ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(f.productId, f.name, f.nameEn, f.category, f.unit, f.price, f.minPrice || null, f.maxPrice || null, f.required ? 1 : 0, f.desc, f.sort)
   }
+
+  // 清理测试供应商的现有报价（避免重复）
+  await db.prepare("DELETE FROM supplier_price_items WHERE supplier_id LIKE 'sup-%'").run()
   
   // 供应商报价数据
   const supplierPrices = [
@@ -446,12 +450,10 @@ export async function seedDemoData() {
   ]
   
   for (const s of supplierPrices) {
-    const id = generateId()
     await db.prepare(`
-      INSERT INTO supplier_price_items (id, supplier_id, supplier_name, fee_name, fee_name_en, fee_category, unit, price, currency, effective_date, expiry_date, route_from, route_to, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EUR', '2025-01-01', '2025-12-31', ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT DO NOTHING
-    `).run(id, s.supplierId, s.supplierName, s.name, s.nameEn, s.category, s.unit, s.price, s.routeFrom, s.routeTo)
+      INSERT INTO supplier_price_items (supplier_id, supplier_name, fee_name, fee_name_en, fee_category, unit, price, currency, effective_date, expiry_date, route_from, route_to, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'EUR', '2025-01-01', '2025-12-31', ?, ?, CURRENT_TIMESTAMP)
+    `).run(s.supplierId, s.supplierName, s.name, s.nameEn, s.category, s.unit, s.price, s.routeFrom, s.routeTo)
   }
   
   // 统计
