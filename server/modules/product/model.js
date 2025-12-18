@@ -375,7 +375,7 @@ export async function seedDemoData() {
       INSERT INTO products (id, product_code, product_name, product_name_en, category, description, is_active, sort_order, created_by, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'admin', CURRENT_TIMESTAMP)
       ON CONFLICT (id) DO UPDATE SET product_name = EXCLUDED.product_name, updated_at = CURRENT_TIMESTAMP
-    `).run(p.id, p.code, p.name, p.nameEn, p.category, p.desc, true, p.sort)
+    `).run(p.id, p.code, p.name, p.nameEn, p.category, p.desc, 1, p.sort)
   }
   
   // 产品费用项数据
