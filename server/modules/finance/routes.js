@@ -146,5 +146,32 @@ router.put('/bank-accounts/:id', controller.updateBankAccount)
 // 删除银行账户
 router.delete('/bank-accounts/:id', controller.deleteBankAccount)
 
+// ==================== 财务报表路由 ====================
+// 注意：具体路径必须放在参数化路径之前，避免路由冲突
+
+// 获取资产负债表数据
+router.get('/finance/reports/balance-sheet', controller.getBalanceSheet)
+
+// 获取利润表数据
+router.get('/finance/reports/income-statement', controller.getIncomeStatement)
+
+// 获取现金流量表数据
+router.get('/finance/reports/cash-flow', controller.getCashFlowStatement)
+
+// 获取经营分析表数据
+router.get('/finance/reports/business-analysis', controller.getBusinessAnalysis)
+
+// 获取财务报表历史列表
+router.get('/finance/reports/history', controller.getFinancialReportHistory)
+
+// 下载本地存储的报表文件
+router.get('/finance/reports/files/:filename', controller.downloadReportFile)
+
+// 生成并保存财务报表 PDF（参数化路由）
+router.post('/finance/reports/:type/generate', controller.generateFinancialReport)
+
+// 获取单个财务报表详情（参数化路由，放在最后）
+router.get('/finance/reports/:id', controller.getFinancialReportById)
+
 export default router
 

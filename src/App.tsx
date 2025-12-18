@@ -49,6 +49,7 @@ import FinancePayments from './pages/FinancePayments'
 import FinanceFees from './pages/FinanceFees'
 import FinanceReports from './pages/FinanceReports'
 import FinanceOrderReport from './pages/FinanceOrderReport'
+import FinancialStatements from './pages/FinancialStatements'
 import BankAccounts from './pages/BankAccounts'
 import CreateInvoice from './pages/CreateInvoice'
 // TMS模块
@@ -73,8 +74,15 @@ import SupplierDashboard from './pages/SupplierDashboard'
 import SupplierManage from './pages/SupplierManage'
 import SupplierPrices from './pages/SupplierPrices'
 import SupplierPriceImport from './pages/SupplierPriceImport'
+// 单证管理模块
+import DocumentDashboard from './pages/DocumentDashboard'
+import DocumentImport from './pages/DocumentImport'
+import DocumentMatching from './pages/DocumentMatching'
+import DocumentTaxCalc from './pages/DocumentTaxCalc'
+import DocumentSupplement from './pages/DocumentSupplement'
 import { initMenuSettings } from './utils/menuSettings'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ToastProvider } from './components/Toast'
 import { Loader2 } from 'lucide-react'
 
 // 保护路由组件
@@ -168,6 +176,12 @@ function AppRoutes() {
         <Route path="/crm/quotations" element={<CRMQuotations />} />
         <Route path="/crm/contracts" element={<CRMContracts />} />
         <Route path="/crm/feedbacks" element={<CRMFeedbacks />} />
+        {/* 单证管理 */}
+        <Route path="/documents" element={<DocumentDashboard />} />
+        <Route path="/documents/import" element={<DocumentImport />} />
+        <Route path="/documents/matching" element={<DocumentMatching />} />
+        <Route path="/documents/tax-calc" element={<DocumentTaxCalc />} />
+        <Route path="/documents/supplement" element={<DocumentSupplement />} />
         {/* 财务管理 */}
         <Route path="/finance" element={<FinanceDashboard />} />
         <Route path="/finance/invoices" element={<FinanceInvoices />} />
@@ -179,6 +193,7 @@ function AppRoutes() {
         <Route path="/finance/fees" element={<FinanceFees />} />
         <Route path="/finance/reports" element={<FinanceReports />} />
         <Route path="/finance/order-report" element={<FinanceOrderReport />} />
+        <Route path="/finance/statements" element={<FinancialStatements />} />
         <Route path="/finance/bank-accounts" element={<BankAccounts />} />
       </Routes>
     </Layout>
@@ -192,23 +207,25 @@ function App() {
   }, [])
 
   return (
-    <AuthProvider>
-      <Router>
-        <Routes>
-          {/* 登录页面 */}
-          <Route path="/login" element={<Login />} />
-          {/* 受保护的路由 */}
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <AppRoutes />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </Router>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            {/* 登录页面 */}
+            <Route path="/login" element={<Login />} />
+            {/* 受保护的路由 */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <AppRoutes />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ToastProvider>
   )
 }
 

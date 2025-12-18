@@ -366,8 +366,12 @@ export async function updateBillShipStatus(id, shipStatus, actualArrivalDate = n
 
 /**
  * 更新换单状态
+ * @param {number} id - 提单ID
+ * @param {string} docSwapStatus - 换单状态
+ * @param {string} docSwapAgent - 代理商名称（可选，记录在操作日志中）
+ * @param {number} docSwapFee - 换单费用（可选，记录在操作日志中）
  */
-export async function updateBillDocSwapStatus(id, docSwapStatus) {
+export async function updateBillDocSwapStatus(id, docSwapStatus, docSwapAgent, docSwapFee) {
   const db = getDatabase()
   
   // PostgreSQL 需要将 NOW() 转换为 TEXT 类型以匹配 doc_swap_time 列
@@ -375,8 +379,11 @@ export async function updateBillDocSwapStatus(id, docSwapStatus) {
   const nowExpr = isPostgres ? "TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS')" : "NOW()"
   const updatedAtExpr = isPostgres ? "NOW()" : "NOW()"
   
+  // 注意: docSwapAgent 和 docSwapFee 目前记录在操作日志中
+  // 如果需要持久化到主表，请先添加数据库字段
+  
   const sql = `
-    UPDATE bills_of_lading 
+    UPDATE bills_of_lading
     SET doc_swap_status = ?,
         doc_swap_time = CASE WHEN ? = '已换单' THEN ${nowExpr} ELSE doc_swap_time END,
         updated_at = ${updatedAtExpr}

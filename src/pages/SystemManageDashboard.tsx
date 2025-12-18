@@ -56,7 +56,7 @@ const systemModules: SystemCard[] = [
   },
   {
     path: '/system/tariff-rates',
-    label: '税率管理',
+    label: 'HS Code数据库',
     description: '配置和管理各类税率信息',
     icon: FileText,
     color: 'text-teal-600',

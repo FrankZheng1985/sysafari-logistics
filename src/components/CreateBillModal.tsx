@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
-import { X, Play, Plane, Ship, Train, Truck, Upload, Download, HelpCircle, Plus, Trash2, FileText, ChevronDown, Loader2, Users } from 'lucide-react'
+import { X, Play, Plane, Ship, Train, Truck, Upload, Download, HelpCircle, Plus, Trash2, FileText, ChevronDown, Loader2, Users, CheckCircle, AlertCircle, Eye } from 'lucide-react'
 import DatePicker from './DatePicker'
-import { createBill, getShippingCompanyByContainerCode, searchContainerCodes, parseBillFile, getPortsOfLoadingList, getDestinationPortsList, getCustomers, type ContainerCode, type PortOfLoadingItem, type DestinationPortItem, type Customer } from '../utils/api'
+import { createBill, getShippingCompanyByContainerCode, searchContainerCodes, parseBillFile, getPortsOfLoadingList, getDestinationPortsList, getCustomers, parseTransportDocument, getTrackingSupplementInfo, type ContainerCode, type PortOfLoadingItem, type DestinationPortItem, type Customer, type ParsedTransportData, type TrackingSupplementInfo } from '../utils/api'
 
 interface CreateBillModalProps {
   visible: boolean
@@ -20,6 +20,12 @@ export default function CreateBillModal({
   const [selectedType, setSelectedType] = useState<'official' | 'temporary' | null>(null)
   const [selectedTransport, setSelectedTransport] = useState<'air' | 'sea' | 'rail' | 'truck' | null>(null)
   const [easyBill, setEasyBill] = useState(true)
+  
+  // OCR解析相关状态
+  const [ocrParsing, setOcrParsing] = useState(false)
+  const [ocrResult, setOcrResult] = useState<ParsedTransportData | null>(null)
+  const [ocrError, setOcrError] = useState<string | null>(null)
+  const [showOcrPreview, setShowOcrPreview] = useState(false)
   
   // 第三步表单数据
   const [formData, setFormData] = useState({
@@ -52,6 +58,10 @@ export default function CreateBillModal({
     fullContainerTransport: '' as 'must-full' | 'can-split' | '', // 全程整柜运输
     lastMileTransport: 'truck', // 末端运输方式
     devanning: '' as 'required' | 'not-required' | '', // 拆柜
+    // 新增字段：从追踪API获取
+    containerNumber: '', // 集装箱号（完整柜号）
+    sealNumber: '', // 封号
+    containerSize: '', // 柜型（如 20GP, 40GP, 40HQ）
   })
   const [bindResourceTab, setBindResourceTab] = useState<'general' | 'pallet'>('general')
   const [resourceFile, setResourceFile] = useState<File | null>(null)
@@ -382,34 +392,41 @@ export default function CreateBillModal({
     setSelectedTransport(transport)
   }
 
-  // 解析提单文件
-  const handleParseFile = async () => {
-    if (!formData.masterBillFile) {
+  // 解析提单文件（优先使用本地PDF解析，OCR作为增强）
+  // 支持直接传入文件参数，解决React状态更新异步问题
+  const handleParseFile = async (fileParam?: File) => {
+    const fileToProcess = fileParam || formData.masterBillFile
+    
+    if (!fileToProcess) {
       alert('请先选择文件')
       return
     }
 
     setParsingFile(true)
+    setOcrParsing(true)
+    setOcrError(null)
+    setOcrResult(null)
     
     try {
-      const response = await parseBillFile(formData.masterBillFile)
+      // 优先使用本地PDF解析API（已证实可工作）
+      const response = await parseBillFile(fileToProcess)
+      
       if (response.errCode === 200 && response.data) {
         const data = response.data
+        console.log('PDF解析结果:', data)
         
         // 自动填充表单字段
         if (data.masterBillNumber) {
-          // 解析主单号（可能是完整号码，需要拆分）
           const billNumber = data.masterBillNumber.toUpperCase()
-          // 尝试匹配格式：4个字母+数字（如 EMCU1608836）
-          const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
-          if (match) {
-            handleInputChange('containerCodePrefix', match[1])
-            handleInputChange('masterBillNumberSuffix', match[2])
-            handleInputChange('masterBillNumber', billNumber)
-          } else {
-            // 如果不是标准格式，直接填入主单号
-            handleInputChange('masterBillNumber', billNumber)
+          // 海运：尝试匹配格式：4个字母+数字（如 EMCU1608836）
+          if (selectedTransport === 'sea') {
+            const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
+            if (match) {
+              handleInputChange('containerCodePrefix', match[1])
+              handleInputChange('masterBillNumberSuffix', match[2])
+            }
           }
+          handleInputChange('masterBillNumber', billNumber)
         }
         
         if (data.shippingCompany) {
@@ -437,39 +454,253 @@ export default function CreateBillModal({
         }
         
         if (data.vessel) {
-          handleInputChange('flightNumber', data.vessel) // 海运时 vessel 对应 flightNumber 字段
+          handleInputChange('flightNumber', data.vessel)
         }
         
         if (data.estimatedDeparture) {
           handleInputChange('estimatedDeparture', data.estimatedDeparture)
         }
         
-        // 如果提取到集装箱代码，尝试获取海运公司信息
-        if (data.containerNumber) {
+        // 如果提取到集装箱代码，尝试获取船公司信息
+        if (data.containerNumber && selectedTransport === 'sea') {
           const containerCode = data.containerNumber.substring(0, 4).toUpperCase()
-          if (containerCode && selectedTransport === 'sea') {
+          if (containerCode) {
             try {
               const companyResponse = await getShippingCompanyByContainerCode(containerCode)
               if (companyResponse.errCode === 200 && companyResponse.data) {
-                handleInputChange('shippingCompany', companyResponse.data.companyName)
+                handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
               }
             } catch (err) {
-              console.error('获取海运公司信息失败:', err)
+              console.error('获取船公司信息失败:', err)
             }
           }
         }
         
-        // 显示成功提示
-        alert('提单信息已自动提取并填充到表单中')
+        // 检查是否提取到有效数据
+        const hasData = data.masterBillNumber || data.origin || data.destination || data.pieces || data.weight
+        if (hasData) {
+          // 异步获取追踪补充信息（码头、船名航次等）
+          // 不阻塞主流程
+          fetchSupplementInfo(data.masterBillNumber, data.containerNumber)
+          alert('提单信息已自动提取并填充到表单中')
+        } else {
+          alert('解析完成，但未识别到有效信息，请手动填写')
+        }
       } else {
         console.warn('解析返回异常:', response)
-        alert('解析文件完成，但未提取到有效信息')
+        alert('解析文件完成，但未提取到有效信息，请手动填写')
       }
     } catch (error: any) {
       console.error('解析提单文件失败:', error)
       alert('解析文件失败: ' + (error.message || '未知错误') + '\n请手动填写表单信息')
     } finally {
       setParsingFile(false)
+      setOcrParsing(false)
+    }
+  }
+  
+  // 将OCR结果应用到表单
+  const applyOcrResultToForm = (data: ParsedTransportData) => {
+    // 主单号/提单号
+    if (data.billNumber) {
+      const billNumber = String(data.billNumber).toUpperCase()
+      // 海运：尝试匹配格式：4个字母+数字（如 EMCU1608836）
+      if (selectedTransport === 'sea') {
+        const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
+        if (match) {
+          handleInputChange('containerCodePrefix', match[1])
+          handleInputChange('masterBillNumberSuffix', match[2])
+        }
+      }
+      handleInputChange('masterBillNumber', billNumber)
+    }
+    
+    // 集装箱号
+    if (data.containerNumber) {
+      const containerCode = String(data.containerNumber).substring(0, 4).toUpperCase()
+      if (containerCode && selectedTransport === 'sea') {
+        handleInputChange('containerCodePrefix', containerCode)
+        // 异步获取船公司信息
+        getShippingCompanyByContainerCode(containerCode).then(companyResponse => {
+          if (companyResponse.errCode === 200 && companyResponse.data) {
+            handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+          }
+        }).catch(console.error)
+      }
+    }
+    
+    // 航班号/船名航次/列车号
+    if (data.vessel) {
+      handleInputChange('flightNumber', data.vessel)
+    } else if (data.flightNumber) {
+      handleInputChange('flightNumber', data.flightNumber)
+    } else if (data.trainNumber) {
+      handleInputChange('flightNumber', data.trainNumber)
+    }
+    
+    // 起运港
+    if (data.portOfLoading) {
+      handleInputChange('origin', data.portOfLoading)
+    }
+    
+    // 目的港
+    if (data.portOfDischarge) {
+      handleInputChange('destination', data.portOfDischarge)
+    }
+    
+    // 件数
+    if (data.pieces) {
+      handleInputChange('pieces', String(data.pieces))
+    }
+    
+    // 毛重
+    if (data.grossWeight) {
+      handleInputChange('grossWeight', String(data.grossWeight))
+    }
+    
+    // 体积
+    if (data.volume) {
+      handleInputChange('volume', String(data.volume))
+    }
+    
+    // 船公司/航空公司
+    if (data.shippingCompany) {
+      handleInputChange('shippingCompany', data.shippingCompany)
+    } else if (data.airline) {
+      handleInputChange('shippingCompany', data.airline)
+    }
+    
+    // ETA
+    if (data.eta) {
+      handleInputChange('estimatedArrival', data.eta)
+    }
+  }
+  
+  // 获取追踪补充信息（码头、船名航次、件数、毛重等）
+  // 用于填充提单解析未提取到的字段
+  const fetchSupplementInfo = async (billNumber?: string, containerNumber?: string) => {
+    if (!billNumber && !containerNumber) return
+    
+    try {
+      console.log('获取追踪补充信息...', { billNumber, containerNumber })
+      const response = await getTrackingSupplementInfo({
+        trackingNumber: billNumber,
+        containerNumber: containerNumber,
+        transportType: selectedTransport || 'sea',
+      })
+      
+      if (response.errCode === 200 && response.data) {
+        const info = response.data
+        console.log('追踪补充信息:', info)
+        
+        // 自动填充码头/地勤信息
+        if (info.terminal && !formData.groundHandling) {
+          handleInputChange('groundHandling', info.terminal)
+        }
+        
+        // 自动填充船名航次（如果之前没有）
+        if (info.vessel && !formData.flightNumber) {
+          const vesselInfo = info.voyage ? `${info.vessel} ${info.voyage}` : info.vessel
+          handleInputChange('flightNumber', vesselInfo)
+        }
+        
+        // 自动填充 ETA（如果之前没有）
+        if (info.eta && !formData.estimatedArrival) {
+          handleInputChange('estimatedArrival', info.eta)
+        }
+        
+        // 自动填充 ETD（如果之前没有）
+        if (info.etd && !formData.estimatedDeparture) {
+          handleInputChange('estimatedDeparture', info.etd)
+        }
+        
+        // 自动填充件数（如果之前没有）
+        if (info.pieces && !formData.pieces) {
+          handleInputChange('pieces', String(info.pieces))
+        }
+        
+        // 自动填充毛重（如果之前没有）
+        if (info.grossWeight && !formData.grossWeight) {
+          handleInputChange('grossWeight', String(info.grossWeight))
+        }
+        
+        // 自动填充体积（如果之前没有）
+        if (info.volume && !formData.volume) {
+          handleInputChange('volume', String(info.volume))
+        }
+        
+        // 自动填充集装箱号（如果之前没有）
+        if (info.containerNumber && !formData.containerNumber) {
+          handleInputChange('containerNumber', info.containerNumber)
+        }
+        
+        // 自动填充封号（如果之前没有）
+        if (info.sealNumber && !formData.sealNumber) {
+          handleInputChange('sealNumber', info.sealNumber)
+        }
+        
+        // 自动填充柜型（如果之前没有）
+        if (info.containerType && !formData.containerSize) {
+          handleInputChange('containerSize', info.containerType)
+        }
+        
+        // 显示获取到的补充信息
+        const supplementFields: string[] = []
+        if (info.terminal) supplementFields.push(`码头: ${info.terminal}`)
+        if (info.vessel) supplementFields.push(`船名: ${info.vessel}`)
+        if (info.voyage) supplementFields.push(`航次: ${info.voyage}`)
+        if (info.eta) supplementFields.push(`ETA: ${info.eta}`)
+        if (info.pieces) supplementFields.push(`件数: ${info.pieces}`)
+        if (info.grossWeight) supplementFields.push(`毛重: ${info.grossWeight}KG`)
+        if (info.containerNumber) supplementFields.push(`柜号: ${info.containerNumber}`)
+        if (info.sealNumber) supplementFields.push(`封号: ${info.sealNumber}`)
+        if (info.containerType) supplementFields.push(`柜型: ${info.containerType}`)
+        
+        if (supplementFields.length > 0) {
+          console.log('已自动填充补充信息:', supplementFields.join(', '))
+        }
+      }
+    } catch (error) {
+      console.error('获取追踪补充信息失败:', error)
+      // 不影响主流程，静默失败
+    }
+  }
+  
+  // 回退到旧的解析方法
+  const fallbackParseBillFile = async () => {
+    if (!formData.masterBillFile) return
+    
+    try {
+      const response = await parseBillFile(formData.masterBillFile)
+      if (response.errCode === 200 && response.data) {
+        const data = response.data
+        
+        if (data.masterBillNumber) {
+          const billNumber = data.masterBillNumber.toUpperCase()
+          const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
+          if (match) {
+            handleInputChange('containerCodePrefix', match[1])
+            handleInputChange('masterBillNumberSuffix', match[2])
+            handleInputChange('masterBillNumber', billNumber)
+          } else {
+            handleInputChange('masterBillNumber', billNumber)
+          }
+        }
+        
+        if (data.shippingCompany) handleInputChange('shippingCompany', data.shippingCompany)
+        if (data.origin) handleInputChange('origin', data.origin)
+        if (data.destination) handleInputChange('destination', data.destination)
+        if (data.pieces) handleInputChange('pieces', data.pieces)
+        if (data.weight) handleInputChange('grossWeight', data.weight)
+        if (data.volume) handleInputChange('volume', data.volume)
+        if (data.vessel) handleInputChange('flightNumber', data.vessel)
+        if (data.estimatedDeparture) handleInputChange('estimatedDeparture', data.estimatedDeparture)
+        
+        alert('提单信息已自动提取并填充到表单中')
+      }
+    } catch (error) {
+      console.error('回退解析失败:', error)
+      alert('解析文件失败，请手动填写表单信息')
     }
   }
 
@@ -728,6 +959,9 @@ export default function CreateBillModal({
           fullContainerTransport: '',
           lastMileTransport: 'truck',
           devanning: '',
+          containerNumber: '',
+          sealNumber: '',
+          containerSize: '',
         })
         setReferenceList([])
         setErrors({})
@@ -833,6 +1067,9 @@ export default function CreateBillModal({
           fullContainerTransport: '',
           lastMileTransport: 'truck',
           devanning: '',
+          containerNumber: '',
+          sealNumber: '',
+          containerSize: '',
         })
         setReferenceList([])
         setErrors({})
@@ -934,7 +1171,7 @@ export default function CreateBillModal({
                     : 'text-gray-500'
                 }`}
               >
-                选择运输方式
+                运输方式 + 上传运输单
               </span>
             </div>
 
@@ -963,7 +1200,7 @@ export default function CreateBillModal({
                     : 'text-gray-500'
                 }`}
               >
-                绑定数据
+                确认信息 + 补录
               </span>
             </div>
           </div>
@@ -1082,7 +1319,7 @@ export default function CreateBillModal({
 
               {/* 简易创建提单选项 - 仅正式提单显示 */}
               {selectedType === 'official' && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-4">
                   <input
                     type="checkbox"
                     id="easyBill"
@@ -1093,6 +1330,103 @@ export default function CreateBillModal({
                   <label htmlFor="easyBill" className="text-sm text-gray-700 cursor-pointer">
                     简易创建提单(Easy Bill)请勾选
                   </label>
+                </div>
+              )}
+              
+              {/* 上传运输单 - 选择运输方式后显示 */}
+              {selectedTransport && (
+                <div className="mt-6 p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    上传运输单（可选，支持OCR智能识别）
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-3">
+                    支持 PDF、图片(JPG/PNG)、Excel 格式，系统将自动识别并填充表单字段
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <label className={`px-3 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 cursor-pointer text-xs flex items-center gap-1.5 transition-colors ${ocrParsing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>选择文件</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          setFormData(prev => ({ ...prev, masterBillFile: file }))
+                          // 自动开始解析 - 直接传入文件参数，避免状态更新异步问题
+                          if (file) {
+                            handleParseFile(file)
+                          }
+                        }}
+                        className="hidden"
+                        disabled={ocrParsing}
+                      />
+                    </label>
+                    {formData.masterBillFile && (
+                      <span className="text-xs text-gray-600 flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        {formData.masterBillFile.name}
+                      </span>
+                    )}
+                    {ocrParsing && (
+                      <span className="text-xs text-primary-600 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        正在智能识别...
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* OCR识别结果预览 */}
+                  {showOcrPreview && ocrResult && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-green-700 flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          OCR识别成功，已自动填充以下字段
+                        </span>
+                        <button
+                          onClick={() => setShowOcrPreview(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        {ocrResult.billNumber && (
+                          <div><span className="text-gray-500">单号:</span> <span className="font-medium">{ocrResult.billNumber}</span></div>
+                        )}
+                        {ocrResult.portOfLoading && (
+                          <div><span className="text-gray-500">起运:</span> <span className="font-medium">{ocrResult.portOfLoading}</span></div>
+                        )}
+                        {ocrResult.portOfDischarge && (
+                          <div><span className="text-gray-500">目的:</span> <span className="font-medium">{ocrResult.portOfDischarge}</span></div>
+                        )}
+                        {ocrResult.pieces && (
+                          <div><span className="text-gray-500">件数:</span> <span className="font-medium">{ocrResult.pieces}</span></div>
+                        )}
+                        {ocrResult.grossWeight && (
+                          <div><span className="text-gray-500">毛重:</span> <span className="font-medium">{ocrResult.grossWeight} KG</span></div>
+                        )}
+                        {(ocrResult.vessel || ocrResult.flightNumber) && (
+                          <div><span className="text-gray-500">航次:</span> <span className="font-medium">{ocrResult.vessel || ocrResult.flightNumber}</span></div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* OCR识别错误 */}
+                  {ocrError && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                      <span className="text-xs text-yellow-700 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {ocrError}，您可以继续手动填写
+                      </span>
+                    </div>
+                  )}
+                  
+                  <p className="mt-3 text-[10px] text-gray-400">
+                    提示：如果识别结果不准确，可在下一步手动修改
+                  </p>
                 </div>
               )}
             </div>
@@ -1115,74 +1449,72 @@ export default function CreateBillModal({
                 </div>
               )}
 
-              {/* 基本信息 */}
+              {/* ===== 基本信息 ===== */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">基本信息</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* 左列 */}
-                  <div className="space-y-4">
-                    {/* 运输方式 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        运输方式 <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={getTransportText()}
-                        disabled
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50 text-gray-500"
-                      >
-                        <option>{getTransportText()}</option>
-                      </select>
-                    </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  {/* 运输方式 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      运输方式 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={getTransportText()}
+                      disabled
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50 text-gray-500"
+                    >
+                      <option>{getTransportText()}</option>
+                    </select>
+                  </div>
 
-                    {/* 主单文件 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        主单文件 <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex items-center gap-2">
+                  {/* 主单文件 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      主单文件 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.masterBillFile?.name || ''}
+                        placeholder="未选择文件"
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
+                      />
+                      <label className={`px-1.5 py-0.5 bg-primary-600 text-white rounded hover:bg-primary-700 cursor-pointer text-xs flex items-center gap-1 ${parsingFile ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <Upload className="w-3 h-3" />
+                        <span>选择文件</span>
                         <input
-                          type="text"
-                          readOnly
-                          value={formData.masterBillFile?.name || ''}
-                          placeholder="未选择文件"
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          onChange={(e) => handleFileUpload('masterBillFile', e.target.files?.[0] || null)}
+                          className="hidden"
+                          disabled={parsingFile}
                         />
-                        <label className={`px-1.5 py-0.5 bg-primary-600 text-white rounded hover:bg-primary-700 cursor-pointer text-xs flex items-center gap-1 ${parsingFile ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                          <Upload className="w-3 h-3" />
-                          <span>选择文件</span>
-                          <input
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={(e) => handleFileUpload('masterBillFile', e.target.files?.[0] || null)}
-                            className="hidden"
-                            disabled={parsingFile}
-                          />
-                        </label>
-                        {formData.masterBillFile && !parsingFile && (
-                          <button
-                            onClick={handleParseFile}
-                            className="px-1.5 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs flex items-center gap-1"
-                          >
-                            <FileText className="w-3 h-3" />
-                            <span>确认解析</span>
-                          </button>
-                        )}
-                        {parsingFile && (
-                          <div className="px-1.5 py-0.5 bg-gray-400 text-white rounded text-xs flex items-center gap-1">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            <span>解析中...</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 客户选择 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                        <Users className="w-3 h-3" />
-                        关联客户
                       </label>
+                      {formData.masterBillFile && !parsingFile && (
+                        <button
+                          onClick={handleParseFile}
+                          className="px-1.5 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs flex items-center gap-1"
+                        >
+                          <FileText className="w-3 h-3" />
+                          <span>确认解析</span>
+                        </button>
+                      )}
+                      {parsingFile && (
+                        <div className="px-1.5 py-0.5 bg-gray-400 text-white rounded text-xs flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>解析中...</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 关联客户 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      关联客户
+                    </label>
                       <div className="relative customer-dropdown">
                         <input
                           type="text"
@@ -1707,181 +2039,263 @@ export default function CreateBillModal({
                         <p className="mt-1 text-xs text-red-500">{errors.destination}</p>
                       )}
                     </div>
+                </div>
+              </div>
 
-                    {/* 件数 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                        件数 <span className="text-red-500">*</span>
-                        <HelpCircle className="w-3 h-3 text-gray-400" />
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.pieces}
-                        onChange={(e) => handleInputChange('pieces', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                      />
-                    </div>
-
-                    {/* 体积 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        体积 <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={formData.volume}
-                          onChange={(e) => handleInputChange('volume', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                        />
-                        <select
-                          value={formData.volumeUnit}
-                          onChange={(e) => handleInputChange('volumeUnit', e.target.value)}
-                          className={`px-2 py-1 border border-gray-300 rounded text-xs bg-white ${
-                            formData.volumeUnit === 'CBM' ? 'text-gray-500' : 'text-gray-900'
-                          }`}
-                        >
-                          <option value="CBM" className="text-gray-500">CBM</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* 每公斤运费单价 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                        每公斤运费单价 <span className="text-red-500">*</span>
-                        <HelpCircle className="w-3 h-3 text-gray-400" />
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={formData.freightRate}
-                          onChange={(e) => handleInputChange('freightRate', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                        />
-                        <select
-                          value={formData.freightRateUnit}
-                          onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
-                        >
-                          <option value="CNY">CNY</option>
-                        </select>
-                      </div>
-                    </div>
+              {/* ===== 航程信息 ===== */}
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">航程信息</h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  {/* 航班号/船名航次 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      航班号/船名航次 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.flightNumber}
+                      onChange={(e) => {
+                        handleInputChange('flightNumber', e.target.value)
+                        if (errors.flightNumber) {
+                          setErrors(prev => ({ ...prev, flightNumber: '' }))
+                        }
+                      }}
+                      className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                        errors.flightNumber
+                          ? 'border-red-500 focus:ring-red-500'
+                          : 'border-gray-300 focus:ring-primary-500'
+                      }`}
+                    />
+                    {errors.flightNumber && (
+                      <p className="mt-1 text-xs text-red-500">{errors.flightNumber}</p>
+                    )}
                   </div>
 
-                  {/* 右列 */}
-                  <div className="space-y-4">
-                    {/* 占位符 - 与左列"运输方式"对齐 */}
-                    <div className="h-[52px]"></div>
-                    
-                    {/* 航班号/船名航次 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        航班号/船名航次 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.flightNumber}
-                        onChange={(e) => {
-                          handleInputChange('flightNumber', e.target.value)
-                          if (errors.flightNumber) {
-                            setErrors(prev => ({ ...prev, flightNumber: '' }))
-                          }
-                        }}
-                        className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
-                          errors.flightNumber
-                            ? 'border-red-500 focus:ring-red-500'
-                            : 'border-gray-300 focus:ring-primary-500'
-                        }`}
-                      />
-                      {errors.flightNumber && (
-                        <p className="mt-1 text-xs text-red-500">{errors.flightNumber}</p>
-                      )}
-                    </div>
-
-                    {/* 地勤 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        地勤 <span className="text-red-500">*</span>
-                      </label>
+                  {/* 地勤（码头） */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      地勤（码头） <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
                       <input
                         type="text"
                         value={formData.groundHandling}
                         onChange={(e) => handleInputChange('groundHandling', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        placeholder="集装箱落在哪个码头"
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       />
-                    </div>
-
-                    {/* 预计离开时间 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        预计离开时间 <span className="text-red-500">*</span>
-                      </label>
-                      <DatePicker
-                        id="estimatedDeparture"
-                        value={formData.estimatedDeparture}
-                        onChange={(value) => handleInputChange('estimatedDeparture', value)}
-                        placeholder="请选择日期"
-                        className="w-full"
-                      />
-                    </div>
-
-                    {/* 预计到达时间 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        预计到达时间 <span className="text-red-500">*</span>
-                      </label>
-                      <DatePicker
-                        id="estimatedArrival"
-                        value={formData.estimatedArrival}
-                        onChange={(value) => handleInputChange('estimatedArrival', value)}
-                        placeholder="请选择日期"
-                        className="w-full"
-                      />
-                    </div>
-
-                    {/* 毛重 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        毛重 <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={formData.grossWeight}
-                          onChange={(e) => handleInputChange('grossWeight', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                        />
-                        <select
-                          value={formData.grossWeightUnit}
-                          onChange={(e) => handleInputChange('grossWeightUnit', e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
-                        >
-                          <option value="KGS">KGS</option>
-                          <option value="LBS">LBS</option>
-                          <option value="g">g</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* 派送 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        派送 <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={formData.delivery}
-                        onChange={(e) => handleInputChange('delivery', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      <button
+                        type="button"
+                        onClick={() => fetchSupplementInfo(formData.masterBillNumber)}
+                        disabled={!formData.masterBillNumber}
+                        className={`px-2 py-1 text-xs rounded flex items-center gap-1 transition-colors ${
+                          formData.masterBillNumber
+                            ? 'bg-primary-600 text-white hover:bg-primary-700'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                        title="根据主单号自动获取码头信息"
                       >
-                        <option value="After Bill">After Bill(创建完提单后可派送)</option>
-                        <option value="After Clearance">After Clearance(报关后可派送)</option>
-                      </select>
+                        <Download className="w-3 h-3" />
+                        获取
+                      </button>
                     </div>
+                    <p className="mt-1 text-[10px] text-gray-400">输入主单号后可自动获取码头信息</p>
+                  </div>
+
+                  {/* 预计离开时间 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      预计离开时间 <span className="text-red-500">*</span>
+                    </label>
+                    <DatePicker
+                      id="estimatedDeparture"
+                      value={formData.estimatedDeparture}
+                      onChange={(value) => handleInputChange('estimatedDeparture', value)}
+                      placeholder="请选择日期"
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* 预计到达时间 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      预计到达时间 <span className="text-red-500">*</span>
+                    </label>
+                    <DatePicker
+                      id="estimatedArrival"
+                      value={formData.estimatedArrival}
+                      onChange={(value) => handleInputChange('estimatedArrival', value)}
+                      placeholder="请选择日期"
+                      className="w-full"
+                    />
                   </div>
                 </div>
               </div>
+
+              {/* ===== 货物信息 ===== */}
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">货物信息</h3>
+                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+                  {/* 件数 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      件数 <span className="text-red-500">*</span>
+                      <HelpCircle className="w-3 h-3 text-gray-400" />
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.pieces}
+                      onChange={(e) => handleInputChange('pieces', e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                    />
+                  </div>
+
+                  {/* 毛重 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      毛重 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={formData.grossWeight}
+                        onChange={(e) => handleInputChange('grossWeight', e.target.value)}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      />
+                      <select
+                        value={formData.grossWeightUnit}
+                        onChange={(e) => handleInputChange('grossWeightUnit', e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                      >
+                        <option value="KGS">KGS</option>
+                        <option value="LBS">LBS</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 体积 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      体积 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={formData.volume}
+                        onChange={(e) => handleInputChange('volume', e.target.value)}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      />
+                      <select
+                        value={formData.volumeUnit}
+                        onChange={(e) => handleInputChange('volumeUnit', e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                      >
+                        <option value="CBM">CBM</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 每公斤运费单价 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      每公斤运费单价 <span className="text-red-500">*</span>
+                      <HelpCircle className="w-3 h-3 text-gray-400" />
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={formData.freightRate}
+                        onChange={(e) => handleInputChange('freightRate', e.target.value)}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      />
+                      <select
+                        value={formData.freightRateUnit}
+                        onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
+                        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                      >
+                        <option value="CNY">CNY</option>
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 派送 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      派送 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.delivery}
+                      onChange={(e) => handleInputChange('delivery', e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                    >
+                      <option value="After Bill">After Bill</option>
+                      <option value="After Clearance">After Clearance</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 海运特有字段 - 集装箱信息 */}
+              {selectedTransport === 'sea' && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">集装箱信息</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* 集装箱号 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        集装箱号
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.containerNumber}
+                        onChange={(e) => handleInputChange('containerNumber', e.target.value.toUpperCase())}
+                        placeholder="如 COSU1234567"
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      />
+                    </div>
+                    
+                    {/* 柜型 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        柜型
+                      </label>
+                      <select
+                        value={formData.containerSize}
+                        onChange={(e) => handleInputChange('containerSize', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      >
+                        <option value="">请选择</option>
+                        <option value="20GP">20GP</option>
+                        <option value="40GP">40GP</option>
+                        <option value="40HQ">40HQ</option>
+                        <option value="45HQ">45HQ</option>
+                        <option value="20RF">20RF (冷柜)</option>
+                        <option value="40RF">40RF (冷柜)</option>
+                        <option value="20OT">20OT (开顶)</option>
+                        <option value="40OT">40OT (开顶)</option>
+                        <option value="20FR">20FR (框架)</option>
+                        <option value="40FR">40FR (框架)</option>
+                      </select>
+                    </div>
+                    
+                    {/* 封号 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        封号
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.sealNumber}
+                        onChange={(e) => handleInputChange('sealNumber', e.target.value.toUpperCase())}
+                        placeholder="铅封号"
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* 海运特有字段 - 附加属性 */}
               {selectedTransport === 'sea' && (

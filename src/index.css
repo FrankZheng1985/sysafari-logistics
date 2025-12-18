@@ -339,3 +339,19 @@ td {
   }
 }
 
+/* Toast 滑入动画（从右侧滑入） */
+.animate-slide-in {
+  animation: slideInFromRight 0.3s ease-out;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+

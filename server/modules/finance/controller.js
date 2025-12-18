@@ -2,10 +2,16 @@
  * 财务管理模块 - 控制器
  */
 
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { success, successWithPagination, badRequest, notFound, serverError } from '../../utils/response.js'
 import * as model from './model.js'
 import * as invoiceGenerator from './invoiceGenerator.js'
 import { getBOCExchangeRate } from '../../utils/exchangeRate.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // ==================== 发票管理 ====================
 
@@ -909,6 +915,215 @@ export async function deleteBankAccount(req, res) {
   } catch (error) {
     console.error('删除银行账户失败:', error)
     return serverError(res, '删除银行账户失败')
+  }
+}
+
+// ==================== 财务报表 ====================
+
+/**
+ * 获取资产负债表
+ */
+export async function getBalanceSheet(req, res) {
+  try {
+    const { asOfDate } = req.query
+    const date = asOfDate || new Date().toISOString().split('T')[0]
+    
+    const data = await model.getBalanceSheet(date)
+    return success(res, data)
+  } catch (error) {
+    console.error('获取资产负债表失败:', error)
+    return serverError(res, '获取资产负债表失败')
+  }
+}
+
+/**
+ * 获取利润表
+ */
+export async function getIncomeStatement(req, res) {
+  try {
+    const { startDate, endDate } = req.query
+    
+    if (!startDate || !endDate) {
+      return badRequest(res, '请提供开始日期和结束日期')
+    }
+    
+    const data = await model.getIncomeStatement(startDate, endDate)
+    return success(res, data)
+  } catch (error) {
+    console.error('获取利润表失败:', error)
+    return serverError(res, '获取利润表失败')
+  }
+}
+
+/**
+ * 获取现金流量表
+ */
+export async function getCashFlowStatement(req, res) {
+  try {
+    const { startDate, endDate } = req.query
+    
+    if (!startDate || !endDate) {
+      return badRequest(res, '请提供开始日期和结束日期')
+    }
+    
+    const data = await model.getCashFlowStatement(startDate, endDate)
+    return success(res, data)
+  } catch (error) {
+    console.error('获取现金流量表失败:', error)
+    return serverError(res, '获取现金流量表失败')
+  }
+}
+
+/**
+ * 获取经营分析表
+ */
+export async function getBusinessAnalysis(req, res) {
+  try {
+    const { startDate, endDate } = req.query
+    
+    if (!startDate || !endDate) {
+      return badRequest(res, '请提供开始日期和结束日期')
+    }
+    
+    const data = await model.getBusinessAnalysis(startDate, endDate)
+    return success(res, data)
+  } catch (error) {
+    console.error('获取经营分析表失败:', error)
+    return serverError(res, '获取经营分析表失败')
+  }
+}
+
+/**
+ * 生成并保存财务报表 PDF
+ */
+export async function generateFinancialReport(req, res) {
+  try {
+    const { type } = req.params
+    const { startDate, endDate, asOfDate, createdBy, createdByName } = req.body
+    
+    // 验证报表类型
+    const validTypes = ['balance_sheet', 'income_statement', 'cash_flow', 'business_analysis']
+    if (!validTypes.includes(type)) {
+      return badRequest(res, '无效的报表类型')
+    }
+    
+    // 获取报表数据
+    let reportData
+    let periodStart = null
+    let periodEnd = null
+    let reportAsOfDate = null
+    
+    if (type === 'balance_sheet') {
+      reportAsOfDate = asOfDate || new Date().toISOString().split('T')[0]
+      reportData = await model.getBalanceSheet(reportAsOfDate)
+    } else {
+      if (!startDate || !endDate) {
+        return badRequest(res, '请提供开始日期和结束日期')
+      }
+      periodStart = startDate
+      periodEnd = endDate
+      
+      if (type === 'income_statement') {
+        reportData = await model.getIncomeStatement(startDate, endDate)
+      } else if (type === 'cash_flow') {
+        reportData = await model.getCashFlowStatement(startDate, endDate)
+      } else if (type === 'business_analysis') {
+        reportData = await model.getBusinessAnalysis(startDate, endDate)
+      }
+    }
+    
+    // 生成并上传 PDF
+    const { generateAndUploadReport, REPORT_NAMES } = await import('./financialReportPdf.js')
+    const result = await generateAndUploadReport(type, reportData, { createdBy, createdByName })
+    
+    // 保存报表记录到数据库
+    const saveResult = await model.saveFinancialReport({
+      reportType: type,
+      reportName: REPORT_NAMES[type] || type,
+      periodStart,
+      periodEnd,
+      asOfDate: reportAsOfDate,
+      pdfUrl: result.pdfUrl,
+      pdfKey: result.pdfKey,
+      reportData,
+      createdBy,
+      createdByName
+    })
+    
+    return success(res, {
+      id: saveResult.id,
+      reportType: type,
+      reportName: REPORT_NAMES[type],
+      pdfUrl: result.pdfUrl,
+      filename: result.filename
+    }, '报表生成成功')
+  } catch (error) {
+    console.error('生成财务报表失败:', error)
+    return serverError(res, '生成财务报表失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取财务报表历史列表
+ */
+export async function getFinancialReportHistory(req, res) {
+  try {
+    const { reportType, startDate, endDate, page, pageSize } = req.query
+    
+    const result = await model.getFinancialReports({
+      reportType,
+      startDate,
+      endDate,
+      page: page ? parseInt(page) : 1,
+      pageSize: pageSize ? parseInt(pageSize) : 20
+    })
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取报表历史失败:', error)
+    return serverError(res, '获取报表历史失败')
+  }
+}
+
+/**
+ * 获取单个财务报表详情
+ */
+export async function getFinancialReportById(req, res) {
+  try {
+    const { id } = req.params
+    const report = await model.getFinancialReportById(id)
+    
+    if (!report) {
+      return notFound(res, '报表不存在')
+    }
+    
+    return success(res, report)
+  } catch (error) {
+    console.error('获取报表详情失败:', error)
+    return serverError(res, '获取报表详情失败')
+  }
+}
+
+/**
+ * 下载报表 PDF（本地文件）
+ */
+export async function downloadReportFile(req, res) {
+  try {
+    const { filename } = req.params
+    const filePath = path.join(__dirname, '../../uploads/reports', filename)
+    
+    if (!fs.existsSync(filePath)) {
+      return notFound(res, '文件不存在')
+    }
+    
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`)
+    
+    const fileStream = fs.createReadStream(filePath)
+    fileStream.pipe(res)
+  } catch (error) {
+    console.error('下载报表失败:', error)
+    return serverError(res, '下载报表失败')
   }
 }
 

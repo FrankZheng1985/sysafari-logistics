@@ -39,3 +39,11 @@ backups/
 # Logs directory
 logs/
 .vercel
+
+# Uploaded files (runtime generated)
+server/uploads/file-*
+server/uploads/cargo-imports/
+server/uploads/invoices/*.pdf
+server/uploads/invoices/*.xlsx
+server/uploads/reports/
+server/uploads/tax-confirms/

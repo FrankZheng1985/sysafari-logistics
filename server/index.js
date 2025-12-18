@@ -20,8 +20,14 @@ import productRoutes from './modules/product/routes.js'
 import supplierRoutes from './modules/supplier/routes.js'
 import systemRoutes from './modules/system/routes.js'
 import tmsRoutes from './modules/tms/routes.js'
+import taricRoutes from './modules/taric/routes.js'
+import cargoRoutes from './modules/cargo/routes.js'
+import ocrRoutes from './modules/ocr/routes.js'
+import trackingRoutes from './modules/tracking/routes.js'
 // 导入税号自动验证定时任务
 import { startTaxValidationScheduler } from './modules/crm/taxScheduler.js'
+// 导入 TARIC 同步调度器
+import { startScheduler as startTaricScheduler } from './modules/taric/scheduler.js'
 // 导入自动迁移脚本
 import { runMigrations } from './scripts/auto-migrate.js'
 
@@ -81,6 +87,10 @@ app.use('/api', productRoutes)
 app.use('/api', supplierRoutes)
 app.use('/api', systemRoutes)
 app.use('/api', tmsRoutes)
+app.use('/api', taricRoutes)
+app.use('/api', cargoRoutes)
+app.use('/api/ocr', ocrRoutes)
+app.use('/api', trackingRoutes)
 
 // 数据库连接（PostgreSQL）
 const USE_POSTGRES = isUsingPostgres()
@@ -332,7 +342,7 @@ function initDatabase() {
   // ==================== 操作日志表 ====================
   db.exec(`
     CREATE TABLE IF NOT EXISTS operation_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       bill_id TEXT NOT NULL,
       operation_type TEXT NOT NULL,
       operation_name TEXT NOT NULL,
@@ -363,7 +373,7 @@ function initDatabase() {
   // ==================== 提单文件表 ====================
   db.exec(`
     CREATE TABLE IF NOT EXISTS bill_files (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       bill_id TEXT NOT NULL,
       file_name TEXT NOT NULL,
       file_path TEXT NOT NULL,
@@ -642,7 +652,7 @@ function initDatabase() {
   // 基础数据表
   db.exec(`
     CREATE TABLE IF NOT EXISTS basic_data (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       code TEXT NOT NULL UNIQUE,
       category TEXT NOT NULL,
@@ -663,7 +673,7 @@ function initDatabase() {
   // 起运港表
   db.exec(`
     CREATE TABLE IF NOT EXISTS ports_of_loading (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       port_code TEXT NOT NULL UNIQUE,
       port_name_cn TEXT NOT NULL,
       port_name_en TEXT,
@@ -731,29 +741,61 @@ function initDatabase() {
   const existingLoadingPorts = db.prepare('SELECT COUNT(*) as count FROM ports_of_loading').get()
   if (existingLoadingPorts.count === 0) {
     const insertLoadingPort = db.prepare(`
-      INSERT INTO ports_of_loading (port_code, port_name_cn, port_name_en, country, country_code, city, transport_type, port_type) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO ports_of_loading (port_code, port_name_cn, port_name_en, country, country_code, city, transport_type, port_type, parent_port_code, sort_order) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    // 中国主要港口
-    insertLoadingPort.run('CNSHA', '上海港', 'Shanghai', '中国', 'CN', '上海', 'sea', 'main')
-    insertLoadingPort.run('CNNGB', '宁波港', 'Ningbo', '中国', 'CN', '宁波', 'sea', 'main')
-    insertLoadingPort.run('CNSZX', '深圳港', 'Shenzhen', '中国', 'CN', '深圳', 'sea', 'main')
-    insertLoadingPort.run('CNQIN', '青岛港', 'Qingdao', '中国', 'CN', '青岛', 'sea', 'main')
-    insertLoadingPort.run('CNTXG', '天津港', 'Tianjin', '中国', 'CN', '天津', 'sea', 'main')
-    insertLoadingPort.run('CNXMN', '厦门港', 'Xiamen', '中国', 'CN', '厦门', 'sea', 'main')
-    insertLoadingPort.run('CNGZN', '广州港', 'Guangzhou', '中国', 'CN', '广州', 'sea', 'main')
-    insertLoadingPort.run('CNDLC', '大连港', 'Dalian', '中国', 'CN', '大连', 'sea', 'main')
+    // 中国主要海港
+    insertLoadingPort.run('CNSHA', '上海港', 'Shanghai', '中国', 'CN', '上海', 'sea', 'main', null, 1)
+    insertLoadingPort.run('CNNGB', '宁波港', 'Ningbo', '中国', 'CN', '宁波', 'sea', 'main', null, 2)
+    insertLoadingPort.run('CNSZX', '深圳港', 'Shenzhen', '中国', 'CN', '深圳', 'sea', 'main', null, 3)
+    insertLoadingPort.run('CNYTN', '盐田港', 'Yantian', '中国', 'CN', '深圳', 'sea', 'sub', 'CNSZX', 4)
+    insertLoadingPort.run('CNSHK', '蛇口港', 'Shekou', '中国', 'CN', '深圳', 'sea', 'sub', 'CNSZX', 5)
+    insertLoadingPort.run('CNQIN', '青岛港', 'Qingdao', '中国', 'CN', '青岛', 'sea', 'main', null, 6)
+    insertLoadingPort.run('CNTXG', '天津港', 'Tianjin', '中国', 'CN', '天津', 'sea', 'main', null, 7)
+    insertLoadingPort.run('CNXMN', '厦门港', 'Xiamen', '中国', 'CN', '厦门', 'sea', 'main', null, 8)
+    insertLoadingPort.run('CNGZN', '广州港', 'Guangzhou', '中国', 'CN', '广州', 'sea', 'main', null, 9)
+    insertLoadingPort.run('CNNSA', '南沙港', 'Nansha', '中国', 'CN', '广州', 'sea', 'sub', 'CNGZN', 10)
+    insertLoadingPort.run('CNDLC', '大连港', 'Dalian', '中国', 'CN', '大连', 'sea', 'main', null, 11)
+    insertLoadingPort.run('CNLYG', '连云港', 'Lianyungang', '中国', 'CN', '连云港', 'sea', 'main', null, 12)
+    insertLoadingPort.run('CNFOC', '福州港', 'Fuzhou', '中国', 'CN', '福州', 'sea', 'main', null, 13)
+    insertLoadingPort.run('CNHAK', '海口港', 'Haikou', '中国', 'CN', '海口', 'sea', 'main', null, 14)
+    insertLoadingPort.run('CNZUH', '珠海港', 'Zhuhai', '中国', 'CN', '珠海', 'sea', 'main', null, 15)
     // 空运港
-    insertLoadingPort.run('CNPVG', '上海浦东机场', 'Shanghai Pudong', '中国', 'CN', '上海', 'air', 'main')
-    insertLoadingPort.run('CNPEK', '北京首都机场', 'Beijing Capital', '中国', 'CN', '北京', 'air', 'main')
-    insertLoadingPort.run('CNCAN', '广州白云机场', 'Guangzhou Baiyun', '中国', 'CN', '广州', 'air', 'main')
-    console.log('已插入示例起运地数据')
+    insertLoadingPort.run('CNPVG', '上海浦东机场', 'Shanghai Pudong', '中国', 'CN', '上海', 'air', 'main', null, 100)
+    insertLoadingPort.run('CNPEK', '北京首都机场', 'Beijing Capital', '中国', 'CN', '北京', 'air', 'main', null, 101)
+    insertLoadingPort.run('CNCAN', '广州白云机场', 'Guangzhou Baiyun', '中国', 'CN', '广州', 'air', 'main', null, 102)
+    insertLoadingPort.run('CNSHX', '深圳宝安机场', 'Shenzhen Baoan', '中国', 'CN', '深圳', 'air', 'main', null, 103)
+    // 中欧班列站点
+    insertLoadingPort.run('CNXIA', '西安国际港', 'Xian International Port', '中国', 'CN', '西安', 'rail', 'main', null, 200)
+    insertLoadingPort.run('CNCGO', '郑州圃田站', 'Zhengzhou Putian', '中国', 'CN', '郑州', 'rail', 'main', null, 201)
+    insertLoadingPort.run('CNCHG', '重庆团结村站', 'Chongqing Tuanjiecun', '中国', 'CN', '重庆', 'rail', 'main', null, 202)
+    insertLoadingPort.run('CNCDG', '成都城厢站', 'Chengdu Chengxiang', '中国', 'CN', '成都', 'rail', 'main', null, 203)
+    insertLoadingPort.run('CNURS', '乌鲁木齐站', 'Urumqi', '中国', 'CN', '乌鲁木齐', 'rail', 'main', null, 204)
+    insertLoadingPort.run('CNYIW', '义乌西站', 'Yiwu West', '中国', 'CN', '义乌', 'rail', 'main', null, 205)
+    console.log('已插入示例起运地数据（含盐田港等）')
+  } else {
+    // 检查盐田港是否存在，如果不存在则补充插入
+    const yantianExists = db.prepare('SELECT COUNT(*) as count FROM ports_of_loading WHERE port_code = ?').get('CNYTN')
+    if (yantianExists.count === 0) {
+      try {
+        const insertLoadingPort = db.prepare(`
+          INSERT OR IGNORE INTO ports_of_loading (port_code, port_name_cn, port_name_en, country, country_code, city, transport_type, port_type, parent_port_code, sort_order) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        insertLoadingPort.run('CNYTN', '盐田港', 'Yantian', '中国', 'CN', '深圳', 'sea', 'sub', 'CNSZX', 4)
+        insertLoadingPort.run('CNSHK', '蛇口港', 'Shekou', '中国', 'CN', '深圳', 'sea', 'sub', 'CNSZX', 5)
+        insertLoadingPort.run('CNNSA', '南沙港', 'Nansha', '中国', 'CN', '广州', 'sea', 'sub', 'CNGZN', 10)
+        console.log('补充插入盐田港等港口数据')
+      } catch (e) {
+        console.log('盐田港等港口数据插入跳过（可能已存在）')
+      }
+    }
   }
 
   // 目的港表
   db.exec(`
     CREATE TABLE IF NOT EXISTS destination_ports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       port_code TEXT NOT NULL UNIQUE,
       port_name_cn TEXT NOT NULL,
       port_name_en TEXT,
@@ -826,7 +868,7 @@ function initDatabase() {
   // 空运港表
   db.exec(`
     CREATE TABLE IF NOT EXISTS air_ports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       port_code TEXT NOT NULL UNIQUE,
       port_name_cn TEXT NOT NULL,
       port_name_en TEXT,
@@ -882,7 +924,7 @@ function initDatabase() {
   // 国家表
   db.exec(`
     CREATE TABLE IF NOT EXISTS countries (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       country_code TEXT NOT NULL UNIQUE,
       country_name_cn TEXT NOT NULL,
       country_name_en TEXT NOT NULL,
@@ -958,7 +1000,7 @@ function initDatabase() {
   // 船公司表
   db.exec(`
     CREATE TABLE IF NOT EXISTS shipping_companies (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       company_code TEXT NOT NULL UNIQUE,
       company_name TEXT NOT NULL,
       country TEXT,
@@ -1213,7 +1255,7 @@ function initDatabase() {
   // 集装箱代码表
   db.exec(`
     CREATE TABLE IF NOT EXISTS container_codes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       shipping_company_id INTEGER NOT NULL,
       container_code TEXT NOT NULL UNIQUE,
       description TEXT,
@@ -1569,7 +1611,7 @@ function initDatabase() {
   // 服务商表（TMS模块）
   db.exec(`
     CREATE TABLE IF NOT EXISTS service_providers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       provider_code TEXT NOT NULL UNIQUE,
       provider_name TEXT NOT NULL,
       service_type TEXT DEFAULT 'delivery',
@@ -1620,7 +1662,7 @@ function initDatabase() {
   // 运费价格表（TMS模块）
   db.exec(`
     CREATE TABLE IF NOT EXISTS transport_pricing (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       route_code TEXT NOT NULL UNIQUE,
       route_name TEXT NOT NULL,
       origin TEXT,
@@ -1667,7 +1709,7 @@ function initDatabase() {
   // 服务费类别表
   db.exec(`
     CREATE TABLE IF NOT EXISTS service_fee_categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       code TEXT NOT NULL UNIQUE,
       description TEXT,
@@ -1701,7 +1743,7 @@ function initDatabase() {
   // 运输方式表
   db.exec(`
     CREATE TABLE IF NOT EXISTS transport_methods (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       code TEXT NOT NULL UNIQUE,
       description TEXT,
@@ -1737,7 +1779,7 @@ function initDatabase() {
   // 增值税率表
   db.exec(`
     CREATE TABLE IF NOT EXISTS vat_rates (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       country_code TEXT NOT NULL,
       country_name TEXT NOT NULL,
       standard_rate REAL NOT NULL DEFAULT 19,
@@ -1791,7 +1833,7 @@ function initDatabase() {
   // 服务费项目表
   db.exec(`
     CREATE TABLE IF NOT EXISTS service_fees (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       category TEXT NOT NULL,
       unit TEXT NOT NULL,
@@ -1831,7 +1873,7 @@ function initDatabase() {
   // 运输价格表
   db.exec(`
     CREATE TABLE IF NOT EXISTS transport_prices (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       origin TEXT NOT NULL,
       destination TEXT NOT NULL,
@@ -1895,7 +1937,7 @@ function initDatabase() {
   // 系统设置表
   db.exec(`
     CREATE TABLE IF NOT EXISTS system_settings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       setting_key TEXT NOT NULL UNIQUE,
       setting_value TEXT,
       setting_type TEXT DEFAULT 'string',
@@ -1913,7 +1955,7 @@ function initDatabase() {
   // ==================== TARIC 税率管理表 ====================
   db.exec(`
     CREATE TABLE IF NOT EXISTS tariff_rates (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       hs_code TEXT NOT NULL,
       hs_code_10 TEXT,
       goods_description TEXT NOT NULL,
@@ -1981,7 +2023,7 @@ function initDatabase() {
   // 税率变更历史表
   db.exec(`
     CREATE TABLE IF NOT EXISTS tariff_rate_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       tariff_rate_id INTEGER NOT NULL,
       hs_code TEXT NOT NULL,
       old_duty_rate REAL,
@@ -2026,7 +2068,7 @@ function initDatabase() {
   // 登录尝试记录表（用于账号锁定）
   db.exec(`
     CREATE TABLE IF NOT EXISTS login_attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       username TEXT NOT NULL,
       ip_address TEXT,
       attempt_time DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2041,7 +2083,7 @@ function initDatabase() {
   // 验证码表（用于邮箱验证）
   db.exec(`
     CREATE TABLE IF NOT EXISTS verification_codes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       user_id INTEGER,
       username TEXT NOT NULL,
       email TEXT NOT NULL,
@@ -2054,12 +2096,12 @@ function initDatabase() {
   `)
 
   // 清理过期的验证码
-  db.exec(`DELETE FROM verification_codes WHERE expires_at < datetime('now')`)
+  db.exec(`DELETE FROM verification_codes WHERE expires_at < NOW()`)
 
   // 登录日志表
   db.exec(`
     CREATE TABLE IF NOT EXISTS login_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       user_id INTEGER,
       username TEXT NOT NULL,
       login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2076,7 +2118,7 @@ function initDatabase() {
   // 系统安全配置表
   db.exec(`
     CREATE TABLE IF NOT EXISTS security_settings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       setting_key TEXT UNIQUE NOT NULL,
       setting_value TEXT,
       description TEXT,
@@ -2107,7 +2149,7 @@ function initDatabase() {
   // 用户表
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       name TEXT NOT NULL,
@@ -2132,7 +2174,7 @@ function initDatabase() {
   // 角色表
   db.exec(`
     CREATE TABLE IF NOT EXISTS roles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       role_code TEXT UNIQUE NOT NULL,
       role_name TEXT NOT NULL,
       description TEXT,
@@ -2146,7 +2188,7 @@ function initDatabase() {
   // 权限表
   db.exec(`
     CREATE TABLE IF NOT EXISTS permissions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       permission_code TEXT UNIQUE NOT NULL,
       permission_name TEXT NOT NULL,
       module TEXT NOT NULL,
@@ -2159,7 +2201,7 @@ function initDatabase() {
   // 角色-权限关联表
   db.exec(`
     CREATE TABLE IF NOT EXISTS role_permissions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       role_code TEXT NOT NULL,
       permission_code TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2170,7 +2212,7 @@ function initDatabase() {
   // 用户-订单分配表（用于跟踪哪些订单分配给哪个操作员）
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_bill_assignments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       bill_id TEXT NOT NULL,
       assigned_by INTEGER,
@@ -2193,7 +2235,7 @@ function initDatabase() {
   // Auth0 待绑定用户表
   db.exec(`
     CREATE TABLE IF NOT EXISTS auth0_pending_users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       auth0_id TEXT UNIQUE NOT NULL,
       email TEXT,
       name TEXT,
@@ -5156,7 +5198,7 @@ app.post('/api/bills/parse-file', upload.single('file'), async (req, res) => {
 // ==================== 起运港管理 API ====================
 
 // 获取起运港列表
-app.get('/api/ports-of-loading', (req, res) => {
+app.get('/api/ports-of-loading', async (req, res) => {
   try {
     const { country, status, search, transportType, continent } = req.query
     
@@ -5195,10 +5237,11 @@ app.get('/api/ports-of-loading', (req, res) => {
     }
 
     if (search) {
+      // 使用 ILIKE 实现不区分大小写搜索（PostgreSQL原生支持）
       if (continent) {
-        query += ' AND (p.port_code LIKE ? OR p.port_name_cn LIKE ? OR p.port_name_en LIKE ? OR p.city LIKE ?)'
+        query += ' AND (p.port_code ILIKE ? OR p.port_name_cn ILIKE ? OR p.port_name_en ILIKE ? OR p.city ILIKE ?)'
       } else {
-        query += ' AND (port_code LIKE ? OR port_name_cn LIKE ? OR port_name_en LIKE ? OR city LIKE ?)'
+        query += ' AND (port_code ILIKE ? OR port_name_cn ILIKE ? OR port_name_en ILIKE ? OR city ILIKE ?)'
       }
       const searchPattern = `%${search}%`
       params.push(searchPattern, searchPattern, searchPattern, searchPattern)
@@ -5206,7 +5249,8 @@ app.get('/api/ports-of-loading', (req, res) => {
 
     query += continent ? ' ORDER BY p.country, p.port_name_cn' : ' ORDER BY country, port_name_cn'
 
-    const data = db.prepare(query).all(...params)
+    // 使用 await 等待异步查询结果
+    const data = await db.prepare(query).all(...params)
     
     res.json({
       errCode: 200,
@@ -6467,17 +6511,20 @@ function extractDataFromText(text, fileName) {
   
   console.log('开始从文本提取信息，文本长度:', text.length, '文件名:', fileName)
   
-  // 1. 提取主单号（格式：4个字母+数字，如 EMCU1608836, COSU1234567）
+  // 1. 提取主单号（支持多种格式）
   const billNumberPatterns = [
-    /([A-Z]{4}\d{7,})/g,  // 4字母+7位以上数字
-    /(B\/L\s*NO[:\s]*([A-Z]{4}\d+))/i,  // B/L NO: EMCU1608836
-    /(BILL\s*OF\s*LADING[:\s]*([A-Z]{4}\d+))/i,  // BILL OF LADING: EMCU1608836
+    /([A-Z]{4}\d{7,})/g,  // 4字母+7位以上数字，如 EMCU1608836
+    /(B\/L\s*NO[:\s]*([A-Z0-9]{8,}))/i,  // B/L NO: EMCU1608836 或 B/L NO: 1234567890
+    /(BILL\s*OF\s*LADING[:\s]*([A-Z0-9]{8,}))/i,  // BILL OF LADING: ...
+    /([A-Z]{3}\d{8})/g,  // 3字母+8位数字，如 空运单号 ABC12345678
+    /\b(\d{10,})\b/g,  // 纯数字10位以上（常见提单号格式）
   ]
   
   for (const pattern of billNumberPatterns) {
     const match = upperText.match(pattern) || upperFileName.match(pattern)
     if (match) {
-      const numberMatch = match[0].match(/([A-Z]{4}\d+)/)
+      // 尝试提取有效的提单号
+      const numberMatch = match[0].match(/([A-Z]{4}\d+)/) || match[0].match(/([A-Z]{3}\d{8,})/) || match[0].match(/(\d{10,})/)
       if (numberMatch) {
         extracted.masterBillNumber = numberMatch[1]
         console.log('找到主单号:', extracted.masterBillNumber)
@@ -6488,7 +6535,24 @@ function extractDataFromText(text, fileName) {
   
   // 如果文本中没有找到，从文件名中提取
   if (!extracted.masterBillNumber) {
-    const fileNameMatch = upperFileName.match(/([A-Z]{4}\d{7,})/)
+    // 去除文件扩展名
+    const baseFileName = upperFileName.replace(/\.[^.]+$/, '')
+    console.log('处理文件名:', baseFileName)
+    
+    // 优先匹配4字母+数字格式
+    let fileNameMatch = baseFileName.match(/([A-Z]{4}\d{7,})/)
+    if (!fileNameMatch) {
+      // 尝试匹配3字母+数字格式（空运单号）
+      fileNameMatch = baseFileName.match(/([A-Z]{3}\d{8,})/)
+    }
+    if (!fileNameMatch) {
+      // 尝试匹配纯数字格式（8位以上）- 从任意位置提取
+      fileNameMatch = baseFileName.match(/(\d{8,})/)
+    }
+    if (!fileNameMatch) {
+      // 更宽松：提取连续6位以上数字
+      fileNameMatch = baseFileName.match(/(\d{6,})/)
+    }
     if (fileNameMatch) {
       extracted.masterBillNumber = fileNameMatch[1]
       console.log('从文件名找到主单号:', extracted.masterBillNumber)
@@ -7238,9 +7302,9 @@ app.delete('/api/transport-prices/:id', async (req, res) => {
 // ==================== TARIC 税率管理 API ====================
 
 // 获取税率列表
-app.get('/api/tariff-rates', (req, res) => {
+app.get('/api/tariff-rates', async (req, res) => {
   try {
-    const { search, hsCode, origin, page = 1, pageSize = 50 } = req.query
+    const { search, hsCode, origin, dataSource, status, dutyRateMin, dutyRateMax, page = 1, pageSize = 50 } = req.query
     let query = 'SELECT * FROM tariff_rates WHERE 1=1'
     let countQuery = 'SELECT COUNT(*) as total FROM tariff_rates WHERE 1=1'
     const params = []
@@ -7259,20 +7323,46 @@ app.get('/api/tariff-rates', (req, res) => {
     }
 
     if (origin) {
-      query += ' AND (origin_country_code = ? OR origin_country LIKE ?)'
-      countQuery += ' AND (origin_country_code = ? OR origin_country LIKE ?)'
-      params.push(origin, `%${origin}%`)
+      // 使用 UPPER() 进行大小写不敏感的搜索
+      query += ' AND (UPPER(origin_country_code) = UPPER(?) OR UPPER(origin_country) LIKE UPPER(?) OR UPPER(geographical_area) = UPPER(?))'
+      countQuery += ' AND (UPPER(origin_country_code) = UPPER(?) OR UPPER(origin_country) LIKE UPPER(?) OR UPPER(geographical_area) = UPPER(?))'
+      params.push(origin, `%${origin}%`, origin)
     }
 
-    // 获取总数
-    const totalResult = db.prepare(countQuery).get(...params)
+    if (dataSource) {
+      query += ' AND data_source = ?'
+      countQuery += ' AND data_source = ?'
+      params.push(dataSource)
+    }
+
+    if (status) {
+      const isActive = status === 'active' ? 1 : 0
+      query += ' AND is_active = ?'
+      countQuery += ' AND is_active = ?'
+      params.push(isActive)
+    }
+
+    if (dutyRateMin !== undefined && dutyRateMin !== '') {
+      query += ' AND duty_rate >= ?'
+      countQuery += ' AND duty_rate >= ?'
+      params.push(parseFloat(dutyRateMin))
+    }
+
+    if (dutyRateMax !== undefined && dutyRateMax !== '') {
+      query += ' AND duty_rate <= ?'
+      countQuery += ' AND duty_rate <= ?'
+      params.push(parseFloat(dutyRateMax))
+    }
+
+    // 获取总数（异步）
+    const totalResult = await db.prepare(countQuery).get(...params)
     const total = totalResult.total
 
     // 分页
     const offset = (Number(page) - 1) * Number(pageSize)
     query += ' ORDER BY hs_code ASC LIMIT ? OFFSET ?'
 
-    const rates = db.prepare(query).all(...params, Number(pageSize), offset)
+    const rates = await db.prepare(query).all(...params, Number(pageSize), offset)
 
     res.json({
       errCode: 200,
@@ -7508,22 +7598,14 @@ app.post('/api/tariff-rates', (req, res) => {
   }
 })
 
-// 更新税率
-app.put('/api/tariff-rates/:id', (req, res) => {
+// 更新税率（只更新传入的字段，保留原有值）
+app.put('/api/tariff-rates/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const {
-      hsCode, hsCode10, goodsDescription, goodsDescriptionCn,
-      originCountry, originCountryCode, dutyRate, dutyRateType,
-      vatRate, antiDumpingRate, countervailingRate, preferentialRate,
-      preferentialOrigin, unitCode, unitName, supplementaryUnit,
-      measureType, measureCode, legalBase, startDate, endDate,
-      quotaOrderNumber, additionalCode, footnotes, isActive,
-      declarationType, minDeclarationValue, material, usageScenario
-    } = req.body
+    const updates = req.body
 
-    // 获取旧数据用于记录历史
-    const oldRate = db.prepare('SELECT * FROM tariff_rates WHERE id = ?').get(id)
+    // 获取旧数据
+    const oldRate = await db.prepare('SELECT * FROM tariff_rates WHERE id = $1').get(id)
     if (!oldRate) {
       return res.status(404).json({
         errCode: 404,
@@ -7531,37 +7613,79 @@ app.put('/api/tariff-rates/:id', (req, res) => {
       })
     }
 
-    // 更新数据
-    const result = db.prepare(`
-      UPDATE tariff_rates SET
-        hs_code = ?, hs_code_10 = ?, goods_description = ?, goods_description_cn = ?,
-        origin_country = ?, origin_country_code = ?, duty_rate = ?, duty_rate_type = ?,
-        vat_rate = ?, anti_dumping_rate = ?, countervailing_rate = ?, preferential_rate = ?,
-        preferential_origin = ?, unit_code = ?, unit_name = ?, supplementary_unit = ?,
-        measure_type = ?, measure_code = ?, legal_base = ?, start_date = ?, end_date = ?,
-        quota_order_number = ?, additional_code = ?, footnotes = ?, is_active = ?,
-        declaration_type = ?, min_declaration_value = ?, material = ?, usage_scenario = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(
-      hsCode, hsCode10 || '', goodsDescription, goodsDescriptionCn || '',
-      originCountry || '', originCountryCode || '', dutyRate || 0, dutyRateType || 'percentage',
-      vatRate || 19, antiDumpingRate || 0, countervailingRate || 0, preferentialRate || null,
-      preferentialOrigin || '', unitCode || '', unitName || '', supplementaryUnit || '',
-      measureType || '', measureCode || '', legalBase || '', startDate || '', endDate || '',
-      quotaOrderNumber || '', additionalCode || '', footnotes || '', isActive !== false ? 1 : 0,
-      declarationType || 'per_unit', minDeclarationValue || 0, material || '', usageScenario || '',
-      id
-    )
+    // 字段映射：请求字段 -> 数据库字段
+    const fieldMap = {
+      hsCode: 'hs_code',
+      hsCode10: 'hs_code_10',
+      goodsDescription: 'goods_description',
+      goodsDescriptionCn: 'goods_description_cn',
+      originCountry: 'origin_country',
+      originCountryCode: 'origin_country_code',
+      dutyRate: 'duty_rate',
+      dutyRateType: 'duty_rate_type',
+      vatRate: 'vat_rate',
+      antiDumpingRate: 'anti_dumping_rate',
+      countervailingRate: 'countervailing_rate',
+      preferentialRate: 'preferential_rate',
+      preferentialOrigin: 'preferential_origin',
+      unitCode: 'unit_code',
+      unitName: 'unit_name',
+      supplementaryUnit: 'supplementary_unit',
+      measureType: 'measure_type',
+      measureCode: 'measure_code',
+      legalBase: 'legal_base',
+      startDate: 'start_date',
+      endDate: 'end_date',
+      quotaOrderNumber: 'quota_order_number',
+      additionalCode: 'additional_code',
+      footnotes: 'footnotes',
+      isActive: 'is_active',
+      declarationType: 'declaration_type',
+      minDeclarationValue: 'min_declaration_value',
+      material: 'material',
+      usageScenario: 'usage_scenario'
+    }
+
+    // 构建动态更新 SQL
+    const setClauses = []
+    const values = []
+    let paramIndex = 1
+
+    for (const [reqField, dbField] of Object.entries(fieldMap)) {
+      if (updates[reqField] !== undefined) {
+        setClauses.push(`${dbField} = $${paramIndex}`)
+        values.push(updates[reqField])
+        paramIndex++
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.json({
+        errCode: 200,
+        msg: '没有需要更新的字段',
+      })
+    }
+
+    // 添加 updated_at
+    setClauses.push('updated_at = CURRENT_TIMESTAMP')
+    values.push(id)
+
+    const sql = `UPDATE tariff_rates SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`
+    await db.prepare(sql).run(...values)
 
     // 如果税率有变化，记录历史
-    if (oldRate.duty_rate !== dutyRate || oldRate.vat_rate !== vatRate) {
-      db.prepare(`
-        INSERT INTO tariff_rate_history (
-          tariff_rate_id, hs_code, old_duty_rate, new_duty_rate,
-          old_vat_rate, new_vat_rate, change_type, change_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, hsCode, oldRate.duty_rate, dutyRate, oldRate.vat_rate, vatRate, 'update', '手动更新')
+    if (updates.dutyRate !== undefined && oldRate.duty_rate !== updates.dutyRate) {
+      try {
+        await db.prepare(`
+          INSERT INTO tariff_rate_history (
+            tariff_rate_id, hs_code, old_duty_rate, new_duty_rate,
+            old_vat_rate, new_vat_rate, change_type, change_reason
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `).run(id, oldRate.hs_code, oldRate.duty_rate, updates.dutyRate, 
+               oldRate.vat_rate, updates.vatRate || oldRate.vat_rate, 'update', '手动更新')
+      } catch (historyError) {
+        console.warn('记录历史失败:', historyError.message)
+      }
     }
 
     res.json({
@@ -11125,6 +11249,9 @@ async function startServer() {
     
     // 启动税号自动验证定时任务
     startTaxValidationScheduler()
+    
+    // 启动 TARIC 同步定时任务（每天凌晨3点执行）
+    startTaricScheduler({ hour: 3 })
   })
 }
 

@@ -12,6 +12,10 @@ export const SUPPLIER_TYPES = {
   TRADER: 'trader',                // 贸易商
   AGENT: 'agent',                  // 代理商
   DISTRIBUTOR: 'distributor',      // 分销商
+  DOC_SWAP_AGENT: 'doc_swap_agent', // 换单代理
+  CUSTOMS_AGENT: 'customs_agent',  // 清关代理
+  TRANSPORT: 'transport',          // 运输公司
+  WAREHOUSE: 'warehouse',          // 仓储服务商
   OTHER: 'other'                   // 其他
 }
 

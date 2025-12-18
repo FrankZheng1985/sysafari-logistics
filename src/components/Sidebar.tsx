@@ -24,7 +24,10 @@ import {
   MessageSquare,
   Clock,
   CheckCircle,
-  CreditCard
+  CreditCard,
+  Upload,
+  Calculator,
+  FilePlus
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import clsx from 'clsx'
@@ -60,7 +63,18 @@ const menuItems: MenuItem[] = [
       { path: '/bookings/packages', label: '打包', icon: Package },
       { path: '/bookings/bill', label: '提单', icon: FileText },
       { path: '/bookings/declarations', label: '报关', icon: ClipboardList },
-      { path: '/bookings/clearance', label: '单证管理', icon: FileCheck },
+    ],
+  },
+  {
+    path: '/documents',
+    label: '单证管理',
+    icon: FileCheck,
+    children: [
+      { path: '/documents', label: '单证概览', icon: ClipboardList },
+      { path: '/documents/import', label: '货物导入', icon: Upload },
+      { path: '/documents/matching', label: 'HS匹配审核', icon: CheckCircle },
+      { path: '/documents/tax-calc', label: '税费计算', icon: Calculator },
+      { path: '/documents/supplement', label: '数据补充', icon: FilePlus },
     ],
   },
   {
@@ -117,6 +131,7 @@ const menuItems: MenuItem[] = [
       { path: '/finance/payments', label: '收付款', icon: Wallet },
       { path: '/finance/fees', label: '费用管理', icon: CreditCard },
       { path: '/finance/reports', label: '报表分析', icon: TrendingUp },
+      { path: '/finance/statements', label: '财务报表', icon: FileText },
     ],
   },
   {
@@ -142,14 +157,14 @@ const menuItems: MenuItem[] = [
       { path: '/system/security-settings', label: '安全设置', icon: Shield },
       { path: '/system/logo-manage', label: 'Logo 管理', icon: Image },
       { path: '/system/basic-data', label: '基础数据管理', icon: Database },
-      { path: '/system/tariff-rates', label: '税率管理', icon: FileText },
+      { path: '/system/tariff-rates', label: 'HS Code数据库', icon: FileText },
     ],
   },
 ]
 
 export default function Sidebar() {
   const navigate = useNavigate()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['/bookings', '/tools', '/system', '/crm', '/tms', '/suppliers', '/inspection', '/finance'])
+  const [expandedItems, setExpandedItems] = useState<string[]>(['/bookings', '/documents', '/tools', '/system', '/crm', '/tms', '/suppliers', '/inspection', '/finance'])
   const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({})
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
@@ -251,6 +266,8 @@ export default function Sidebar() {
       navigate('/inspection')
     } else if (item.path === '/finance') {
       navigate('/finance')
+    } else if (item.path === '/documents') {
+      navigate('/documents')
     }
   }
 

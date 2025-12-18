@@ -7,7 +7,7 @@ import DatePicker from '../components/DatePicker'
 import Timeline, { TimelineItem } from '../components/Timeline'
 import FeeModal from '../components/FeeModal'
 import OrderFeePanel from '../components/OrderFeePanel'
-import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData } from '../utils/api'
+import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
 import { getBillById as getBillByIdFromMock } from '../data/mockOrders'
 
 interface Declaration {
@@ -142,6 +142,15 @@ export default function BillDetails() {
   const [pickupNote, setPickupNote] = useState('')
   const [pickupSubmitting, setPickupSubmitting] = useState(false)
   
+  // 换单模态窗口状态
+  const [showDocSwapModal, setShowDocSwapModal] = useState(false)
+  const [docSwapAgent, setDocSwapAgent] = useState('')
+  const [docSwapAgentId, setDocSwapAgentId] = useState('')
+  const [docSwapFee, setDocSwapFee] = useState('')
+  const [docSwapSubmitting, setDocSwapSubmitting] = useState(false)
+  const [docSwapAgentList, setDocSwapAgentList] = useState<Supplier[]>([])
+  const [docSwapAgentLoading, setDocSwapAgentLoading] = useState(false)
+  
   // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -175,7 +184,7 @@ export default function BillDetails() {
   // 标签页排序状态
   const [tabOrder, setTabOrder] = useState<string[]>(() => {
     const saved = localStorage.getItem('billDetailsTabOrder')
-    const defaultOrder = ['info', 'files', 'timeline', 'actions']
+    const defaultOrder = ['info', 'fees', 'files', 'timeline', 'actions']
     if (saved) {
       let parsed = JSON.parse(saved)
       // 移除已废弃的标签页，替换旧标签名
@@ -185,16 +194,21 @@ export default function BillDetails() {
       if (!parsed.includes('files')) {
         parsed.splice(1, 0, 'files')
       }
+      // 确保包含费用标签页
+      if (!parsed.includes('fees')) {
+        parsed.splice(1, 0, 'fees')
+      }
       localStorage.setItem('billDetailsTabOrder', JSON.stringify(parsed))
       return parsed.length > 0 ? parsed : defaultOrder
     }
     return defaultOrder
   })
   const [draggedTab, setDraggedTab] = useState<string | null>(null)
-  
+
   // 标签页配置
   const tabConfig: Record<string, { label: string; badge?: () => string }> = {
     info: { label: '基本信息' },
+    fees: { label: '费用管理', badge: () => `(${billFees.length})` },
     files: { label: '文件管理', badge: () => `(${billFiles.length})` },
     timeline: { label: '时间线' },
     actions: { label: '操作' },
@@ -890,6 +904,247 @@ export default function BillDetails() {
           </div>
         )}
 
+        {/* 费用管理 */}
+        {activeTab === 'fees' && (
+          <div className="space-y-4">
+            {/* 费用汇总卡片 */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* 应收汇总 */}
+              <div className="bg-white rounded-lg border border-blue-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">应收费用</span>
+                </div>
+                <div className="text-2xl font-bold text-blue-600">
+                  €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  共 {billFees.filter(f => f.feeType === 'receivable').length} 笔
+                </div>
+              </div>
+              
+              {/* 应付汇总 */}
+              <div className="bg-white rounded-lg border border-orange-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                    <DollarSign className="w-4 h-4 text-orange-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">应付费用</span>
+                </div>
+                <div className="text-2xl font-bold text-orange-600">
+                  €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  共 {billFees.filter(f => f.feeType === 'payable').length} 笔
+                </div>
+              </div>
+              
+              {/* 毛利汇总 */}
+              <div className="bg-white rounded-lg border border-emerald-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <Receipt className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">毛利</span>
+                </div>
+                <div className={`text-2xl font-bold ${
+                  (billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                   billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)) >= 0
+                    ? 'text-emerald-600' : 'text-red-600'
+                }`}>
+                  €{(billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                     billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)
+                    ).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  利润率: {billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) > 0
+                    ? ((billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                        billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)) /
+                        billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) * 100
+                      ).toFixed(1)
+                    : '0.0'}%
+                </div>
+              </div>
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setCurrentFeeType('receivable')
+                  setShowFeeModal(true)
+                }}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                录入应收
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentFeeType('payable')
+                  setShowFeeModal(true)
+                }}
+                className="px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                录入应付
+              </button>
+              <button
+                onClick={() => navigate(`/finance/fees?billId=${billDetail.id}`)}
+                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                费用管理页
+              </button>
+            </div>
+
+            {/* 费用列表 - 分应收应付显示 */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* 应收费用列表 */}
+              <div className="bg-white rounded-lg border border-gray-200">
+                <div className="px-4 py-3 border-b border-gray-100 bg-blue-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">应收</span>
+                      <span className="text-sm font-medium text-gray-900">收款明细</span>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600">
+                      €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+                <div className="max-h-[400px] overflow-y-auto">
+                  {feesLoading ? (
+                    <div className="text-center py-8 text-sm text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                      加载中...
+                    </div>
+                  ) : billFees.filter(f => f.feeType === 'receivable').length > 0 ? (
+                    <div className="divide-y divide-gray-100">
+                      {billFees.filter(f => f.feeType === 'receivable').map((fee) => (
+                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-900">{fee.feeName}</span>
+                            <span className="text-sm font-semibold text-blue-600">
+                              €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
+                                fee.category === 'freight' ? 'bg-blue-50 text-blue-600' :
+                                fee.category === 'customs' ? 'bg-red-50 text-red-600' :
+                                fee.category === 'warehouse' ? 'bg-amber-50 text-amber-600' :
+                                fee.category === 'insurance' ? 'bg-green-50 text-green-600' :
+                                fee.category === 'handling' ? 'bg-purple-50 text-purple-600' :
+                                fee.category === 'documentation' ? 'bg-cyan-50 text-cyan-600' :
+                                'bg-gray-50 text-gray-600'
+                              }`}>
+                                {fee.category === 'freight' ? '运费' :
+                                 fee.category === 'customs' ? '关税' :
+                                 fee.category === 'warehouse' ? '仓储' :
+                                 fee.category === 'insurance' ? '保险' :
+                                 fee.category === 'handling' ? '操作' :
+                                 fee.category === 'documentation' ? '文件' : '其他'}
+                              </span>
+                              {fee.customerName && (
+                                <span className="text-xs text-gray-500">{fee.customerName}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                            </span>
+                          </div>
+                          {fee.description && (
+                            <div className="text-xs text-gray-400 mt-1 truncate">{fee.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-sm text-gray-400">
+                      <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      暂无应收费用
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 应付费用列表 */}
+              <div className="bg-white rounded-lg border border-gray-200">
+                <div className="px-4 py-3 border-b border-gray-100 bg-orange-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-700">应付</span>
+                      <span className="text-sm font-medium text-gray-900">付款明细</span>
+                    </div>
+                    <span className="text-sm font-bold text-orange-600">
+                      €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+                <div className="max-h-[400px] overflow-y-auto">
+                  {feesLoading ? (
+                    <div className="text-center py-8 text-sm text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                      加载中...
+                    </div>
+                  ) : billFees.filter(f => f.feeType === 'payable').length > 0 ? (
+                    <div className="divide-y divide-gray-100">
+                      {billFees.filter(f => f.feeType === 'payable').map((fee) => (
+                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-900">{fee.feeName}</span>
+                            <span className="text-sm font-semibold text-orange-600">
+                              €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
+                                fee.category === 'freight' ? 'bg-blue-50 text-blue-600' :
+                                fee.category === 'customs' ? 'bg-red-50 text-red-600' :
+                                fee.category === 'warehouse' ? 'bg-amber-50 text-amber-600' :
+                                fee.category === 'insurance' ? 'bg-green-50 text-green-600' :
+                                fee.category === 'handling' ? 'bg-purple-50 text-purple-600' :
+                                fee.category === 'documentation' ? 'bg-cyan-50 text-cyan-600' :
+                                'bg-gray-50 text-gray-600'
+                              }`}>
+                                {fee.category === 'freight' ? '运费' :
+                                 fee.category === 'customs' ? '关税' :
+                                 fee.category === 'warehouse' ? '仓储' :
+                                 fee.category === 'insurance' ? '保险' :
+                                 fee.category === 'handling' ? '操作' :
+                                 fee.category === 'documentation' ? '文件' : '其他'}
+                              </span>
+                              {fee.supplierName && (
+                                <span className="text-xs text-gray-500">{fee.supplierName}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                            </span>
+                          </div>
+                          {fee.description && (
+                            <div className="text-xs text-gray-400 mt-1 truncate">{fee.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-sm text-gray-400">
+                      <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      暂无应付费用
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 文件管理 */}
         {activeTab === 'files' && (
           <div className="space-y-4">
@@ -1376,19 +1631,23 @@ export default function BillDetails() {
                         {billDetail.docSwapStatus !== '已换单' && (
                           <button
                             onClick={async () => {
-                              if (!confirm('确定要标记为已换单吗？')) return
-                              try {
-                                const response = await updateBillDocSwapStatus(String(billDetail.id), '已换单')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, docSwapStatus: '已换单', docSwapTime: new Date().toISOString() })
-                                  loadOperationLogs()
-                                  alert('已标记为换单完成')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
+                              setDocSwapAgent('')
+                              setDocSwapAgentId('')
+                              setDocSwapFee('')
+                              setShowDocSwapModal(true)
+                              // 加载换单代理列表
+                              if (docSwapAgentList.length === 0) {
+                                setDocSwapAgentLoading(true)
+                                try {
+                                  const response = await getDocSwapAgents()
+                                  if (response.errCode === 200 && response.data) {
+                                    setDocSwapAgentList(response.data.list || [])
+                                  }
+                                } catch (error) {
+                                  console.error('加载换单代理列表失败:', error)
+                                } finally {
+                                  setDocSwapAgentLoading(false)
                                 }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
                               }
                             }}
                             className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 flex items-center gap-1"
@@ -1400,13 +1659,14 @@ export default function BillDetails() {
                         {billDetail.docSwapStatus === '已换单' && (
                           <button
                             onClick={async () => {
-                              if (!confirm('确定要取消换单状态吗？')) return
+                              if (!confirm('确定要取消换单状态吗？取消后，系统自动创建的换单费也会一并撤销。')) return
                               try {
                                 const response = await updateBillDocSwapStatus(String(billDetail.id), '未换单')
                                 if (response.errCode === 200) {
                                   setBillDetail({ ...billDetail, docSwapStatus: '未换单', docSwapTime: undefined })
                                   loadOperationLogs()
-                                  alert('已取消换单状态')
+                                  loadBillFees()  // 刷新费用列表，删除的换单费会消失
+                                  alert('已取消换单状态，相关换单费已撤销')
                                 } else {
                                   alert(`操作失败: ${response.msg}`)
                                 }
@@ -1686,7 +1946,7 @@ export default function BillDetails() {
                       录入费用
                     </button>
                     <button
-                      onClick={() => navigate(`/finance/fees?billId=${billDetail.id}`)}
+                      onClick={() => setActiveTab('fees')}
                       className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center justify-center gap-1"
                     >
                       <Receipt className="w-3.5 h-3.5" />
@@ -1695,16 +1955,46 @@ export default function BillDetails() {
                   </div>
                 </div>
                 
-                {/* 费用汇总 */}
+                {/* 费用汇总 - 分应收/应付显示 */}
                 {billFees.length > 0 && (
-                  <div className="p-3 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-green-50/50">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">费用总计</span>
-                      <span className="text-base font-bold text-emerald-600">
-                        ¥{billFees.reduce((sum, fee) => sum + (fee.amount || 0), 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                  <div className="p-3 border-b border-gray-100">
+                    {/* 应收费用汇总 */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700">应收</span>
+                        <span className="text-xs text-gray-500">
+                          ({billFees.filter(f => f.feeType === 'receivable').length}笔)
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-blue-600">
+                        €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">共 {billFees.length} 笔</div>
+                    {/* 应付费用汇总 */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-orange-100 text-orange-700">应付</span>
+                        <span className="text-xs text-gray-500">
+                          ({billFees.filter(f => f.feeType === 'payable').length}笔)
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-orange-600">
+                        €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    {/* 毛利 */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                      <span className="text-xs font-medium text-gray-600">毛利</span>
+                      <span className={`text-sm font-bold ${
+                        (billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                         billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)) >= 0
+                          ? 'text-emerald-600' : 'text-red-600'
+                      }`}>
+                        €{(billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                           billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)
+                          ).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   </div>
                 )}
                 
@@ -1718,30 +2008,48 @@ export default function BillDetails() {
                   ) : billFees.length > 0 ? (
                     <div className="divide-y divide-gray-100">
                       {billFees.map((fee) => (
-                        <div key={fee.id} className="px-3 py-2.5 hover:bg-gray-50">
+                        <div key={fee.id} className={`px-3 py-2.5 hover:bg-gray-50 ${
+                          fee.feeType === 'payable' ? 'border-l-2 border-l-orange-400' : 'border-l-2 border-l-blue-400'
+                        }`}>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-gray-900">{fee.feeName}</span>
-                            <span className="text-xs font-semibold text-gray-900">
-                              {fee.currency || '€'}{fee.amount?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-flex items-center px-1 py-0.5 rounded text-[9px] font-medium ${
+                                fee.feeType === 'payable' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {fee.feeType === 'payable' ? '付' : '收'}
+                              </span>
+                              <span className="text-xs font-medium text-gray-900">{fee.feeName}</span>
+                            </div>
+                            <span className={`text-xs font-semibold ${
+                              fee.feeType === 'payable' ? 'text-orange-600' : 'text-blue-600'
+                            }`}>
+                              {fee.currency || '€'}{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
-                              fee.category === 'freight' ? 'bg-blue-100 text-blue-700' :
-                              fee.category === 'customs' ? 'bg-red-100 text-red-700' :
-                              fee.category === 'warehouse' ? 'bg-orange-100 text-orange-700' :
-                              fee.category === 'insurance' ? 'bg-green-100 text-green-700' :
-                              fee.category === 'handling' ? 'bg-purple-100 text-purple-700' :
-                              fee.category === 'documentation' ? 'bg-cyan-100 text-cyan-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {fee.category === 'freight' ? '运费' :
-                               fee.category === 'customs' ? '关税' :
-                               fee.category === 'warehouse' ? '仓储' :
-                               fee.category === 'insurance' ? '保险' :
-                               fee.category === 'handling' ? '操作' :
-                               fee.category === 'documentation' ? '文件' : '其他'}
-                            </span>
+                          <div className="flex items-center justify-between mt-1 ml-6">
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
+                                fee.category === 'freight' ? 'bg-blue-50 text-blue-600' :
+                                fee.category === 'customs' ? 'bg-red-50 text-red-600' :
+                                fee.category === 'warehouse' ? 'bg-amber-50 text-amber-600' :
+                                fee.category === 'insurance' ? 'bg-green-50 text-green-600' :
+                                fee.category === 'handling' ? 'bg-purple-50 text-purple-600' :
+                                fee.category === 'documentation' ? 'bg-cyan-50 text-cyan-600' :
+                                'bg-gray-50 text-gray-600'
+                              }`}>
+                                {fee.category === 'freight' ? '运费' :
+                                 fee.category === 'customs' ? '关税' :
+                                 fee.category === 'warehouse' ? '仓储' :
+                                 fee.category === 'insurance' ? '保险' :
+                                 fee.category === 'handling' ? '操作' :
+                                 fee.category === 'documentation' ? '文件' : '其他'}
+                              </span>
+                              {fee.supplierName && fee.feeType === 'payable' && (
+                                <span className="text-[10px] text-gray-400 truncate max-w-[80px]" title={fee.supplierName}>
+                                  {fee.supplierName}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-gray-400">
                               {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
                             </span>
@@ -1968,6 +2276,138 @@ export default function BillDetails() {
         </div>
       )}
       
+      {/* 换单完成模态窗口 */}
+      {showDocSwapModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Repeat className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-semibold text-gray-900">换单完成</h3>
+              </div>
+              <button
+                onClick={() => setShowDocSwapModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    换单代理商 <span className="text-red-500">*</span>
+                  </label>
+                  {docSwapAgentLoading ? (
+                    <div className="flex items-center justify-center py-2 text-gray-500 text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      加载中...
+                    </div>
+                  ) : (
+                    <select
+                      value={docSwapAgentId}
+                      onChange={(e) => {
+                        const selectedId = e.target.value
+                        setDocSwapAgentId(selectedId)
+                        const selected = docSwapAgentList.find(s => s.id === selectedId)
+                        setDocSwapAgent(selected?.supplierName || '')
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                    >
+                      <option value="">请选择换单代理商</option>
+                      {docSwapAgentList.map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.supplierName} {supplier.shortName ? `(${supplier.shortName})` : ''} - {supplier.city || supplier.country}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {docSwapAgentList.length === 0 && !docSwapAgentLoading && (
+                    <p className="text-xs text-gray-500 mt-1">暂无换单代理商，请先在供应商管理中添加</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    换单费用 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">€</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={docSwapFee}
+                      onChange={(e) => setDocSwapFee(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowDocSwapModal(false)}
+                className="px-3 py-1.5 text-xs text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  if (!docSwapAgentId) {
+                    alert('请选择换单代理商')
+                    return
+                  }
+                  if (!docSwapFee || parseFloat(docSwapFee) < 0) {
+                    alert('请输入有效的换单费用')
+                    return
+                  }
+                  setDocSwapSubmitting(true)
+                  try {
+                    const response = await updateBillDocSwapStatus(
+                      String(billDetail.id),
+                      '已换单',
+                      docSwapAgent,
+                      parseFloat(docSwapFee)
+                    )
+                    if (response.errCode === 200) {
+                      setBillDetail({ 
+                        ...billDetail, 
+                        docSwapStatus: '已换单', 
+                        docSwapTime: new Date().toISOString(),
+                        docSwapAgent: docSwapAgent,
+                        docSwapAgentId: docSwapAgentId,
+                        docSwapFee: parseFloat(docSwapFee)
+                      })
+                      loadOperationLogs()
+                      loadBillFees()  // 刷新费用列表，显示新创建的换单费
+                      setShowDocSwapModal(false)
+                      alert('已标记为换单完成')
+                    } else {
+                      alert(`操作失败: ${response.msg}`)
+                    }
+                  } catch (error) {
+                    console.error('操作失败:', error)
+                    alert('操作失败，请稍后重试')
+                  } finally {
+                    setDocSwapSubmitting(false)
+                  }
+                }}
+                disabled={!docSwapAgentId || !docSwapFee || docSwapSubmitting}
+                className="px-3 py-1.5 text-xs text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {docSwapSubmitting ? '提交中...' : '确认换单'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 费用录入弹窗 */}
       <FeeModal
         visible={showFeeModal}

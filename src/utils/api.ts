@@ -968,7 +968,9 @@ export async function updateBillShipStatus(
 // 更新换单状态
 export async function updateBillDocSwapStatus(
   id: string, 
-  docSwapStatus: '未换单' | '已换单'
+  docSwapStatus: '未换单' | '已换单',
+  docSwapAgent?: string,
+  docSwapFee?: number
 ): Promise<ApiResponse<BillOfLading>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/bills/${id}/doc-swap-status`, {
@@ -976,7 +978,7 @@ export async function updateBillDocSwapStatus(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ docSwapStatus }),
+      body: JSON.stringify({ docSwapStatus, docSwapAgent, docSwapFee }),
     })
     
     if (!response.ok) {
@@ -2930,6 +2932,128 @@ export async function parseBillFile(file: File): Promise<ApiResponse<ParsedBillD
   }
 }
 
+// ==================== OCR 运输单识别 API 接口 ====================
+
+/**
+ * OCR解析后的运输单数据
+ */
+export interface ParsedTransportData {
+  transportType: 'sea' | 'air' | 'rail' | 'truck'
+  billNumber?: string | null
+  containerNumber?: string | null
+  vessel?: string | null
+  flightNumber?: string | null
+  trainNumber?: string | null
+  vehicleNumber?: string | null
+  portOfLoading?: string | null
+  portOfDischarge?: string | null
+  pieces?: number | null
+  grossWeight?: number | null
+  volume?: number | null
+  volumeWeight?: number | null
+  shipper?: string | null
+  consignee?: string | null
+  carrier?: string | null
+  airline?: string | null
+  shippingCompany?: string | null
+  eta?: string | null
+  _ocrText?: string
+  _fileName?: string
+  _fileType?: string
+  error?: string
+}
+
+/**
+ * 检查OCR服务配置状态
+ * @returns OCR配置状态
+ * 
+ * 接口地址: GET /api/ocr/status
+ */
+export async function checkOcrStatus(): Promise<ApiResponse<{ configured: boolean; message: string }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/ocr/status`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('检查OCR状态失败:', error)
+    throw error
+  }
+}
+
+/**
+ * OCR解析运输单文件
+ * @param file 运输单文件（PDF/图片/Excel）
+ * @param transportType 运输方式 (sea/air/rail/truck)
+ * @returns 解析后的运输单数据
+ * 
+ * 接口地址: POST /api/ocr/parse-transport
+ */
+export async function parseTransportDocument(
+  file: File, 
+  transportType?: 'sea' | 'air' | 'rail' | 'truck'
+): Promise<ApiResponse<ParsedTransportData>> {
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (transportType) {
+      formData.append('transportType', transportType)
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/ocr/parse-transport`, {
+      method: 'POST',
+      body: formData,
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    
+    return await response.json()
+  } catch (error) {
+    console.error('OCR解析运输单失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 批量OCR解析运输单（Excel文件）
+ * @param file Excel文件
+ * @param transportType 运输方式
+ * @returns 批量解析结果
+ * 
+ * 接口地址: POST /api/ocr/batch-parse
+ */
+export async function batchParseTransportDocuments(
+  file: File,
+  transportType?: 'sea' | 'air' | 'rail' | 'truck'
+): Promise<ApiResponse<{ total: number; items: ParsedTransportData[] }>> {
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (transportType) {
+      formData.append('transportType', transportType)
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/ocr/batch-parse`, {
+      method: 'POST',
+      body: formData,
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    
+    return await response.json()
+  } catch (error) {
+    console.error('批量OCR解析失败:', error)
+    throw error
+  }
+}
+
 // ==================== 运输方式 API 接口 ====================
 
 export interface TransportMethod {
@@ -3549,6 +3673,10 @@ export interface TariffRateQueryParams {
   search?: string
   hsCode?: string
   origin?: string
+  dataSource?: string
+  status?: string
+  dutyRateMin?: number
+  dutyRateMax?: number
   page?: number
   pageSize?: number
 }
@@ -3568,6 +3696,10 @@ export async function getTariffRates(params?: TariffRateQueryParams): Promise<Ta
     if (params?.search) searchParams.append('search', params.search)
     if (params?.hsCode) searchParams.append('hsCode', params.hsCode)
     if (params?.origin) searchParams.append('origin', params.origin)
+    if (params?.dataSource) searchParams.append('dataSource', params.dataSource)
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.dutyRateMin !== undefined) searchParams.append('dutyRateMin', String(params.dutyRateMin))
+    if (params?.dutyRateMax !== undefined) searchParams.append('dutyRateMax', String(params.dutyRateMax))
     if (params?.page) searchParams.append('page', String(params.page))
     if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize))
 
@@ -3720,6 +3852,217 @@ export async function getTariffRateStats(): Promise<ApiResponse<TariffRateStats>
     return await response.json()
   } catch (error) {
     console.error('获取税率统计失败:', error)
+    throw error
+  }
+}
+
+// ==================== TARIC 实时查询 API 接口 ====================
+
+/**
+ * TARIC 实时查询结果
+ */
+export interface TaricRealtimeResult {
+  hsCode: string
+  hsCode10: string
+  originCountryCode: string | null
+  goodsDescription?: string
+  dutyRate: number | null
+  thirdCountryDuty: number | null
+  antiDumpingRate: number | null
+  countervailingRate: number | null
+  hasAntiDumping?: boolean
+  hasCountervailing?: boolean
+  hasQuota?: boolean
+  requiresLicense?: boolean
+  requiresSPS?: boolean
+  preferentialRates: Array<{
+    rate: number
+    geographicalArea: string
+    conditions?: string
+  }>
+  measures: Array<{
+    type: string
+    rate?: number
+    geographicalArea?: string
+    startDate?: string
+    endDate?: string
+  }>
+  totalMeasures?: number
+  queryTime: string
+  fromCache: boolean
+  savedToDb?: string
+}
+
+/**
+ * TARIC API 健康状态
+ */
+export interface TaricApiHealth {
+  available: boolean
+  responseTime?: number
+  error?: string
+  timestamp: string
+  cacheStats: {
+    validCount: number
+    expiredCount: number
+    totalCount: number
+  }
+}
+
+/**
+ * 国家/地区代码
+ */
+export interface CountryCode {
+  code: string
+  iso: string
+  name: string
+  type: 'C' | 'R' // C = Country, R = Region
+}
+
+/**
+ * 实时查询单个 HS 编码
+ * @param hsCode HS 编码（6-10位）
+ * @param originCountry 原产国代码（可选，如 CN）
+ * @param saveToDb 是否保存到数据库
+ */
+export async function lookupTaricRealtime(
+  hsCode: string,
+  originCountry?: string,
+  saveToDb?: boolean
+): Promise<ApiResponse<TaricRealtimeResult>> {
+  try {
+    const params = new URLSearchParams()
+    if (originCountry) params.append('originCountry', originCountry)
+    if (saveToDb) params.append('saveToDb', 'true')
+    
+    const queryString = params.toString()
+    const url = queryString
+      ? `${API_BASE_URL}/api/taric/realtime/${hsCode}?${queryString}`
+      : `${API_BASE_URL}/api/taric/realtime/${hsCode}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('TARIC 实时查询失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 批量实时查询 HS 编码
+ * @param hsCodes HS 编码数组
+ * @param originCountry 原产国代码（可选）
+ */
+export async function batchLookupTaricRealtime(
+  hsCodes: string[],
+  originCountry?: string
+): Promise<ApiResponse<{
+  results: Array<{ hsCode: string; data: TaricRealtimeResult }>
+  errors: Array<{ hsCode: string; error: string }>
+  totalCount: number
+}>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/realtime-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hsCodes, originCountry }),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('TARIC 批量查询失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取 HS 编码的贸易措施详情
+ * @param hsCode HS 编码
+ * @param originCountry 原产国代码（可选）
+ */
+export async function getTaricMeasures(
+  hsCode: string,
+  originCountry?: string
+): Promise<ApiResponse<{
+  measures: Array<{
+    type: string
+    rate: number | null
+    geographicalArea: string | null
+    startDate: string | null
+    endDate: string | null
+    regulation: string | null
+    conditions: string[]
+  }>
+}>> {
+  try {
+    const params = originCountry ? `?originCountry=${originCountry}` : ''
+    const response = await fetch(`${API_BASE_URL}/api/taric/measures/${hsCode}${params}`)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取贸易措施失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取国家/地区代码列表
+ */
+export async function getTaricCountryCodes(): Promise<ApiResponse<{
+  countries: CountryCode[]
+  fromCache: boolean
+}>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/countries`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取国家代码失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 检查 TARIC API 健康状态
+ */
+export async function checkTaricApiHealth(): Promise<ApiResponse<TaricApiHealth>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/api-health`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('TARIC API 健康检查失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 清除 TARIC API 缓存
+ */
+export async function clearTaricApiCache(): Promise<ApiResponse<{ message: string }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/clear-cache`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('清除缓存失败:', error)
     throw error
   }
 }
@@ -4396,6 +4739,367 @@ export async function getTaxValidationStats(): Promise<ApiResponse<TaxValidation
     return await response.json()
   } catch (error) {
     console.error('获取税号验证统计失败:', error)
+    throw error
+  }
+}
+
+// ==================== 物流跟踪 API 接口 ====================
+
+/**
+ * 跟踪记录
+ */
+export interface TrackingRecord {
+  id: string
+  billId: string
+  transportType: 'sea' | 'air' | 'rail' | 'truck'
+  trackingNumber: string
+  nodeType: string
+  nodeName: string
+  status: 'pending' | 'in_transit' | 'arrived' | 'customs' | 'delivered' | 'exception'
+  location: string
+  eventTime: string
+  remark: string
+  source: 'manual' | 'api'
+  operator: string
+  latitude?: number
+  longitude?: number
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 跟踪信息响应
+ */
+export interface TrackingInfo {
+  records: TrackingRecord[]
+  latestStatus: TrackingRecord | null
+  refreshed: boolean
+}
+
+/**
+ * 节点模板
+ */
+export interface NodeTemplate {
+  nodeType: string
+  nodeName: string
+  order: number
+}
+
+/**
+ * 获取提单跟踪记录
+ * @param billId 提单ID
+ * @param options 选项
+ */
+export async function getBillTracking(
+  billId: string,
+  options?: { refresh?: boolean; transportType?: string }
+): Promise<ApiResponse<TrackingInfo>> {
+  try {
+    const params = new URLSearchParams()
+    if (options?.refresh) params.append('refresh', 'true')
+    if (options?.transportType) params.append('transportType', options.transportType)
+    
+    const queryString = params.toString()
+    const url = `${API_BASE_URL}/api/tracking/bill/${billId}${queryString ? `?${queryString}` : ''}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取跟踪记录失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 添加手动跟踪节点
+ * @param billId 提单ID
+ * @param data 节点数据
+ */
+export async function addTrackingNode(
+  billId: string,
+  data: {
+    nodeType: string
+    nodeName: string
+    status?: string
+    location?: string
+    eventTime?: string
+    remark?: string
+    operator?: string
+    latitude?: number
+    longitude?: number
+  }
+): Promise<ApiResponse<{ id: string }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tracking/bill/${billId}/node`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('添加跟踪节点失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 更新跟踪记录
+ * @param id 记录ID
+ * @param data 更新数据
+ */
+export async function updateTrackingRecord(
+  id: string,
+  data: Partial<TrackingRecord>
+): Promise<ApiResponse<void>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tracking/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('更新跟踪记录失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 删除跟踪记录
+ * @param id 记录ID
+ */
+export async function deleteTrackingRecord(id: string): Promise<ApiResponse<void>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tracking/${id}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('删除跟踪记录失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取跟踪节点模板
+ * @param transportType 运输方式
+ */
+export async function getTrackingNodeTemplates(
+  transportType?: string
+): Promise<ApiResponse<NodeTemplate[]>> {
+  try {
+    const params = new URLSearchParams()
+    if (transportType) params.append('transportType', transportType)
+    
+    const queryString = params.toString()
+    const url = `${API_BASE_URL}/api/tracking/templates${queryString ? `?${queryString}` : ''}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取节点模板失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 批量刷新跟踪状态
+ * @param billIds 提单ID数组
+ * @param transportType 运输方式
+ */
+export async function batchRefreshTracking(
+  billIds: string[],
+  transportType?: string
+): Promise<ApiResponse<{ success: number; failed: number; errors: Array<{ billId: string; error: string }> }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/tracking/batch-refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ billIds, transportType }),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('批量刷新跟踪失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取跟踪统计
+ */
+export async function getTrackingStats(params?: {
+  transportType?: string
+  startDate?: string
+  endDate?: string
+}): Promise<ApiResponse<{
+  totalBills: number
+  totalRecords: number
+  inTransit: number
+  delivered: number
+  exceptions: number
+}>> {
+  try {
+    const searchParams = new URLSearchParams()
+    if (params?.transportType) searchParams.append('transportType', params.transportType)
+    if (params?.startDate) searchParams.append('startDate', params.startDate)
+    if (params?.endDate) searchParams.append('endDate', params.endDate)
+    
+    const queryString = searchParams.toString()
+    const url = `${API_BASE_URL}/api/tracking/stats${queryString ? `?${queryString}` : ''}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取跟踪统计失败:', error)
+    throw error
+  }
+}
+
+// ==================== 供应商管理 API ====================
+
+export interface Supplier {
+  id: string
+  supplierCode: string
+  supplierName: string
+  shortName?: string
+  supplierType: string
+  contactPerson?: string
+  contactPhone?: string
+  contactEmail?: string
+  country?: string
+  city?: string
+  address?: string
+  status: string
+  level?: string
+  currency?: string
+  remark?: string
+}
+
+/**
+ * 获取供应商列表
+ * @param params 查询参数
+ */
+export async function getSupplierList(params?: {
+  search?: string
+  type?: string
+  types?: string
+  status?: string
+  level?: string
+  page?: number
+  pageSize?: number
+}): Promise<ApiResponse<{ list: Supplier[]; total: number; page: number; pageSize: number }>> {
+  try {
+    const searchParams = new URLSearchParams()
+    if (params?.search) searchParams.append('search', params.search)
+    if (params?.type) searchParams.append('type', params.type)
+    if (params?.types) searchParams.append('types', params.types)
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.level) searchParams.append('level', params.level)
+    if (params?.page) searchParams.append('page', String(params.page))
+    if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize))
+    
+    const queryString = searchParams.toString()
+    const url = `${API_BASE_URL}/api/suppliers${queryString ? `?${queryString}` : ''}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取供应商列表失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取换单代理供应商列表（快捷方法）
+ */
+export async function getDocSwapAgents(): Promise<ApiResponse<{ list: Supplier[]; total: number }>> {
+  return getSupplierList({ type: 'doc_swap_agent', status: 'active', pageSize: 100 })
+}
+
+// ==================== 追踪补充信息 API ====================
+
+/**
+ * 追踪补充信息响应数据
+ */
+export interface TrackingSupplementInfo {
+  // 码头/堆场信息（地勤）
+  terminal?: string | null
+  terminalCode?: string | null
+  // 船名航次
+  vessel?: string | null
+  voyage?: string | null
+  // 预计时间
+  eta?: string | null
+  etd?: string | null
+  // 承运人
+  carrier?: string | null
+  // 货物信息
+  pieces?: number | null
+  grossWeight?: number | null
+  volume?: number | null
+  // 集装箱信息
+  containerNumber?: string | null
+  containerType?: string | null
+  sealNumber?: string | null
+}
+
+/**
+ * 根据提单号/集装箱号获取补充信息（码头、船名航次等）
+ * 用于创建提单时自动填充未识别的字段
+ * @param params 查询参数
+ * @returns 补充信息
+ * 
+ * 接口地址: GET /api/tracking/supplement-info
+ */
+export async function getTrackingSupplementInfo(params: {
+  trackingNumber?: string
+  containerNumber?: string
+  transportType?: 'sea' | 'air' | 'rail' | 'truck'
+}): Promise<ApiResponse<TrackingSupplementInfo | null>> {
+  try {
+    const searchParams = new URLSearchParams()
+    if (params.trackingNumber) searchParams.append('trackingNumber', params.trackingNumber)
+    if (params.containerNumber) searchParams.append('containerNumber', params.containerNumber)
+    if (params.transportType) searchParams.append('transportType', params.transportType)
+    
+    const queryString = searchParams.toString()
+    const url = `${API_BASE_URL}/api/tracking/supplement-info?${queryString}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取追踪补充信息失败:', error)
     throw error
   }
 }

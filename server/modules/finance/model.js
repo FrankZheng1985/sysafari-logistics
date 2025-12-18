@@ -236,7 +236,7 @@ export async function createInvoice(data) {
       subtotal, tax_amount, total_amount, paid_amount,
       currency, exchange_rate, description, notes,
       status, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     invoiceNumber,
@@ -296,7 +296,7 @@ export async function updateInvoice(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE invoices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -344,7 +344,7 @@ export async function updateInvoicePaidAmount(id) {
   // 更新发票
   await db.prepare(`
     UPDATE invoices 
-    SET paid_amount = ?, status = ?, updated_at = datetime('now')
+    SET paid_amount = ?, status = ?, updated_at = NOW()
     WHERE id = ?
   `).run(paidAmount, status, id)
   
@@ -504,7 +504,7 @@ export async function createPayment(data) {
       amount, currency, exchange_rate, bank_account, reference_number,
       description, notes, status, created_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     paymentNumber,
@@ -569,7 +569,7 @@ export async function updatePayment(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE payments SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -734,22 +734,48 @@ export async function getFeeById(id) {
 }
 
 /**
+ * 生成费用编号
+ */
+async function generateFeeNumber() {
+  const db = getDatabase()
+  const today = new Date()
+  const prefix = `FEE${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}`
+  
+  // 获取当月最大序号
+  const result = await db.prepare(`
+    SELECT fee_number FROM fees 
+    WHERE fee_number LIKE ? 
+    ORDER BY fee_number DESC 
+    LIMIT 1
+  `).get(`${prefix}%`)
+  
+  if (!result) {
+    return `${prefix}0001`
+  }
+  
+  const lastNum = parseInt(result.fee_number.slice(-4), 10)
+  return `${prefix}${String(lastNum + 1).padStart(4, '0')}`
+}
+
+/**
  * 创建费用
  */
 export async function createFee(data) {
   const db = getDatabase()
   const id = generateId()
+  const feeNumber = await generateFeeNumber()
   
   const result = await db.prepare(`
     INSERT INTO fees (
-      id, bill_id, bill_number, customer_id, customer_name,
+      id, fee_number, bill_id, bill_number, customer_id, customer_name,
       supplier_id, supplier_name, fee_type,
       category, fee_name, amount, currency, exchange_rate,
       fee_date, description, notes, created_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
+    feeNumber,
     data.billId || null,
     data.billNumber || '',
     data.customerId || null,
@@ -768,7 +794,7 @@ export async function createFee(data) {
     data.createdBy || null
   )
   
-  return { id }
+  return { id, feeNumber }
 }
 
 /**
@@ -802,7 +828,7 @@ export async function updateFee(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = datetime('now')")
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE fees SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -816,6 +842,44 @@ export async function deleteFee(id) {
   const db = getDatabase()
   const result = await db.prepare('DELETE FROM fees WHERE id = ?').run(id)
   return result.changes > 0
+}
+
+/**
+ * 根据 billId 和条件删除费用（用于撤销操作时删除自动创建的费用）
+ * @param {string} billId - 提单ID
+ * @param {Object} conditions - 删除条件
+ * @param {string} conditions.feeName - 费用名称
+ * @param {string} conditions.notes - 备注（如'系统自动创建'）
+ * @returns {number} 删除的记录数
+ */
+export async function deleteFeeByCondition(billId, conditions = {}) {
+  const db = getDatabase()
+  
+  let query = 'DELETE FROM fees WHERE bill_id = ?'
+  const params = [billId]
+  
+  if (conditions.feeName) {
+    query += ' AND fee_name = ?'
+    params.push(conditions.feeName)
+  }
+  
+  if (conditions.notes) {
+    query += ' AND notes = ?'
+    params.push(conditions.notes)
+  }
+  
+  if (conditions.feeType) {
+    query += ' AND fee_type = ?'
+    params.push(conditions.feeType)
+  }
+  
+  if (conditions.category) {
+    query += ' AND category = ?'
+    params.push(conditions.category)
+  }
+  
+  const result = await db.prepare(query).run(...params)
+  return result.changes
 }
 
 // ==================== 提单费用汇总 ====================
@@ -1189,6 +1253,7 @@ export default {
   createFee,
   updateFee,
   deleteFee,
+  deleteFeeByCondition,
   
   // 提单财务
   getBillFinanceSummary,
@@ -1207,7 +1272,16 @@ export default {
   getBankAccountById,
   createBankAccount,
   updateBankAccount,
-  deleteBankAccount
+  deleteBankAccount,
+  
+  // 财务报表
+  getBalanceSheet,
+  getIncomeStatement,
+  getCashFlowStatement,
+  getBusinessAnalysis,
+  saveFinancialReport,
+  getFinancialReports,
+  getFinancialReportById
 }
 
 // ==================== 银行账户管理 ====================
@@ -1357,6 +1431,566 @@ function formatBankAccount(row) {
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+}
+
+// ==================== 财务报表 ====================
+
+/**
+ * 获取资产负债表数据
+ * @param {string} asOfDate - 截止日期 (YYYY-MM-DD)
+ */
+export async function getBalanceSheet(asOfDate) {
+  const db = getDatabase()
+  
+  // 应收账款（销售发票未收款）
+  const receivablesResult = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(total_amount - paid_amount), 0) as total,
+      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE THEN total_amount - paid_amount ELSE 0 END), 0) as overdue
+    FROM invoices 
+    WHERE invoice_type = 'sales' 
+      AND status NOT IN ('paid', 'cancelled')
+      AND invoice_date <= $1
+  `).get(asOfDate)
+  
+  // 应付账款（采购发票未付款）
+  const payablesResult = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(total_amount - paid_amount), 0) as total,
+      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE THEN total_amount - paid_amount ELSE 0 END), 0) as overdue
+    FROM invoices 
+    WHERE invoice_type = 'purchase' 
+      AND status NOT IN ('paid', 'cancelled')
+      AND invoice_date <= $1
+  `).get(asOfDate)
+  
+  // 银行存款（银行账户余额汇总）- 简化处理，从收付款记录计算
+  const cashResult = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(CASE WHEN payment_type = 'receipt' THEN amount ELSE -amount END), 0) as balance
+    FROM payments 
+    WHERE status = 'completed'
+      AND payment_date <= $1
+  `).get(asOfDate)
+  
+  const receivables = {
+    total: Number(receivablesResult?.total || 0),
+    overdue: Number(receivablesResult?.overdue || 0)
+  }
+  
+  const payables = {
+    total: Number(payablesResult?.total || 0),
+    overdue: Number(payablesResult?.overdue || 0)
+  }
+  
+  const bankBalance = Number(cashResult?.balance || 0)
+  
+  const totalAssets = bankBalance + receivables.total
+  const totalLiabilities = payables.total
+  const netAssets = totalAssets - totalLiabilities
+  
+  return {
+    asOfDate,
+    assets: {
+      bankBalance,
+      receivables,
+      total: totalAssets
+    },
+    liabilities: {
+      payables,
+      total: totalLiabilities
+    },
+    netAssets
+  }
+}
+
+/**
+ * 获取利润表数据
+ * @param {string} startDate - 开始日期
+ * @param {string} endDate - 结束日期
+ */
+export async function getIncomeStatement(startDate, endDate) {
+  const db = getDatabase()
+  
+  // 按费用类别统计收入（应收费用）
+  const incomeResult = await db.prepare(`
+    SELECT 
+      COALESCE(fee_category, category, 'other') as category,
+      COALESCE(SUM(amount), 0) as amount
+    FROM fees 
+    WHERE (fee_type = 'receivable' OR fee_type IS NULL)
+      AND created_at >= $1 AND created_at <= $2
+    GROUP BY COALESCE(fee_category, category, 'other')
+  `).all(startDate, endDate + ' 23:59:59')
+  
+  // 按费用类别统计成本（应付费用）
+  const costResult = await db.prepare(`
+    SELECT 
+      COALESCE(fee_category, category, 'other') as category,
+      COALESCE(SUM(amount), 0) as amount
+    FROM fees 
+    WHERE fee_type = 'payable'
+      AND created_at >= $1 AND created_at <= $2
+    GROUP BY COALESCE(fee_category, category, 'other')
+  `).all(startDate, endDate + ' 23:59:59')
+  
+  // 整理收入数据
+  const incomeByCategory = {}
+  let totalIncome = 0
+  for (const row of incomeResult) {
+    const amount = Number(row.amount || 0)
+    incomeByCategory[row.category] = amount
+    totalIncome += amount
+  }
+  
+  // 整理成本数据
+  const costByCategory = {}
+  let totalCost = 0
+  for (const row of costResult) {
+    const amount = Number(row.amount || 0)
+    costByCategory[row.category] = amount
+    totalCost += amount
+  }
+  
+  const grossProfit = totalIncome - totalCost
+  const grossMargin = totalIncome > 0 ? (grossProfit / totalIncome * 100) : 0
+  
+  return {
+    periodStart: startDate,
+    periodEnd: endDate,
+    income: {
+      byCategory: incomeByCategory,
+      total: totalIncome
+    },
+    cost: {
+      byCategory: costByCategory,
+      total: totalCost
+    },
+    grossProfit,
+    grossMargin: Math.round(grossMargin * 100) / 100
+  }
+}
+
+/**
+ * 获取现金流量表数据
+ * @param {string} startDate - 开始日期
+ * @param {string} endDate - 结束日期
+ */
+export async function getCashFlowStatement(startDate, endDate) {
+  const db = getDatabase()
+  
+  // 期间内收款（现金流入）
+  const inflowResult = await db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total
+    FROM payments 
+    WHERE payment_type = 'receipt'
+      AND status = 'completed'
+      AND payment_date >= $1 AND payment_date <= $2
+  `).get(startDate, endDate)
+  
+  // 期间内付款（现金流出）
+  const outflowResult = await db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total
+    FROM payments 
+    WHERE payment_type = 'payment'
+      AND status = 'completed'
+      AND payment_date >= $1 AND payment_date <= $2
+  `).get(startDate, endDate)
+  
+  // 期初余额（开始日期之前的收付款净额）
+  const beginningResult = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(CASE WHEN payment_type = 'receipt' THEN amount ELSE -amount END), 0) as balance
+    FROM payments 
+    WHERE status = 'completed'
+      AND payment_date < $1
+  `).get(startDate)
+  
+  const inflow = Number(inflowResult?.total || 0)
+  const outflow = Number(outflowResult?.total || 0)
+  const netCashFlow = inflow - outflow
+  const beginningBalance = Number(beginningResult?.balance || 0)
+  const endingBalance = beginningBalance + netCashFlow
+  
+  return {
+    periodStart: startDate,
+    periodEnd: endDate,
+    operatingActivities: {
+      inflow,
+      outflow,
+      net: netCashFlow
+    },
+    beginningBalance,
+    endingBalance,
+    netChange: netCashFlow
+  }
+}
+
+/**
+ * 获取经营分析表数据
+ * @param {string} startDate - 开始日期
+ * @param {string} endDate - 结束日期
+ */
+export async function getBusinessAnalysis(startDate, endDate) {
+  const db = getDatabase()
+  
+  // 1. 客户分析
+  const customerStats = await db.prepare(`
+    SELECT COUNT(DISTINCT id) as total FROM customers
+  `).get()
+  
+  const newCustomers = await db.prepare(`
+    SELECT COUNT(*) as count FROM customers 
+    WHERE created_at >= $1 AND created_at <= $2
+  `).get(startDate, endDate + ' 23:59:59')
+  
+  // TOP客户（按收入排名）
+  const topCustomers = await db.prepare(`
+    SELECT 
+      customer_id,
+      customer_name,
+      COALESCE(SUM(amount), 0) as revenue
+    FROM fees 
+    WHERE (fee_type = 'receivable' OR fee_type IS NULL)
+      AND created_at >= $1 AND created_at <= $2
+      AND customer_id IS NOT NULL
+    GROUP BY customer_id, customer_name
+    ORDER BY revenue DESC
+    LIMIT 10
+  `).all(startDate, endDate + ' 23:59:59')
+  
+  // 计算TOP5贡献占比
+  const totalCustomerRevenue = topCustomers.reduce((sum, c) => sum + Number(c.revenue || 0), 0)
+  const top5Revenue = topCustomers.slice(0, 5).reduce((sum, c) => sum + Number(c.revenue || 0), 0)
+  const top5Percentage = totalCustomerRevenue > 0 ? (top5Revenue / totalCustomerRevenue * 100) : 0
+  
+  // 2. 订单分析
+  const orderStats = await db.prepare(`
+    SELECT COUNT(*) as total_orders
+    FROM bills_of_lading b
+    WHERE created_at >= $1 AND created_at <= $2
+      AND is_void = 0
+  `).get(startDate, endDate + ' 23:59:59')
+  
+  // 计算平均订单金额
+  const avgOrderAmount = await db.prepare(`
+    SELECT COALESCE(AVG(fee_total), 0) as avg_amount
+    FROM (
+      SELECT bill_id, SUM(amount) as fee_total
+      FROM fees
+      WHERE created_at >= $1 AND created_at <= $2
+      GROUP BY bill_id
+    ) as bill_fees
+  `).get(startDate, endDate + ' 23:59:59')
+  
+  const completedOrders = await db.prepare(`
+    SELECT COUNT(*) as count FROM bills_of_lading 
+    WHERE status = 'completed'
+      AND created_at >= $1 AND created_at <= $2
+      AND is_void = 0
+  `).get(startDate, endDate + ' 23:59:59')
+  
+  const totalOrders = Number(orderStats?.total_orders || 0)
+  const completionRate = totalOrders > 0 ? (Number(completedOrders?.count || 0) / totalOrders * 100) : 0
+  
+  // 月度订单趋势
+  const monthlyOrders = await db.prepare(`
+    SELECT 
+      TO_CHAR(created_at, 'YYYY-MM') as month,
+      COUNT(*) as order_count
+    FROM bills_of_lading 
+    WHERE created_at >= $1 AND created_at <= $2
+      AND is_void = 0
+    GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+    ORDER BY month
+  `).all(startDate, endDate + ' 23:59:59')
+  
+  // 3. 盈利能力分析（从利润表获取）
+  const incomeStatement = await getIncomeStatement(startDate, endDate)
+  
+  // 4. 应收账款分析
+  const receivablesAging = await db.prepare(`
+    SELECT 
+      CASE 
+        WHEN due_date >= CURRENT_DATE OR due_date IS NULL THEN '0-30'
+        WHEN CURRENT_DATE - due_date <= 30 THEN '0-30'
+        WHEN CURRENT_DATE - due_date <= 60 THEN '31-60'
+        WHEN CURRENT_DATE - due_date <= 90 THEN '61-90'
+        ELSE '90+'
+      END as aging,
+      COALESCE(SUM(total_amount - paid_amount), 0) as amount
+    FROM invoices 
+    WHERE invoice_type = 'sales' 
+      AND status NOT IN ('paid', 'cancelled')
+    GROUP BY 
+      CASE 
+        WHEN due_date >= CURRENT_DATE OR due_date IS NULL THEN '0-30'
+        WHEN CURRENT_DATE - due_date <= 30 THEN '0-30'
+        WHEN CURRENT_DATE - due_date <= 60 THEN '31-60'
+        WHEN CURRENT_DATE - due_date <= 90 THEN '61-90'
+        ELSE '90+'
+      END
+  `).all()
+  
+  // 平均收款周期 - 简化查询
+  const avgCollectionDays = await db.prepare(`
+    SELECT COALESCE(AVG(CURRENT_DATE - invoice_date), 0) as avg_days
+    FROM invoices
+    WHERE invoice_type = 'sales'
+      AND invoice_date >= $1 AND invoice_date <= $2
+      AND status NOT IN ('paid', 'cancelled')
+  `).get(startDate, endDate)
+  
+  // 回款率
+  const collectionRate = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(paid_amount), 0) as collected,
+      COALESCE(SUM(total_amount), 0) as total
+    FROM invoices 
+    WHERE invoice_type = 'sales'
+      AND invoice_date >= $1 AND invoice_date <= $2
+  `).get(startDate, endDate)
+  
+  const collectionRatePercent = Number(collectionRate?.total || 0) > 0 
+    ? (Number(collectionRate?.collected || 0) / Number(collectionRate?.total || 0) * 100) 
+    : 0
+  
+  // 5. 供应商分析
+  const supplierStats = await db.prepare(`
+    SELECT COUNT(DISTINCT id) as total FROM suppliers WHERE status = 'active'
+  `).get()
+  
+  const topSuppliers = await db.prepare(`
+    SELECT 
+      supplier_id,
+      supplier_name,
+      COALESCE(SUM(amount), 0) as purchase_amount
+    FROM fees 
+    WHERE fee_type = 'payable'
+      AND created_at >= $1 AND created_at <= $2
+      AND supplier_id IS NOT NULL
+    GROUP BY supplier_id, supplier_name
+    ORDER BY purchase_amount DESC
+    LIMIT 10
+  `).all(startDate, endDate + ' 23:59:59')
+  
+  // 6. 趋势对比（与上期对比）
+  const periodDays = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))
+  const prevStartDate = new Date(new Date(startDate).getTime() - periodDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const prevEndDate = new Date(new Date(startDate).getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  
+  const prevIncomeStatement = await getIncomeStatement(prevStartDate, prevEndDate)
+  
+  const prevOrderStats = await db.prepare(`
+    SELECT COUNT(*) as total_orders
+    FROM bills_of_lading
+    WHERE created_at >= $1 AND created_at <= $2
+      AND is_void = 0
+  `).get(prevStartDate, prevEndDate + ' 23:59:59')
+  
+  // 计算环比
+  const calcChange = (current, previous) => {
+    if (!previous || previous === 0) return null
+    return Math.round((current - previous) / previous * 10000) / 100
+  }
+  
+  return {
+    periodStart: startDate,
+    periodEnd: endDate,
+    customerAnalysis: {
+      totalCustomers: Number(customerStats?.total || 0),
+      newCustomers: Number(newCustomers?.count || 0),
+      top5Contribution: Math.round(top5Percentage * 100) / 100,
+      topCustomers: topCustomers.map((c, i) => ({
+        rank: i + 1,
+        customerId: c.customer_id,
+        customerName: c.customer_name,
+        revenue: Number(c.revenue || 0),
+        percentage: totalCustomerRevenue > 0 ? Math.round(Number(c.revenue || 0) / totalCustomerRevenue * 10000) / 100 : 0
+      }))
+    },
+    orderAnalysis: {
+      totalOrders,
+      avgOrderAmount: Math.round(Number(avgOrderAmount?.avg_amount || 0) * 100) / 100,
+      completionRate: Math.round(completionRate * 100) / 100,
+      monthlyTrend: monthlyOrders.map(m => ({
+        month: m.month,
+        orderCount: Number(m.order_count || 0)
+      }))
+    },
+    profitAnalysis: {
+      totalIncome: incomeStatement.income.total,
+      totalCost: incomeStatement.cost.total,
+      grossProfit: incomeStatement.grossProfit,
+      grossMargin: incomeStatement.grossMargin,
+      costBreakdown: Object.entries(incomeStatement.cost.byCategory).map(([category, amount]) => ({
+        category,
+        amount: Number(amount),
+        percentage: incomeStatement.cost.total > 0 ? Math.round(Number(amount) / incomeStatement.cost.total * 10000) / 100 : 0
+      }))
+    },
+    receivablesAnalysis: {
+      totalReceivables: receivablesAging.reduce((sum, a) => sum + Number(a.amount || 0), 0),
+      avgCollectionDays: Math.round(Number(avgCollectionDays?.avg_days || 0)),
+      collectionRate: Math.round(collectionRatePercent * 100) / 100,
+      aging: receivablesAging.map(a => ({
+        range: a.aging,
+        amount: Number(a.amount || 0)
+      }))
+    },
+    supplierAnalysis: {
+      totalSuppliers: Number(supplierStats?.total || 0),
+      totalPurchase: topSuppliers.reduce((sum, s) => sum + Number(s.purchase_amount || 0), 0),
+      topSuppliers: topSuppliers.map((s, i) => ({
+        rank: i + 1,
+        supplierId: s.supplier_id,
+        supplierName: s.supplier_name,
+        purchaseAmount: Number(s.purchase_amount || 0)
+      }))
+    },
+    trendComparison: {
+      current: {
+        income: incomeStatement.income.total,
+        cost: incomeStatement.cost.total,
+        grossProfit: incomeStatement.grossProfit,
+        orders: totalOrders
+      },
+      previous: {
+        income: prevIncomeStatement.income.total,
+        cost: prevIncomeStatement.cost.total,
+        grossProfit: prevIncomeStatement.grossProfit,
+        orders: Number(prevOrderStats?.total_orders || 0)
+      },
+      change: {
+        income: calcChange(incomeStatement.income.total, prevIncomeStatement.income.total),
+        cost: calcChange(incomeStatement.cost.total, prevIncomeStatement.cost.total),
+        grossProfit: calcChange(incomeStatement.grossProfit, prevIncomeStatement.grossProfit),
+        orders: calcChange(totalOrders, Number(prevOrderStats?.total_orders || 0))
+      }
+    }
+  }
+}
+
+// ==================== 财务报表历史记录 ====================
+
+/**
+ * 保存财务报表记录
+ */
+export async function saveFinancialReport(data) {
+  const db = getDatabase()
+  const id = data.id || generateId()
+  
+  await db.prepare(`
+    INSERT INTO financial_reports (
+      id, report_type, report_name, period_start, period_end, as_of_date,
+      pdf_url, pdf_key, report_data, currency, created_by, created_by_name
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  `).run(
+    id,
+    data.reportType,
+    data.reportName,
+    data.periodStart || null,
+    data.periodEnd || null,
+    data.asOfDate || null,
+    data.pdfUrl || null,
+    data.pdfKey || null,
+    JSON.stringify(data.reportData || {}),
+    data.currency || 'EUR',
+    data.createdBy || null,
+    data.createdByName || null
+  )
+  
+  return { id }
+}
+
+/**
+ * 获取财务报表历史列表
+ */
+export async function getFinancialReports(params = {}) {
+  const db = getDatabase()
+  const { reportType, startDate, endDate, page = 1, pageSize = 20 } = params
+  
+  let whereConditions = ['1=1']
+  const queryParams = []
+  let paramIndex = 1
+  
+  if (reportType && reportType !== 'all') {
+    whereConditions.push(`report_type = $${paramIndex++}`)
+    queryParams.push(reportType)
+  }
+  
+  if (startDate) {
+    whereConditions.push(`created_at >= $${paramIndex++}`)
+    queryParams.push(startDate)
+  }
+  
+  if (endDate) {
+    whereConditions.push(`created_at <= $${paramIndex++}`)
+    queryParams.push(endDate + ' 23:59:59')
+  }
+  
+  const whereClause = whereConditions.join(' AND ')
+  
+  // 获取总数
+  const countResult = await db.prepare(`
+    SELECT COUNT(*) as total FROM financial_reports WHERE ${whereClause}
+  `).get(...queryParams)
+  
+  // 获取分页数据
+  const offset = (page - 1) * pageSize
+  const list = await db.prepare(`
+    SELECT * FROM financial_reports 
+    WHERE ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+  `).all(...queryParams, pageSize, offset)
+  
+  return {
+    list: list.map(row => ({
+      id: row.id,
+      reportType: row.report_type,
+      reportName: row.report_name,
+      periodStart: row.period_start,
+      periodEnd: row.period_end,
+      asOfDate: row.as_of_date,
+      pdfUrl: row.pdf_url,
+      pdfKey: row.pdf_key,
+      reportData: row.report_data ? JSON.parse(row.report_data) : null,
+      currency: row.currency,
+      createdBy: row.created_by,
+      createdByName: row.created_by_name,
+      createdAt: row.created_at
+    })),
+    total: parseInt(countResult?.total || 0),
+    page: parseInt(page),
+    pageSize: parseInt(pageSize)
+  }
+}
+
+/**
+ * 获取单个财务报表
+ */
+export async function getFinancialReportById(id) {
+  const db = getDatabase()
+  const row = await db.prepare('SELECT * FROM financial_reports WHERE id = $1').get(id)
+  
+  if (!row) return null
+  
+  return {
+    id: row.id,
+    reportType: row.report_type,
+    reportName: row.report_name,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    asOfDate: row.as_of_date,
+    pdfUrl: row.pdf_url,
+    pdfKey: row.pdf_key,
+    reportData: row.report_data ? JSON.parse(row.report_data) : null,
+    currency: row.currency,
+    createdBy: row.created_by,
+    createdByName: row.created_by_name,
+    createdAt: row.created_at
   }
 }
 

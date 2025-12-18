@@ -5,6 +5,7 @@
 import { getDatabase } from '../../config/database.js'
 import { success, successWithPagination, badRequest, notFound, conflict, serverError } from '../../utils/response.js'
 import * as model from './model.js'
+import * as financeModel from '../finance/model.js'
 
 /**
  * 生成下一个提单序号
@@ -336,7 +337,7 @@ export async function updateShipStatus(req, res) {
 export async function updateDocSwapStatus(req, res) {
   try {
     const { id } = req.params
-    const { docSwapStatus } = req.body
+    const { docSwapStatus, docSwapAgent, docSwapFee } = req.body
     
     if (!docSwapStatus) {
       return badRequest(res, '换单状态为必填项')
@@ -348,19 +349,73 @@ export async function updateDocSwapStatus(req, res) {
     }
     
     const oldStatus = existing.docSwapStatus
-    const updated = await model.updateBillDocSwapStatus(id, docSwapStatus)
+    const updated = await model.updateBillDocSwapStatus(id, docSwapStatus, docSwapAgent, docSwapFee)
     
     if (!updated) {
       return serverError(res, '更新失败')
+    }
+    
+    // 构建操作日志备注
+    let remark = ''
+    if (docSwapStatus === '已换单' && docSwapAgent) {
+      remark = `代理商: ${docSwapAgent}`
+      if (docSwapFee !== undefined && docSwapFee !== null) {
+        remark += `, 换单费: €${docSwapFee}`
+      }
+    }
+    
+    // 如果是换单完成且有换单费，自动创建一笔应付费用
+    if (docSwapStatus === '已换单' && docSwapFee && parseFloat(docSwapFee) > 0) {
+      try {
+        await financeModel.createFee({
+          billId: id,
+          billNumber: existing.billNumber,
+          customerId: existing.customerId,
+          customerName: existing.customerName,
+          supplierName: docSwapAgent,
+          feeType: 'payable',  // 应付费用
+          category: 'handling',  // 操作费类别
+          feeName: '换单费',
+          amount: parseFloat(docSwapFee),
+          currency: 'EUR',
+          exchangeRate: 1,
+          feeDate: new Date().toISOString().split('T')[0],
+          description: `换单代理: ${docSwapAgent}`,
+          notes: '系统自动创建',
+          createdBy: req.user?.id
+        })
+        console.log(`✅ 已为提单 ${existing.billNumber} 自动创建换单费 €${docSwapFee}`)
+      } catch (feeError) {
+        console.error('创建换单费用失败:', feeError)
+        // 费用创建失败不影响换单状态更新
+      }
+    }
+    
+    // 如果是取消换单，删除之前自动创建的换单费
+    if (docSwapStatus === '未换单' && oldStatus === '已换单') {
+      try {
+        const deletedCount = await financeModel.deleteFeeByCondition(id, {
+          feeName: '换单费',
+          notes: '系统自动创建'
+        })
+        if (deletedCount > 0) {
+          console.log(`✅ 已删除提单 ${existing.billNumber} 的换单费 (${deletedCount}笔)`)
+          remark += deletedCount > 0 ? `，已撤销换单费 ${deletedCount} 笔` : ''
+        }
+      } catch (feeError) {
+        console.error('删除换单费用失败:', feeError)
+        // 费用删除失败不影响状态更新，但记录日志
+      }
     }
     
     // 记录操作日志
     await model.addOperationLog({
       billId: id,
       operationType: 'doc_swap',
-      operationName: '更新换单状态',
+      operationName: docSwapStatus === '已换单' ? '换单完成' : '取消换单',
       oldValue: oldStatus || '未换单',
       newValue: docSwapStatus,
+      remark: remark,
       operator: req.user?.name || '系统',
       operatorId: req.user?.id,
       module: 'doc_swap'

@@ -179,9 +179,10 @@ export async function getPortsOfLoading(params = {}) {
   }
   
   if (search) {
-    query += ' AND (port_name_cn LIKE ? OR port_name_en LIKE ? OR port_code LIKE ?)'
+    // 使用 ILIKE 实现不区分大小写搜索（PostgreSQL原生支持）
+    query += ' AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ? OR city ILIKE ?)'
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
