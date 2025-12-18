@@ -81,8 +81,8 @@ export default function SupplierPriceImport() {
   const [submitting, setSubmitting] = useState(false)
 
   const tabs = [
-    { key: 'supplier-list', label: '供应商列表', path: '/suppliers/manage' },
-    { key: 'supplier-prices', label: '采购价管理', path: '/suppliers/prices' },
+    { key: 'product-pricing', label: '产品定价', path: '/tools/product-pricing' },
+    { key: 'supplier-pricing', label: '供应商报价', path: '/suppliers/prices' },
     { key: 'import', label: '智能导入', path: '/suppliers/import' }
   ]
 
@@ -271,14 +271,10 @@ export default function SupplierPriceImport() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title="供应商管理"
-        subtitle="智能导入供应商报价"
+        title="报价管理"
         tabs={tabs}
-        activeTab="import"
-        onTabChange={(key) => {
-          const tab = tabs.find(t => t.key === key)
-          if (tab) navigate(tab.path)
-        }}
+        activeTab="/suppliers/import"
+        onTabChange={(path) => navigate(path)}
       />
 
       {/* 步骤指示器 */}

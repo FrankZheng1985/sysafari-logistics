@@ -83,9 +83,9 @@ export default function SupplierPrices() {
   })
 
   const tabs = [
-    { key: 'dashboard', label: '供应商概览', path: '/suppliers' },
-    { key: 'manage', label: '供应商管理', path: '/suppliers/manage' },
-    { key: 'prices', label: '采购价管理', path: '/suppliers/prices' }
+    { key: 'product-pricing', label: '产品定价', path: '/tools/product-pricing' },
+    { key: 'supplier-pricing', label: '供应商报价', path: '/suppliers/prices' },
+    { key: 'import', label: '智能导入', path: '/suppliers/import' }
   ]
 
   useEffect(() => {
@@ -271,10 +271,11 @@ export default function SupplierPrices() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHeader 
-        title="供应商管理"
+      <PageHeader
+        title="报价管理"
         tabs={tabs}
-        activeTab="prices"
+        activeTab="/suppliers/prices"
+        onTabChange={(path) => navigate(path)}
       />
 
       <div className="p-4">

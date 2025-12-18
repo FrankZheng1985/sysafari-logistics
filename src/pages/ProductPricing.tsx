@@ -93,7 +93,8 @@ export default function ProductPricing() {
 
   const tabs = [
     { key: 'product-pricing', label: '产品定价', path: '/tools/product-pricing' },
-    { key: 'supplier-pricing', label: '供应商报价', path: '/suppliers/prices' }
+    { key: 'supplier-pricing', label: '供应商报价', path: '/suppliers/prices' },
+    { key: 'import', label: '智能导入', path: '/suppliers/import' }
   ]
 
   useEffect(() => {
@@ -331,13 +332,9 @@ export default function ProductPricing() {
     <div className="p-4 space-y-4">
       <PageHeader
         title="报价管理"
-        subtitle="管理公司销售产品定价和供应商报价"
         tabs={tabs}
-        activeTab="product-pricing"
-        onTabChange={(key) => {
-          const tab = tabs.find(t => t.key === key)
-          if (tab) navigate(tab.path)
-        }}
+        activeTab="/tools/product-pricing"
+        onTabChange={(path) => navigate(path)}
       />
 
       {/* 工具栏 */}

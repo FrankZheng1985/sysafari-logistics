@@ -22,6 +22,8 @@ import systemRoutes from './modules/system/routes.js'
 import tmsRoutes from './modules/tms/routes.js'
 // 导入税号自动验证定时任务
 import { startTaxValidationScheduler } from './modules/crm/taxScheduler.js'
+// 导入自动迁移脚本
+import { runMigrations } from './scripts/auto-migrate.js'
 
 const require = createRequire(import.meta.url)
 const pdfParse = require('pdf-parse')
@@ -11089,7 +11091,15 @@ async function startServer() {
       console.error('❌ 无法连接到 PostgreSQL 数据库，服务器启动失败')
       process.exit(1)
     }
-    
+
+    // 执行自动数据库迁移（创建新表和字段）
+    try {
+      await runMigrations()
+    } catch (error) {
+      console.error('⚠️ 数据库迁移警告:', error.message)
+      // 不阻止服务启动，仅警告
+    }
+
     // 执行数据库迁移
     await migrateAirPortsContinent()
     await migrateDeliveryStatus()
