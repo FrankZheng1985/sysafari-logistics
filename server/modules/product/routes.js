@@ -7,6 +7,9 @@ import * as controller from './controller.js'
 
 const router = Router()
 
+// 种子数据 (仅用于演示环境)
+router.post('/seed-demo-data', controller.seedDemoData)
+
 // 产品管理
 router.get('/products', controller.getProducts)
 router.get('/products/:id', controller.getProductById)

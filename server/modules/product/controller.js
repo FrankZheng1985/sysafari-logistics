@@ -278,3 +278,23 @@ export async function setProductFeeItems(req, res) {
     })
   }
 }
+
+/**
+ * 插入演示测试数据 (仅用于演示环境)
+ */
+export async function seedDemoData(req, res) {
+  try {
+    const result = await model.seedDemoData()
+    res.json({
+      errCode: 200,
+      msg: '演示数据插入成功',
+      data: result
+    })
+  } catch (error) {
+    console.error('插入演示数据失败:', error)
+    res.json({
+      errCode: 500,
+      msg: '插入演示数据失败: ' + error.message
+    })
+  }
+}

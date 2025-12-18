@@ -353,6 +353,119 @@ function convertFeeItemToCamelCase(row) {
   }
 }
 
+/**
+ * 插入演示测试数据
+ */
+export async function seedDemoData() {
+  const db = getDatabase()
+  
+  // 产品数据
+  const products = [
+    { id: 'prod-001', code: 'FCL-SEA', name: '整柜海运服务', nameEn: 'Full Container Load Sea Freight', category: 'sea_freight', desc: '提供整柜海运服务，包含订舱、港口操作、海运运输等', sort: 1 },
+    { id: 'prod-002', code: 'LCL-SEA', name: '拼箱海运服务', nameEn: 'Less Container Load Sea Freight', category: 'sea_freight', desc: '提供拼箱海运服务，适合小批量货物', sort: 2 },
+    { id: 'prod-003', code: 'CUSTOMS', name: '清关服务', nameEn: 'Customs Clearance Service', category: 'customs', desc: '提供进出口清关服务，包含报关、查验、放行等', sort: 3 },
+    { id: 'prod-004', code: 'WAREHOUSE', name: '仓储服务', nameEn: 'Warehousing Service', category: 'warehouse', desc: '提供仓储、分拣、包装等增值服务', sort: 4 },
+    { id: 'prod-005', code: 'TRUCKING', name: '陆运配送服务', nameEn: 'Trucking & Delivery Service', category: 'trucking', desc: '提供欧洲境内陆运配送服务', sort: 5 },
+    { id: 'prod-006', code: 'AIR-FREIGHT', name: '空运服务', nameEn: 'Air Freight Service', category: 'air_freight', desc: '提供空运服务，适合紧急或高价值货物', sort: 6 },
+    { id: 'prod-007', code: 'RAIL-FREIGHT', name: '铁路运输服务', nameEn: 'Rail Freight Service', category: 'rail_freight', desc: '提供中欧铁路运输服务', sort: 7 }
+  ]
+  
+  for (const p of products) {
+    await db.prepare(`
+      INSERT INTO products (id, product_code, product_name, product_name_en, category, description, is_active, sort_order, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'admin', CURRENT_TIMESTAMP)
+      ON CONFLICT (id) DO UPDATE SET product_name = EXCLUDED.product_name, updated_at = CURRENT_TIMESTAMP
+    `).run(p.id, p.code, p.name, p.nameEn, p.category, p.desc, true, p.sort)
+  }
+  
+  // 产品费用项数据
+  const productFeeItems = [
+    // 整柜海运服务
+    { productId: 'prod-001', name: '海运费', nameEn: 'Ocean Freight', category: 'freight', unit: '柜', price: 1200, minPrice: 800, maxPrice: 2000, required: true, desc: '基本海运费用', sort: 1 },
+    { productId: 'prod-001', name: '订舱费', nameEn: 'Booking Fee', category: 'handling', unit: '票', price: 50, required: true, desc: '订舱服务费', sort: 2 },
+    { productId: 'prod-001', name: '文件费', nameEn: 'Documentation Fee', category: 'handling', unit: '票', price: 35, required: true, desc: '提单文件费', sort: 3 },
+    { productId: 'prod-001', name: '港口操作费', nameEn: 'Terminal Handling Charge', category: 'terminal', unit: '柜', price: 280, required: true, desc: '起运港装卸费', sort: 4 },
+    { productId: 'prod-001', name: '燃油附加费', nameEn: 'Bunker Adjustment Factor', category: 'surcharge', unit: '柜', price: 150, required: false, desc: '实报实销', sort: 5 },
+    // 拼箱海运服务
+    { productId: 'prod-002', name: '海运费', nameEn: 'Ocean Freight', category: 'freight', unit: 'CBM', price: 65, minPrice: 50, maxPrice: 100, required: true, desc: '按立方计费', sort: 1 },
+    { productId: 'prod-002', name: '拼箱服务费', nameEn: 'Consolidation Fee', category: 'handling', unit: 'CBM', price: 25, required: true, desc: '货物拼装服务', sort: 2 },
+    { productId: 'prod-002', name: '文件费', nameEn: 'Documentation Fee', category: 'handling', unit: '票', price: 35, required: true, desc: '提单文件费', sort: 3 },
+    // 清关服务
+    { productId: 'prod-003', name: '报关费', nameEn: 'Customs Declaration Fee', category: 'customs', unit: '票', price: 85, minPrice: 65, maxPrice: 120, required: true, desc: '标准报关服务', sort: 1 },
+    { productId: 'prod-003', name: '查验费', nameEn: 'Inspection Fee', category: 'customs', unit: '票', price: 180, required: false, desc: '海关查验配合费', sort: 2 },
+    { productId: 'prod-003', name: '关税代垫', nameEn: 'Duty Advance', category: 'duty', unit: '票', price: 0, required: false, desc: '实报实销', sort: 3 },
+    // 仓储服务
+    { productId: 'prod-004', name: '仓储费', nameEn: 'Storage Fee', category: 'warehouse', unit: 'CBM/天', price: 1.5, required: true, desc: '按立方按天计费', sort: 1 },
+    { productId: 'prod-004', name: '入库费', nameEn: 'Receiving Fee', category: 'warehouse', unit: 'CBM', price: 8, required: true, desc: '货物入库操作', sort: 2 },
+    { productId: 'prod-004', name: '出库费', nameEn: 'Dispatching Fee', category: 'warehouse', unit: 'CBM', price: 8, required: true, desc: '货物出库操作', sort: 3 },
+    // 陆运配送
+    { productId: 'prod-005', name: '陆运费', nameEn: 'Trucking Fee', category: 'freight', unit: 'KM', price: 2.5, required: true, desc: '按公里计费', sort: 1 },
+    { productId: 'prod-005', name: '起步价', nameEn: 'Minimum Charge', category: 'freight', unit: '票', price: 180, required: true, desc: '最低运费', sort: 2 },
+    // 空运服务
+    { productId: 'prod-006', name: '空运费', nameEn: 'Air Freight', category: 'freight', unit: 'KG', price: 4.5, required: true, desc: '按公斤计费', sort: 1 },
+    { productId: 'prod-006', name: '燃油附加费', nameEn: 'Fuel Surcharge', category: 'surcharge', unit: 'KG', price: 0.8, required: true, desc: '按重量收取', sort: 2 },
+    // 铁路运输
+    { productId: 'prod-007', name: '铁路运费', nameEn: 'Rail Freight', category: 'freight', unit: '柜', price: 3500, required: true, desc: '中欧铁路运费', sort: 1 },
+    { productId: 'prod-007', name: '装车费', nameEn: 'Loading Fee', category: 'handling', unit: '柜', price: 200, required: true, desc: '铁路站装车', sort: 2 }
+  ]
+  
+  for (const f of productFeeItems) {
+    const id = generateId()
+    await db.prepare(`
+      INSERT INTO product_fee_items (id, product_id, fee_name, fee_name_en, fee_category, unit, standard_price, min_price, max_price, currency, is_required, description, sort_order, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EUR', ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT DO NOTHING
+    `).run(id, f.productId, f.name, f.nameEn, f.category, f.unit, f.price, f.minPrice || null, f.maxPrice || null, f.required ? 1 : 0, f.desc, f.sort)
+  }
+  
+  // 供应商报价数据
+  const supplierPrices = [
+    // COSCO
+    { supplierId: 'sup-001', supplierName: 'COSCO Shipping Lines Co., Ltd', name: '整柜海运费 20GP', nameEn: 'Ocean Freight 20GP', category: 'freight', unit: '柜', price: 850, routeFrom: '上海', routeTo: '汉堡' },
+    { supplierId: 'sup-001', supplierName: 'COSCO Shipping Lines Co., Ltd', name: '整柜海运费 40GP', nameEn: 'Ocean Freight 40GP', category: 'freight', unit: '柜', price: 1100, routeFrom: '上海', routeTo: '汉堡' },
+    { supplierId: 'sup-001', supplierName: 'COSCO Shipping Lines Co., Ltd', name: '整柜海运费 40HQ', nameEn: 'Ocean Freight 40HQ', category: 'freight', unit: '柜', price: 1150, routeFrom: '上海', routeTo: '汉堡' },
+    { supplierId: 'sup-001', supplierName: 'COSCO Shipping Lines Co., Ltd', name: 'THC起运港', nameEn: 'Origin THC', category: 'terminal', unit: '柜', price: 180, routeFrom: '', routeTo: '' },
+    { supplierId: 'sup-001', supplierName: 'COSCO Shipping Lines Co., Ltd', name: '燃油附加费', nameEn: 'BAF', category: 'surcharge', unit: '柜', price: 120, routeFrom: '', routeTo: '' },
+    // Maersk
+    { supplierId: 'sup-002', supplierName: 'Maersk Line', name: '整柜海运费 20GP', nameEn: 'Ocean Freight 20GP', category: 'freight', unit: '柜', price: 920, routeFrom: '宁波', routeTo: '鹿特丹' },
+    { supplierId: 'sup-002', supplierName: 'Maersk Line', name: '整柜海运费 40GP', nameEn: 'Ocean Freight 40GP', category: 'freight', unit: '柜', price: 1200, routeFrom: '宁波', routeTo: '鹿特丹' },
+    { supplierId: 'sup-002', supplierName: 'Maersk Line', name: '整柜海运费 40HQ', nameEn: 'Ocean Freight 40HQ', category: 'freight', unit: '柜', price: 1250, routeFrom: '宁波', routeTo: '鹿特丹' },
+    { supplierId: 'sup-002', supplierName: 'Maersk Line', name: 'THC起运港', nameEn: 'Origin THC', category: 'terminal', unit: '柜', price: 195, routeFrom: '', routeTo: '' },
+    // Hamburg Logistics
+    { supplierId: 'sup-003', supplierName: 'Hamburg Logistics GmbH', name: '仓储费', nameEn: 'Storage Fee', category: 'warehouse', unit: 'CBM/天', price: 1.2, routeFrom: '', routeTo: '' },
+    { supplierId: 'sup-003', supplierName: 'Hamburg Logistics GmbH', name: '入库费', nameEn: 'Receiving Fee', category: 'warehouse', unit: 'CBM', price: 6.5, routeFrom: '', routeTo: '' },
+    { supplierId: 'sup-003', supplierName: 'Hamburg Logistics GmbH', name: '出库费', nameEn: 'Dispatching Fee', category: 'warehouse', unit: 'CBM', price: 6.5, routeFrom: '', routeTo: '' },
+    { supplierId: 'sup-003', supplierName: 'Hamburg Logistics GmbH', name: '拆柜费', nameEn: 'Devanning', category: 'warehouse', unit: '柜', price: 220, routeFrom: '', routeTo: '' },
+    // Euro Customs
+    { supplierId: 'sup-004', supplierName: 'Euro Customs Services', name: '报关费', nameEn: 'Customs Declaration Fee', category: 'customs', unit: '票', price: 65, routeFrom: '', routeTo: '' },
+    { supplierId: 'sup-004', supplierName: 'Euro Customs Services', name: '查验配合费', nameEn: 'Inspection Assistance', category: 'customs', unit: '票', price: 150, routeFrom: '', routeTo: '' },
+    // Rotterdam Trucking
+    { supplierId: 'sup-005', supplierName: 'Rotterdam Trucking BV', name: '陆运费-荷兰境内', nameEn: 'Trucking NL', category: 'freight', unit: 'KM', price: 2.2, routeFrom: '', routeTo: '' },
+    { supplierId: 'sup-005', supplierName: 'Rotterdam Trucking BV', name: '陆运费-德国', nameEn: 'Trucking DE', category: 'freight', unit: 'KM', price: 2.4, routeFrom: '', routeTo: '' },
+    { supplierId: 'sup-005', supplierName: 'Rotterdam Trucking BV', name: '起步价', nameEn: 'Minimum Charge', category: 'freight', unit: '票', price: 150, routeFrom: '', routeTo: '' }
+  ]
+  
+  for (const s of supplierPrices) {
+    const id = generateId()
+    await db.prepare(`
+      INSERT INTO supplier_price_items (id, supplier_id, supplier_name, fee_name, fee_name_en, fee_category, unit, price, currency, effective_date, expiry_date, route_from, route_to, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EUR', '2025-01-01', '2025-12-31', ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT DO NOTHING
+    `).run(id, s.supplierId, s.supplierName, s.name, s.nameEn, s.category, s.unit, s.price, s.routeFrom, s.routeTo)
+  }
+  
+  // 统计
+  const productCount = await db.prepare('SELECT COUNT(*) as count FROM products').get()
+  const feeItemCount = await db.prepare('SELECT COUNT(*) as count FROM product_fee_items').get()
+  const priceCount = await db.prepare('SELECT COUNT(*) as count FROM supplier_price_items').get()
+  
+  return {
+    products: productCount?.count || 0,
+    productFeeItems: feeItemCount?.count || 0,
+    supplierPriceItems: priceCount?.count || 0
+  }
+}
+
 export default {
   getProducts,
   getProductById,
@@ -363,5 +476,6 @@ export default {
   addProductFeeItem,
   updateProductFeeItem,
   deleteProductFeeItem,
-  setProductFeeItems
+  setProductFeeItems,
+  seedDemoData
 }
