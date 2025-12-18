@@ -1493,7 +1493,7 @@ export default function CreateBillModal({
                       </label>
                       {formData.masterBillFile && !parsingFile && (
                         <button
-                          onClick={handleParseFile}
+                          onClick={() => handleParseFile()}
                           className="px-1.5 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs flex items-center gap-1"
                         >
                           <FileText className="w-3 h-3" />

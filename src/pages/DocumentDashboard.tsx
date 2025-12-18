@@ -21,6 +21,7 @@ interface DocumentStats {
     importNo: string
     customerName: string
     containerNo: string
+    billNumber?: string
     totalItems: number
     matchedItems: number
     status: string
