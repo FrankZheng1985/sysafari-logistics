@@ -2,6 +2,7 @@ import { User, Key, LogOut, Shield } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import UserPasswordModal from './UserPasswordModal'
+import NotificationBell from './NotificationBell'
 import { useAuth } from '../contexts/AuthContext'
 import { changePassword } from '../utils/api'
 
@@ -76,7 +77,10 @@ export default function Header() {
       <div className="flex items-center gap-4">
         <h1 className="text-lg font-semibold text-gray-900">BP Logistics 物流管理系统</h1>
       </div>
-      <div className="flex items-center gap-4 relative" ref={dropdownRef}>
+      <div className="flex items-center gap-3 relative" ref={dropdownRef}>
+        {/* 通知铃铛 */}
+        <NotificationBell />
+        
         <button
           onClick={handleUserClick}
           className="flex items-center gap-2 text-sm font-semibold text-gray-900 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 hover:border-primary-300 hover:text-primary-600 transition-all cursor-pointer"

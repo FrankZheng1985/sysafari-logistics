@@ -34,9 +34,14 @@ import crmRoutes from './modules/crm/routes.js'
 import financeRoutes from './modules/finance/routes.js'
 import documentRoutes from './modules/document/routes.js'
 import supplierRoutes from './modules/supplier/routes.js'
+import productRoutes from './modules/product/routes.js'
+import messageRoutes from './modules/message/routes.js'
 
 // 供应商模块初始化
 import { initSupplierTable } from './modules/supplier/model.js'
+
+// 预警定时任务
+import { startScheduler as startAlertScheduler } from './jobs/alertScheduler.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -102,6 +107,12 @@ app.use('/api', documentRoutes)
 // 供应商管理模块
 app.use('/api', supplierRoutes)
 
+// 产品定价模块
+app.use('/api/product', productRoutes)
+
+// 消息/审批/预警模块
+app.use('/api', messageRoutes)
+
 // ==================== 错误处理 ====================
 
 // 错误日志
@@ -125,6 +136,9 @@ function initializeDatabase() {
   
   // 初始化供应商表
   initSupplierTable()
+  
+  // 启动预警定时任务（每24小时检查一次）
+  startAlertScheduler(24)
   
   console.log('📦 数据库初始化完成')
   return db
@@ -159,6 +173,7 @@ function startServer() {
     console.log('║      /api/documents/:id/download - 文档下载                ║')
     console.log('║      /api/templates          - 文档模板                    ║')
     console.log('║   [供应商管理] /api/suppliers                              ║')
+    console.log('║   [消息中心] /api/messages, approvals, alerts             ║')
     console.log('║                                                            ║')
     console.log('╚════════════════════════════════════════════════════════════╝')
     console.log('')

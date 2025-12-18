@@ -65,6 +65,10 @@ import SystemManageDashboard from './pages/SystemManageDashboard'
 import ActivityLogs from './pages/ActivityLogs'
 import ApprovalList from './pages/ApprovalList'
 import Auth0UserBinding from './pages/Auth0UserBinding'
+// 消息/审批/预警模块
+import MessageCenter from './pages/MessageCenter'
+import ApprovalWorkbench from './pages/ApprovalWorkbench'
+import AlertDashboard from './pages/AlertDashboard'
 import SupplierDashboard from './pages/SupplierDashboard'
 import SupplierManage from './pages/SupplierManage'
 import SupplierPrices from './pages/SupplierPrices'
@@ -142,7 +146,9 @@ function AppRoutes() {
         <Route path="/system/basic-data/fee-category" element={<BasicDataManage />} />
         <Route path="/system/basic-data/transport-method" element={<BasicDataManage />} />
         <Route path="/system/tariff-rates" element={<TariffRateManage />} />
-        <Route path="/system/approvals" element={<ApprovalList />} />
+        <Route path="/system/approvals" element={<ApprovalWorkbench />} />
+        <Route path="/system/messages" element={<MessageCenter />} />
+        <Route path="/system/alerts" element={<AlertDashboard />} />
         {/* 供应商管理模块 */}
         <Route path="/suppliers" element={<SupplierDashboard />} />
         <Route path="/suppliers/list" element={<SupplierManage />} />

@@ -1,0 +1,485 @@
+/**
+ * 审批工作台页面
+ * 展示待审批列表，支持审批操作
+ */
+
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { 
+  ClipboardCheck, 
+  Bell, 
+  AlertTriangle,
+  Check,
+  X,
+  RefreshCw,
+  Clock,
+  CheckCircle,
+  XCircle,
+  FileText,
+  Wallet,
+  Building2,
+  Package,
+  Eye,
+  Filter
+} from 'lucide-react'
+import PageHeader from '../components/PageHeader'
+import { useAuth } from '../contexts/AuthContext'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
+
+interface Approval {
+  id: string
+  approval_type: string
+  business_id: string
+  title: string
+  content: string
+  amount: number
+  applicant_id: string
+  applicant_name: string
+  approver_id: string
+  approver_name: string
+  status: string
+  remark: string
+  reject_reason: string
+  created_at: string
+  processed_at: string
+}
+
+// 审批类型配置
+const APPROVAL_TYPES: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+  order: { label: '订单审批', icon: Package, color: 'text-blue-600 bg-blue-100' },
+  payment: { label: '付款申请', icon: Wallet, color: 'text-green-600 bg-green-100' },
+  supplier: { label: '供应商审批', icon: Building2, color: 'text-purple-600 bg-purple-100' },
+  fee: { label: '费用审批', icon: FileText, color: 'text-orange-600 bg-orange-100' },
+}
+
+// 审批状态配置
+const APPROVAL_STATUS: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
+  pending: { label: '待审批', color: 'text-amber-600 bg-amber-100', icon: Clock },
+  approved: { label: '已通过', color: 'text-green-600 bg-green-100', icon: CheckCircle },
+  rejected: { label: '已驳回', color: 'text-red-600 bg-red-100', icon: XCircle },
+}
+
+export default function ApprovalWorkbench() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const [approvals, setApprovals] = useState<Approval[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(20)
+  const [loading, setLoading] = useState(false)
+  const [activeStatus, setActiveStatus] = useState('pending')
+  const [activeType, setActiveType] = useState('all')
+  
+  // 审批弹窗状态
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [currentApproval, setCurrentApproval] = useState<Approval | null>(null)
+  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve')
+  const [remark, setRemark] = useState('')
+  const [rejectReason, setRejectReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const tabs = [
+    { label: '消息中心', path: '/system/messages' },
+    { label: '审批工作台', path: '/system/approvals' },
+    { label: '预警管理', path: '/system/alerts' },
+  ]
+
+  // 加载审批列表
+  const fetchApprovals = async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      })
+      
+      // 根据当前用户角色决定查看范围
+      if (user?.id) {
+        params.append('approverId', user.id)
+      }
+      
+      if (activeStatus !== 'all') {
+        params.append('status', activeStatus)
+      }
+      
+      if (activeType !== 'all') {
+        params.append('approvalType', activeType)
+      }
+      
+      const response = await fetch(`${API_BASE}/api/approvals?${params}`)
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        setApprovals(data.data.list || [])
+        setTotal(data.data.total || 0)
+      }
+    } catch (error) {
+      console.error('加载审批列表失败:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 打开审批弹窗
+  const openApprovalModal = (approval: Approval, action: 'approve' | 'reject') => {
+    setCurrentApproval(approval)
+    setApprovalAction(action)
+    setRemark('')
+    setRejectReason('')
+    setShowApprovalModal(true)
+  }
+
+  // 提交审批
+  const submitApproval = async () => {
+    if (!currentApproval || !user?.id) return
+    
+    if (approvalAction === 'reject' && !rejectReason.trim()) {
+      alert('请填写驳回原因')
+      return
+    }
+    
+    setSubmitting(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/approvals/${currentApproval.id}/process`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: approvalAction === 'approve' ? 'approved' : 'rejected',
+          approverId: user.id,
+          approverName: user.name || user.username,
+          remark: remark,
+          rejectReason: rejectReason
+        })
+      })
+      
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert(approvalAction === 'approve' ? '审批通过成功' : '审批驳回成功')
+        setShowApprovalModal(false)
+        fetchApprovals()
+      } else {
+        alert(data.msg || '操作失败')
+      }
+    } catch (error) {
+      console.error('审批操作失败:', error)
+      alert('操作失败，请稍后重试')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // 查看关联业务
+  const viewBusiness = (approval: Approval) => {
+    if (approval.approval_type === 'order' && approval.business_id) {
+      navigate(`/bill-details/${approval.business_id}`)
+    } else if (approval.approval_type === 'payment' && approval.business_id) {
+      navigate(`/finance/invoices/${approval.business_id}`)
+    } else if (approval.approval_type === 'supplier' && approval.business_id) {
+      navigate('/suppliers/list')
+    }
+  }
+
+  useEffect(() => {
+    fetchApprovals()
+  }, [user?.id, page, activeStatus, activeType])
+
+  // 格式化时间
+  const formatTime = (dateStr: string) => {
+    if (!dateStr) return '-'
+    return new Date(dateStr).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  // 格式化金额
+  const formatAmount = (amount: number) => {
+    if (!amount) return '-'
+    return new Intl.NumberFormat('zh-CN', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount)
+  }
+
+  const totalPages = Math.ceil(total / pageSize)
+
+  return (
+    <div className="p-4 space-y-4">
+      <PageHeader
+        title="审批工作台"
+        icon={<ClipboardCheck className="w-6 h-6 text-primary-600" />}
+        tabs={tabs}
+        activeTab="/system/approvals"
+        onTabChange={(path) => navigate(path)}
+      />
+
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-4 gap-4">
+        {Object.entries(APPROVAL_STATUS).map(([key, config]) => {
+          const Icon = config.icon
+          const count = key === 'pending' 
+            ? approvals.filter(a => a.status === 'pending').length 
+            : 0 // 实际应该从统计API获取
+          return (
+            <button
+              key={key}
+              onClick={() => { setActiveStatus(key); setPage(1) }}
+              className={`bg-white rounded-lg border p-4 text-left transition-all ${
+                activeStatus === key 
+                  ? 'border-primary-300 shadow-sm' 
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">{config.label}</p>
+                  <p className="text-2xl font-semibold text-gray-900 mt-1">
+                    {key === activeStatus ? total : '-'}
+                  </p>
+                </div>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${config.color}`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+              </div>
+            </button>
+          )
+        })}
+        <button
+          onClick={() => { setActiveStatus('all'); setPage(1) }}
+          className={`bg-white rounded-lg border p-4 text-left transition-all ${
+            activeStatus === 'all' 
+              ? 'border-primary-300 shadow-sm' 
+              : 'border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">全部</p>
+              <p className="text-2xl font-semibold text-gray-900 mt-1">
+                {activeStatus === 'all' ? total : '-'}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 text-gray-600">
+              <ClipboardCheck className="w-5 h-5" />
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* 筛选和列表 */}
+      <div className="bg-white rounded-lg border border-gray-200">
+        {/* 筛选栏 */}
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <span className="text-sm text-gray-500">类型:</span>
+            <select
+              value={activeType}
+              onChange={(e) => { setActiveType(e.target.value); setPage(1) }}
+              className="text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="all">全部类型</option>
+              {Object.entries(APPROVAL_TYPES).map(([key, config]) => (
+                <option key={key} value={key}>{config.label}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={fetchApprovals}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+            title="刷新"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {/* 审批列表 */}
+        {loading ? (
+          <div className="py-12 text-center text-gray-400">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+            加载中...
+          </div>
+        ) : approvals.length === 0 ? (
+          <div className="py-12 text-center text-gray-400">
+            <ClipboardCheck className="w-10 h-10 mx-auto mb-2 opacity-50" />
+            暂无审批记录
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {approvals.map((approval) => {
+              const typeConfig = APPROVAL_TYPES[approval.approval_type] || APPROVAL_TYPES.order
+              const statusConfig = APPROVAL_STATUS[approval.status] || APPROVAL_STATUS.pending
+              const TypeIcon = typeConfig.icon
+              const StatusIcon = statusConfig.icon
+              
+              return (
+                <div key={approval.id} className="px-4 py-4">
+                  <div className="flex items-start justify-between">
+                    {/* 左侧信息 */}
+                    <div className="flex items-start gap-4">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeConfig.color}`}>
+                        <TypeIcon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`px-2 py-0.5 text-xs rounded ${typeConfig.color}`}>
+                            {typeConfig.label}
+                          </span>
+                          <span className="text-sm font-medium text-gray-900">{approval.title}</span>
+                          <span className={`px-2 py-0.5 text-xs rounded flex items-center gap-1 ${statusConfig.color}`}>
+                            <StatusIcon className="w-3 h-3" />
+                            {statusConfig.label}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-2">{approval.content}</p>
+                        <div className="flex items-center gap-4 text-xs text-gray-400">
+                          <span>申请人: {approval.applicant_name || '-'}</span>
+                          {approval.amount && <span>金额: {formatAmount(approval.amount)}</span>}
+                          <span>提交时间: {formatTime(approval.created_at)}</span>
+                        </div>
+                        {approval.status !== 'pending' && (
+                          <div className="mt-2 text-xs text-gray-400">
+                            <span>审批人: {approval.approver_name || '-'}</span>
+                            <span className="ml-4">处理时间: {formatTime(approval.processed_at)}</span>
+                            {approval.reject_reason && (
+                              <span className="ml-4 text-red-500">驳回原因: {approval.reject_reason}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 右侧操作 */}
+                    <div className="flex items-center gap-2">
+                      {approval.business_id && (
+                        <button
+                          onClick={() => viewBusiness(approval)}
+                          className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                        >
+                          <Eye className="w-4 h-4" />
+                          查看
+                        </button>
+                      )}
+                      {approval.status === 'pending' && (
+                        <>
+                          <button
+                            onClick={() => openApprovalModal(approval, 'approve')}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                          >
+                            <Check className="w-4 h-4" />
+                            通过
+                          </button>
+                          <button
+                            onClick={() => openApprovalModal(approval, 'reject')}
+                            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+                          >
+                            <X className="w-4 h-4" />
+                            驳回
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* 分页 */}
+        {totalPages > 1 && (
+          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+            <span className="text-sm text-gray-500">
+              第 {page} / {totalPages} 页，共 {total} 条
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                上一页
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 审批弹窗 */}
+      {showApprovalModal && currentApproval && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">
+                {approvalAction === 'approve' ? '确认通过' : '确认驳回'}
+              </h3>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">审批项目</label>
+                <p className="text-sm text-gray-600">{currentApproval.title}</p>
+              </div>
+              
+              {approvalAction === 'reject' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    驳回原因 <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="请填写驳回原因"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    rows={3}
+                  />
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <textarea
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  placeholder="可选，填写审批备注"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowApprovalModal(false)}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                onClick={submitApproval}
+                disabled={submitting}
+                className={`px-4 py-2 text-sm text-white rounded-lg ${
+                  approvalAction === 'approve'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-red-600 hover:bg-red-700'
+                } disabled:opacity-50`}
+              >
+                {submitting ? '处理中...' : (approvalAction === 'approve' ? '确认通过' : '确认驳回')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
