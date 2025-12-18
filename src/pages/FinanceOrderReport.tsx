@@ -210,48 +210,58 @@ export default function FinanceOrderReport() {
             </thead>
             <tbody>
               {orderReportData?.list && orderReportData.list.length > 0 ? (
-                orderReportData.list.map((item) => (
-                  <tr key={item.billId} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-3">
-                      <span 
-                        className="text-primary-600 hover:underline cursor-pointer font-medium"
-                        onClick={() => navigate(`/bill-details/${item.billId}`)}
-                      >
-                        {item.billNumber}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-gray-600">{item.customerName || '-'}</td>
-                    <td className="py-3 px-3 text-right text-gray-900">{item.feeCount}</td>
-                    <td className="py-3 px-3 text-right text-blue-600">
-                      {item.freightAmount > 0 ? formatCurrency(item.freightAmount) : '-'}
-                    </td>
-                    <td className="py-3 px-3 text-right text-red-600">
-                      {item.customsAmount > 0 ? formatCurrency(item.customsAmount) : '-'}
-                    </td>
-                    <td className="py-3 px-3 text-right text-orange-600">
-                      {item.warehouseAmount > 0 ? formatCurrency(item.warehouseAmount) : '-'}
-                    </td>
-                    <td className="py-3 px-3 text-right text-purple-600">
-                      {item.handlingAmount > 0 ? formatCurrency(item.handlingAmount) : '-'}
-                    </td>
-                    <td className="py-3 px-3 text-right text-gray-600">
-                      {(item.insuranceAmount + item.documentationAmount + item.otherAmount) > 0 
-                        ? formatCurrency(item.insuranceAmount + item.documentationAmount + item.otherAmount) 
-                        : '-'}
-                    </td>
-                    <td className="py-3 px-3 text-right font-bold text-green-600">
-                      {formatCurrency(item.totalAmount)}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <button
-                        onClick={() => navigate(`/finance/fees?billId=${item.billId}`)}
-                        className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
-                      >
-                        查看明细
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                orderReportData.list.map((item) => {
+                  const freightAmt = Number(item.freightAmount || 0)
+                  const customsAmt = Number(item.customsAmount || 0)
+                  const warehouseAmt = Number(item.warehouseAmount || 0)
+                  const handlingAmt = Number(item.handlingAmount || 0)
+                  const insuranceAmt = Number(item.insuranceAmount || 0)
+                  const documentationAmt = Number(item.documentationAmount || 0)
+                  const otherAmt = Number(item.otherAmount || 0)
+                  const totalAmt = Number(item.totalAmount || 0)
+                  const miscAmt = insuranceAmt + documentationAmt + otherAmt
+                  
+                  return (
+                    <tr key={item.billId + item.customerId} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-3">
+                        <span 
+                          className="text-primary-600 hover:underline cursor-pointer font-medium"
+                          onClick={() => navigate(`/bill-details/${item.billId}`)}
+                        >
+                          {item.billNumber}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-gray-600">{item.customerName || '-'}</td>
+                      <td className="py-3 px-3 text-right text-gray-900">{item.feeCount}</td>
+                      <td className="py-3 px-3 text-right text-blue-600">
+                        {freightAmt > 0 ? formatCurrency(freightAmt) : '-'}
+                      </td>
+                      <td className="py-3 px-3 text-right text-red-600">
+                        {customsAmt > 0 ? formatCurrency(customsAmt) : '-'}
+                      </td>
+                      <td className="py-3 px-3 text-right text-orange-600">
+                        {warehouseAmt > 0 ? formatCurrency(warehouseAmt) : '-'}
+                      </td>
+                      <td className="py-3 px-3 text-right text-purple-600">
+                        {handlingAmt > 0 ? formatCurrency(handlingAmt) : '-'}
+                      </td>
+                      <td className="py-3 px-3 text-right text-gray-600">
+                        {miscAmt > 0 ? formatCurrency(miscAmt) : '-'}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold text-green-600">
+                        {formatCurrency(totalAmt)}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <button
+                          onClick={() => navigate(`/finance/fees?billId=${item.billId}`)}
+                          className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
+                        >
+                          查看明细
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
               ) : (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-gray-400">
@@ -274,22 +284,22 @@ export default function FinanceOrderReport() {
                   <td className="py-3 px-3 text-gray-600">{orderReportData.total} 个订单</td>
                   <td className="py-3 px-3 text-right text-gray-900">{orderReportData.summary.feeCount}</td>
                   <td className="py-3 px-3 text-right text-blue-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.freightAmount, 0))}
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.freightAmount || 0), 0))}
                   </td>
                   <td className="py-3 px-3 text-right text-red-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.customsAmount, 0))}
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.customsAmount || 0), 0))}
                   </td>
                   <td className="py-3 px-3 text-right text-orange-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.warehouseAmount, 0))}
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.warehouseAmount || 0), 0))}
                   </td>
                   <td className="py-3 px-3 text-right text-purple-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.handlingAmount, 0))}
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.handlingAmount || 0), 0))}
                   </td>
                   <td className="py-3 px-3 text-right text-gray-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.insuranceAmount + i.documentationAmount + i.otherAmount, 0))}
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.insuranceAmount || 0) + Number(i.documentationAmount || 0) + Number(i.otherAmount || 0), 0))}
                   </td>
                   <td className="py-3 px-3 text-right font-bold text-green-600">
-                    {formatCurrency(orderReportData.summary.totalAmount)}
+                    {formatCurrency(Number(orderReportData.summary.totalAmount || 0))}
                   </td>
                   <td></td>
                 </tr>
