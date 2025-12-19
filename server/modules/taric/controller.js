@@ -651,6 +651,72 @@ export async function clearTranslationCache(req, res) {
   }
 }
 
+// ==================== 中国反倾销税查询 ====================
+
+/**
+ * 获取中国反倾销税摘要
+ */
+export async function getChinaAntiDumpingSummary(req, res) {
+  try {
+    const { getAntiDumpingSummary } = await import('./chinaAntiDumpingRates.js')
+    const summary = getAntiDumpingSummary()
+    return success(res, summary)
+  } catch (error) {
+    console.error('获取中国反倾销税摘要失败:', error)
+    return serverError(res, '获取中国反倾销税摘要失败')
+  }
+}
+
+/**
+ * 获取所有中国反倾销税 HS 编码列表
+ */
+export async function getChinaAntiDumpingCodes(req, res) {
+  try {
+    const { getAntiDumpingHsCodes } = await import('./chinaAntiDumpingRates.js')
+    const codes = getAntiDumpingHsCodes()
+    return success(res, {
+      total: codes.length,
+      codes
+    })
+  } catch (error) {
+    console.error('获取中国反倾销税编码列表失败:', error)
+    return serverError(res, '获取中国反倾销税编码列表失败')
+  }
+}
+
+/**
+ * 查询单个 HS 编码的中国反倾销税
+ */
+export async function lookupChinaAntiDumping(req, res) {
+  try {
+    const { hsCode } = req.params
+    
+    if (!hsCode || hsCode.length < 4) {
+      return badRequest(res, '请提供至少4位的HS编码')
+    }
+    
+    const { findChinaAntiDumpingRate } = await import('./chinaAntiDumpingRates.js')
+    const result = findChinaAntiDumpingRate(hsCode)
+    
+    if (!result) {
+      return success(res, {
+        found: false,
+        hsCode,
+        message: '该编码暂无中国原产地反倾销税记录',
+        note: '可能该产品无反倾销措施，或数据尚未更新'
+      })
+    }
+    
+    return success(res, {
+      found: true,
+      ...result
+    })
+  } catch (error) {
+    console.error('查询中国反倾销税失败:', error)
+    return serverError(res, '查询中国反倾销税失败')
+  }
+}
+
 // ==================== 导出 ====================
 
 export default {
@@ -672,5 +738,9 @@ export default {
   // 翻译功能
   triggerTranslation,
   getTranslationStatus,
-  clearTranslationCache
+  clearTranslationCache,
+  // 中国反倾销税查询
+  getChinaAntiDumpingSummary,
+  getChinaAntiDumpingCodes,
+  lookupChinaAntiDumping
 }

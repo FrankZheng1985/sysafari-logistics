@@ -37,44 +37,81 @@ const CARRIER_CODES = {
 export async function fetchTracking(params) {
   const { trackingNumber, containerNumber, config } = params
   
-  // 优先使用 Ship24 聚合API（推荐方式）
-  if (config?.providerCode === 'ship24' && config?.apiKey) {
+  // 识别船公司代码（从提单号或集装箱号前4位）
+  const number = trackingNumber || containerNumber || ''
+  const carrierCode = number.substring(0, 4).toUpperCase()
+  const carrier = CARRIER_CODES[carrierCode]
+  
+  console.log(`跟踪查询: ${number}, 识别船公司: ${carrier || '未知'}`)
+  
+  // ==================== 优先级调整 ====================
+  // 如果能识别出具体船公司，优先使用船公司官方 API（数据更准确）
+  // Ship24 作为备选方案
+  
+  // 1. 尝试使用船公司直连 API（数据更准确）
+  if (carrier && config?.apiKey) {
     try {
-      console.log('使用 Ship24 API 获取跟踪数据...')
-      const result = await ship24Adapter.fetchTracking(params)
-      if (result && (result.events?.length > 0 || result.carrier)) {
-        console.log('✅ Ship24 返回真实数据')
+      console.log(`🚢 尝试使用 ${carrier.toUpperCase()} 官方API...`)
+      let result = null
+      
+      switch (carrier) {
+        case 'maersk':
+          result = await fetchMaerskTracking(trackingNumber, containerNumber, config)
+          break
+        case 'cosco':
+          result = await fetchCoscoTracking(trackingNumber, containerNumber, config)
+          break
+        case 'msc':
+          result = await fetchMscTracking(trackingNumber, containerNumber, config)
+          break
+        case 'cmacgm':
+          result = await fetchCmaCgmTracking(trackingNumber, containerNumber, config)
+          break
+        case 'oocl':
+          result = await fetchOoclTracking(trackingNumber, containerNumber, config)
+          break
+        case 'hapag':
+          result = await fetchHapagTracking(trackingNumber, containerNumber, config)
+          break
+        case 'evergreen':
+          result = await fetchEvergreenTracking(trackingNumber, containerNumber, config)
+          break
+      }
+      
+      if (result && (result.events?.length > 0 || result.eta)) {
+        console.log(`✅ ${carrier.toUpperCase()} 官方API 返回数据`)
         return result
       }
-      console.log('⚠️ Ship24 未返回有效数据，尝试其他方式')
     } catch (error) {
-      console.error('Ship24 API 调用失败:', error.message)
-      // Ship24 失败后尝试其他方式
+      console.error(`${carrier} 官方API调用失败:`, error.message)
+      // 失败后尝试 Ship24
     }
   }
   
-  // 使用各船公司直连API
-  if (config && config.apiKey && config.apiUrl) {
-    // 根据不同船公司调用对应的API
-    const carrierCode = (containerNumber || '').substring(0, 4).toUpperCase()
-    const carrier = CARRIER_CODES[carrierCode]
-    
+  // 2. 使用 Ship24 聚合API 作为备选
+  if (config?.providerCode === 'ship24' && config?.apiKey) {
     try {
-      switch (carrier) {
-        case 'maersk':
-          return await fetchMaerskTracking(trackingNumber, containerNumber, config)
-        case 'cosco':
-          return await fetchCoscoTracking(trackingNumber, containerNumber, config)
-        case 'msc':
-          return await fetchMscTracking(trackingNumber, containerNumber, config)
-        default:
-          // 通用跟踪API
-          if (config.apiUrl) {
-            return await fetchGenericTracking(trackingNumber, containerNumber, config)
-          }
+      console.log('📡 使用 Ship24 聚合API 获取跟踪数据...')
+      const result = await ship24Adapter.fetchTracking(params)
+      if (result && (result.events?.length > 0 || result.carrier)) {
+        console.log('✅ Ship24 返回数据')
+        // 添加数据来源警告
+        result._dataSource = 'ship24'
+        result._warning = 'Ship24为第三方聚合数据，可能与船公司官网有差异'
+        return result
       }
+      console.log('⚠️ Ship24 未返回有效数据')
     } catch (error) {
-      console.error('船公司API调用失败:', error.message)
+      console.error('Ship24 API 调用失败:', error.message)
+    }
+  }
+  
+  // 3. 尝试通用跟踪API
+  if (config && config.apiUrl && !config.providerCode) {
+    try {
+      return await fetchGenericTracking(trackingNumber, containerNumber, config)
+    } catch (error) {
+      console.error('通用跟踪API调用失败:', error.message)
     }
   }
   
@@ -162,6 +199,148 @@ async function fetchMscTracking(billNumber, containerNumber, config) {
 }
 
 /**
+ * CMA CGM 达飞轮船 API 跟踪
+ * OAuth 2.0 认证
+ */
+async function fetchCmaCgmTracking(billNumber, containerNumber, config) {
+  try {
+    // CMA CGM 使用 OAuth 2.0，需要先获取 access token
+    let accessToken = config.accessToken
+    
+    // 如果没有有效的 access token，先获取
+    if (!accessToken && config.clientId && config.clientSecret) {
+      const tokenResponse = await fetch(`${config.apiUrl}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+        }),
+      })
+      
+      if (tokenResponse.ok) {
+        const tokenData = await tokenResponse.json()
+        accessToken = tokenData.access_token
+      }
+    }
+    
+    // 如果仍然没有 token，使用 apiKey 作为备选
+    const authHeader = accessToken 
+      ? `Bearer ${accessToken}` 
+      : `Bearer ${config.apiKey}`
+    
+    const response = await fetch(
+      `${config.apiUrl}/tracking/v1/shipments/${billNumber || containerNumber}`,
+      {
+        headers: {
+          'Authorization': authHeader,
+          'Accept': 'application/json',
+        },
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error(`CMA CGM API error: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return normalizeCmaCgmResponse(data, billNumber || containerNumber)
+  } catch (error) {
+    console.error('达飞轮船API调用失败:', error)
+    throw error // 抛出错误让上层处理降级
+  }
+}
+
+/**
+ * OOCL 东方海外 API 跟踪
+ */
+async function fetchOoclTracking(billNumber, containerNumber, config) {
+  try {
+    const response = await fetch(
+      `${config.apiUrl}/cargoTracking/query?blNo=${billNumber}`,
+      {
+        headers: {
+          'apiKey': config.apiKey,
+          'Accept': 'application/json',
+        },
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error(`OOCL API error: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return normalizeOoclResponse(data, billNumber || containerNumber)
+  } catch (error) {
+    console.error('东方海外API调用失败:', error)
+    throw error
+  }
+}
+
+/**
+ * Hapag-Lloyd 赫伯罗特 API 跟踪
+ */
+async function fetchHapagTracking(billNumber, containerNumber, config) {
+  try {
+    // Hapag-Lloyd 支持按集装箱号或提单号查询
+    const endpoint = containerNumber 
+      ? `/track/v1/containers/${containerNumber}`
+      : `/track/v1/shipments/${billNumber}`
+    
+    const response = await fetch(
+      `${config.apiUrl}${endpoint}`,
+      {
+        headers: {
+          'X-API-Key': config.apiKey,
+          'Accept': 'application/json',
+        },
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error(`Hapag-Lloyd API error: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return normalizeHapagResponse(data, billNumber || containerNumber)
+  } catch (error) {
+    console.error('赫伯罗特API调用失败:', error)
+    throw error
+  }
+}
+
+/**
+ * Evergreen 长荣海运 API 跟踪
+ */
+async function fetchEvergreenTracking(billNumber, containerNumber, config) {
+  try {
+    const response = await fetch(
+      `${config.apiUrl}/tracking/cargo?blNo=${billNumber}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${config.apiKey}`,
+          'Accept': 'application/json',
+        },
+      }
+    )
+    
+    if (!response.ok) {
+      throw new Error(`Evergreen API error: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    return normalizeEvergreenResponse(data, billNumber || containerNumber)
+  } catch (error) {
+    console.error('长荣海运API调用失败:', error)
+    throw error
+  }
+}
+
+/**
  * 通用跟踪API
  */
 async function fetchGenericTracking(billNumber, containerNumber, config) {
@@ -189,6 +368,258 @@ async function fetchGenericTracking(billNumber, containerNumber, config) {
     console.error('通用跟踪API调用失败:', error)
     return getMockTrackingData(billNumber || containerNumber)
   }
+}
+
+// ==================== 响应数据标准化函数 ====================
+
+/**
+ * 标准化 CMA CGM 达飞轮船 API 响应
+ */
+function normalizeCmaCgmResponse(data, trackingNumber) {
+  // CMA CGM 响应结构适配
+  const shipment = data?.shipment || data
+  const events = data?.events || shipment?.events || []
+  
+  return {
+    trackingNumber: shipment?.billOfLading || trackingNumber,
+    carrier: 'CMA CGM',
+    carrierCode: 'CMAU',
+    vessel: shipment?.vessel?.name || null,
+    voyage: shipment?.vessel?.voyage || null,
+    terminal: shipment?.destination?.terminal || extractTerminalFromEvents(events),
+    terminalCode: null,
+    eta: shipment?.eta || shipment?.estimatedArrival || null,
+    etd: shipment?.etd || shipment?.estimatedDeparture || null,
+    ata: shipment?.ata || shipment?.actualArrival || null,
+    pieces: shipment?.cargo?.packageCount || null,
+    grossWeight: shipment?.cargo?.weight?.value || null,
+    volume: shipment?.cargo?.volume?.value || null,
+    containerNumber: shipment?.container?.number || null,
+    containerType: shipment?.container?.type || null,
+    sealNumber: shipment?.container?.sealNumber || null,
+    originPort: shipment?.origin?.port || shipment?.origin?.name || null,
+    destinationPort: shipment?.destination?.port || shipment?.destination?.name || null,
+    status: shipment?.status || null,
+    events: normalizeEvents(events, 'cmacgm'),
+    _dataSource: 'cmacgm_official',
+    _raw: data,
+  }
+}
+
+/**
+ * 标准化 OOCL 东方海外 API 响应
+ */
+function normalizeOoclResponse(data, trackingNumber) {
+  const shipment = data?.cargoTrackingInfo || data
+  const events = shipment?.trackingEvents || []
+  
+  return {
+    trackingNumber: shipment?.blNo || trackingNumber,
+    carrier: 'OOCL',
+    carrierCode: 'OOCL',
+    vessel: shipment?.vesselName || null,
+    voyage: shipment?.voyageNo || null,
+    terminal: shipment?.dischargeTerminal || extractTerminalFromEvents(events),
+    terminalCode: null,
+    eta: shipment?.eta || null,
+    etd: shipment?.etd || null,
+    ata: shipment?.ata || null,
+    pieces: shipment?.packageQty || null,
+    grossWeight: shipment?.grossWeight || null,
+    volume: shipment?.measurement || null,
+    containerNumber: shipment?.containerNo || null,
+    containerType: shipment?.containerType || null,
+    sealNumber: shipment?.sealNo || null,
+    originPort: shipment?.polName || shipment?.pol || null,
+    destinationPort: shipment?.podName || shipment?.pod || null,
+    status: shipment?.currentStatus || null,
+    events: normalizeEvents(events, 'oocl'),
+    _dataSource: 'oocl_official',
+    _raw: data,
+  }
+}
+
+/**
+ * 标准化 Hapag-Lloyd 赫伯罗特 API 响应
+ */
+function normalizeHapagResponse(data, trackingNumber) {
+  const shipment = data?.shipment || data?.container || data
+  const events = data?.events || shipment?.events || []
+  
+  return {
+    trackingNumber: shipment?.blNumber || shipment?.referenceNumber || trackingNumber,
+    carrier: 'Hapag-Lloyd',
+    carrierCode: 'HLCU',
+    vessel: shipment?.vessel || null,
+    voyage: shipment?.voyage || null,
+    terminal: shipment?.destinationTerminal || extractTerminalFromEvents(events),
+    terminalCode: null,
+    eta: shipment?.estimatedTimeOfArrival || shipment?.eta || null,
+    etd: shipment?.estimatedTimeOfDeparture || shipment?.etd || null,
+    ata: shipment?.actualTimeOfArrival || null,
+    pieces: shipment?.numberOfPackages || null,
+    grossWeight: shipment?.grossWeight || null,
+    volume: shipment?.volume || null,
+    containerNumber: shipment?.containerNumber || null,
+    containerType: shipment?.containerType || shipment?.equipmentType || null,
+    sealNumber: shipment?.sealNumber || null,
+    originPort: shipment?.portOfLoading || null,
+    destinationPort: shipment?.portOfDischarge || null,
+    status: shipment?.transportStatus || null,
+    events: normalizeEvents(events, 'hapag'),
+    _dataSource: 'hapag_official',
+    _raw: data,
+  }
+}
+
+/**
+ * 标准化 Evergreen 长荣海运 API 响应
+ */
+function normalizeEvergreenResponse(data, trackingNumber) {
+  const shipment = data?.trackingResult || data
+  const events = shipment?.events || data?.events || []
+  
+  return {
+    trackingNumber: shipment?.blNo || trackingNumber,
+    carrier: 'Evergreen',
+    carrierCode: 'EGLV',
+    vessel: shipment?.vesselName || null,
+    voyage: shipment?.voyageNo || null,
+    terminal: shipment?.dischargeTerminal || extractTerminalFromEvents(events),
+    terminalCode: null,
+    eta: shipment?.eta || null,
+    etd: shipment?.etd || null,
+    ata: shipment?.ata || null,
+    pieces: shipment?.pkgQty || null,
+    grossWeight: shipment?.weight || null,
+    volume: shipment?.cbm || null,
+    containerNumber: shipment?.containerNo || null,
+    containerType: shipment?.cntrType || null,
+    sealNumber: shipment?.sealNo || null,
+    originPort: shipment?.polName || null,
+    destinationPort: shipment?.podName || null,
+    status: shipment?.currentStatus || null,
+    events: normalizeEvents(events, 'evergreen'),
+    _dataSource: 'evergreen_official',
+    _raw: data,
+  }
+}
+
+/**
+ * 从事件列表中提取码头信息
+ */
+function extractTerminalFromEvents(events) {
+  if (!events || events.length === 0) return null
+  
+  // 优先查找卸货/到港事件
+  for (const event of events) {
+    const eventType = (event.eventType || event.type || '').toLowerCase()
+    const status = (event.status || event.description || '').toLowerCase()
+    
+    if (eventType.includes('discharge') || eventType.includes('arrival') ||
+        status.includes('discharge') || status.includes('unload')) {
+      if (event.terminal || event.facility || event.location?.terminal) {
+        return event.terminal || event.facility || event.location?.terminal
+      }
+    }
+  }
+  
+  // 找不到卸货事件，返回最后一个有码头信息的事件
+  for (const event of events.reverse()) {
+    if (event.terminal || event.facility) {
+      return event.terminal || event.facility
+    }
+  }
+  
+  return null
+}
+
+/**
+ * 标准化事件列表
+ */
+function normalizeEvents(events, carrierCode) {
+  if (!events || events.length === 0) return []
+  
+  return events.map(event => {
+    // 不同船公司的事件结构适配
+    let eventTime, eventType, location, description, terminal, vessel
+    
+    switch (carrierCode) {
+      case 'cmacgm':
+        eventTime = event.timestamp || event.dateTime
+        eventType = event.type || event.eventCode
+        location = event.location?.name || event.place
+        description = event.description || event.eventDescription
+        terminal = event.location?.terminal || event.facility
+        vessel = event.vessel
+        break
+        
+      case 'oocl':
+        eventTime = event.eventDate || event.timestamp
+        eventType = event.eventCode || event.eventType
+        location = event.locationName || event.location
+        description = event.eventDesc || event.description
+        terminal = event.terminal
+        vessel = event.vessel
+        break
+        
+      case 'hapag':
+        eventTime = event.eventDateTime || event.timestamp
+        eventType = event.eventType || event.code
+        location = event.location || event.place
+        description = event.eventDescription || event.description
+        terminal = event.terminal || event.facility
+        vessel = event.vessel || event.vesselName
+        break
+        
+      case 'evergreen':
+        eventTime = event.eventDate || event.dateTime
+        eventType = event.eventCode || event.eventType
+        location = event.location || event.place
+        description = event.eventDesc || event.description
+        terminal = event.terminal
+        vessel = event.vessel
+        break
+        
+      default:
+        eventTime = event.timestamp || event.dateTime || event.eventDate
+        eventType = event.type || event.eventType || event.eventCode
+        location = event.location || event.place
+        description = event.description || event.eventDescription
+        terminal = event.terminal || event.facility
+        vessel = event.vessel
+    }
+    
+    return {
+      eventType: mapEventType(eventType),
+      eventTime,
+      location,
+      description,
+      terminal,
+      vessel,
+    }
+  })
+}
+
+/**
+ * 映射事件类型到系统标准类型
+ */
+function mapEventType(rawType) {
+  if (!rawType) return 'IN_TRANSIT'
+  
+  const type = rawType.toLowerCase()
+  
+  if (type.includes('gate') && type.includes('out')) return 'GATE_OUT'
+  if (type.includes('gate') && type.includes('in')) return 'GATE_IN'
+  if (type.includes('load') && !type.includes('unload')) return 'VESSEL_DEPARTED'
+  if (type.includes('depart') || type.includes('sail')) return 'VESSEL_DEPARTED'
+  if (type.includes('arriv')) return 'VESSEL_ARRIVED'
+  if (type.includes('discharge') || type.includes('unload')) return 'DISCHARGED'
+  if (type.includes('customs') && type.includes('release')) return 'CUSTOMS_RELEASED'
+  if (type.includes('customs') || type.includes('clearance')) return 'CUSTOMS_HOLD'
+  if (type.includes('deliver')) return 'DELIVERED'
+  
+  return 'IN_TRANSIT'
 }
 
 /**

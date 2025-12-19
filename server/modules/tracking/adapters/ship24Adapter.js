@@ -102,6 +102,10 @@ function parseShip24Response(data, trackingNumber) {
   const shipment = tracking.shipment || {}
   const events = tracking.events || []
   
+  // 详细日志：记录原始shipment数据结构以便调试
+  console.log('=== Ship24 原始 shipment 数据 ===')
+  console.log(JSON.stringify(shipment, null, 2))
+  
   // 提取货物和集装箱信息
   const delivery = shipment.delivery || {}
   const recipient = shipment.recipient || {}
@@ -119,6 +123,21 @@ function parseShip24Response(data, trackingNumber) {
     e.statusMilestone === 'departed'
   )
   
+  // 从多个可能的字段提取 ETA（Ship24 可能使用不同字段名）
+  const eta = extractETA(shipment, delivery, recipient, events)
+  const etd = extractETD(shipment, departureEvent, origin, events)
+  
+  // 详细日志：记录提取的时间信息
+  console.log('=== Ship24 时间提取结果 ===')
+  console.log({
+    eta,
+    etd,
+    'delivery.estimatedDeliveryDate': delivery.estimatedDeliveryDate,
+    'shipment.estimatedArrivalDate': shipment.estimatedArrivalDate,
+    'shipment.eta': shipment.eta,
+    'recipient.estimatedArrivalDate': recipient?.estimatedArrivalDate,
+  })
+  
   return {
     trackingNumber: shipment.trackingNumber || trackingNumber,
     carrier: shipment.carrier?.name || shipment.courierName || null,
@@ -128,13 +147,13 @@ function parseShip24Response(data, trackingNumber) {
     vessel: extractVessel(events, shipment),
     voyage: extractVoyage(events, shipment),
     
-    // 码头信息
-    terminal: extractTerminal(events),
+    // 码头信息 - 改进：优先从目的港事件或shipment提取
+    terminal: extractTerminal(events, shipment, recipient),
     terminalCode: null,
     
-    // 时间信息
-    eta: delivery.estimatedDeliveryDate || null,
-    etd: shipment.estimatedDepartureDate || departureEvent?.datetime || null,
+    // 时间信息 - 使用改进的提取逻辑
+    eta: eta,
+    etd: etd,
     ata: arrivalEvent?.datetime || null, // 实际到港时间
     
     // 货物信息（Ship24 可能不返回这些详细信息）
@@ -168,6 +187,63 @@ function parseShip24Response(data, trackingNumber) {
     // 原始数据（用于调试）
     _raw: tracking,
   }
+}
+
+/**
+ * 从多个可能的字段提取 ETA（预计到达时间）
+ * Ship24 API 可能在不同字段返回 ETA
+ */
+function extractETA(shipment, delivery, recipient, events) {
+  // 按优先级尝试多个可能的字段
+  const possibleETA = 
+    delivery?.estimatedDeliveryDate ||    // 最常见
+    shipment?.estimatedArrivalDate ||     // 有些API用这个字段
+    shipment?.eta ||                       // 简写形式
+    recipient?.estimatedArrivalDate ||     // 从收件人信息
+    shipment?.arrivalDate ||               // 到达日期
+    delivery?.eta ||                        // delivery下的eta
+    null
+  
+  // 如果都没有，尝试从事件中提取预计到港时间
+  if (!possibleETA && events?.length > 0) {
+    // 查找包含ETA信息的事件
+    for (const event of events) {
+      if (event.estimatedArrivalDate) return event.estimatedArrivalDate
+      if (event.eta) return event.eta
+      // 从描述中提取
+      const match = event.status?.match(/(?:ETA|预计到达)[:\s]*(\d{4}-\d{2}-\d{2})/i)
+      if (match) return match[1]
+    }
+  }
+  
+  return possibleETA
+}
+
+/**
+ * 从多个可能的字段提取 ETD（预计离开时间）
+ */
+function extractETD(shipment, departureEvent, origin, events) {
+  // 按优先级尝试多个可能的字段
+  const possibleETD = 
+    shipment?.estimatedDepartureDate ||    // 最常见
+    shipment?.etd ||                        // 简写形式
+    origin?.estimatedDepartureDate ||       // 从起运信息
+    departureEvent?.datetime ||             // 从离港事件
+    shipment?.departureDate ||              // 离开日期
+    null
+  
+  // 如果都没有，尝试从事件中提取
+  if (!possibleETD && events?.length > 0) {
+    for (const event of events) {
+      if (event.estimatedDepartureDate) return event.estimatedDepartureDate
+      if (event.etd) return event.etd
+      // 从描述中提取
+      const match = event.status?.match(/(?:ETD|预计离开)[:\s]*(\d{4}-\d{2}-\d{2})/i)
+      if (match) return match[1]
+    }
+  }
+  
+  return possibleETD
 }
 
 /**
@@ -205,17 +281,54 @@ function extractVoyage(events, shipment) {
 
 /**
  * 从事件中提取码头信息
+ * 改进：优先从卸货港/目的港相关的事件和shipment信息提取
  */
-function extractTerminal(events) {
-  for (const event of events) {
-    if (event.location?.facility) {
-      return event.location.facility
+function extractTerminal(events, shipment, recipient) {
+  // 1. 优先从 shipment 的目的港信息提取
+  if (shipment?.dischargePort?.facility) {
+    return shipment.dischargePort.facility
+  }
+  if (shipment?.destination?.facility) {
+    return shipment.destination.facility
+  }
+  if (recipient?.facility) {
+    return recipient.facility
+  }
+  if (recipient?.terminal) {
+    return recipient.terminal
+  }
+  
+  // 2. 从事件中查找目的港码头（优先卸货事件）
+  if (events && events.length > 0) {
+    // 先找卸货/到港事件的码头
+    for (const event of events) {
+      const status = (event.status || '').toLowerCase()
+      if (status.includes('discharg') || status.includes('unload') || 
+          event.statusMilestone === 'arrived') {
+        if (event.location?.facility) {
+          return event.location.facility
+        }
+        if (event.location?.terminal) {
+          return event.location.terminal
+        }
+        // 从location name中提取（如果包含Terminal/Port等关键词）
+        if (event.location?.name && 
+            (event.location.name.includes('Terminal') || 
+             event.location.name.includes('Port') ||
+             event.location.name.includes('Container'))) {
+          return event.location.name
+        }
+      }
     }
-    // 到港/卸船事件通常包含码头信息
-    if (event.statusMilestone === 'arrived' || event.status?.includes('discharged')) {
-      return event.location?.name || null
+    
+    // 再找其他事件中的facility信息
+    for (const event of events) {
+      if (event.location?.facility) {
+        return event.location.facility
+      }
     }
   }
+  
   return null
 }
 

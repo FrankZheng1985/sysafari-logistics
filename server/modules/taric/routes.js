@@ -109,4 +109,18 @@ router.get('/taric/translate-status', controller.getTranslationStatus)
 // POST /api/taric/clear-translation-cache
 router.post('/taric/clear-translation-cache', controller.clearTranslationCache)
 
+// ==================== 中国反倾销税查询 ====================
+
+// 获取中国反倾销税摘要（按产品类别分组统计）
+// GET /api/taric/china-anti-dumping/summary
+router.get('/taric/china-anti-dumping/summary', controller.getChinaAntiDumpingSummary)
+
+// 获取所有中国反倾销税 HS 编码列表
+// GET /api/taric/china-anti-dumping/codes
+router.get('/taric/china-anti-dumping/codes', controller.getChinaAntiDumpingCodes)
+
+// 查询单个 HS 编码的中国反倾销税
+// GET /api/taric/china-anti-dumping/:hsCode
+router.get('/taric/china-anti-dumping/:hsCode', controller.lookupChinaAntiDumping)
+
 export default router

@@ -11,6 +11,7 @@
 import https from 'https'
 import http from 'http'
 import { findDutyRate } from './commonDutyRates.js'
+import { findChinaAntiDumpingRate } from './chinaAntiDumpingRates.js'
 
 // ==================== 配置 ====================
 
@@ -196,23 +197,33 @@ export async function lookupTaricCode(hsCode, originCountry = '') {
   // 先从本地常用税率数据库查找
   const localRate = findDutyRate(normalizedCode)
   
+  // 如果是中国原产地，查找反倾销税数据
+  let chinaAntiDumping = null
+  if (originCountry && originCountry.toUpperCase() === 'CN') {
+    chinaAntiDumping = findChinaAntiDumpingRate(normalizedCode)
+  }
+  
   let result = {
     hsCode: normalizedCode.substring(0, 8),
     hsCode10: normalizedCode,
     originCountryCode: originCountry || null,
     measures: [],
-    dutyRate: localRate?.dutyRate ?? null,
+    dutyRate: chinaAntiDumping?.dutyRate ?? localRate?.dutyRate ?? null,
     thirdCountryDuty: localRate?.thirdCountryDuty ?? null,
     preferentialRates: [],
-    antiDumpingRate: null,
-    countervailingRate: null,
+    antiDumpingRate: chinaAntiDumping?.antiDumpingRate ?? null,
+    antiDumpingRateRange: chinaAntiDumping?.antiDumpingRateRange ?? null,
+    countervailingRate: chinaAntiDumping?.countervailingRate ?? null,
     additionalCodes: [],
     restrictions: [],
     quotas: [],
-    goodsDescription: localRate?.description || null,
-    goodsDescriptionCn: localRate?.descriptionCn || null,
-    dataSource: localRate ? 'local_database' : 'taric_api',
-    note: localRate?.note || null,
+    goodsDescription: chinaAntiDumping?.description || localRate?.description || null,
+    goodsDescriptionCn: chinaAntiDumping?.descriptionCn || localRate?.descriptionCn || null,
+    dataSource: chinaAntiDumping ? 'china_anti_dumping_database' : (localRate ? 'local_database' : 'taric_api'),
+    note: chinaAntiDumping?.note || localRate?.note || null,
+    regulationId: chinaAntiDumping?.regulationId || null,
+    validFrom: chinaAntiDumping?.validFrom || null,
+    totalDutyRate: chinaAntiDumping?.totalDutyRate ?? null,
     queryTime: new Date().toISOString()
   }
   
@@ -613,6 +624,15 @@ export async function checkApiHealth() {
 
 // ==================== 导出 ====================
 
+// 重新导出中国反倾销税相关函数
+export { 
+  findChinaAntiDumpingRate,
+  getAllChinaAntiDumpingRates,
+  getAntiDumpingHsCodes,
+  hasAntiDumpingDuty,
+  getAntiDumpingSummary
+} from './chinaAntiDumpingRates.js'
+
 export default {
   lookupTaricCode,
   getMeasureDetails,
@@ -620,5 +640,7 @@ export default {
   getCountryCodes,
   checkApiHealth,
   clearCache,
-  getCacheStats
+  getCacheStats,
+  // 中国反倾销税
+  findChinaAntiDumpingRate
 }
