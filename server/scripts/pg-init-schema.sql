@@ -83,7 +83,17 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     cmr_exception_resolution TEXT,
     cmr_exception_resolved_time TEXT,
     doc_swap_status TEXT DEFAULT '未换单',
-    doc_swap_time TEXT
+    doc_swap_time TEXT,
+    -- 附加属性字段
+    container_type TEXT,
+    bill_type TEXT,
+    transport_arrangement TEXT,
+    consignee_type TEXT,
+    container_return TEXT,
+    full_container_transport TEXT,
+    last_mile_transport TEXT,
+    devanning TEXT,
+    t1_declaration TEXT
 );
 
 -- ==================== 操作日志表 ====================
@@ -1388,9 +1398,106 @@ CREATE TABLE IF NOT EXISTS import_records (
 CREATE INDEX IF NOT EXISTS idx_import_records_supplier ON import_records(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_import_records_status ON import_records(status);
 
+-- ==================== API对接管理模块 ====================
+CREATE TABLE IF NOT EXISTS api_integrations (
+    id SERIAL PRIMARY KEY,
+    api_code TEXT UNIQUE NOT NULL,           -- 唯一标识：ship24, tencent_ocr, tencent_cos 等
+    api_name TEXT NOT NULL,                  -- 显示名称
+    provider TEXT,                           -- 服务商
+    category TEXT DEFAULT 'other',           -- 分类：tracking/ocr/storage/translation/tariff/validation/infrastructure
+    api_url TEXT,                            -- API地址
+    health_check_url TEXT,                   -- 健康检查端点
+    pricing_model TEXT DEFAULT 'free',       -- 计费模式：per_call/per_volume/subscription/free
+    unit_price NUMERIC DEFAULT 0,           -- 单价
+    currency TEXT DEFAULT 'USD',             -- 计费货币
+    balance NUMERIC DEFAULT 0,              -- 当前余额
+    total_recharged NUMERIC DEFAULT 0,       -- 累计充值
+    total_consumed NUMERIC DEFAULT 0,       -- 累计消费
+    alert_threshold NUMERIC DEFAULT 100,     -- 预警阈值
+    recharge_url TEXT,                       -- 充值入口链接
+    status TEXT DEFAULT 'active',            -- 状态：active/inactive/suspended
+    health_status TEXT DEFAULT 'unknown',    -- 健康状态：online/offline/degraded/unknown
+    last_health_check TIMESTAMP,             -- 上次健康检查时间
+    health_check_message TEXT,               -- 健康检查返回信息
+    response_time_ms INTEGER,                -- 响应时间（毫秒）
+    last_sync_time TIMESTAMP,                -- 上次同步时间
+    config_json TEXT,                        -- 扩展配置JSON
+    description TEXT,                        -- 描述说明
+    icon TEXT,                               -- 图标名称
+    sort_order INTEGER DEFAULT 0,            -- 排序
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_integrations_code ON api_integrations(api_code);
+CREATE INDEX IF NOT EXISTS idx_api_integrations_category ON api_integrations(category);
+CREATE INDEX IF NOT EXISTS idx_api_integrations_status ON api_integrations(status);
+CREATE INDEX IF NOT EXISTS idx_api_integrations_health ON api_integrations(health_status);
+
+CREATE TABLE IF NOT EXISTS api_usage_records (
+    id SERIAL PRIMARY KEY,
+    api_id INTEGER REFERENCES api_integrations(id) ON DELETE CASCADE,
+    api_code TEXT NOT NULL,
+    usage_date DATE NOT NULL,
+    call_count INTEGER DEFAULT 0,            -- 调用次数
+    success_count INTEGER DEFAULT 0,         -- 成功次数
+    fail_count INTEGER DEFAULT 0,             -- 失败次数
+    data_volume NUMERIC DEFAULT 0,            -- 数据量（MB/KB等）
+    cost NUMERIC DEFAULT 0,                   -- 费用
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(api_code, usage_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_usage_code ON api_usage_records(api_code);
+CREATE INDEX IF NOT EXISTS idx_api_usage_date ON api_usage_records(usage_date);
+CREATE INDEX IF NOT EXISTS idx_api_usage_api_id ON api_usage_records(api_id);
+
+CREATE TABLE IF NOT EXISTS api_recharge_records (
+    id SERIAL PRIMARY KEY,
+    api_id INTEGER REFERENCES api_integrations(id) ON DELETE CASCADE,
+    api_code TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    recharge_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    payment_method TEXT,                     -- 支付方式
+    reference_no TEXT,                       -- 参考号/订单号
+    operator TEXT,                           -- 操作人
+    remark TEXT,                             -- 备注
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_recharge_code ON api_recharge_records(api_code);
+CREATE INDEX IF NOT EXISTS idx_api_recharge_time ON api_recharge_records(recharge_time);
+CREATE INDEX IF NOT EXISTS idx_api_recharge_api_id ON api_recharge_records(api_id);
+
+-- ==================== 船公司跟踪API配置表 ====================
+CREATE TABLE IF NOT EXISTS tracking_api_configs (
+    id SERIAL PRIMARY KEY,
+    provider_code VARCHAR(50) NOT NULL UNIQUE,
+    provider_name VARCHAR(100) NOT NULL,
+    transport_type VARCHAR(20) NOT NULL DEFAULT 'sea',
+    api_type VARCHAR(20) DEFAULT 'rest',
+    api_url VARCHAR(500),
+    api_key VARCHAR(500),
+    api_secret VARCHAR(500),
+    client_id VARCHAR(200),
+    client_secret VARCHAR(500),
+    extra_config JSONB,
+    status VARCHAR(20) DEFAULT 'inactive',
+    description TEXT,
+    priority INTEGER DEFAULT 10,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tracking_api_configs_provider ON tracking_api_configs(provider_code);
+CREATE INDEX IF NOT EXISTS idx_tracking_api_configs_transport ON tracking_api_configs(transport_type);
+CREATE INDEX IF NOT EXISTS idx_tracking_api_configs_status ON tracking_api_configs(status);
+
 -- 完成提示
 DO $$
 BEGIN
     RAISE NOTICE '✅ PostgreSQL 数据库表结构初始化完成！';
-    RAISE NOTICE '📊 共创建 59 个数据表';
+    RAISE NOTICE '📊 共创建 63 个数据表';
 END $$;
