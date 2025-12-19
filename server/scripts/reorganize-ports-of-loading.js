@@ -39,7 +39,7 @@ async function reorganizePortsOfLoading() {
     // 先清空现有数据（可选，根据实际情况决定）
     // await db.prepare('DELETE FROM ports_of_loading').run()
     
-    // 准备插入/更新语句（兼容SQLite和PostgreSQL）
+    // 准备插入/更新语句
     const checkStmt = db.prepare('SELECT id FROM ports_of_loading WHERE port_code = ?')
     const insertStmt = db.prepare(`
       INSERT INTO ports_of_loading (

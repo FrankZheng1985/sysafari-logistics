@@ -62,6 +62,7 @@ export default function FinanceDashboard() {
   const tabs = [
     { label: '财务概览', path: '/finance' },
     { label: '发票管理', path: '/finance/invoices' },
+    { label: '历史记录', path: '/finance/invoices/history' },
     { label: '收付款', path: '/finance/payments' },
     { label: '费用管理', path: '/finance/fees' },
     { label: '财务报表', path: '/finance/reports' },

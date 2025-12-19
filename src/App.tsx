@@ -42,6 +42,7 @@ import CRMFeedbacks from './pages/CRMFeedbacks'
 // 财务模块
 import FinanceDashboard from './pages/FinanceDashboard'
 import FinanceInvoices from './pages/FinanceInvoices'
+import FinanceInvoiceHistory from './pages/FinanceInvoiceHistory'
 import InvoiceDetail from './pages/InvoiceDetail'
 import EditInvoice from './pages/EditInvoice'
 import RegisterPayment from './pages/RegisterPayment'
@@ -187,6 +188,7 @@ function AppRoutes() {
         {/* 财务管理 */}
         <Route path="/finance" element={<FinanceDashboard />} />
         <Route path="/finance/invoices" element={<FinanceInvoices />} />
+        <Route path="/finance/invoices/history" element={<FinanceInvoiceHistory />} />
         <Route path="/finance/invoices/create" element={<CreateInvoice />} />
         <Route path="/finance/invoices/:id/edit" element={<EditInvoice />} />
         <Route path="/finance/invoices/:id/payment" element={<RegisterPayment />} />

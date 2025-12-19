@@ -650,7 +650,7 @@ export default function InvoiceDetail() {
               {invoice.status === 'draft' && (
                 <button 
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                  onClick={() => {/* TODO: 发布发票 */}}
+                  onClick={() => alert('发布发票功能开发中')}
                 >
                   <CheckCircle className="w-4 h-4 text-green-500" />
                   发布发票

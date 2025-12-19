@@ -115,7 +115,8 @@ export function generateId() {
 }
 
 /**
- * 将 SQLite 风格的 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
+ * 将 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
+ * (兼容旧代码的占位符格式)
  * @param {string} sql - 带 ? 占位符的 SQL
  */
 export function convertPlaceholders(sql) {

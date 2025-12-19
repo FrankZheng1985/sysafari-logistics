@@ -220,10 +220,10 @@ export function getCurrentSyncStatus() {
 }
 
 /**
- * 取消当前同步（暂不支持）
+ * 取消当前同步
+ * 注：当前版本暂不支持取消正在进行的同步任务
  */
 export function cancelSync() {
-  // TODO: 实现取消逻辑
   throw new Error('暂不支持取消同步')
 }
 

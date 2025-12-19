@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { 
-  Search, Plus, FileText, Edit2, Trash2, Eye,
-  CheckCircle, Clock, AlertTriangle, XCircle,
-  Download, FileSpreadsheet, RefreshCw
+  Search, FileText, Eye, History,
+  CheckCircle, XCircle, Download, FileSpreadsheet
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -29,58 +28,31 @@ interface Invoice {
   status: string
   description: string
   createTime: string
+  updateTime?: string
   pdfUrl?: string
   excelUrl?: string
 }
 
-interface InvoiceStats {
-  sales: {
-    totalCount: number
-    totalAmount: number
-    paidAmount: number
-    unpaidAmount: number
-    pendingCount: number
-    paidCount: number
-    overdueCount: number
-  }
-  purchase: {
-    totalCount: number
-    totalAmount: number
-    paidAmount: number
-    unpaidAmount: number
-    pendingCount: number
-    paidCount: number
-    overdueCount: number
-  }
+interface HistoryStats {
+  totalCount: number
+  paidCount: number
+  cancelledCount: number
+  totalPaidAmount: number
 }
 
-export default function FinanceInvoices() {
+export default function FinanceInvoiceHistory() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
   
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [stats, setStats] = useState<InvoiceStats | null>(null)
+  const [stats, setStats] = useState<HistoryStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
   
   const [searchValue, setSearchValue] = useState('')
-  const [filterType, setFilterType] = useState(searchParams.get('type') || '')
-  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
-  
-  // 当 URL 参数变化时更新筛选状态
-  useEffect(() => {
-    const type = searchParams.get('type') || ''
-    const status = searchParams.get('status') || ''
-    setFilterType(type)
-    setFilterStatus(status)
-  }, [searchParams])
-  
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [modalVisible, setModalVisible] = useState(false) // modalVisible reserved for edit functionality
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null) // editingInvoice reserved for edit functionality
+  const [filterType, setFilterType] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
 
   const tabs = [
     { label: '财务概览', path: '/finance' },
@@ -93,7 +65,6 @@ export default function FinanceInvoices() {
     { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
-   
   useEffect(() => {
     fetchInvoices()
     fetchStats()
@@ -103,11 +74,13 @@ export default function FinanceInvoices() {
   const fetchInvoices = async () => {
     try {
       setLoading(true)
+      // 只查询已完成的发票（已付款和已取消）
+      const statusFilter = filterStatus || 'paid,cancelled'
       const params = new URLSearchParams({
         page: page.toString(),
         pageSize: pageSize.toString(),
+        status: statusFilter,
         ...(filterType && { type: filterType }),
-        ...(filterStatus && { status: filterStatus }),
         ...(searchValue && { search: searchValue }),
       })
       
@@ -119,7 +92,7 @@ export default function FinanceInvoices() {
         setTotal(data.data?.total || 0)
       }
     } catch (error) {
-      console.error('获取发票列表失败:', error)
+      console.error('获取历史发票列表失败:', error)
     } finally {
       setLoading(false)
     }
@@ -130,29 +103,17 @@ export default function FinanceInvoices() {
       const response = await fetch(`${API_BASE}/api/invoices/stats`)
       const data = await response.json()
       if (data.errCode === 200) {
-        setStats(data.data)
+        const salesStats = data.data?.sales || {}
+        const purchaseStats = data.data?.purchase || {}
+        setStats({
+          totalCount: (salesStats.paidCount || 0) + (purchaseStats.paidCount || 0),
+          paidCount: (salesStats.paidCount || 0) + (purchaseStats.paidCount || 0),
+          cancelledCount: 0, // 后端可以扩展返回此数据
+          totalPaidAmount: (salesStats.paidAmount || 0) + (purchaseStats.paidAmount || 0),
+        })
       }
     } catch (error) {
       console.error('获取发票统计失败:', error)
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这张发票吗？')) return
-    
-    try {
-      const response = await fetch(`${API_BASE}/api/invoices/${id}`, { method: 'DELETE' })
-      const data = await response.json()
-      
-      if (data.errCode === 200) {
-        fetchInvoices()
-        fetchStats()
-      } else {
-        alert(data.msg || '删除失败')
-      }
-    } catch (error) {
-      console.error('删除发票失败:', error)
-      alert('删除失败')
     }
   }
 
@@ -166,14 +127,25 @@ export default function FinanceInvoices() {
 
   const getStatusConfig = (status: string) => {
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof CheckCircle }> = {
-      draft: { label: '草稿', color: 'text-gray-600', bg: 'bg-gray-100', icon: FileText },
-      pending: { label: '待付款', color: 'text-yellow-600', bg: 'bg-yellow-100', icon: Clock },
-      partial: { label: '部分付款', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock },
       paid: { label: '已付款', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
-      overdue: { label: '已逾期', color: 'text-red-600', bg: 'bg-red-100', icon: AlertTriangle },
-      cancelled: { label: '已取消', color: 'text-gray-400', bg: 'bg-gray-50', icon: XCircle },
+      cancelled: { label: '已取消', color: 'text-gray-400', bg: 'bg-gray-100', icon: XCircle },
     }
-    return configs[status] || configs.pending
+    return configs[status] || { label: status, color: 'text-gray-600', bg: 'bg-gray-100', icon: FileText }
+  }
+
+  const formatDateTime = (dateStr: string | undefined) => {
+    if (!dateStr) return '-'
+    try {
+      return new Date(dateStr).toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch {
+      return dateStr
+    }
   }
 
   const columns: Column<Invoice>[] = useMemo(() => [
@@ -236,14 +208,9 @@ export default function FinanceInvoices() {
       align: 'right',
       render: (item) => (
         <div className="text-right">
-          <div className={`font-medium ${item.paidAmount >= item.totalAmount ? 'text-green-600' : 'text-gray-900'}`}>
+          <div className="font-medium text-green-600">
             {formatCurrency(item.paidAmount, item.currency)}
           </div>
-          {item.paidAmount < item.totalAmount && (
-            <div className="text-xs text-red-500">
-              未付 {formatCurrency(item.totalAmount - item.paidAmount, item.currency)}
-            </div>
-          )}
         </div>
       )
     },
@@ -263,23 +230,19 @@ export default function FinanceInvoices() {
       }
     },
     {
-      key: 'dueDate',
-      label: '到期日',
-      width: 100,
-      render: (item) => {
-        if (!item.dueDate) return <span className="text-gray-400">-</span>
-        const isOverdue = new Date(item.dueDate) < new Date() && item.status !== 'paid'
-        return (
-          <span className={isOverdue ? 'text-red-500' : 'text-gray-600'}>
-            {item.dueDate}
-          </span>
-        )
-      }
+      key: 'updateTime',
+      label: '完成时间',
+      width: 140,
+      render: (item) => (
+        <span className="text-xs text-gray-500">
+          {formatDateTime(item.updateTime || item.createTime)}
+        </span>
+      )
     },
     {
       key: 'actions',
       label: '操作',
-      width: 180,
+      width: 120,
       render: (item) => (
         <div className="flex items-center gap-1">
           <button
@@ -307,29 +270,9 @@ export default function FinanceInvoices() {
               <FileSpreadsheet className="w-3.5 h-3.5" />
             </button>
           )}
-          <button
-            onClick={() => {
-              setEditingInvoice(item)
-              setModalVisible(true)
-            }}
-            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-            title="编辑"
-            disabled={item.status === 'paid'}
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => handleDelete(item.id)}
-            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-            title="删除"
-            disabled={item.paidAmount > 0}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       )
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [navigate])
 
   return (
@@ -337,53 +280,32 @@ export default function FinanceInvoices() {
       <PageHeader
         title="财务管理"
         tabs={tabs}
-        activeTab="/finance/invoices"
+        activeTab="/finance/invoices/history"
         onTabChange={(path) => navigate(path)}
       />
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* 销售发票统计 */}
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-blue-700">销售发票（应收）</span>
-            <span className="text-xs text-blue-600">{stats?.sales?.totalCount || 0} 张</span>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <div className="text-xs text-gray-500">总金额</div>
-              <div className="text-sm font-medium text-gray-900">{formatCurrency(stats?.sales?.totalAmount || 0)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">已收款</div>
-              <div className="text-sm font-medium text-green-600">{formatCurrency(stats?.sales?.paidAmount || 0)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">未收款</div>
-              <div className="text-sm font-medium text-red-600">{formatCurrency(stats?.sales?.unpaidAmount || 0)}</div>
-            </div>
-          </div>
+      <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <History className="w-5 h-5 text-green-600" />
+          <span className="text-sm font-medium text-gray-700">历史发票统计</span>
         </div>
-
-        {/* 采购发票统计 */}
-        <div className="bg-orange-50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-orange-700">采购发票（应付）</span>
-            <span className="text-xs text-orange-600">{stats?.purchase?.totalCount || 0} 张</span>
+        <div className="grid grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-gray-500">已完成发票</div>
+            <div className="text-lg font-semibold text-gray-900">{stats?.totalCount || 0} 张</div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <div className="text-xs text-gray-500">总金额</div>
-              <div className="text-sm font-medium text-gray-900">{formatCurrency(stats?.purchase?.totalAmount || 0)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">已付款</div>
-              <div className="text-sm font-medium text-green-600">{formatCurrency(stats?.purchase?.paidAmount || 0)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">未付款</div>
-              <div className="text-sm font-medium text-red-600">{formatCurrency(stats?.purchase?.unpaidAmount || 0)}</div>
-            </div>
+          <div>
+            <div className="text-xs text-gray-500">已付款发票</div>
+            <div className="text-lg font-semibold text-green-600">{stats?.paidCount || 0} 张</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">已取消发票</div>
+            <div className="text-lg font-semibold text-gray-400">{stats?.cancelledCount || 0} 张</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">累计收款金额</div>
+            <div className="text-lg font-semibold text-primary-600">{formatCurrency(stats?.totalPaidAmount || 0)}</div>
           </div>
         </div>
       </div>
@@ -406,10 +328,7 @@ export default function FinanceInvoices() {
           {/* 类型筛选 */}
           <select
             value={filterType}
-            onChange={(e) => {
-              setFilterType(e.target.value)
-              setSearchParams(e.target.value ? { type: e.target.value } : {})
-            }}
+            onChange={(e) => setFilterType(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
           >
             <option value="">全部类型</option>
@@ -424,21 +343,10 @@ export default function FinanceInvoices() {
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
           >
             <option value="">全部状态</option>
-            <option value="draft">草稿</option>
-            <option value="pending">待付款</option>
-            <option value="partial">部分付款</option>
             <option value="paid">已付款</option>
-            <option value="overdue">已逾期</option>
+            <option value="cancelled">已取消</option>
           </select>
         </div>
-
-        <button
-          onClick={() => navigate('/finance/invoices/create')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          新建发票
-        </button>
       </div>
 
       {/* 数据表格 */}
@@ -481,4 +389,3 @@ export default function FinanceInvoices() {
     </div>
   )
 }
-

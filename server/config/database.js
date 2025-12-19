@@ -37,7 +37,8 @@ if (!DATABASE_URL) {
 let pgPool = null
 
 /**
- * 将 SQLite 风格的 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
+ * 将 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
+ * (兼容旧代码的占位符格式)
  */
 function convertPlaceholders(sql) {
   let index = 0
@@ -45,7 +46,8 @@ function convertPlaceholders(sql) {
 }
 
 /**
- * 将 SQLite 的 datetime 函数转换为 PostgreSQL 语法
+ * 将 datetime 函数转换为 PostgreSQL 标准语法
+ * (兼容旧代码的日期时间函数)
  */
 function convertDateTimeFunctions(sql) {
   return sql
@@ -55,9 +57,9 @@ function convertDateTimeFunctions(sql) {
     // datetime('now', '-1 minutes') → NOW() - INTERVAL '1 minutes'
     .replace(/datetime\s*\(\s*'now'\s*,\s*'-(\d+)\s*minutes'\s*\)/gi, 
       "NOW() - INTERVAL '$1 minutes'")
-    // datetime('now', 'localtime') 或 datetime("now", "localtime") → NOW()
+    // datetime('now', 'localtime') → NOW()
     .replace(/datetime\s*\(\s*['"]now['"]\s*,\s*['"]localtime['"]\s*\)/gi, 'NOW()')
-    // datetime('now') 或 datetime("now") → NOW()
+    // datetime('now') → NOW()
     .replace(/datetime\s*\(\s*['"]now['"]\s*\)/gi, 'NOW()')
     // CURRENT_TIMESTAMP → NOW()
     .replace(/CURRENT_TIMESTAMP/gi, 'NOW()')
@@ -84,7 +86,8 @@ function extractParenthesesContent(str, startIndex) {
 }
 
 /**
- * 将 SQLite 的 INSERT OR REPLACE 转换为 PostgreSQL 的 INSERT ON CONFLICT
+ * 将 INSERT OR REPLACE 转换为 PostgreSQL 的 INSERT ON CONFLICT
+ * (兼容旧代码的插入/替换语法)
  */
 function convertInsertOrReplace(sql) {
   // 先检查是否包含 INSERT OR REPLACE
@@ -151,9 +154,10 @@ function convertInsertOrReplace(sql) {
 }
 
 /**
- * 转换 SQLite SQL 为 PostgreSQL 兼容语法
+ * 转换旧式 SQL 为 PostgreSQL 标准语法
+ * (兼容层：处理历史代码中的非标准SQL)
  */
-function convertSQLiteToPostgres(sql) {
+function convertLegacyToPostgres(sql) {
   let pgSql = sql
   pgSql = convertDateTimeFunctions(pgSql)
   pgSql = convertInsertOrReplace(pgSql)
@@ -162,14 +166,14 @@ function convertSQLiteToPostgres(sql) {
 
 /**
  * PostgreSQL Statement 包装类
- * 模拟 better-sqlite3 的同步 API，但内部使用 Promise
+ * 提供同步风格的 API，内部使用 Promise
  */
 class PgStatement {
   constructor(pool, sql) {
     this.pool = pool
     this.originalSql = sql
-    // 先转换 SQLite 语法，再转换占位符
-    this.pgSql = convertPlaceholders(convertSQLiteToPostgres(sql))
+    // 先转换旧式语法，再转换占位符
+    this.pgSql = convertPlaceholders(convertLegacyToPostgres(sql))
   }
   
   run(...params) {
@@ -212,7 +216,7 @@ class PgStatement {
 
 /**
  * PostgreSQL 数据库适配器
- * 提供与 better-sqlite3 兼容的 API
+ * 提供统一的同步风格数据库访问 API
  */
 class PostgresDatabase {
   constructor(pool) {
@@ -279,8 +283,8 @@ class PostgresTransactionDb {
   }
   
   prepare(sql) {
-    // 先转换 SQLite 语法，再转换占位符
-    const pgSql = convertPlaceholders(convertSQLiteToPostgres(sql))
+    // 先转换旧式语法，再转换占位符
+    const pgSql = convertPlaceholders(convertLegacyToPostgres(sql))
     return {
       run: async (...params) => {
         const result = await this.client.query(pgSql, params)

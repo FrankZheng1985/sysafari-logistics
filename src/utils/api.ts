@@ -422,12 +422,12 @@ export async function assignBillToOperator(
  * 接口地址: GET /api/files/download?declarationNumber={declarationNumber}
  */
 export async function getFileDownloadUrl(declarationNumber: string): Promise<ApiResponse<{ downloadUrl: string; fileName: string }>> {
-  // TODO: 对接后台系统时，取消注释以下代码
+  // 注：此接口使用模拟数据，后台接口完成后可切换为真实 API 调用
   // return request<ApiResponse<{ downloadUrl: string; fileName: string }>>(
   //   `/files/download?declarationNumber=${declarationNumber}`
   // )
   
-  // 临时模拟数据
+  // 模拟数据
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({

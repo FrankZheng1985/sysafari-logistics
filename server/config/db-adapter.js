@@ -31,7 +31,8 @@ if (!DATABASE_URL) {
 }
 
 /**
- * 将 SQLite 风格的 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
+ * 将 ? 占位符转换为 PostgreSQL 风格的 $1, $2...
+ * (兼容旧代码的占位符格式)
  */
 function convertPlaceholders(sql) {
   let index = 0
@@ -39,21 +40,22 @@ function convertPlaceholders(sql) {
 }
 
 /**
- * 将 SQLite 语法转换为 PostgreSQL 语法
+ * 将旧式语法转换为 PostgreSQL 标准语法
+ * (兼容层：处理历史代码中的非标准SQL)
  */
-function convertSQLiteToPG(sql) {
+function convertLegacyToPG(sql) {
   let pgSql = sql
   
-  // 1. datetime('now', 'localtime') 或 datetime("now", "localtime") → NOW()
+  // datetime('now', 'localtime') → NOW()
   pgSql = pgSql.replace(/datetime\s*\(\s*['"]now['"]\s*,\s*['"]localtime['"]\s*\)/gi, 'NOW()')
   
-  // 1.5. datetime('now') 或 datetime("now") → NOW()
+  // datetime('now') → NOW()
   pgSql = pgSql.replace(/datetime\s*\(\s*['"]now['"]\s*\)/gi, 'NOW()')
   
-  // 2. CURRENT_TIMESTAMP → NOW() (PostgreSQL 兼容，但统一使用 NOW())
+  // CURRENT_TIMESTAMP → NOW() (统一使用 NOW())
   pgSql = pgSql.replace(/CURRENT_TIMESTAMP/gi, 'NOW()')
   
-  // 3. INSERT OR REPLACE INTO table (...) VALUES (...)
+  // INSERT OR REPLACE INTO table (...) VALUES (...)
   //    → INSERT INTO table (...) VALUES (...) ON CONFLICT (primary_key) DO UPDATE SET ...
   const insertOrReplaceMatch = pgSql.match(/INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i)
   if (insertOrReplaceMatch) {
@@ -85,7 +87,7 @@ function convertSQLiteToPG(sql) {
 }
 
 /**
- * PostgreSQL 适配器 - 模拟 better-sqlite3 的 API
+ * PostgreSQL 适配器 - 提供统一的同步风格数据库访问 API
  */
 class PostgresAdapter {
   constructor() {
@@ -112,17 +114,17 @@ class PostgresAdapter {
   }
   
   /**
-   * 模拟 db.prepare(sql) - 返回一个 Statement 对象
+   * db.prepare(sql) - 返回一个 Statement 对象
    */
   prepare(sql) {
-    // 先转换 SQLite 语法到 PostgreSQL，再转换占位符
-    const convertedSql = convertSQLiteToPG(sql)
+    // 先转换旧式语法，再转换占位符
+    const convertedSql = convertLegacyToPG(sql)
     const pgSql = convertPlaceholders(convertedSql)
     return new PostgresStatement(this.pool, pgSql, sql)
   }
   
   /**
-   * 模拟 db.exec(sql) - 执行多条 SQL（不返回结果）
+   * db.exec(sql) - 执行多条 SQL（不返回结果）
    */
   exec(sql) {
     return this._execAsync(sql)
@@ -146,7 +148,7 @@ class PostgresAdapter {
   }
   
   /**
-   * 模拟 db.transaction(fn) - 事务
+   * db.transaction(fn) - 事务
    */
   transaction(fn) {
     return async (...args) => {
@@ -176,7 +178,7 @@ class PostgresAdapter {
 }
 
 /**
- * PostgreSQL Statement - 模拟 better-sqlite3 的 Statement
+ * PostgreSQL Statement - 提供同步风格的 SQL 执行 API
  */
 class PostgresStatement {
   constructor(pool, pgSql, originalSql) {
@@ -186,7 +188,7 @@ class PostgresStatement {
   }
   
   /**
-   * 模拟 stmt.run(...params) - 执行 INSERT/UPDATE/DELETE
+   * stmt.run(...params) - 执行 INSERT/UPDATE/DELETE
    */
   run(...params) {
     return this._runAsync(params)
@@ -213,7 +215,7 @@ class PostgresStatement {
   }
   
   /**
-   * 模拟 stmt.get(...params) - 获取单行
+   * stmt.get(...params) - 获取单行
    */
   get(...params) {
     return this._getAsync(params)
@@ -230,7 +232,7 @@ class PostgresStatement {
   }
   
   /**
-   * 模拟 stmt.all(...params) - 获取所有行
+   * stmt.all(...params) - 获取所有行
    */
   all(...params) {
     return this._allAsync(params)
@@ -256,8 +258,8 @@ class PostgresTransactionAdapter {
   }
   
   prepare(sql) {
-    // 先转换 SQLite 语法到 PostgreSQL，再转换占位符
-    const convertedSql = convertSQLiteToPG(sql)
+    // 先转换旧式语法，再转换占位符
+    const convertedSql = convertLegacyToPG(sql)
     const pgSql = convertPlaceholders(convertedSql)
     return new PostgresTransactionStatement(this.client, pgSql)
   }

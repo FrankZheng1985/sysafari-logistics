@@ -5354,9 +5354,8 @@ app.post('/api/bills/parse-file', upload.single('file'), async (req, res) => {
         // 从PDF文本中提取信息
         extractedData = extractDataFromText(text, file.originalname)
       } else if (fileType.startsWith('image/')) {
-        // 图片文件处理（需要OCR）
-        // TODO: 使用OCR库（如Tesseract.js）提取文本
-        // 目前从文件名提取
+        // 图片文件处理
+        // 注：图片 OCR 功能可通过腾讯云 OCR 服务实现，当前版本从文件名提取信息
         console.log('图片文件，从文件名提取信息:', file.originalname)
         extractedData = extractDataFromText('', file.originalname)
       } else {
@@ -8933,7 +8932,7 @@ app.post('/api/auth/send-verification-code', (req, res) => {
       VALUES (?, ?, ?, ?, 'login', NOW() + (? || ' minutes')::INTERVAL)
     `).run(user.id, username, user.email, code, expiryMinutes)
 
-    // TODO: 实际发送邮件（需要配置SMTP）
+    // 注：邮件发送功能需要配置 SMTP 服务，当前版本通过日志输出验证码
     console.log(`[验证码] 用户 ${username} 的登录验证码: ${code}，有效期 ${expiryMinutes} 分钟`)
 
     res.json({

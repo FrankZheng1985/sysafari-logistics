@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { FileText, Plus, RefreshCw, Archive, Trash2, CheckCircle, RotateCcw } from 'lucide-react'
+import { FileText, Plus, RefreshCw, Archive, Trash2, CheckCircle, RotateCcw, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
@@ -31,6 +31,57 @@ const formatDateTime = (dateStr: string | undefined | null) => {
   } catch {
     return dateStr
   }
+}
+
+// 复制到剪贴板的辅助函数
+const copyToClipboard = async (text: string, e: React.MouseEvent) => {
+  e.stopPropagation()
+  if (!text || text === '-') return
+  try {
+    await navigator.clipboard.writeText(text)
+    // 显示简单的复制成功提示
+    const target = e.currentTarget as HTMLElement
+    const originalTitle = target.title
+    target.title = '已复制!'
+    setTimeout(() => {
+      target.title = originalTitle
+    }, 1000)
+  } catch (err) {
+    console.error('复制失败:', err)
+  }
+}
+
+// 带复制按钮的文本组件
+const CopyableText = ({ 
+  text, 
+  className = '', 
+  onClick 
+}: { 
+  text: string | undefined | null
+  className?: string
+  onClick?: (e: React.MouseEvent) => void
+}) => {
+  const displayText = text || '-'
+  if (displayText === '-') {
+    return <span className="text-gray-400">-</span>
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <span 
+        className={className}
+        onClick={onClick}
+      >
+        {displayText}
+      </span>
+      <button
+        title="复制"
+        className="text-gray-400 hover:text-gray-600"
+        onClick={(e) => copyToClipboard(displayText, e)}
+      >
+        <Copy className="w-3 h-3" />
+      </button>
+    </div>
+  )
 }
 
 export default function OrderBills() {
@@ -261,7 +312,18 @@ export default function OrderBills() {
       sorter: true,
       filterable: true,
       render: (item: BillOfLading) => (
-        <span className={`font-medium ${textPrimary}`}>{item.billNumber}</span>
+        <div className="flex items-center gap-1">
+          <span className={`font-medium ${textPrimary}`}>{item.billNumber}</span>
+          {item.billNumber && (
+            <button
+              title="复制提单号"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={(e) => copyToClipboard(item.billNumber, e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
@@ -430,7 +492,7 @@ export default function OrderBills() {
       sorter: true,
       filterable: true,
       render: (item: BillOfLading) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <span
             className={`font-semibold cursor-pointer hover:underline ${item.isVoid ? 'text-gray-400 line-through' : 'text-primary-600'}`}
             onClick={(e) => {
@@ -440,6 +502,15 @@ export default function OrderBills() {
           >
             {item.billNumber}
           </span>
+          {item.billNumber && (
+            <button
+              title="复制序号"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={(e) => copyToClipboard(item.billNumber, e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
           {item.isVoid && (
             <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-600 rounded">作废</span>
           )}
@@ -452,15 +523,26 @@ export default function OrderBills() {
       sorter: true,
       filterable: true,
       render: (item: BillOfLading) => (
-        <span
-          className="font-medium text-primary-600 hover:underline cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation()
-            navigate(`/bookings/bill/${item.id}`)
-          }}
-        >
-          {item.containerNumber || '-'}
-        </span>
+        <div className="flex items-center gap-1">
+          <span
+            className="font-medium text-primary-600 hover:underline cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/bookings/bill/${item.id}`)
+            }}
+          >
+            {item.containerNumber || '-'}
+          </span>
+          {item.containerNumber && (
+            <button
+              title="复制提单号"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={(e) => copyToClipboard(item.containerNumber || '', e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
@@ -469,7 +551,18 @@ export default function OrderBills() {
       sorter: true,
       filterable: true,
       render: (item: BillOfLading) => (
-        <span className={`font-mono ${textPrimary}`}>{item.actualContainerNo || '-'}</span>
+        <div className="flex items-center gap-1">
+          <span className={`font-mono ${textPrimary}`}>{item.actualContainerNo || '-'}</span>
+          {item.actualContainerNo && (
+            <button
+              title="复制集装箱号"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={(e) => copyToClipboard(item.actualContainerNo || '', e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
