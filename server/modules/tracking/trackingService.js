@@ -278,13 +278,25 @@ export async function getSupplementInfo(params) {
       config,
     })
     
-    // 提取补充信息
-    if (adapter.extractSupplementInfo) {
-      return adapter.extractSupplementInfo(trackingData)
+    // 如果适配器返回null，说明没有真实数据，直接返回null
+    if (!trackingData) {
+      console.log('未获取到真实跟踪数据，返回null')
+      return null
     }
     
-    // 默认返回基本信息
-    return {
+    // 提取补充信息
+    if (adapter.extractSupplementInfo) {
+      const supplementInfo = adapter.extractSupplementInfo(trackingData)
+      // 如果提取的信息为空，返回null
+      if (!supplementInfo) {
+        console.log('提取的补充信息为空，返回null')
+        return null
+      }
+      return supplementInfo
+    }
+    
+    // 默认返回基本信息（如果所有字段都是null，返回null）
+    const defaultInfo = {
       terminal: trackingData?.terminal || null,
       vessel: trackingData?.vessel || null,
       voyage: trackingData?.voyage || null,
@@ -293,6 +305,10 @@ export async function getSupplementInfo(params) {
       ata: trackingData?.ata || null,
       carrier: trackingData?.carrier || null,
     }
+    
+    // 检查是否有任何有效数据
+    const hasAnyData = Object.values(defaultInfo).some(value => value !== null && value !== undefined)
+    return hasAnyData ? defaultInfo : null
   } catch (error) {
     console.error('获取补充信息失败:', error)
     return null

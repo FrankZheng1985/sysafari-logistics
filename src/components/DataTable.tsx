@@ -327,7 +327,7 @@ export default function DataTable<T extends Record<string, any>>({
 
   if (total === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+      <div className="flex flex-col items-center justify-center flex-1 text-gray-400">
         <div className="text-6xl mb-4">📦</div>
         <div className="text-lg">暂无数据</div>
       </div>
@@ -340,8 +340,8 @@ export default function DataTable<T extends Record<string, any>>({
   }
 
   return (
-    <div className="space-y-4" onClick={handleClickOutside}>
-      <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+    <div className="flex flex-col h-full" onClick={handleClickOutside}>
+      <div className="flex-1 overflow-auto border border-gray-200 rounded-lg shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -481,8 +481,8 @@ export default function DataTable<T extends Record<string, any>>({
       </div>
 
       {/* Pagination */}
-      {pagination && totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white">
+      {pagination && (
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white">
           <div className="flex items-center gap-2">
             {pagination.showTotal && (
               <span className="text-sm text-gray-700">

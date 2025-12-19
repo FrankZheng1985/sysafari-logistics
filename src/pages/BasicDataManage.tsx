@@ -252,21 +252,15 @@ export default function BasicDataManage() {
     }
   }
 
-  // 加载起运地数据
+  // 加载起运地数据（统一从 ports_of_loading 表加载，包括空运）
   const loadPortData = async () => {
-    // 如果选择的是空运港，则从 air_ports 表加载数据
-    if (portTransportType === 'air') {
-      await loadAirPortData()
-      return
-    }
-    
     setPortLoading(true)
     setPortError(null)
     try {
       const response = await getPortsOfLoadingList({
         search: activeTab === 'port' && searchValue ? searchValue : undefined,
-        transportType: activeTab === 'port' ? portTransportType : undefined,
-        continent: activeTab === 'port' && selectedContinent ? selectedContinent : undefined,
+        transportType: portTransportType,
+        continent: selectedContinent || undefined,
       })
       if (response.errCode === 200 && response.data) {
         setPortData(response.data)
@@ -2050,19 +2044,9 @@ export default function BasicDataManage() {
               <span>总数: {containerData.length}</span>
             ) : activeTab === 'port' ? (
               <>
-                {portTransportType === 'air' ? (
-                  <>
-                    <span>总数: {airPortData.length}</span>
-                    <span>启用: {airPortData.filter(d => d.status === 'active').length}</span>
-                    <span>禁用: {airPortData.filter((d: AirPortItem) => d.status === 'inactive').length}</span>
-                  </>
-                ) : (
-                  <>
-                    <span>总数: {portData.length}</span>
-                    <span>启用: {portData.filter(d => d.status === 'active').length}</span>
-                    <span>禁用: {portData.filter(d => d.status === 'inactive').length}</span>
-                  </>
-                )}
+                <span>总数: {portData.length}</span>
+                <span>启用: {portData.filter(d => d.status === 'active').length}</span>
+                <span>禁用: {portData.filter(d => d.status === 'inactive').length}</span>
               </>
             ) : activeTab === 'destination' ? (
               <>
@@ -2310,72 +2294,37 @@ export default function BasicDataManage() {
                 </button>
               </div>
             </div>
-            {portTransportType === 'air' ? (
-              // 空运港数据（从 air_ports 表）
-              airPortError ? (
-                <div className="flex flex-col items-center justify-center h-64 text-red-500">
-                  <Plane className="w-12 h-12 mb-2" />
-                  <span className="text-xs">{airPortError}</span>
-                  <button
-                    onClick={loadAirPortData}
-                    className="mt-4 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 text-xs"
-                  >
-                    重试
-                  </button>
-                </div>
-              ) : airPortData.length === 0 && !airPortLoading ? (
-                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                  <Plane className="w-12 h-12 mb-2" />
-                  <span className="text-xs">暂无数据</span>
-                </div>
-              ) : (
-                <DataTable
-                  columns={airPortColumns}
-                  data={airPortData}
-                  loading={airPortLoading}
-                  searchValue={searchValue}
-                  searchableColumns={['portCode', 'portNameCn', 'portNameEn', 'country', 'city']}
-                  compact={true}
-                  pagination={{
-                    pageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total) => `共 ${total} 条记录`,
-                  }}
-                />
-              )
+            {/* 所有运输方式统一从 ports_of_loading 表加载数据 */}
+            {portError ? (
+              <div className="flex flex-col items-center justify-center h-64 text-red-500">
+                {portTransportType === 'air' ? <Plane className="w-12 h-12 mb-2" /> : <Anchor className="w-12 h-12 mb-2" />}
+                <span className="text-xs">{portError}</span>
+                <button
+                  onClick={loadPortData}
+                  className="mt-4 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 text-xs"
+                >
+                  重试
+                </button>
+              </div>
+            ) : portData.length === 0 && !portLoading ? (
+              <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                {portTransportType === 'air' ? <Plane className="w-12 h-12 mb-2" /> : <Anchor className="w-12 h-12 mb-2" />}
+                <span className="text-xs">暂无数据</span>
+              </div>
             ) : (
-              // 其他运输方式数据（从 ports_of_loading 表）
-              portError ? (
-                <div className="flex flex-col items-center justify-center h-64 text-red-500">
-                  <Anchor className="w-12 h-12 mb-2" />
-                  <span className="text-xs">{portError}</span>
-                  <button
-                    onClick={loadPortData}
-                    className="mt-4 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 text-xs"
-                  >
-                    重试
-                  </button>
-                </div>
-              ) : portData.length === 0 && !portLoading ? (
-                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                  <Anchor className="w-12 h-12 mb-2" />
-                  <span className="text-xs">暂无数据</span>
-                </div>
-              ) : (
-                <DataTable
-                  columns={portColumns}
-                  data={portData}
-                  loading={portLoading}
-                  searchValue={searchValue}
-                  searchableColumns={['portCode', 'portNameCn', 'portNameEn', 'country', 'city', 'description']}
-                  compact={true}
-                  pagination={{
-                    pageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total) => `共 ${total} 条记录`,
-                  }}
-                />
-              )
+              <DataTable
+                columns={portColumns}
+                data={portData}
+                loading={portLoading}
+                searchValue={searchValue}
+                searchableColumns={['portCode', 'portNameCn', 'portNameEn', 'country', 'city', 'description']}
+                compact={true}
+                pagination={{
+                  pageSize: 10,
+                  showSizeChanger: true,
+                  showTotal: (total) => `共 ${total} 条记录`,
+                }}
+              />
             )}
           </>
         ) : activeTab === 'airport' ? (

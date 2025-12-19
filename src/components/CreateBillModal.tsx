@@ -196,16 +196,20 @@ export default function CreateBillModal({
     if (visible && selectedTransport) {
       const loadPortsOfLoading = async () => {
         try {
+          console.log('加载起运港列表，运输方式:', selectedTransport)
           // 根据运输方式加载对应的起运港数据
           const response = await getPortsOfLoadingList({
             transportType: selectedTransport,
             status: 'active'
           })
+          console.log('起运港API响应:', response)
           if (response.errCode === 200 && response.data) {
             // 只显示启用的港口
             const activePorts = response.data.filter((port: PortOfLoadingItem) => port.status === 'active')
+            console.log('过滤后的起运港数量:', activePorts.length)
             setPortsOfLoading(activePorts)
           } else {
+            console.warn('起运港API返回异常:', response)
             setPortsOfLoading([])
           }
         } catch (error) {
@@ -215,6 +219,7 @@ export default function CreateBillModal({
       }
       loadPortsOfLoading()
     } else {
+      console.log('未选择运输方式或弹窗未打开，清空起运港列表')
       setPortsOfLoading([])
     }
   }, [visible, selectedTransport])
@@ -597,6 +602,7 @@ export default function CreateBillModal({
   
   // 获取追踪补充信息（码头、船名航次、件数、毛重等）
   // 用于填充提单解析未提取到的字段
+  // 重要：只填充真实数据，不填充虚拟数据。如果字段已有值，不覆盖。
   const fetchSupplementInfo = async (billNumber?: string, containerNumber?: string) => {
     if (!billNumber && !containerNumber) return
     
@@ -608,57 +614,70 @@ export default function CreateBillModal({
         transportType: selectedTransport || 'sea',
       })
       
+      // 如果API返回null或没有数据，说明没有真实数据，不填充
       if (response.errCode === 200 && response.data) {
         const info = response.data
-        console.log('追踪补充信息:', info)
         
-        // 自动填充码头/地勤信息
+        // 检查是否是虚拟数据（这些值正好是mock数据中的值）
+        const isMockData = (
+          (info.pieces === 120 && info.grossWeight === 2500.5 && info.volume === 45.8) ||
+          (info.vessel === 'COSCO TAURUS' && info.voyage === 'V.025E')
+        )
+        
+        if (isMockData) {
+          console.warn('⚠️ 检测到虚拟数据，跳过填充。保留已提取的真实数据。')
+          return
+        }
+        
+        console.log('追踪补充信息（真实数据）:', info)
+        
+        // 自动填充码头/地勤信息（只在字段为空时填充）
         if (info.terminal && !formData.groundHandling) {
           handleInputChange('groundHandling', info.terminal)
         }
         
-        // 自动填充船名航次（如果之前没有）
+        // 自动填充船名航次（只在字段为空时填充）
         if (info.vessel && !formData.flightNumber) {
           const vesselInfo = info.voyage ? `${info.vessel} ${info.voyage}` : info.vessel
           handleInputChange('flightNumber', vesselInfo)
         }
         
-        // 自动填充 ETA（如果之前没有）
+        // 自动填充 ETA（只在字段为空时填充）
         if (info.eta && !formData.estimatedArrival) {
           handleInputChange('estimatedArrival', info.eta)
         }
         
-        // 自动填充 ETD（如果之前没有）
+        // 自动填充 ETD（只在字段为空时填充）
         if (info.etd && !formData.estimatedDeparture) {
           handleInputChange('estimatedDeparture', info.etd)
         }
         
-        // 自动填充件数（如果之前没有）
+        // 自动填充件数（只在字段为空时填充）
         if (info.pieces && !formData.pieces) {
           handleInputChange('pieces', String(info.pieces))
         }
         
-        // 自动填充毛重（如果之前没有）
+        // 自动填充毛重（只在字段为空时填充）
         if (info.grossWeight && !formData.grossWeight) {
           handleInputChange('grossWeight', String(info.grossWeight))
         }
         
-        // 自动填充体积（如果之前没有）
+        // 自动填充体积（只在字段为空时填充）
         if (info.volume && !formData.volume) {
           handleInputChange('volume', String(info.volume))
         }
         
-        // 自动填充集装箱号（如果之前没有）
+        // 自动填充集装箱号（只在字段为空时填充）
         if (info.containerNumber && !formData.containerNumber) {
           handleInputChange('containerNumber', info.containerNumber)
         }
         
-        // 自动填充封号（如果之前没有）
+        // 自动填充封号（只在字段为空时填充）
         if (info.sealNumber && !formData.sealNumber) {
           handleInputChange('sealNumber', info.sealNumber)
         }
         
-        // 自动填充柜型（如果之前没有）
+        // 自动填充柜型（只在字段为空时填充）
         if (info.containerType && !formData.containerSize) {
           handleInputChange('containerSize', info.containerType)
         }
@@ -676,8 +695,11 @@ export default function CreateBillModal({
         if (info.containerType) supplementFields.push(`柜型: ${info.containerType}`)
         
         if (supplementFields.length > 0) {
-          console.log('已自动填充补充信息:', supplementFields.join(', '))
+          console.log('已自动填充补充信息（真实数据）:', supplementFields.join(', '))
         }
+      } else if (response.errCode === 200 && !response.data) {
+        // API返回成功但没有数据，说明没有获取到真实数据（可能是未配置API或API失败）
+        console.log('⚠️ 未获取到真实跟踪数据，保留已提取的数据')
       }
     } catch (error) {
       console.error('获取追踪补充信息失败:', error)
@@ -1093,7 +1115,9 @@ export default function CreateBillModal({
         t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
       }
       
+      console.log('准备保存草稿，数据:', draftData)
       const response = await createBill(draftData)
+      console.log('保存草稿API响应:', response)
       
       if (response.errCode === 200) {
         alert('草稿保存成功')
@@ -1144,9 +1168,15 @@ export default function CreateBillModal({
       } else {
         alert(`保存失败: ${response.msg}`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('保存草稿失败:', error)
-      alert('保存草稿失败，请稍后重试')
+      console.error('错误详情:', {
+        message: error?.message,
+        stack: error?.stack,
+        response: error?.response
+      })
+      const errorMsg = error?.response?.data?.msg || error?.message || '保存草稿失败，请稍后重试'
+      alert(`保存草稿失败: ${errorMsg}`)
     } finally {
       setSubmitting(false)
     }

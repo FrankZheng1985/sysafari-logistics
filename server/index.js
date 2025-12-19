@@ -99,7 +99,7 @@ const USE_POSTGRES = isUsingPostgres()
 const db = getDatabase()
 
 // 初始化数据库表
-function initDatabase() {
+async function initDatabase() {
   // ==================== 序号序列管理表 ====================
   // 用于跟踪每个业务类型的当前序号，确保各业务独立编号
   db.exec(`
@@ -749,16 +749,16 @@ function initDatabase() {
     // 字段已存在，忽略错误
   }
 
-  // 将现有港口数据的 transport_type 更新为 'sea'（确保所有数据都是海运港类型）
+  // 为现有表添加 continent 字段（如果不存在）
   try {
-    const updateResult = db.prepare(`UPDATE ports_of_loading SET transport_type = 'sea' WHERE transport_type IS NULL OR transport_type = '' OR transport_type != 'sea'`).run()
-    if (updateResult.changes > 0) {
-      console.log(`已将 ${updateResult.changes} 条港口数据更新为海运港类型`)
-    }
+    db.exec(`ALTER TABLE ports_of_loading ADD COLUMN continent TEXT`)
   } catch (err) {
-    // 忽略错误
-    console.log('更新现有港口数据 transport_type 失败:', err)
+    // 字段已存在，忽略错误
   }
+
+  // 注意：不再强制将所有港口数据更新为 'sea'
+  // 因为 ports_of_loading 表中可能包含不同运输方式的数据（sea, air, rail, truck）
+  // API会根据 transportType 参数正确过滤数据
 
   // 创建索引
   db.exec(`
@@ -2748,25 +2748,39 @@ function initializeSequenceForTableWithCondition(tableName, businessType, condit
  * @param {string} businessType - 业务类型: 'package', 'bill', 'draft', 'declaration', 'label', 'last_mile'
  * @returns {number} 下一个序号
  */
-function getNextOrderSeq(businessType) {
-  // 使用事务确保序号唯一性
-  return db.transaction(() => {
-    // 获取当前序号
-    const currentSeqResult = db.prepare(`SELECT current_seq FROM order_sequences WHERE business_type = ?`).get(businessType)
-    const currentSeq = currentSeqResult?.current_seq || 0
+async function getNextOrderSeq(businessType) {
+  try {
+    console.log(`获取序号，businessType: ${businessType}`)
+    // 使用事务确保序号唯一性
+    const transactionFn = db.transaction(async (txDb) => {
+      // 获取当前序号（使用?占位符，适配器会自动转换）
+      const currentSeqResult = await txDb.prepare(`SELECT current_seq FROM order_sequences WHERE business_type = ?`).get(businessType)
+      console.log(`当前序号查询结果:`, currentSeqResult)
+      const currentSeq = currentSeqResult?.current_seq || 0
+      console.log(`当前序号: ${currentSeq}`)
+      
+      // 计算下一个序号
+      const nextSeq = currentSeq + 1
+      console.log(`下一个序号: ${nextSeq}`)
+      
+      // 更新序号（使用?占位符，适配器会自动转换）
+      const updateResult = await txDb.prepare(`
+        UPDATE order_sequences 
+        SET current_seq = ?, updated_at = NOW() 
+        WHERE business_type = ?
+      `).run(nextSeq, businessType)
+      console.log(`更新序号结果:`, updateResult)
+      
+      return nextSeq
+    })
     
-    // 计算下一个序号
-    const nextSeq = currentSeq + 1
-    
-    // 更新序号
-    db.prepare(`
-      UPDATE order_sequences 
-      SET current_seq = ?, updated_at = NOW() 
-      WHERE business_type = ?
-    `).run(nextSeq, businessType)
-    
-    return nextSeq
-  })()
+    const result = await transactionFn()
+    console.log(`获取序号成功: ${result}`)
+    return result
+  } catch (error) {
+    console.error(`getNextOrderSeq失败，businessType: ${businessType}`, error)
+    throw error
+  }
 }
 
 /**
@@ -2774,13 +2788,66 @@ function getNextOrderSeq(businessType) {
  * @param {string} businessType - 业务类型
  * @returns {object} { seq: number, prefix: string, formatted: string }
  */
-function getSequenceInfo(businessType) {
-  const seqResult = db.prepare(`SELECT current_seq, prefix FROM order_sequences WHERE business_type = ?`).get(businessType)
-  const nextSeq = getNextOrderSeq(businessType)
-  return {
-    seq: nextSeq,
-    prefix: seqResult?.prefix || '',
-    formatted: `${seqResult?.prefix || ''}${String(nextSeq).padStart(6, '0')}`
+async function getSequenceInfo(businessType) {
+  try {
+    console.log(`getSequenceInfo开始，businessType: ${businessType}`)
+    // 先获取前缀信息（在更新序号之前）
+    // 使用?占位符，适配器会自动转换为PostgreSQL的$1格式
+    let seqResult = await db.prepare(`SELECT current_seq, prefix FROM order_sequences WHERE business_type = ?`).get(businessType)
+    console.log(`查询序号结果:`, seqResult)
+    
+    // 如果记录不存在，初始化它
+    if (!seqResult) {
+      console.warn(`order_sequences表中不存在business_type='${businessType}'的记录，尝试初始化`)
+      try {
+        // 根据业务类型设置默认前缀（与初始化代码保持一致）
+        const defaultPrefixes = {
+          'bill': 'BP',
+          'draft': 'DFT',  // 注意：与初始化代码中的前缀保持一致
+          'invoice': 'INV',
+          'fee': 'FEE',
+          'package': 'PKG',
+          'declaration': 'DEC',
+          'label': 'LBL',
+          'last_mile': 'LM'
+        }
+        const prefix = defaultPrefixes[businessType] || ''
+        console.log(`尝试插入序号记录，prefix: ${prefix}`)
+        await db.prepare(`
+          INSERT INTO order_sequences (business_type, current_seq, prefix, description)
+          VALUES (?, 0, ?, ?)
+          ON CONFLICT (business_type) DO NOTHING
+        `).run(businessType, prefix, `${businessType}序号`)
+        console.log(`已初始化business_type='${businessType}'的记录`)
+        // 重新查询
+        seqResult = await db.prepare(`SELECT current_seq, prefix FROM order_sequences WHERE business_type = ?`).get(businessType)
+        console.log(`重新查询序号结果:`, seqResult)
+      } catch (initError) {
+        console.error(`初始化order_sequences失败:`, initError)
+        console.error(`初始化错误堆栈:`, initError.stack)
+        // 继续执行，使用空前缀
+      }
+    }
+    
+    const prefix = seqResult?.prefix || ''
+    console.log(`使用前缀: ${prefix}`)
+    
+    // 获取下一个序号（这会更新序号）
+    const nextSeq = await getNextOrderSeq(businessType)
+    console.log(`获取到的序号: ${nextSeq}`)
+    
+    const formatted = `${prefix}${String(nextSeq).padStart(6, '0')}`
+    console.log(`格式化后的提单号: ${formatted}`)
+    
+    return {
+      seq: nextSeq,
+      prefix: prefix,
+      formatted: formatted
+    }
+  } catch (error) {
+    console.error(`getSequenceInfo失败，businessType: ${businessType}`, error)
+    console.error(`错误堆栈:`, error.stack)
+    throw error
   }
 }
 
@@ -2838,16 +2905,17 @@ if (!USE_POSTGRES) {
 }
 
 // 记录操作日志
-function logOperation(billId, operationType, operationName, oldValue, newValue, operator = 'admin', remark = '') {
+async function logOperation(billId, operationType, operationName, oldValue, newValue, operator = 'admin', remark = '') {
   try {
     const operationTime = new Date().toISOString()
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO operation_logs (bill_id, operation_type, operation_name, old_value, new_value, operator, remark, operation_time)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(billId, operationType, operationName, oldValue, newValue, operator, remark, operationTime)
     console.log(`[操作日志] ${operationName}: ${oldValue || '-'} -> ${newValue || '-'}`)
   } catch (error) {
     console.error('记录操作日志失败:', error)
+    // 不抛出错误，避免影响主流程
   }
 }
 
@@ -3458,8 +3526,9 @@ app.get('/api/bills/:id/logs', (req, res) => {
 })
 
 // 创建提单
-app.post('/api/bills', (req, res) => {
+app.post('/api/bills', async (req, res) => {
   try {
+    console.log('收到创建提单请求:', JSON.stringify(req.body, null, 2))
     // 支持驼峰命名和下划线命名
     const data = req.body
     const bill_id = data.billId || data.bill_id
@@ -3495,12 +3564,44 @@ app.post('/api/bills', (req, res) => {
     const devanning = data.devanning
     const t1_declaration = data.t1Declaration || data.t1_declaration
 
-    const id = Date.now().toString()
+    // 生成唯一ID（使用时间戳+随机数确保唯一性）
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
     const now = new Date().toISOString()
+    console.log('生成的提单ID:', id)
 
     // 根据状态获取下一个序号（草稿和正式订单使用独立序号）
     const isDraft = status === '草稿'
-    const nextOrderSeq = getNextOrderSeq(isDraft ? 'draft' : 'bill')
+    console.log(`创建${isDraft ? '草稿' : '提单'}，状态: ${status}, isDraft: ${isDraft}`)
+    
+    let nextOrderSeq
+    try {
+      const businessType = isDraft ? 'draft' : 'bill'
+      console.log(`准备获取序号，businessType: ${businessType}`)
+      nextOrderSeq = await getNextOrderSeq(businessType)
+      console.log(`获取序号成功: ${nextOrderSeq}`)
+    } catch (seqError) {
+      console.error('获取序号失败:', seqError)
+      console.error('序号错误堆栈:', seqError.stack)
+      throw new Error('获取订单序号失败: ' + (seqError.message || String(seqError)))
+    }
+    
+    // 如果没有传递bill_number，自动生成
+    let final_bill_number = bill_number
+    if (!final_bill_number) {
+      try {
+        const businessType = isDraft ? 'draft' : 'bill'
+        console.log(`准备生成提单号，businessType: ${businessType}`)
+        const billNumberInfo = await getSequenceInfo(businessType)
+        final_bill_number = billNumberInfo.formatted
+        console.log(`自动生成提单号: ${final_bill_number}`)
+      } catch (billNumError) {
+        console.error('生成提单号失败:', billNumError)
+        console.error('提单号错误堆栈:', billNumError.stack)
+        throw new Error('生成提单号失败: ' + (billNumError.message || String(billNumError)))
+      }
+    } else {
+      console.log(`使用传入的提单号: ${final_bill_number}`)
+    }
 
     const stmt = db.prepare(`
       INSERT INTO bills_of_lading (
@@ -3515,49 +3616,69 @@ app.post('/api/bills', (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
-    stmt.run(
-      id,
-      bill_id || null,
-      bill_number,
-      container_number || null,
-      vessel || null,
-      eta || null,
-      ata || null,
-      pieces || 0,
-      weight || 0,
-      volume || null,
-      inspection || '-',
-      customs_stats || '0/0',
-      creator || 'system',
-      create_time || now,
-      status || '船未到港',
-      shipper || null,
-      consignee || null,
-      notify_party || null,
-      port_of_loading || null,
-      port_of_discharge || null,
-      place_of_delivery || null,
-      transport_method || null,
-      company_name || null,
-      container_type || null,
-      bill_type || null,
-      transport_arrangement || null,
-      consignee_type || null,
-      container_return || null,
-      full_container_transport || null,
-      last_mile_transport || null,
-      devanning || null,
-      t1_declaration || null,
-      nextOrderSeq,
-      0, // is_void = false
-      now,
-      now
-    )
+    try {
+      console.log('准备插入数据库，参数数量:', 36)
+      const insertResult = await stmt.run(
+        id,
+        bill_id || null,
+        final_bill_number,
+        container_number || null,
+        vessel || null,
+        eta || null,
+        ata || null,
+        pieces || 0,
+        weight || 0,
+        volume || null,
+        inspection || '-',
+        customs_stats || '0/0',
+        creator || 'system',
+        create_time || now,
+        status || '船未到港',
+        shipper || null,
+        consignee || null,
+        notify_party || null,
+        port_of_loading || null,
+        port_of_discharge || null,
+        place_of_delivery || null,
+        transport_method || null,
+        company_name || null,
+        container_type || null,
+        bill_type || null,
+        transport_arrangement || null,
+        consignee_type || null,
+        container_return || null,
+        full_container_transport || null,
+        last_mile_transport || null,
+        devanning || null,
+        t1_declaration || null,
+        nextOrderSeq,
+        0, // is_void = false
+        now,
+        now
+      )
+      console.log('数据库插入成功，影响行数:', insertResult.changes, '最后插入ID:', insertResult.lastInsertRowid || 'N/A (TEXT类型主键)')
+    } catch (insertError) {
+      console.error('数据库插入失败:', insertError)
+      console.error('插入错误详情:', {
+        message: insertError.message,
+        code: insertError.code,
+        errno: insertError.errno
+      })
+      throw new Error('数据库插入失败: ' + insertError.message)
+    }
 
-    const bill = db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
+    const bill = await db.prepare('SELECT * FROM bills_of_lading WHERE id = ?').get(id)
+
+    if (!bill) {
+      console.error('创建提单后查询失败，id:', id)
+      return res.status(500).json({
+        errCode: 500,
+        msg: '创建成功但查询失败，请刷新页面查看',
+      })
+    }
 
     // 记录操作日志
-    logOperation(id, 'create', isDraft ? '创建草稿' : '创建提单', null, bill_number, creator || 'system')
+    await logOperation(id, 'create', isDraft ? '创建草稿' : '创建提单', null, final_bill_number, creator || 'system')
 
     res.json({
       errCode: 200,
@@ -3566,9 +3687,10 @@ app.post('/api/bills', (req, res) => {
     })
   } catch (error) {
     console.error('创建提单失败:', error)
+    console.error('错误堆栈:', error.stack)
     res.status(500).json({
       errCode: 500,
-      msg: '创建提单失败',
+      msg: '创建提单失败: ' + (error.message || '未知错误'),
       error: error.message,
     })
   }
@@ -5277,55 +5399,50 @@ app.get('/api/ports-of-loading', async (req, res) => {
   try {
     const { country, status, search, transportType, continent } = req.query
     
-    // 如果需要按洲过滤，需要关联countries表
-    let query = ''
-    if (continent) {
-      query = `
-        SELECT DISTINCT p.* 
-        FROM ports_of_loading p
-        LEFT JOIN countries c ON p.country = c.country_name_cn OR p.country_code = c.country_code
-        WHERE 1=1
-      `
-    } else {
-      query = 'SELECT * FROM ports_of_loading WHERE 1=1'
-    }
+    // 直接使用ports_of_loading表中的continent字段过滤
+    let query = 'SELECT * FROM ports_of_loading WHERE 1=1'
     const params = []
 
+    // 按洲过滤（直接使用表中的continent字段）
     if (continent) {
-      query += ' AND c.continent = ?'
+      query += ' AND continent = ?'
       params.push(continent)
     }
 
     if (country) {
-      query += ' AND p.country = ?'
+      query += ' AND country = ?'
       params.push(country)
     }
 
     if (status) {
-      query += continent ? ' AND p.status = ?' : ' AND status = ?'
+      query += ' AND status = ?'
       params.push(status)
     }
 
     if (transportType) {
-      query += continent ? ' AND p.transport_type = ?' : ' AND transport_type = ?'
+      // 严格过滤：只返回指定运输方式的港口数据
+      query += ' AND transport_type = ?'
       params.push(transportType)
+      console.log(`过滤起运港：transport_type = '${transportType}', continent = '${continent || '全部'}'`)
+    } else {
+      // 如果没有指定运输方式，默认只返回海运港口（向后兼容）
+      query += ' AND transport_type = ?'
+      params.push('sea')
+      console.log('未指定运输方式，默认返回海运港口')
     }
 
     if (search) {
       // 使用 ILIKE 实现不区分大小写搜索（PostgreSQL原生支持）
-      if (continent) {
-        query += ' AND (p.port_code ILIKE ? OR p.port_name_cn ILIKE ? OR p.port_name_en ILIKE ? OR p.city ILIKE ?)'
-      } else {
-        query += ' AND (port_code ILIKE ? OR port_name_cn ILIKE ? OR port_name_en ILIKE ? OR city ILIKE ?)'
-      }
+      query += ' AND (port_code ILIKE ? OR port_name_cn ILIKE ? OR port_name_en ILIKE ? OR city ILIKE ?)'
       const searchPattern = `%${search}%`
       params.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
 
-    query += continent ? ' ORDER BY p.country, p.port_name_cn' : ' ORDER BY country, port_name_cn'
+    query += ' ORDER BY sort_order, country, port_name_cn'
 
     // 使用 await 等待异步查询结果
     const data = await db.prepare(query).all(...params)
+    console.log(`查询起运港：transportType=${transportType}, 返回${data.length}条数据`)
     
     res.json({
       errCode: 200,
@@ -5342,6 +5459,8 @@ app.get('/api/ports-of-loading', async (req, res) => {
         transportType: item.transport_type || 'sea',
         portType: item.port_type || 'main',
         parentPortCode: item.parent_port_code || undefined,
+        continent: item.continent || '',
+        sortOrder: item.sort_order || 0,
         status: item.status,
         createTime: item.created_at,
         updateTime: item.updated_at,
@@ -5357,7 +5476,7 @@ app.get('/api/ports-of-loading', async (req, res) => {
 })
 
 // 获取主港口列表 (静态路由必须在动态路由 :id 之前)
-app.get('/api/ports-of-loading/main-ports', (req, res) => {
+app.get('/api/ports-of-loading/main-ports', async (req, res) => {
   try {
     const { transportType = 'sea' } = req.query
     
@@ -5371,7 +5490,7 @@ app.get('/api/ports-of-loading/main-ports', (req, res) => {
     
     query += ' ORDER BY port_name_cn'
     
-    const data = db.prepare(query).all(...params)
+    const data = await db.prepare(query).all(...params)
     
     res.json({
       errCode: 200,
@@ -5642,15 +5761,23 @@ app.delete('/api/ports-of-loading', (req, res) => {
 // ==================== 目的港管理 API ====================
 
 // 获取目的港列表
-app.get('/api/destination-ports', (req, res) => {
+app.get('/api/destination-ports', async (req, res) => {
   try {
     const { country, status, search, transportType, continent } = req.query
     let query = 'SELECT * FROM destination_ports WHERE 1=1'
     const params = []
 
     if (transportType) {
+      // 严格过滤：只返回指定运输方式的目的港数据
+      // 不再包含NULL值，确保数据准确性
       query += ' AND transport_type = ?'
       params.push(transportType)
+      console.log(`过滤目的港：transport_type = '${transportType}' (严格匹配)`)
+    } else {
+      // 如果没有指定运输方式，默认只返回海运港口（向后兼容）
+      query += ' AND transport_type = ?'
+      params.push('sea')
+      console.log('未指定运输方式，默认返回海运目的港')
     }
 
     if (continent) {
@@ -5676,7 +5803,7 @@ app.get('/api/destination-ports', (req, res) => {
 
     query += ' ORDER BY continent, country, port_name_cn'
 
-    const data = db.prepare(query).all(...params)
+    const data = await db.prepare(query).all(...params)
     
     res.json({
       errCode: 200,

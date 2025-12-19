@@ -469,7 +469,7 @@ export function extractSupplementInfo(trackingData) {
     return null
   }
   
-  return {
+  const info = {
     // 码头/堆场信息
     terminal: trackingData.terminal || null,
     terminalCode: trackingData.terminalCode || null,
@@ -498,6 +498,14 @@ export function extractSupplementInfo(trackingData) {
     status: trackingData.status || null,
     statusDescription: trackingData.statusDescription || null,
   }
+  
+  // 检查是否所有字段都是null，如果是则返回null（表示没有真实数据）
+  const hasAnyData = Object.values(info).some(value => value !== null && value !== undefined)
+  if (!hasAnyData) {
+    return null
+  }
+  
+  return info
 }
 
 /**

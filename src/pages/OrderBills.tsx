@@ -721,7 +721,7 @@ export default function OrderBills() {
         }
       />
       
-      <ContentCard noPadding>
+      <ContentCard noPadding className="flex flex-col" style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}>
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <LoadingSpinner />

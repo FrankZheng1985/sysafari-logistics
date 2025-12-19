@@ -115,9 +115,9 @@ export async function fetchTracking(params) {
     }
   }
   
-  // 没有有效的API配置，返回模拟数据用于测试
-  console.log('⚠️ 未配置有效API，返回模拟数据')
-  return getMockTrackingData(trackingNumber || containerNumber)
+  // 没有有效的API配置，返回null（不返回模拟数据）
+  console.log('⚠️ 未配置有效API，无法获取真实数据')
+  return null
 }
 
 /**
@@ -142,7 +142,7 @@ async function fetchMaerskTracking(billNumber, containerNumber, config) {
     return await response.json()
   } catch (error) {
     console.error('马士基API调用失败:', error)
-    return getMockTrackingData(billNumber || containerNumber)
+    return null
   }
 }
 
@@ -168,7 +168,7 @@ async function fetchCoscoTracking(billNumber, containerNumber, config) {
     return await response.json()
   } catch (error) {
     console.error('中远API调用失败:', error)
-    return getMockTrackingData(billNumber || containerNumber)
+    return null
   }
 }
 
@@ -194,7 +194,7 @@ async function fetchMscTracking(billNumber, containerNumber, config) {
     return await response.json()
   } catch (error) {
     console.error('MSC API调用失败:', error)
-    return getMockTrackingData(billNumber || containerNumber)
+    return null
   }
 }
 
@@ -366,7 +366,7 @@ async function fetchGenericTracking(billNumber, containerNumber, config) {
     return await response.json()
   } catch (error) {
     console.error('通用跟踪API调用失败:', error)
-    return getMockTrackingData(billNumber || containerNumber)
+    return null
   }
 }
 
@@ -859,6 +859,12 @@ export function extractSupplementInfo(trackingData) {
         break
       }
     }
+  }
+  
+  // 检查是否所有字段都是null，如果是则返回null（表示没有真实数据）
+  const hasAnyData = Object.values(info).some(value => value !== null && value !== undefined)
+  if (!hasAnyData) {
+    return null
   }
   
   return info
