@@ -1396,7 +1396,7 @@ export async function updateBankAccount(id, data) {
   
   if (fields.length === 0) return null
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   await db.prepare(`UPDATE bank_accounts SET ${fields.join(', ')} WHERE id = ?`).run(...values)

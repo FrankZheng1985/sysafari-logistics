@@ -785,8 +785,14 @@ export async function saveSystemSetting(key, value, type, description) {
   }
   
   await db.prepare(`
-    INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
+    INSERT INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
     VALUES (?, ?, ?, ?, NOW())
+    ON CONFLICT (setting_key) 
+    DO UPDATE SET
+      setting_value = EXCLUDED.setting_value,
+      setting_type = EXCLUDED.setting_type,
+      description = EXCLUDED.description,
+      updated_at = EXCLUDED.updated_at
   `).run(key, stringValue, settingType, description || '')
 }
 
@@ -797,8 +803,14 @@ export async function saveSystemSettingsBatch(settings) {
   const db = getDatabase()
   
   const upsertStmt = await db.prepare(`
-    INSERT OR REPLACE INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
+    INSERT INTO system_settings (setting_key, setting_value, setting_type, description, updated_at)
     VALUES (?, ?, ?, ?, NOW())
+    ON CONFLICT (setting_key) 
+    DO UPDATE SET
+      setting_value = EXCLUDED.setting_value,
+      setting_type = EXCLUDED.setting_type,
+      description = EXCLUDED.description,
+      updated_at = EXCLUDED.updated_at
   `)
   
   for (const { key, value, type, description } of settings) {

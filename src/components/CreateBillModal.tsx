@@ -97,6 +97,9 @@ export default function CreateBillModal({
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  
+  // 船公司来源追踪：'container' = 集装箱代码匹配, 'file' = 文件解析, 'manual' = 手动输入
+  const [shippingCompanySource, setShippingCompanySource] = useState<'container' | 'file' | 'manual' | ''>('')
 
   // 加载集装箱代码列表（仅海运时）
   useEffect(() => {
@@ -265,6 +268,7 @@ export default function CreateBillModal({
       setCustomers([])
       setSelectedCustomer(null)
       setCustomerSearch('')
+      setShippingCompanySource('')
     }
   }, [visible])
 
@@ -285,9 +289,12 @@ export default function CreateBillModal({
         const response = await getShippingCompanyByContainerCode(code)
         if (response.errCode === 200 && response.data) {
           handleInputChange('shippingCompany', response.data.companyCode)
+          setShippingCompanySource('container')
+          console.log('船公司识别来源: 集装箱代码匹配', response.data.companyCode)
         }
       } catch (error) {
         handleInputChange('shippingCompany', '')
+        setShippingCompanySource('')
       }
     }
     
@@ -327,10 +334,13 @@ export default function CreateBillModal({
         const response = await getShippingCompanyByContainerCode(code)
         if (response.errCode === 200 && response.data) {
           handleInputChange('shippingCompany', response.data.companyCode)
+          setShippingCompanySource('container')
+          console.log('船公司识别来源: 集装箱代码匹配', response.data.companyCode)
         }
       } catch (error) {
         if (value.length === 4) {
           handleInputChange('shippingCompany', '')
+          setShippingCompanySource('')
         }
       }
     }
@@ -515,15 +525,17 @@ export default function CreateBillModal({
       handleInputChange('masterBillNumber', billNumber)
     }
     
-    // 集装箱号
+    // 集装箱号 - 优先使用集装箱代码匹配船公司
     if (data.containerNumber) {
       const containerCode = String(data.containerNumber).substring(0, 4).toUpperCase()
       if (containerCode && selectedTransport === 'sea') {
         handleInputChange('containerCodePrefix', containerCode)
-        // 异步获取船公司信息
+        // 异步获取船公司信息 - 集装箱代码匹配优先级最高
         getShippingCompanyByContainerCode(containerCode).then(companyResponse => {
           if (companyResponse.errCode === 200 && companyResponse.data) {
             handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+            setShippingCompanySource('container')
+            console.log('船公司识别来源: 集装箱代码匹配', companyResponse.data.companyCode)
           }
         }).catch(console.error)
       }
@@ -563,11 +575,18 @@ export default function CreateBillModal({
       handleInputChange('volume', String(data.volume))
     }
     
-    // 船公司/航空公司
-    if (data.shippingCompany) {
-      handleInputChange('shippingCompany', data.shippingCompany)
-    } else if (data.airline) {
-      handleInputChange('shippingCompany', data.airline)
+    // 船公司/航空公司 - 只有在没有集装箱号时才使用文件解析的结果
+    // 如果有集装箱号，优先使用集装箱代码匹配的船公司（在上面已处理）
+    if (!data.containerNumber) {
+      if (data.shippingCompany) {
+        handleInputChange('shippingCompany', data.shippingCompany)
+        setShippingCompanySource('file')
+        console.log('船公司识别来源: 文件解析', data.shippingCompany)
+      } else if (data.airline) {
+        handleInputChange('shippingCompany', data.airline)
+        setShippingCompanySource('file')
+        console.log('航空公司识别来源: 文件解析', data.airline)
+      }
     }
     
     // ETA
@@ -674,11 +693,13 @@ export default function CreateBillModal({
       const response = await parseBillFile(formData.masterBillFile)
       if (response.errCode === 200 && response.data) {
         const data = response.data
+        let containerCodeFromBill = ''
         
         if (data.masterBillNumber) {
           const billNumber = data.masterBillNumber.toUpperCase()
           const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
           if (match) {
+            containerCodeFromBill = match[1]
             handleInputChange('containerCodePrefix', match[1])
             handleInputChange('masterBillNumberSuffix', match[2])
             handleInputChange('masterBillNumber', billNumber)
@@ -687,7 +708,31 @@ export default function CreateBillModal({
           }
         }
         
-        if (data.shippingCompany) handleInputChange('shippingCompany', data.shippingCompany)
+        // 船公司识别：优先使用集装箱代码匹配
+        if (containerCodeFromBill && selectedTransport === 'sea') {
+          try {
+            const companyResponse = await getShippingCompanyByContainerCode(containerCodeFromBill)
+            if (companyResponse.errCode === 200 && companyResponse.data) {
+              handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+              setShippingCompanySource('container')
+              console.log('船公司识别来源: 集装箱代码匹配', companyResponse.data.companyCode)
+            } else if (data.shippingCompany) {
+              // 集装箱代码匹配失败，回退到文件解析
+              handleInputChange('shippingCompany', data.shippingCompany)
+              setShippingCompanySource('file')
+            }
+          } catch {
+            // 集装箱代码匹配失败，回退到文件解析
+            if (data.shippingCompany) {
+              handleInputChange('shippingCompany', data.shippingCompany)
+              setShippingCompanySource('file')
+            }
+          }
+        } else if (data.shippingCompany) {
+          handleInputChange('shippingCompany', data.shippingCompany)
+          setShippingCompanySource('file')
+        }
+        
         if (data.origin) handleInputChange('origin', data.origin)
         if (data.destination) handleInputChange('destination', data.destination)
         if (data.pieces) handleInputChange('pieces', data.pieces)
@@ -917,6 +962,16 @@ export default function CreateBillModal({
         customerId: selectedCustomer?.id || '',
         customerName: selectedCustomer?.customerName || '',
         customerCode: selectedCustomer?.customerCode || '',
+        // 附加属性字段
+        containerType: formData.containerType,
+        billType: formData.billType,
+        transportArrangement: formData.transportation,
+        consigneeType: formData.consigneeType,
+        containerReturn: formData.containerReturn,
+        fullContainerTransport: formData.fullContainerTransport,
+        lastMileTransport: formData.lastMileTransport,
+        devanning: formData.devanning,
+        t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
       }
       
       const response = await createBill(billData)
@@ -963,6 +1018,7 @@ export default function CreateBillModal({
           sealNumber: '',
           containerSize: '',
         })
+        setShippingCompanySource('')
         setReferenceList([])
         setErrors({})
         onClose()
@@ -1025,6 +1081,16 @@ export default function CreateBillModal({
         customerId: selectedCustomer?.id || '',
         customerName: selectedCustomer?.customerName || '',
         customerCode: selectedCustomer?.customerCode || '',
+        // 附加属性字段（草稿也保存，即使可能为空）
+        containerType: formData.containerType || '',
+        billType: formData.billType || '',
+        transportArrangement: formData.transportation || '',
+        consigneeType: formData.consigneeType || '',
+        containerReturn: formData.containerReturn || '',
+        fullContainerTransport: formData.fullContainerTransport || '',
+        lastMileTransport: formData.lastMileTransport || 'truck',
+        devanning: formData.devanning || '',
+        t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
       }
       
       const response = await createBill(draftData)
@@ -1071,6 +1137,7 @@ export default function CreateBillModal({
           sealNumber: '',
           containerSize: '',
         })
+        setShippingCompanySource('')
         setReferenceList([])
         setErrors({})
         onClose()
@@ -1452,69 +1519,45 @@ export default function CreateBillModal({
               {/* ===== 基本信息 ===== */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">基本信息</h3>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  {/* 运输方式 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      运输方式 <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={getTransportText()}
-                      disabled
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50 text-gray-500"
-                    >
-                      <option>{getTransportText()}</option>
-                    </select>
-                  </div>
+                <div className="space-y-4">
+                  {/* 第一行：运输方式 + 主单文件 */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    {/* 运输方式 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        运输方式 <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={getTransportText()}
+                        disabled
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs bg-gray-50 text-gray-500"
+                      >
+                        <option>{getTransportText()}</option>
+                      </select>
+                    </div>
 
-                  {/* 主单文件 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      主单文件 <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex items-center gap-2">
+                    {/* 主单文件 - 显示已上传的文件名 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        主单文件 <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="text"
                         readOnly
                         value={formData.masterBillFile?.name || ''}
-                        placeholder="未选择文件"
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
+                        placeholder="请在上方OCR区域上传文件"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs bg-gray-50"
                       />
-                      <label className={`px-1.5 py-0.5 bg-primary-600 text-white rounded hover:bg-primary-700 cursor-pointer text-xs flex items-center gap-1 ${parsingFile ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <Upload className="w-3 h-3" />
-                        <span>选择文件</span>
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={(e) => handleFileUpload('masterBillFile', e.target.files?.[0] || null)}
-                          className="hidden"
-                          disabled={parsingFile}
-                        />
-                      </label>
-                      {formData.masterBillFile && !parsingFile && (
-                        <button
-                          onClick={() => handleParseFile()}
-                          className="px-1.5 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs flex items-center gap-1"
-                        >
-                          <FileText className="w-3 h-3" />
-                          <span>确认解析</span>
-                        </button>
-                      )}
-                      {parsingFile && (
-                        <div className="px-1.5 py-0.5 bg-gray-400 text-white rounded text-xs flex items-center gap-1">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span>解析中...</span>
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  {/* 关联客户 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      关联客户
-                    </label>
+                  {/* 第二行：关联客户（占整行） */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        关联客户
+                      </label>
                       <div className="relative customer-dropdown">
                         <input
                           type="text"
@@ -1530,7 +1573,7 @@ export default function CreateBillModal({
                               setShowCustomerDropdown(false)
                             }
                           }}
-                          className="w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 border-gray-300 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 border-gray-300 focus:ring-primary-500"
                           placeholder="搜索或选择客户（可选）"
                         />
                         <button
@@ -1608,7 +1651,7 @@ export default function CreateBillModal({
                           </div>
                         )}
                       </div>
-                      <p className="mt-0.5 text-[10px] text-gray-400">选择后可在CRM中查看该客户的所有订单</p>
+                      <p className="mt-1 text-[10px] text-gray-400">选择后可在CRM中查看该客户的所有订单</p>
                     </div>
 
                     {/* 主单号 */}
@@ -1663,7 +1706,7 @@ export default function CreateBillModal({
                                     }
                                   }}
                                   placeholder="代码"
-                                  className={`w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                                  className={`w-full px-2 py-1.5 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                                     errors.masterBillNumber
                                       ? 'border-red-500 focus:ring-red-500'
                                       : 'border-gray-300 focus:ring-primary-500'
@@ -1754,7 +1797,7 @@ export default function CreateBillModal({
                               value={formData.masterBillNumberSuffix}
                               readOnly
                               placeholder="1234567"
-                              className={`flex-1 px-2 py-1 border rounded text-xs focus:outline-none bg-gray-100 text-gray-600 cursor-not-allowed ${
+                              className={`flex-1 px-2 py-1.5 border rounded text-xs focus:outline-none bg-gray-100 text-gray-600 cursor-not-allowed ${
                                 errors.masterBillNumber
                                   ? 'border-red-500'
                                   : 'border-gray-300'
@@ -1769,7 +1812,7 @@ export default function CreateBillModal({
                           type="text"
                           value={formData.masterBillNumber}
                           onChange={(e) => handleMasterBillNumberChange(e.target.value)}
-                          className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                          className={`w-full px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                             errors.masterBillNumber
                               ? 'border-red-500 focus:ring-red-500'
                               : 'border-gray-300 focus:ring-primary-500'
@@ -1778,14 +1821,30 @@ export default function CreateBillModal({
                       )}
                       {formData.masterBillNumber && formData.shippingCompany && (
                         <p className="mt-1 text-xs text-gray-500">
-                          船公司: {formData.shippingCompany} BLNo: {formData.masterBillNumber}
+                          船公司: {formData.shippingCompany}
+                          {shippingCompanySource && (
+                            <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${
+                              shippingCompanySource === 'container' 
+                                ? 'bg-green-100 text-green-700' 
+                                : shippingCompanySource === 'file'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {shippingCompanySource === 'container' ? '集装箱代码匹配' : 
+                               shippingCompanySource === 'file' ? '文件解析' : '手动输入'}
+                            </span>
+                          )}
+                          <span className="ml-2">BLNo: {formData.masterBillNumber}</span>
                         </p>
                       )}
                       {errors.masterBillNumber && (
                         <p className="mt-1 text-xs text-red-500">{errors.masterBillNumber}</p>
                       )}
                     </div>
+                  </div>
 
+                  {/* 第三行：起运港 + 目的港 */}
+                  <div className="grid grid-cols-2 gap-x-6">
                     {/* 起运港 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1825,7 +1884,7 @@ export default function CreateBillModal({
                               setShowPortOfLoadingDropdown(false)
                             }
                           }}
-                          className={`w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                          className={`w-full px-2 py-1.5 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                             errors.origin
                               ? 'border-red-500 focus:ring-red-500'
                               : 'border-gray-300 focus:ring-primary-500'
@@ -1952,7 +2011,7 @@ export default function CreateBillModal({
                               setShowDestinationPortDropdown(false)
                             }
                           }}
-                          className={`w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                          className={`w-full px-2 py-1.5 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                             errors.destination
                               ? 'border-red-500 focus:ring-red-500'
                               : 'border-gray-300 focus:ring-primary-500'
@@ -2039,6 +2098,7 @@ export default function CreateBillModal({
                         <p className="mt-1 text-xs text-red-500">{errors.destination}</p>
                       )}
                     </div>
+                  </div>
                 </div>
               </div>
 
@@ -2060,7 +2120,7 @@ export default function CreateBillModal({
                           setErrors(prev => ({ ...prev, flightNumber: '' }))
                         }
                       }}
-                      className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                      className={`w-full px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                         errors.flightNumber
                           ? 'border-red-500 focus:ring-red-500'
                           : 'border-gray-300 focus:ring-primary-500'
@@ -2076,30 +2136,13 @@ export default function CreateBillModal({
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       地勤（码头） <span className="text-red-500">*</span>
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.groundHandling}
-                        onChange={(e) => handleInputChange('groundHandling', e.target.value)}
-                        placeholder="集装箱落在哪个码头"
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fetchSupplementInfo(formData.masterBillNumber)}
-                        disabled={!formData.masterBillNumber}
-                        className={`px-2 py-1 text-xs rounded flex items-center gap-1 transition-colors ${
-                          formData.masterBillNumber
-                            ? 'bg-primary-600 text-white hover:bg-primary-700'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                        title="根据主单号自动获取码头信息"
-                      >
-                        <Download className="w-3 h-3" />
-                        获取
-                      </button>
-                    </div>
-                    <p className="mt-1 text-[10px] text-gray-400">输入主单号后可自动获取码头信息</p>
+                    <input
+                      type="text"
+                      value={formData.groundHandling}
+                      onChange={(e) => handleInputChange('groundHandling', e.target.value)}
+                      placeholder="集装箱落在哪个码头"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                    />
                   </div>
 
                   {/* 预计离开时间 */}
@@ -2135,104 +2178,113 @@ export default function CreateBillModal({
               {/* ===== 货物信息 ===== */}
               <div className="mt-6">
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">货物信息</h3>
-                <div className="grid grid-cols-3 gap-x-6 gap-y-4">
-                  {/* 件数 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                      件数 <span className="text-red-500">*</span>
-                      <HelpCircle className="w-3 h-3 text-gray-400" />
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.pieces}
-                      onChange={(e) => handleInputChange('pieces', e.target.value)}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                    />
-                  </div>
-
-                  {/* 毛重 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      毛重 <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex gap-2">
+                <div className="space-y-4">
+                  {/* 第一行：件数 + 毛重 */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    {/* 件数 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                        件数 <span className="text-red-500">*</span>
+                        <HelpCircle className="w-3 h-3 text-gray-400" />
+                      </label>
                       <input
                         type="number"
-                        value={formData.grossWeight}
-                        onChange={(e) => handleInputChange('grossWeight', e.target.value)}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        value={formData.pieces}
+                        onChange={(e) => handleInputChange('pieces', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       />
-                      <select
-                        value={formData.grossWeightUnit}
-                        onChange={(e) => handleInputChange('grossWeightUnit', e.target.value)}
-                        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
-                      >
-                        <option value="KGS">KGS</option>
-                        <option value="LBS">LBS</option>
-                      </select>
+                    </div>
+
+                    {/* 毛重 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        毛重 <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={formData.grossWeight}
+                          onChange={(e) => handleInputChange('grossWeight', e.target.value)}
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        />
+                        <select
+                          value={formData.grossWeightUnit}
+                          onChange={(e) => handleInputChange('grossWeightUnit', e.target.value)}
+                          className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                        >
+                          <option value="KGS">KGS</option>
+                          <option value="LBS">LBS</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
-                  {/* 体积 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      体积 <span className="text-red-500">*</span>
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        value={formData.volume}
-                        onChange={(e) => handleInputChange('volume', e.target.value)}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                      />
-                      <select
-                        value={formData.volumeUnit}
-                        onChange={(e) => handleInputChange('volumeUnit', e.target.value)}
-                        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
-                      >
-                        <option value="CBM">CBM</option>
-                      </select>
+                  {/* 第二行：体积 + 每公斤运费单价 */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    {/* 体积 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        体积 <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={formData.volume}
+                          onChange={(e) => handleInputChange('volume', e.target.value)}
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        />
+                        <select
+                          value={formData.volumeUnit}
+                          onChange={(e) => handleInputChange('volumeUnit', e.target.value)}
+                          className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                        >
+                          <option value="CBM">CBM</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* 每公斤运费单价 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                        每公斤运费单价 <span className="text-red-500">*</span>
+                        <HelpCircle className="w-3 h-3 text-gray-400" />
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={formData.freightRate}
+                          onChange={(e) => handleInputChange('freightRate', e.target.value)}
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        />
+                        <select
+                          value={formData.freightRateUnit}
+                          onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
+                          className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                        >
+                          <option value="CNY">CNY</option>
+                          <option value="EUR">EUR</option>
+                          <option value="USD">USD</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
-                  {/* 每公斤运费单价 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                      每公斤运费单价 <span className="text-red-500">*</span>
-                      <HelpCircle className="w-3 h-3 text-gray-400" />
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        value={formData.freightRate}
-                        onChange={(e) => handleInputChange('freightRate', e.target.value)}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                      />
+                  {/* 第三行：派送 */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    {/* 派送 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        派送 <span className="text-red-500">*</span>
+                      </label>
                       <select
-                        value={formData.freightRateUnit}
-                        onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
-                        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                        value={formData.delivery}
+                        onChange={(e) => handleInputChange('delivery', e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       >
-                        <option value="CNY">CNY</option>
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
+                        <option value="After Bill">After Bill</option>
+                        <option value="After Clearance">After Clearance</option>
                       </select>
                     </div>
-                  </div>
-
-                  {/* 派送 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      派送 <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.delivery}
-                      onChange={(e) => handleInputChange('delivery', e.target.value)}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                    >
-                      <option value="After Bill">After Bill</option>
-                      <option value="After Clearance">After Clearance</option>
-                    </select>
                   </div>
                 </div>
               </div>
@@ -2241,7 +2293,7 @@ export default function CreateBillModal({
               {selectedTransport === 'sea' && (
                 <div className="mt-6">
                   <h3 className="text-sm font-semibold text-gray-900 mb-4">集装箱信息</h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                     {/* 集装箱号 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -2252,7 +2304,7 @@ export default function CreateBillModal({
                         value={formData.containerNumber}
                         onChange={(e) => handleInputChange('containerNumber', e.target.value.toUpperCase())}
                         placeholder="如 COSU1234567"
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       />
                     </div>
                     
@@ -2264,7 +2316,7 @@ export default function CreateBillModal({
                       <select
                         value={formData.containerSize}
                         onChange={(e) => handleInputChange('containerSize', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       >
                         <option value="">请选择</option>
                         <option value="20GP">20GP</option>
@@ -2290,7 +2342,7 @@ export default function CreateBillModal({
                         value={formData.sealNumber}
                         onChange={(e) => handleInputChange('sealNumber', e.target.value.toUpperCase())}
                         placeholder="铅封号"
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       />
                     </div>
                   </div>

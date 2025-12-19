@@ -154,6 +154,16 @@ export interface BillOfLading {
   cmrExceptionStatus?: string
   cmrExceptionResolution?: string
   cmrExceptionResolvedTime?: string
+  // 附加属性字段
+  containerType?: 'cfs' | 'fcl' | string  // 箱型：拼箱/整箱
+  billType?: 'master' | 'house' | string  // 提单类型：船东单/货代单
+  transportArrangement?: 'entrust' | 'self' | string  // 运输：委托我司运输/自行运输
+  consigneeType?: 'asl' | 'not-asl' | string  // 收货人：ASL为收货人/ASL不是提单收货人
+  containerReturn?: 'off-site' | 'local' | string  // 异地还柜：异地还柜/本地还柜
+  fullContainerTransport?: 'must-full' | 'can-split' | string  // 全程整柜运输：必须整柜派送/可拆柜后托盘送货
+  lastMileTransport?: 'truck' | 'train' | 'air' | string  // 末端运输方式：卡车派送/铁路运输/空运
+  devanning?: 'required' | 'not-required' | string  // 拆柜：需要拆柜分货服务/不需要拆柜
+  t1Declaration?: 'yes' | 'no' | string  // 海关经停报关服务(T1报关)：是/否
 }
 
 export interface GetBillsParams {

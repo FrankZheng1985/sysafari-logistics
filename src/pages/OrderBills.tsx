@@ -546,6 +546,45 @@ export default function OrderBills() {
       ),
     },
     {
+      key: 'additionalAttributes',
+      label: '附加属性',
+      render: (item: BillOfLading) => {
+        const attrs = []
+        if (item.containerType) {
+          attrs.push(item.containerType === 'cfs' ? '拼箱' : item.containerType === 'fcl' ? '整箱' : item.containerType)
+        }
+        if (item.billType) {
+          attrs.push(item.billType === 'master' ? '船东单' : item.billType === 'house' ? '货代单' : item.billType)
+        }
+        if (item.transportArrangement) {
+          attrs.push(item.transportArrangement === 'entrust' ? '委托运输' : item.transportArrangement === 'self' ? '自行运输' : item.transportArrangement)
+        }
+        if (item.devanning) {
+          attrs.push(item.devanning === 'required' ? '需拆柜' : item.devanning === 'not-required' ? '不拆柜' : item.devanning)
+        }
+        if (item.t1Declaration === 'yes') {
+          attrs.push('T1报关')
+        }
+        
+        if (attrs.length === 0) {
+          return <span className={textMuted}>-</span>
+        }
+        
+        return (
+          <div className="flex flex-wrap gap-1">
+            {attrs.map((attr, idx) => (
+              <span 
+                key={idx}
+                className="inline-flex px-1.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-600 rounded"
+              >
+                {attr}
+              </span>
+            ))}
+          </div>
+        )
+      },
+    },
+    {
       key: 'creator',
       label: '创建者/时间',
       render: (item: BillOfLading) => (

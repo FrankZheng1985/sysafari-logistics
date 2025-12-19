@@ -7,7 +7,7 @@
 import puppeteer from 'puppeteer'
 import ExcelJS from 'exceljs'
 import { generateInvoiceHTML, COMPANY_INFO, getLogoBase64, getStampBase64 } from './invoiceTemplate.js'
-import { db } from '../../config/db-adapter.js'
+import { getDatabase } from '../../config/database.js'
 import * as cosStorage from './cosStorage.js'
 import { generateId } from '../../utils/id.js'
 import fs from 'fs'
@@ -43,6 +43,7 @@ async function saveFileLocally(buffer, filename) {
  * 每年1月1日重置序号
  */
 export async function generateInvoiceNumber() {
+  const db = getDatabase()
   const year = new Date().getFullYear()
   const prefix = `INV${year}`
   
@@ -335,6 +336,7 @@ export async function generateExcel(data) {
  * 从费用记录生成发票数据
  */
 export async function prepareInvoiceData(feeIds, customerId) {
+  const db = getDatabase()
   // 获取费用记录（包含 fee_name_en 字段）
   const placeholders = feeIds.map(() => '?').join(',')
   const fees = await db.prepare(`
@@ -390,6 +392,7 @@ export async function prepareInvoiceData(feeIds, customerId) {
  * 5. 保存发票记录
  */
 export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
+  const db = getDatabase()
   // 1. 生成发票编号
   const invoiceNumber = await generateInvoiceNumber()
   const invoiceDate = new Date().toISOString().split('T')[0]
@@ -510,6 +513,7 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
  * 重新生成发票文件（不创建新发票）
  */
 export async function regenerateInvoiceFiles(invoiceId) {
+  const db = getDatabase()
   // 获取发票记录
   const invoice = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId)
   if (!invoice) {
@@ -741,6 +745,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
  * 获取发票文件的临时下载URL
  */
 export async function getInvoiceDownloadUrl(invoiceId, fileType = 'pdf') {
+  const db = getDatabase()
   const invoice = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId)
   if (!invoice) {
     throw new Error('发票不存在')
@@ -776,6 +781,7 @@ export async function getInvoiceDownloadUrl(invoiceId, fileType = 'pdf') {
  * @returns {Promise<{pdfUrl: string|null, excelUrl: string|null}>}
  */
 export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
+  const db = getDatabase()
   console.log(`[发票文件生成] 开始为发票 ${invoiceId} 生成文件...`)
   try {
     // 获取完整的发票记录

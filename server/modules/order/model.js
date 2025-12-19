@@ -1094,8 +1094,13 @@ export async function getSystemConfig(key) {
 export async function setSystemConfig(key, value, description) {
   const db = getDatabase()
   await db.prepare(`
-    INSERT OR REPLACE INTO system_configs (key, value, description, updated_at)
+    INSERT INTO system_configs (key, value, description, updated_at)
     VALUES (?, ?, COALESCE(?, (SELECT description FROM system_configs WHERE key = ?)), NOW())
+    ON CONFLICT (key) 
+    DO UPDATE SET
+      value = EXCLUDED.value,
+      description = EXCLUDED.description,
+      updated_at = EXCLUDED.updated_at
   `).run(key, value, description, key)
   return true
 }

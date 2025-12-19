@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X } from 'lucide-react'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
 // DataTable available if needed
@@ -681,6 +681,89 @@ export default function BillDetails() {
                   <span className="text-xs text-gray-500">创建时间:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.createTime}</span>
                 </div>
+                {/* 附加属性字段 - 显示在基础信息中 */}
+                {billDetail.containerType && (
+                  <div>
+                    <span className="text-xs text-gray-500">箱型:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.containerType === 'cfs' ? '拼箱(CFS)' : 
+                       billDetail.containerType === 'fcl' ? '整箱(FCL)' : billDetail.containerType}
+                    </span>
+                  </div>
+                )}
+                {billDetail.billType && (
+                  <div>
+                    <span className="text-xs text-gray-500">提单类型:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.billType === 'master' ? '船东单(Master Bill)' : 
+                       billDetail.billType === 'house' ? '货代单(House Bill)' : billDetail.billType}
+                    </span>
+                  </div>
+                )}
+                {billDetail.transportArrangement && (
+                  <div>
+                    <span className="text-xs text-gray-500">运输:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.transportArrangement === 'entrust' ? '委托我司运输' : 
+                       billDetail.transportArrangement === 'self' ? '自行运输' : billDetail.transportArrangement}
+                    </span>
+                  </div>
+                )}
+                {billDetail.consigneeType && (
+                  <div>
+                    <span className="text-xs text-gray-500">收货人:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.consigneeType === 'asl' ? 'ASL为收货人' : 
+                       billDetail.consigneeType === 'not-asl' ? 'ASL不是提单收货人' : billDetail.consigneeType}
+                    </span>
+                  </div>
+                )}
+                {billDetail.containerReturn && (
+                  <div>
+                    <span className="text-xs text-gray-500">异地还柜:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.containerReturn === 'off-site' ? '异地还柜(非Rotterdam)' : 
+                       billDetail.containerReturn === 'local' ? '本地还柜' : billDetail.containerReturn}
+                    </span>
+                  </div>
+                )}
+                {billDetail.fullContainerTransport && (
+                  <div>
+                    <span className="text-xs text-gray-500">全程整柜运输:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.fullContainerTransport === 'must-full' ? '必须整柜派送' : 
+                       billDetail.fullContainerTransport === 'can-split' ? '可拆柜后托盘送货' : billDetail.fullContainerTransport}
+                    </span>
+                  </div>
+                )}
+                {billDetail.lastMileTransport && (
+                  <div>
+                    <span className="text-xs text-gray-500">末端运输方式:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.lastMileTransport === 'truck' ? '卡车派送' : 
+                       billDetail.lastMileTransport === 'train' ? '铁路运输' : 
+                       billDetail.lastMileTransport === 'air' ? '空运' : billDetail.lastMileTransport}
+                    </span>
+                  </div>
+                )}
+                {billDetail.devanning && (
+                  <div>
+                    <span className="text-xs text-gray-500">拆柜:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.devanning === 'required' ? '需要拆柜分货服务' : 
+                       billDetail.devanning === 'not-required' ? '不需要拆柜' : billDetail.devanning}
+                    </span>
+                  </div>
+                )}
+                {billDetail.t1Declaration && (
+                  <div>
+                    <span className="text-xs text-gray-500">T1报关:</span>
+                    <span className="ml-2 font-medium text-xs">
+                      {billDetail.t1Declaration === 'yes' ? '是' : 
+                       billDetail.t1Declaration === 'no' ? '否' : billDetail.t1Declaration}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -745,6 +828,102 @@ export default function BillDetails() {
                 </div>
               </div>
             </div>
+
+            {/* 附加属性 */}
+            {(billDetail.containerType || billDetail.billType || billDetail.transportArrangement || 
+              billDetail.consigneeType || billDetail.containerReturn || billDetail.fullContainerTransport ||
+              billDetail.lastMileTransport || billDetail.devanning || billDetail.t1Declaration) && (
+              <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <Settings className="w-3 h-3 text-primary-600" />
+                  附加属性
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {billDetail.containerType && (
+                    <div>
+                      <span className="text-xs text-gray-500">箱型:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.containerType === 'cfs' ? '拼箱(CFS)' : 
+                         billDetail.containerType === 'fcl' ? '整箱(FCL)' : billDetail.containerType}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.billType && (
+                    <div>
+                      <span className="text-xs text-gray-500">提单:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.billType === 'master' ? '船东单(Master Bill)' : 
+                         billDetail.billType === 'house' ? '货代单(House Bill)' : billDetail.billType}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.transportArrangement && (
+                    <div>
+                      <span className="text-xs text-gray-500">运输:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.transportArrangement === 'entrust' ? '委托我司运输' : 
+                         billDetail.transportArrangement === 'self' ? '自行运输' : billDetail.transportArrangement}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.consigneeType && (
+                    <div>
+                      <span className="text-xs text-gray-500">收货人:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.consigneeType === 'asl' ? 'ASL为收货人' : 
+                         billDetail.consigneeType === 'not-asl' ? 'ASL不是提单收货人' : billDetail.consigneeType}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.containerReturn && (
+                    <div>
+                      <span className="text-xs text-gray-500">异地还柜:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.containerReturn === 'off-site' ? '异地还柜(非Rotterdam)' : 
+                         billDetail.containerReturn === 'local' ? '本地还柜' : billDetail.containerReturn}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.fullContainerTransport && (
+                    <div>
+                      <span className="text-xs text-gray-500">全程整柜运输:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.fullContainerTransport === 'must-full' ? '必须整柜派送' : 
+                         billDetail.fullContainerTransport === 'can-split' ? '可拆柜后托盘送货' : billDetail.fullContainerTransport}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.lastMileTransport && (
+                    <div>
+                      <span className="text-xs text-gray-500">末端运输方式:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.lastMileTransport === 'truck' ? '卡车派送' : 
+                         billDetail.lastMileTransport === 'train' ? '铁路运输' : 
+                         billDetail.lastMileTransport === 'air' ? '空运' : billDetail.lastMileTransport}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.devanning && (
+                    <div>
+                      <span className="text-xs text-gray-500">拆柜:</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.devanning === 'required' ? '需要拆柜分货服务' : 
+                         billDetail.devanning === 'not-required' ? '不需要拆柜' : billDetail.devanning}
+                      </span>
+                    </div>
+                  )}
+                  {billDetail.t1Declaration && (
+                    <div>
+                      <span className="text-xs text-gray-500">海关经停报关服务(T1报关):</span>
+                      <span className="ml-2 font-medium text-xs">
+                        {billDetail.t1Declaration === 'yes' ? '是' : 
+                         billDetail.t1Declaration === 'no' ? '否' : billDetail.t1Declaration}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* 状态信息 */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">

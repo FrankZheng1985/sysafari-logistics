@@ -2,7 +2,7 @@
  * 消息模块 - 数据模型
  */
 
-import { getDatabase } from '../../db-adapter.js'
+import { getDatabase } from '../../config/database.js'
 import { v4 as uuidv4 } from 'uuid'
 
 // ==================== 消息相关 ====================

@@ -35,10 +35,11 @@ const require = createRequire(import.meta.url)
 const pdfParse = require('pdf-parse')
 const XLSX = require('xlsx')
 
-dotenv.config()
-
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+
+// 从项目根目录加载 .env 文件
+dotenv.config({ path: join(__dirname, '../.env') })
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -107,7 +108,7 @@ function initDatabase() {
       current_seq INTEGER DEFAULT 0,
       prefix TEXT,
       description TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -122,8 +123,9 @@ function initDatabase() {
   ]
   
   const initSeqStmt = db.prepare(`
-    INSERT OR IGNORE INTO order_sequences (business_type, current_seq, prefix, description) 
+    INSERT INTO order_sequences (business_type, current_seq, prefix, description) 
     VALUES (?, 0, ?, ?)
+    ON CONFLICT (business_type) DO NOTHING
   `)
   businessTypes.forEach(bt => {
     initSeqStmt.run(bt.type, bt.prefix, bt.description)
@@ -161,8 +163,8 @@ function initDatabase() {
       is_void INTEGER DEFAULT 0,
       void_reason TEXT,
       void_time TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -193,6 +195,34 @@ function initDatabase() {
   } catch (e) { /* 列已存在 */ }
   try {
     db.exec(`ALTER TABLE bills_of_lading ADD COLUMN customs_release_time TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  // 附加属性字段
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN container_type TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN bill_type TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN transport_arrangement TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN consignee_type TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN container_return TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN full_container_transport TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN last_mile_transport TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN devanning TEXT`)
+  } catch (e) { /* 列已存在 */ }
+  try {
+    db.exec(`ALTER TABLE bills_of_lading ADD COLUMN t1_declaration TEXT`)
   } catch (e) { /* 列已存在 */ }
   // 换单字段
   try {
@@ -315,7 +345,7 @@ function initDatabase() {
     }
     
     // 更新序列计数器
-    db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = 'bill'`)
+    db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'bill'`)
       .run(allBills.length)
     
     console.log(`[bill] 已为 ${allBills.length} 条正式订单重新分配连续序号`)
@@ -353,7 +383,7 @@ function initDatabase() {
       module TEXT DEFAULT 'order',
       remark TEXT,
       operation_time TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -382,7 +412,7 @@ function initDatabase() {
       file_type TEXT NOT NULL,
       upload_by TEXT DEFAULT 'admin',
       upload_time TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -409,7 +439,7 @@ function initDatabase() {
       finance_approved_at TEXT,
       finance_comment TEXT,
       fees_json TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -427,16 +457,17 @@ function initDatabase() {
       key TEXT PRIMARY KEY,
       value TEXT,
       description TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
   // 初始化默认配置
   try {
     db.prepare(`
-      INSERT OR IGNORE INTO system_configs (key, value, description) VALUES 
+      INSERT INTO system_configs (key, value, description) VALUES 
       ('void_supervisor_id', '', '作废审批上级用户ID'),
       ('void_finance_id', '', '作废审批财务用户ID')
+      ON CONFLICT (key) DO NOTHING
     `).run()
   } catch (e) { /* 配置已存在 */ }
 
@@ -466,8 +497,8 @@ function initDatabase() {
       is_void INTEGER DEFAULT 0,
       void_reason TEXT,
       void_time TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -514,8 +545,8 @@ function initDatabase() {
       is_void INTEGER DEFAULT 0,
       void_reason TEXT,
       void_time TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -560,8 +591,8 @@ function initDatabase() {
       is_void INTEGER DEFAULT 0,
       void_reason TEXT,
       void_time TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -605,8 +636,8 @@ function initDatabase() {
       is_void INTEGER DEFAULT 0,
       void_reason TEXT,
       void_time TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -658,8 +689,8 @@ function initDatabase() {
       category TEXT NOT NULL,
       description TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -685,8 +716,8 @@ function initDatabase() {
       port_type TEXT DEFAULT 'main',
       parent_port_code TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -779,8 +810,9 @@ function initDatabase() {
     if (yantianExists.count === 0) {
       try {
         const insertLoadingPort = db.prepare(`
-          INSERT OR IGNORE INTO ports_of_loading (port_code, port_name_cn, port_name_en, country, country_code, city, transport_type, port_type, parent_port_code, sort_order) 
+          INSERT INTO ports_of_loading (port_code, port_name_cn, port_name_en, country, country_code, city, transport_type, port_type, parent_port_code, sort_order) 
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (port_code) DO NOTHING
         `)
         insertLoadingPort.run('CNYTN', '盐田港', 'Yantian', '中国', 'CN', '深圳', 'sea', 'sub', 'CNSZX', 4)
         insertLoadingPort.run('CNSHK', '蛇口港', 'Shekou', '中国', 'CN', '深圳', 'sea', 'sub', 'CNSZX', 5)
@@ -806,8 +838,8 @@ function initDatabase() {
       continent TEXT DEFAULT '亚洲',
       description TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -877,8 +909,8 @@ function initDatabase() {
       city TEXT,
       description TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -937,8 +969,8 @@ function initDatabase() {
       timezone TEXT,
       description TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1011,8 +1043,8 @@ function initDatabase() {
       address TEXT,
       description TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1238,7 +1270,8 @@ function initDatabase() {
     ]
     
     const insertCompanyIfNotExists = db.prepare(`
-      INSERT OR IGNORE INTO shipping_companies (company_code, company_name, country, website) VALUES (?, ?, ?, ?)
+      INSERT INTO shipping_companies (company_code, company_name, country, website) VALUES (?, ?, ?, ?)
+      ON CONFLICT (company_code) DO NOTHING
     `)
     
     let addedCount = 0
@@ -1260,8 +1293,8 @@ function initDatabase() {
       container_code TEXT NOT NULL UNIQUE,
       description TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
       FOREIGN KEY (shipping_company_id) REFERENCES shipping_companies(id)
     )
   `)
@@ -1585,7 +1618,8 @@ function initDatabase() {
     ]
     
     const insertCodeIfNotExists = db.prepare(`
-      INSERT OR IGNORE INTO container_codes (shipping_company_id, container_code, description) VALUES (?, ?, ?)
+      INSERT INTO container_codes (shipping_company_id, container_code, description) VALUES (?, ?, ?)
+      ON CONFLICT (shipping_company_id, container_code) DO NOTHING
     `)
     
     let addedCount = 0
@@ -1621,8 +1655,8 @@ function initDatabase() {
       address TEXT,
       description TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1679,8 +1713,8 @@ function initDatabase() {
       provider_name TEXT,
       status TEXT DEFAULT 'active',
       remark TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1715,8 +1749,8 @@ function initDatabase() {
       description TEXT,
       sort_order INTEGER DEFAULT 0,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1750,8 +1784,8 @@ function initDatabase() {
       icon TEXT,
       sort_order INTEGER DEFAULT 0,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1789,8 +1823,8 @@ function initDatabase() {
       description TEXT,
       effective_date TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1841,8 +1875,8 @@ function initDatabase() {
       currency TEXT DEFAULT 'EUR',
       description TEXT,
       is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1886,8 +1920,8 @@ function initDatabase() {
       valid_to TEXT,
       description TEXT,
       is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -1942,8 +1976,8 @@ function initDatabase() {
       setting_value TEXT,
       setting_type TEXT DEFAULT 'string',
       description TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -1982,18 +2016,23 @@ function initDatabase() {
       footnotes TEXT,
       is_active INTEGER DEFAULT 1,
       data_source TEXT DEFAULT 'manual',
-      last_sync_time DATETIME,
+      last_sync_time TIMESTAMP,
       declaration_type TEXT DEFAULT 'per_unit',
       min_declaration_value REAL DEFAULT 0,
       material TEXT,
       usage_scenario TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
   // 添加新字段（兼容已存在的数据库）
-  const tariffColumns = db.prepare("PRAGMA table_info(tariff_rates)").all()
+  // 使用PostgreSQL的information_schema查询表结构
+  const tariffColumns = await db.prepare(`
+    SELECT column_name as name 
+    FROM information_schema.columns 
+    WHERE table_name = 'tariff_rates'
+  `).all()
   const tariffColumnNames = tariffColumns.map(c => c.name)
   if (!tariffColumnNames.includes('declaration_type')) {
     db.exec("ALTER TABLE tariff_rates ADD COLUMN declaration_type TEXT DEFAULT 'per_unit'")
@@ -2033,7 +2072,7 @@ function initDatabase() {
       change_type TEXT,
       change_reason TEXT,
       changed_by TEXT,
-      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      changed_at TIMESTAMP DEFAULT NOW(),
       FOREIGN KEY (tariff_rate_id) REFERENCES tariff_rates(id)
     )
   `)
@@ -2071,14 +2110,14 @@ function initDatabase() {
       id SERIAL PRIMARY KEY,
       username TEXT NOT NULL,
       ip_address TEXT,
-      attempt_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      attempt_time TIMESTAMP DEFAULT NOW(),
       success INTEGER DEFAULT 0,
       failure_reason TEXT
     )
   `)
 
   // 清理30天前的登录尝试记录
-  db.exec(`DELETE FROM login_attempts WHERE attempt_time < datetime('now', '-30 days')`)
+  db.exec(`DELETE FROM login_attempts WHERE attempt_time < NOW() - INTERVAL '30 days'`)
 
   // 验证码表（用于邮箱验证）
   db.exec(`
@@ -2089,9 +2128,9 @@ function initDatabase() {
       email TEXT NOT NULL,
       code TEXT NOT NULL,
       type TEXT DEFAULT 'login',
-      expires_at DATETIME NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
       used INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2104,8 +2143,8 @@ function initDatabase() {
       id SERIAL PRIMARY KEY,
       user_id INTEGER,
       username TEXT NOT NULL,
-      login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-      logout_time DATETIME,
+      login_time TIMESTAMP DEFAULT NOW(),
+      logout_time TIMESTAMP,
       ip_address TEXT,
       user_agent TEXT,
       device_info TEXT,
@@ -2122,7 +2161,7 @@ function initDatabase() {
       setting_key TEXT UNIQUE NOT NULL,
       setting_value TEXT,
       description TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2140,7 +2179,8 @@ function initDatabase() {
     { key: 'session_timeout', value: '480', desc: '会话超时时间（分钟）' },
   ]
   const insertSetting = db.prepare(`
-    INSERT OR IGNORE INTO security_settings (setting_key, setting_value, description) VALUES (?, ?, ?)
+    INSERT INTO security_settings (setting_key, setting_value, description) VALUES (?, ?, ?)
+    ON CONFLICT (setting_key) DO NOTHING
   `)
   securitySettings.forEach(s => insertSetting.run(s.key, s.value, s.desc))
 
@@ -2161,8 +2201,8 @@ function initDatabase() {
       last_login_time TEXT,
       last_login_ip TEXT,
       login_count INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -2180,8 +2220,8 @@ function initDatabase() {
       description TEXT,
       is_system INTEGER DEFAULT 0,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2194,7 +2234,7 @@ function initDatabase() {
       module TEXT NOT NULL,
       description TEXT,
       sort_order INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2204,7 +2244,7 @@ function initDatabase() {
       id SERIAL PRIMARY KEY,
       role_code TEXT NOT NULL,
       permission_code TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(role_code, permission_code)
     )
   `)
@@ -2216,7 +2256,7 @@ function initDatabase() {
       user_id INTEGER NOT NULL,
       bill_id TEXT NOT NULL,
       assigned_by INTEGER,
-      assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      assigned_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(bill_id)
     )
   `)
@@ -2240,11 +2280,11 @@ function initDatabase() {
       email TEXT,
       name TEXT,
       picture TEXT,
-      first_login_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      last_login_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      first_login_at TIMESTAMP DEFAULT NOW(),
+      last_login_at TIMESTAMP DEFAULT NOW(),
       is_bound INTEGER DEFAULT 0,
       bound_user_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
@@ -2282,9 +2322,9 @@ function initDatabase() {
       tags TEXT DEFAULT '[]',
       notes TEXT,
       status TEXT DEFAULT 'active',
-      last_follow_up_time DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      last_follow_up_time TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2305,8 +2345,8 @@ function initDatabase() {
       is_decision_maker INTEGER DEFAULT 0,
       notes TEXT,
       status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2317,15 +2357,15 @@ function initDatabase() {
       customer_id TEXT NOT NULL,
       contact_id TEXT,
       follow_up_type TEXT DEFAULT 'other',
-      follow_up_time DATETIME,
+      follow_up_time TIMESTAMP,
       content TEXT,
       result TEXT,
-      next_follow_up_time DATETIME,
+      next_follow_up_time TIMESTAMP,
       next_action TEXT,
       operator_id INTEGER,
       operator_name TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2347,8 +2387,8 @@ function initDatabase() {
       assigned_to INTEGER,
       assigned_name TEXT,
       lost_reason TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2376,8 +2416,8 @@ function initDatabase() {
       status TEXT DEFAULT 'draft',
       created_by INTEGER,
       created_by_name TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2402,8 +2442,8 @@ function initDatabase() {
       status TEXT DEFAULT 'draft',
       created_by INTEGER,
       created_by_name TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2427,9 +2467,9 @@ function initDatabase() {
       assigned_name TEXT,
       status TEXT DEFAULT 'open',
       resolution TEXT,
-      resolved_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      resolved_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
 
@@ -2450,7 +2490,7 @@ function initDatabase() {
     // 初始化跟进记录
     const insertFollowUp = db.prepare(`
       INSERT INTO customer_follow_ups (id, customer_id, follow_up_type, follow_up_time, content, operator_name)
-      VALUES (?, ?, ?, datetime('now', 'localtime'), ?, ?)
+      VALUES (?, ?, ?, NOW(), ?, ?)
     `)
     insertFollowUp.run('fu001', 'cust001', 'phone', '电话沟通新订单需求', '管理员')
     insertFollowUp.run('fu002', 'cust002', 'email', '发送报价单', '管理员')
@@ -2526,8 +2566,9 @@ function initDatabase() {
   const existingRolePermissions = db.prepare('SELECT COUNT(*) as count FROM role_permissions').get()
   if (existingRolePermissions.count === 0) {
     const insertRolePermission = db.prepare(`
-      INSERT OR IGNORE INTO role_permissions (role_code, permission_code)
+      INSERT INTO role_permissions (role_code, permission_code)
       VALUES (?, ?)
+      ON CONFLICT (role_code, permission_code) DO NOTHING
     `)
     
     // 管理员拥有所有权限
@@ -2627,7 +2668,7 @@ function initializeSequenceForTable(tableName, businessType) {
     
     // 如果表中的最大序号大于序列表中的当前序号，则同步
     if (maxSeq > currentSeq) {
-      db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = ?`)
+      db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = ?`)
         .run(maxSeq, businessType)
       console.log(`[${businessType}] 同步序号: ${currentSeq} -> ${maxSeq}`)
     }
@@ -2649,7 +2690,7 @@ function initializeSequenceForTable(tableName, businessType) {
     }
     
     // 更新序列表中的当前序号
-    db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = ?`)
+    db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = ?`)
       .run(nextSeq - 1, businessType)
     
     console.log(`[${businessType}] 已为 ${recordsWithoutSeq.length} 条记录分配序号`)
@@ -2673,7 +2714,7 @@ function initializeSequenceForTableWithCondition(tableName, businessType, condit
     
     // 如果表中的最大序号大于序列表中的当前序号，则同步
     if (maxSeq > currentSeq) {
-      db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = ?`)
+      db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = ?`)
         .run(maxSeq, businessType)
       console.log(`[${businessType}] 同步序号: ${currentSeq} -> ${maxSeq}`)
     }
@@ -2695,7 +2736,7 @@ function initializeSequenceForTableWithCondition(tableName, businessType, condit
     }
     
     // 更新序列表中的当前序号
-    db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = ?`)
+    db.prepare(`UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = ?`)
       .run(nextSeq - 1, businessType)
     
     console.log(`[${businessType}] 已为 ${recordsWithoutSeq.length} 条记录分配序号`)
@@ -2720,7 +2761,7 @@ function getNextOrderSeq(businessType) {
     // 更新序号
     db.prepare(`
       UPDATE order_sequences 
-      SET current_seq = ?, updated_at = CURRENT_TIMESTAMP 
+      SET current_seq = ?, updated_at = NOW() 
       WHERE business_type = ?
     `).run(nextSeq, businessType)
     
@@ -2783,8 +2824,8 @@ if (!USE_POSTGRES) {
           cooperation_date TEXT,
           contract_expire_date TEXT,
           remark TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW(),
           created_by TEXT,
           updated_by TEXT
         )
@@ -2875,6 +2916,18 @@ function convertToCamelCase(obj) {
     cmrExceptionResolution: obj.cmr_exception_resolution,
     cmrExceptionResolvedTime: obj.cmr_exception_resolved_time,
     cmrNotes: obj.cmr_notes,
+    docSwapStatus: obj.doc_swap_status,
+    docSwapTime: obj.doc_swap_time,
+    // 附加属性字段
+    containerType: obj.container_type,
+    billType: obj.bill_type,
+    transportArrangement: obj.transport_arrangement,
+    consigneeType: obj.consignee_type,
+    containerReturn: obj.container_return,
+    fullContainerTransport: obj.full_container_transport,
+    lastMileTransport: obj.last_mile_transport,
+    devanning: obj.devanning,
+    t1Declaration: obj.t1_declaration,
   }
 }
 
@@ -3037,7 +3090,7 @@ app.put('/api/shipping-companies/:id', (req, res) => {
 
     db.prepare(`
       UPDATE shipping_companies 
-      SET company_name = ?, company_code = ?, country = ?, website = ?, updated_at = CURRENT_TIMESTAMP
+      SET company_name = ?, company_code = ?, country = ?, website = ?, updated_at = NOW()
       WHERE id = ?
     `).run(
       companyName,
@@ -3431,6 +3484,16 @@ app.post('/api/bills', (req, res) => {
     const place_of_delivery = data.placeOfDelivery || data.place_of_delivery
     const transport_method = data.transportMethod || data.transport_method
     const company_name = data.companyName || data.company_name
+    // 附加属性字段
+    const container_type = data.containerType || data.container_type
+    const bill_type = data.billType || data.bill_type
+    const transport_arrangement = data.transportArrangement || data.transport_arrangement
+    const consignee_type = data.consigneeType || data.consignee_type
+    const container_return = data.containerReturn || data.container_return
+    const full_container_transport = data.fullContainerTransport || data.full_container_transport
+    const last_mile_transport = data.lastMileTransport || data.last_mile_transport
+    const devanning = data.devanning
+    const t1_declaration = data.t1Declaration || data.t1_declaration
 
     const id = Date.now().toString()
     const now = new Date().toISOString()
@@ -3445,8 +3508,11 @@ app.post('/api/bills', (req, res) => {
         pieces, weight, volume, inspection, customs_stats, creator, create_time,
         status, shipper, consignee, notify_party, port_of_loading,
         port_of_discharge, place_of_delivery, transport_method, company_name,
+        container_type, bill_type, transport_arrangement, consignee_type,
+        container_return, full_container_transport, last_mile_transport,
+        devanning, t1_declaration,
         order_seq, is_void, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     stmt.run(
@@ -3473,6 +3539,15 @@ app.post('/api/bills', (req, res) => {
       place_of_delivery || null,
       transport_method || null,
       company_name || null,
+      container_type || null,
+      bill_type || null,
+      transport_arrangement || null,
+      consignee_type || null,
+      container_return || null,
+      full_container_transport || null,
+      last_mile_transport || null,
+      devanning || null,
+      t1_declaration || null,
       nextOrderSeq,
       0, // is_void = false
       now,
@@ -3545,7 +3620,7 @@ app.put('/api/bills/:id', (req, res) => {
     res.json({
       errCode: 200,
       msg: '更新成功',
-      data: bill,
+      data: convertToCamelCase(bill),
     })
   } catch (error) {
     console.error('更新提单失败:', error)
@@ -3680,7 +3755,7 @@ app.put('/api/bills/:id/inspection', (req, res) => {
     const oldInspection = existing.inspection
     
     // 构建更新语句
-    let updateFields = ['inspection = ?', 'updated_at = CURRENT_TIMESTAMP']
+    let updateFields = ['inspection = ?', 'updated_at = NOW()']
     let params = [inspection]
     
     // 更新查验详情
@@ -3891,7 +3966,7 @@ app.put('/api/bills/:id/delivery', (req, res) => {
     const oldDeliveryStatus = existing.delivery_status
     
     // 构建更新字段
-    let updateFields = 'delivery_status = ?, updated_at = CURRENT_TIMESTAMP'
+    let updateFields = 'delivery_status = ?, updated_at = NOW()'
     const updateParams = [deliveryStatus]
     
     if (cmrDetail !== undefined) {
@@ -4012,7 +4087,7 @@ app.put('/api/bills/:id/publish', (req, res) => {
     // 更新状态和序号
     db.prepare(`
       UPDATE bills_of_lading 
-      SET status = ?, order_seq = ?, updated_at = CURRENT_TIMESTAMP
+      SET status = ?, order_seq = ?, updated_at = NOW()
       WHERE id = ?
     `).run(newStatus, newOrderSeq, id)
     
@@ -4061,7 +4136,7 @@ app.put('/api/bills/:id/void', (req, res) => {
     // 更新为作废状态
     db.prepare(`
       UPDATE bills_of_lading 
-      SET is_void = 1, void_reason = ?, void_time = ?, updated_at = CURRENT_TIMESTAMP
+      SET is_void = 1, void_reason = ?, void_time = ?, updated_at = NOW()
       WHERE id = ?
     `).run(voidReason || null, now, id)
     
@@ -4110,7 +4185,7 @@ app.put('/api/bills/:id/restore', (req, res) => {
     // 恢复提单
     db.prepare(`
       UPDATE bills_of_lading 
-      SET is_void = 0, void_reason = NULL, void_time = NULL, updated_at = CURRENT_TIMESTAMP
+      SET is_void = 0, void_reason = NULL, void_time = NULL, updated_at = NOW()
       WHERE id = ?
     `).run(id)
     
@@ -4158,7 +4233,7 @@ app.put('/api/bills/:id/ship-status', (req, res) => {
       // 跳港需要记录跳港目的地和时间
       db.prepare(`
         UPDATE bills_of_lading 
-        SET ship_status = ?, skip_port = ?, skip_port_time = ?, updated_at = CURRENT_TIMESTAMP
+        SET ship_status = ?, skip_port = ?, skip_port_time = ?, updated_at = NOW()
         WHERE id = ?
       `).run(shipStatus, skipPort || null, now, id)
       
@@ -4167,7 +4242,7 @@ app.put('/api/bills/:id/ship-status', (req, res) => {
       // 已到港需要记录实际到港日期，同时更新 status 字段
       db.prepare(`
         UPDATE bills_of_lading 
-        SET ship_status = ?, status = ?, actual_arrival_date = ?, updated_at = CURRENT_TIMESTAMP
+        SET ship_status = ?, status = ?, actual_arrival_date = ?, updated_at = NOW()
         WHERE id = ?
       `).run(shipStatus, '已到港', actualArrivalDate || now, id)
       
@@ -4176,7 +4251,7 @@ app.put('/api/bills/:id/ship-status', (req, res) => {
       // 未到港，同时更新 status 字段
       db.prepare(`
         UPDATE bills_of_lading 
-        SET ship_status = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+        SET ship_status = ?, status = ?, updated_at = NOW()
         WHERE id = ?
       `).run(shipStatus, '船未到港', id)
       
@@ -4222,7 +4297,7 @@ app.put('/api/bills/:id/customs-status', (req, res) => {
     if (customsStatus === '已放行') {
       db.prepare(`
         UPDATE bills_of_lading 
-        SET customs_status = ?, customs_release_time = ?, updated_at = CURRENT_TIMESTAMP
+        SET customs_status = ?, customs_release_time = ?, updated_at = NOW()
         WHERE id = ?
       `).run(customsStatus, now, id)
       
@@ -4230,7 +4305,7 @@ app.put('/api/bills/:id/customs-status', (req, res) => {
     } else {
       db.prepare(`
         UPDATE bills_of_lading 
-        SET customs_status = ?, customs_release_time = NULL, updated_at = CURRENT_TIMESTAMP
+        SET customs_status = ?, customs_release_time = NULL, updated_at = NOW()
         WHERE id = ?
       `).run(customsStatus, id)
       
@@ -4348,7 +4423,7 @@ app.put('/api/bills/:id/complete', async (req, res) => {
     // 更新状态为已完成
     await db.prepare(`
       UPDATE bills_of_lading 
-      SET status = ?, complete_time = ?, updated_at = CURRENT_TIMESTAMP
+      SET status = ?, complete_time = ?, updated_at = NOW()
       WHERE id = ?
     `).run('已完成', now, id)
     
@@ -4854,7 +4929,7 @@ app.put('/api/basic-data/:id', (req, res) => {
 
     db.prepare(`
       UPDATE basic_data 
-      SET name = ?, code = ?, category = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, code = ?, category = ?, description = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(name, code, category, description || '', status || 'active', id)
 
@@ -5075,7 +5150,7 @@ app.put('/api/container-codes/:id', (req, res) => {
 
     db.prepare(`
       UPDATE container_codes 
-      SET container_code = ?, description = ?, shipping_company_id = ?, updated_at = CURRENT_TIMESTAMP
+      SET container_code = ?, description = ?, shipping_company_id = ?, updated_at = NOW()
       WHERE id = ?
     `).run(containerCode.toUpperCase(), description || '', shippingCompanyId, id)
 
@@ -5485,7 +5560,7 @@ app.put('/api/ports-of-loading/:id', (req, res) => {
 
     db.prepare(`
       UPDATE ports_of_loading 
-      SET port_code = ?, port_name_cn = ?, port_name_en = ?, country = ?, country_code = ?, city = ?, description = ?, transport_type = ?, port_type = ?, parent_port_code = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET port_code = ?, port_name_cn = ?, port_name_en = ?, country = ?, country_code = ?, city = ?, description = ?, transport_type = ?, port_type = ?, parent_port_code = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(
       portCode.toUpperCase(),
@@ -5786,7 +5861,7 @@ app.put('/api/destination-ports/:id', (req, res) => {
 
     db.prepare(`
       UPDATE destination_ports 
-      SET port_code = ?, port_name_cn = ?, port_name_en = ?, country = ?, country_code = ?, city = ?, transport_type = ?, continent = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET port_code = ?, port_name_cn = ?, port_name_en = ?, country = ?, country_code = ?, city = ?, transport_type = ?, continent = ?, description = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(
       portCode.toUpperCase(),
@@ -6067,7 +6142,7 @@ app.put('/api/air-ports/:id', (req, res) => {
 
     db.prepare(`
       UPDATE air_ports 
-      SET port_code = ?, port_name_cn = ?, port_name_en = ?, country = ?, country_code = ?, city = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET port_code = ?, port_name_cn = ?, port_name_en = ?, country = ?, country_code = ?, city = ?, description = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(
       portCode.toUpperCase(),
@@ -6338,7 +6413,7 @@ app.put('/api/countries/:id', (req, res) => {
 
     db.prepare(`
       UPDATE countries 
-      SET country_code = ?, country_name_cn = ?, country_name_en = ?, continent = ?, region = ?, capital = ?, currency_code = ?, currency_name = ?, phone_code = ?, timezone = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET country_code = ?, country_name_cn = ?, country_name_en = ?, continent = ?, region = ?, capital = ?, currency_code = ?, currency_name = ?, phone_code = ?, timezone = ?, description = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(
       countryCode.toUpperCase(),
@@ -6935,7 +7010,7 @@ app.put('/api/service-fee-categories/:id', async (req, res) => {
 
     const result = await db.prepare(`
       UPDATE service_fee_categories 
-      SET name = ?, code = ?, description = ?, sort_order = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, code = ?, description = ?, sort_order = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(name, code?.toUpperCase(), description, sortOrder, status, id)
 
@@ -7075,7 +7150,7 @@ app.put('/api/service-fees/:id', async (req, res) => {
 
     const result = await db.prepare(`
       UPDATE service_fees 
-      SET name = ?, category = ?, unit = ?, price = ?, currency = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, category = ?, unit = ?, price = ?, currency = ?, description = ?, is_active = ?, updated_at = NOW()
       WHERE id = ?
     `).run(name, category, unit, price, currency, description, isActive ? 1 : 0, id)
 
@@ -7247,7 +7322,7 @@ app.put('/api/transport-prices/:id', async (req, res) => {
 
     const result = await db.prepare(`
       UPDATE transport_prices 
-      SET name = ?, origin = ?, destination = ?, transport_type = ?, distance = ?, price_per_km = ?, total_price = ?, currency = ?, valid_from = ?, valid_to = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, origin = ?, destination = ?, transport_type = ?, distance = ?, price_per_km = ?, total_price = ?, currency = ?, valid_from = ?, valid_to = ?, description = ?, is_active = ?, updated_at = NOW()
       WHERE id = ?
     `).run(name, origin, destination, transportType, finalDistance, finalPricePerKm, finalTotalPrice, currency, validFrom, validTo, description, isActive ? 1 : 0, id)
 
@@ -7667,7 +7742,7 @@ app.put('/api/tariff-rates/:id', async (req, res) => {
     }
 
     // 添加 updated_at
-    setClauses.push('updated_at = CURRENT_TIMESTAMP')
+    setClauses.push('updated_at = NOW()')
     values.push(id)
 
     const sql = `UPDATE tariff_rates SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`
@@ -7742,7 +7817,7 @@ app.post('/api/tariff-rates/import', (req, res) => {
     }
 
     const insertStmt = db.prepare(`
-      INSERT OR REPLACE INTO tariff_rates (
+      INSERT INTO tariff_rates (
         hs_code, hs_code_10, goods_description, goods_description_cn,
         origin_country, origin_country_code, duty_rate, duty_rate_type,
         vat_rate, anti_dumping_rate, countervailing_rate, preferential_rate,
@@ -7750,7 +7825,33 @@ app.post('/api/tariff-rates/import', (req, res) => {
         measure_type, measure_code, legal_base, start_date, end_date,
         quota_order_number, additional_code, footnotes, is_active, data_source,
         last_sync_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+      ON CONFLICT (hs_code, origin_country_code) 
+      DO UPDATE SET
+        hs_code_10 = EXCLUDED.hs_code_10,
+        goods_description = EXCLUDED.goods_description,
+        goods_description_cn = EXCLUDED.goods_description_cn,
+        duty_rate = EXCLUDED.duty_rate,
+        duty_rate_type = EXCLUDED.duty_rate_type,
+        vat_rate = EXCLUDED.vat_rate,
+        anti_dumping_rate = EXCLUDED.anti_dumping_rate,
+        countervailing_rate = EXCLUDED.countervailing_rate,
+        preferential_rate = EXCLUDED.preferential_rate,
+        preferential_origin = EXCLUDED.preferential_origin,
+        unit_code = EXCLUDED.unit_code,
+        unit_name = EXCLUDED.unit_name,
+        supplementary_unit = EXCLUDED.supplementary_unit,
+        measure_type = EXCLUDED.measure_type,
+        measure_code = EXCLUDED.measure_code,
+        legal_base = EXCLUDED.legal_base,
+        start_date = EXCLUDED.start_date,
+        end_date = EXCLUDED.end_date,
+        quota_order_number = EXCLUDED.quota_order_number,
+        additional_code = EXCLUDED.additional_code,
+        footnotes = EXCLUDED.footnotes,
+        is_active = EXCLUDED.is_active,
+        data_source = EXCLUDED.data_source,
+        last_sync_time = EXCLUDED.last_sync_time
     `)
 
     let successCount = 0
@@ -7973,14 +8074,14 @@ app.post('/api/system-settings', async (req, res) => {
       // 更新
       await db.prepare(`
         UPDATE system_settings 
-        SET setting_value = ?, setting_type = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+        SET setting_value = ?, setting_type = ?, description = ?, updated_at = NOW()
         WHERE setting_key = ?
       `).run(stringValue, settingType, description || '', key)
     } else {
       // 插入
       await db.prepare(`
         INSERT INTO system_settings (setting_key, setting_value, setting_type, description, created_at, updated_at)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, NOW(), NOW())
       `).run(key, stringValue, settingType, description || '')
     }
 
@@ -8031,13 +8132,13 @@ app.post('/api/system-settings/batch', async (req, res) => {
       if (existing) {
         await db.prepare(`
           UPDATE system_settings 
-          SET setting_value = ?, setting_type = ?, updated_at = CURRENT_TIMESTAMP
+          SET setting_value = ?, setting_type = ?, updated_at = NOW()
           WHERE setting_key = ?
         `).run(stringValue, settingType, key)
       } else {
         await db.prepare(`
           INSERT INTO system_settings (setting_key, setting_value, setting_type, created_at, updated_at)
-          VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          VALUES (?, ?, ?, NOW(), NOW())
         `).run(key, stringValue, settingType)
       }
     }
@@ -8191,7 +8292,7 @@ app.put('/api/transport-methods/:id', (req, res) => {
 
     const result = db.prepare(`
       UPDATE transport_methods 
-      SET name = ?, code = ?, description = ?, icon = ?, sort_order = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, code = ?, description = ?, icon = ?, sort_order = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(name, code?.toUpperCase(), description, icon, sortOrder, status, id)
 
@@ -8354,7 +8455,7 @@ app.put('/api/vat-rates/:id', (req, res) => {
 
     const result = db.prepare(`
       UPDATE vat_rates 
-      SET country_code = ?, country_name = ?, standard_rate = ?, reduced_rate = ?, super_reduced_rate = ?, parking_rate = ?, description = ?, effective_date = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET country_code = ?, country_name = ?, standard_rate = ?, reduced_rate = ?, super_reduced_rate = ?, parking_rate = ?, description = ?, effective_date = ?, status = ?, updated_at = NOW()
       WHERE id = ?
     `).run(
       countryCode,
@@ -8517,7 +8618,7 @@ function isAccountLocked(username) {
     const recentFailures = db.prepare(`
       SELECT COUNT(*) as count FROM login_attempts 
       WHERE username = ? AND success = 0 
-        AND attempt_time > datetime('now', '-' || ? || ' minutes')
+        AND attempt_time > NOW() - (? || ' minutes')::INTERVAL
     `).get(username, lockoutDuration)
 
     if (recentFailures.count >= lockoutAttempts) {
@@ -8690,7 +8791,7 @@ app.post('/api/auth/send-verification-code', (req, res) => {
     const recentCode = db.prepare(`
       SELECT * FROM verification_codes 
       WHERE username = ? AND type = 'login' 
-        AND created_at > datetime('now', '-1 minutes')
+        AND created_at > NOW() - INTERVAL '1 minute'
     `).get(username)
 
     if (recentCode) {
@@ -8702,7 +8803,7 @@ app.post('/api/auth/send-verification-code', (req, res) => {
     
     db.prepare(`
       INSERT INTO verification_codes (user_id, username, email, code, type, expires_at)
-      VALUES (?, ?, ?, ?, 'login', datetime('now', '+' || ? || ' minutes'))
+      VALUES (?, ?, ?, ?, 'login', NOW() + (? || ' minutes')::INTERVAL)
     `).run(user.id, username, user.email, code, expiryMinutes)
 
     // TODO: 实际发送邮件（需要配置SMTP）
@@ -8801,7 +8902,7 @@ app.put('/api/security/settings', (req, res) => {
     }
 
     const updateStmt = db.prepare(`
-      UPDATE security_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?
+      UPDATE security_settings SET setting_value = ?, updated_at = NOW() WHERE setting_key = ?
     `)
     for (const setting of settings) {
       if (setting.key && setting.value !== undefined) {
@@ -8861,7 +8962,7 @@ app.post('/api/auth/change-password', (req, res) => {
     }
 
     const newPasswordHash = hashPassword(newPassword)
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?')
       .run(newPasswordHash, userId)
 
     res.json({
@@ -9085,7 +9186,7 @@ app.put('/api/users/:id', (req, res) => {
         phone = COALESCE(?, phone),
         role = COALESCE(?, role),
         status = COALESCE(?, status),
-        updated_at = CURRENT_TIMESTAMP
+        updated_at = NOW()
       WHERE id = ?
     `).run(name, email, phone, role, status, id)
 
@@ -9117,7 +9218,7 @@ app.post('/api/users/:id/reset-password', (req, res) => {
     }
 
     const passwordHash = hashPassword(newPassword)
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?')
       .run(passwordHash, id)
 
     res.json({
@@ -9198,7 +9299,7 @@ app.put('/api/users/:id/status', (req, res) => {
       }
     }
 
-    db.prepare('UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    db.prepare('UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?')
       .run(status, id)
 
     res.json({
@@ -9258,7 +9359,7 @@ app.post('/api/roles', (req, res) => {
     // 插入新角色
     const result = db.prepare(`
       INSERT INTO roles (role_code, role_name, description, color_code, is_system, status, created_at)
-      VALUES (?, ?, ?, ?, 0, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, 0, ?, NOW())
     `).run(roleCode, roleName, description || '', colorCode || 'blue', status || 'active')
 
     res.json({
@@ -9289,7 +9390,7 @@ app.put('/api/roles/:roleCode', (req, res) => {
 
     // 更新角色
     db.prepare(`
-      UPDATE roles SET role_name = ?, description = ?, color_code = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      UPDATE roles SET role_name = ?, description = ?, color_code = ?, status = ?, updated_at = NOW()
       WHERE role_code = ?
     `).run(roleName, description || '', colorCode || 'blue', status || 'active', roleCode)
 
@@ -9500,14 +9601,16 @@ app.post('/api/bills/:billId/assign', (req, res) => {
     // 更新订单分配
     db.prepare(`
       UPDATE bills_of_lading 
-      SET assigned_operator_id = ?, assigned_operator_name = ?, updated_at = CURRENT_TIMESTAMP
+      SET assigned_operator_id = ?, assigned_operator_name = ?, updated_at = NOW()
       WHERE id = ?
     `).run(operatorId, operator.name, billId)
 
     // 记录分配
     db.prepare(`
-      INSERT OR REPLACE INTO user_bill_assignments (user_id, bill_id, assigned_by)
+      INSERT INTO user_bill_assignments (user_id, bill_id, assigned_by)
       VALUES (?, ?, ?)
+      ON CONFLICT (user_id, bill_id) 
+      DO UPDATE SET assigned_by = EXCLUDED.assigned_by
     `).run(operatorId, billId, assignedBy || null)
 
     // 记录操作日志
@@ -9763,7 +9866,7 @@ app.post('/api/customers', (req, res) => {
         bank_name, bank_account, credit_limit, payment_terms,
         assigned_to, assigned_name, tags, notes, status,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `).run(
       id, customerCode, data.customerName, data.companyName, data.customerType || 'shipper', data.customerLevel || 'normal',
       data.countryCode, data.province, data.city, data.address, data.postalCode,
@@ -9810,7 +9913,7 @@ app.put('/api/customers/:id', (req, res) => {
         credit_limit = COALESCE(?, credit_limit),
         payment_terms = COALESCE(?, payment_terms),
         notes = COALESCE(?, notes),
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
       WHERE id = ?
     `).run(
       data.customerName, data.companyName, data.customerType, data.customerLevel,
@@ -10026,7 +10129,7 @@ app.post('/api/opportunities', (req, res) => {
         id, opportunity_name, customer_id, customer_name, stage,
         expected_amount, probability, expected_close_date, description,
         assigned_to, assigned_name, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `).run(
       id, data.opportunityName, data.customerId, data.customerName, data.stage || 'lead',
       data.expectedAmount || 0, data.probability || 0, data.expectedCloseDate,
@@ -10056,7 +10159,7 @@ app.put('/api/opportunities/:id', (req, res) => {
         probability = COALESCE(?, probability),
         expected_close_date = COALESCE(?, expected_close_date),
         description = COALESCE(?, description),
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
       WHERE id = ?
     `).run(
       data.opportunityName, data.customerId, data.customerName, data.stage,
@@ -10957,8 +11060,8 @@ app.post('/api/cmr/:id/resolve-exception', (req, res) => {
       UPDATE bills_of_lading SET 
         cmr_exception_status = 'resolved',
         cmr_exception_resolution = ?,
-        cmr_exception_resolved_time = datetime('now', 'localtime'),
-        updated_at = datetime('now', 'localtime')
+        cmr_exception_resolved_time = NOW(),
+        updated_at = NOW()
       WHERE id = ?
     `).run(resolution, id)
     
@@ -10978,7 +11081,7 @@ app.post('/api/cmr/:id/close-exception', (req, res) => {
       UPDATE bills_of_lading SET 
         cmr_exception_status = 'closed',
         delivery_status = '异常关闭',
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
       WHERE id = ?
     `).run(id)
     
@@ -11062,7 +11165,7 @@ app.post('/api/service-providers', (req, res) => {
         id, provider_name, provider_type, contact_person, contact_phone,
         contact_email, address, service_area, status, rating, notes,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `).run(
       id, data.providerName, data.providerType || 'transport', data.contactPerson,
       data.contactPhone, data.contactEmail, data.address, data.serviceArea,
@@ -11094,7 +11197,7 @@ app.put('/api/service-providers/:id', (req, res) => {
         status = COALESCE(?, status),
         rating = COALESCE(?, rating),
         notes = COALESCE(?, notes),
-        updated_at = datetime('now', 'localtime')
+        updated_at = NOW()
       WHERE id = ?
     `).run(
       data.providerName, data.providerType, data.contactPerson,

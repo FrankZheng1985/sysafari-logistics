@@ -27,7 +27,8 @@ import {
   CreditCard,
   Upload,
   Calculator,
-  FilePlus
+  FilePlus,
+  Link2
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import clsx from 'clsx'
@@ -158,6 +159,7 @@ const menuItems: MenuItem[] = [
       { path: '/system/logo-manage', label: 'Logo 管理', icon: Image },
       { path: '/system/basic-data', label: '基础数据管理', icon: Database },
       { path: '/system/tariff-rates', label: 'HS Code数据库', icon: FileText },
+      { path: '/system/api-integrations', label: 'API对接管理', icon: Link2 },
     ],
   },
 ]

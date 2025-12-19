@@ -66,6 +66,7 @@ import SystemManageDashboard from './pages/SystemManageDashboard'
 import ActivityLogs from './pages/ActivityLogs'
 import ApprovalList from './pages/ApprovalList'
 import Auth0UserBinding from './pages/Auth0UserBinding'
+import ApiIntegrations from './pages/ApiIntegrations'
 // 消息/审批/预警模块
 import MessageCenter from './pages/MessageCenter'
 import ApprovalWorkbench from './pages/ApprovalWorkbench'
@@ -157,6 +158,7 @@ function AppRoutes() {
         <Route path="/system/approvals" element={<ApprovalWorkbench />} />
         <Route path="/system/messages" element={<MessageCenter />} />
         <Route path="/system/alerts" element={<AlertDashboard />} />
+        <Route path="/system/api-integrations" element={<ApiIntegrations />} />
         {/* 供应商管理模块 */}
         <Route path="/suppliers" element={<SupplierDashboard />} />
         <Route path="/suppliers/list" element={<SupplierManage />} />

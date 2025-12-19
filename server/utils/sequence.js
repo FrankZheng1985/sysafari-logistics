@@ -25,8 +25,9 @@ function initSequenceTable() {
   
   // 初始化各业务类型的序列
   const insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO order_sequences (business_type, prefix, description, current_seq)
+    INSERT INTO order_sequences (business_type, prefix, description, current_seq)
     VALUES (?, ?, ?, 0)
+    ON CONFLICT (business_type) DO NOTHING
   `)
   
   Object.entries(SEQUENCE_RULES).forEach(([type, rule]) => {
