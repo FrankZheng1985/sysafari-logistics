@@ -4,6 +4,7 @@
 
 import express from 'express'
 import * as controller from './controller.js'
+import * as apiIntegrationsController from './apiIntegrationsController.js'
 import { authenticate } from '../../middleware/auth.js'
 
 const router = express.Router()
@@ -109,6 +110,50 @@ router.put('/system/settings/security', controller.updateSecuritySettings)
 
 // 获取登录日志
 router.get('/system/login-logs', controller.getLoginLogs)
+
+// ==================== API对接管理路由 ====================
+
+// 获取API服务列表
+router.get('/api-integrations', apiIntegrationsController.getApiIntegrations)
+
+// 获取分类列表
+router.get('/api-integrations/categories', apiIntegrationsController.getCategories)
+
+// 批量健康检查
+router.post('/api-integrations/health-check-all', apiIntegrationsController.healthCheckAll)
+
+// 批量同步数据（余额、用量）
+router.post('/api-integrations/sync-all', apiIntegrationsController.syncAllApiData)
+
+// 获取单个API详情
+router.get('/api-integrations/:code', apiIntegrationsController.getApiByCode)
+
+// 更新API配置
+router.put('/api-integrations/:code', apiIntegrationsController.updateApi)
+
+// 添加新API
+router.post('/api-integrations', apiIntegrationsController.createApi)
+
+// 删除API
+router.delete('/api-integrations/:code', apiIntegrationsController.deleteApi)
+
+// 单个API健康检查
+router.post('/api-integrations/:code/health-check', apiIntegrationsController.healthCheck)
+
+// 单个API数据同步（余额、用量）
+router.post('/api-integrations/:code/sync-data', apiIntegrationsController.syncApiData)
+
+// 获取用量历史
+router.get('/api-integrations/:code/usage', apiIntegrationsController.getUsageHistory)
+
+// 同步用量数据（手动录入）
+router.post('/api-integrations/:code/sync', apiIntegrationsController.syncUsage)
+
+// 记录充值
+router.post('/api-integrations/:code/recharge', apiIntegrationsController.recordRecharge)
+
+// 获取充值记录
+router.get('/api-integrations/:code/recharge-history', apiIntegrationsController.getRechargeHistory)
 
 export default router
 
