@@ -435,7 +435,9 @@ export default function DataImportCenter() {
           {/* 数据预览表格 */}
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-              <h3 className="font-medium text-gray-900">数据预览（前100条）</h3>
+              <h3 className="font-medium text-gray-900">
+                数据预览（{previewData.preview.length <= 100 ? `共${previewData.preview.length}条` : '前100条'}）
+              </h3>
             </div>
             <div className="overflow-x-auto max-h-96">
               <table className="min-w-full divide-y divide-gray-200">
@@ -450,7 +452,7 @@ export default function DataImportCenter() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {previewData.preview.slice(0, 50).map((row, index) => (
+                  {previewData.preview.slice(0, 100).map((row, index) => (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-xs text-gray-500">{row._rowIndex || index + 2}</td>
                       {previewData.columns.slice(0, 10).map((col, colIndex) => (
