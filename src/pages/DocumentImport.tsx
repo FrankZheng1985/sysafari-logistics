@@ -127,7 +127,9 @@ export default function DocumentImport() {
   const filteredBills = bills.filter(b => 
     b.billNumber?.toLowerCase().includes(billSearch.toLowerCase()) ||
     b.containerNumber?.toLowerCase().includes(billSearch.toLowerCase()) ||
-    b.companyName?.toLowerCase().includes(billSearch.toLowerCase())
+    b.companyName?.toLowerCase().includes(billSearch.toLowerCase()) ||
+    b.customerName?.toLowerCase().includes(billSearch.toLowerCase()) ||
+    b.orderNumber?.toLowerCase().includes(billSearch.toLowerCase())
   )
   
   // 当选择客户后加载该客户的税号
@@ -384,7 +386,7 @@ export default function DocumentImport() {
     formData.append('billId', selectedBill.id)
     formData.append('billNumber', selectedBill.billNumber || '')
     formData.append('containerNo', selectedBill.containerNumber || '')
-    formData.append('customerName', selectedBill.companyName || '')
+    formData.append('customerName', selectedBill.companyName || selectedBill.customerName || '')
 
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/imports`, {
@@ -547,11 +549,14 @@ export default function DocumentImport() {
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-green-600" />
                   <span className="text-gray-900 font-medium">{selectedBill.billNumber}</span>
+                  {selectedBill.orderNumber && (
+                    <span className="text-blue-600 text-xs">({selectedBill.orderNumber})</span>
+                  )}
                   {selectedBill.containerNumber && (
                     <span className="text-gray-500">| 柜号: {selectedBill.containerNumber}</span>
                   )}
-                  {selectedBill.companyName && (
-                    <span className="text-gray-400 text-xs">({selectedBill.companyName})</span>
+                  {(selectedBill.companyName || selectedBill.customerName) && (
+                    <span className="text-gray-400 text-xs">({selectedBill.companyName || selectedBill.customerName})</span>
                   )}
                 </div>
               ) : (
@@ -599,6 +604,9 @@ export default function DocumentImport() {
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="text-sm font-medium text-gray-900">{bill.billNumber}</span>
+                          {bill.orderNumber && (
+                            <span className="text-xs text-blue-600 ml-1">({bill.orderNumber})</span>
+                          )}
                           {bill.containerNumber && (
                             <span className="text-xs text-gray-500 ml-2">柜号: {bill.containerNumber}</span>
                           )}
@@ -608,7 +616,7 @@ export default function DocumentImport() {
                         )}
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5">
-                        {bill.companyName || '未知客户'}
+                        {bill.companyName || bill.customerName || '未关联客户'}
                         {bill.shipper && ` | 发货人: ${bill.shipper.split('\n')[0]}`}
                       </div>
                     </div>

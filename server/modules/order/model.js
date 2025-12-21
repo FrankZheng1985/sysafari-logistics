@@ -908,6 +908,7 @@ export function convertBillToCamelCase(row) {
     customerId: row.customer_id,
     customerName: row.customer_name,
     customerCode: row.customer_code,
+    companyName: row.customer_name,  // 前端兼容别名
     // 创建者信息
     creator: row.creator,
     createTime: row.created_at,

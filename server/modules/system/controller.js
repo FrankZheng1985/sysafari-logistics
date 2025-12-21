@@ -324,13 +324,16 @@ export async function login(req, res) {
     // 判断是否是测试用户
     const isTestUser = user.userType === 'test'
     
+    // 注意：isTestMode 用于前端判断是否使用简单 token（而非 Auth0 JWT）
+    // 对于所有密码登录的用户（无论是否是测试用户），都应该设置为 true
     return success(res, {
       user: {
         ...safeUser,
         userType: user.userType
       },
       permissions: permissionCodes,
-      isTestMode: isTestUser,
+      isTestMode: true,  // 密码登录始终使用简单 token
+      isTestUser: isTestUser,  // 保留测试用户标识（如需要）
       token: String(user.id)
     }, '登录成功')
   } catch (error) {

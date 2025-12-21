@@ -528,6 +528,9 @@ export interface BillOfLading {
   deliveryStatus?: string
   transportMethod?: string
   companyName?: string
+  customerName?: string  // 客户名称（与companyName同义）
+  customerId?: string    // 客户ID
+  customerCode?: string  // 客户编码
   orderSeq?: number
   isVoid?: boolean
   voidReason?: string
