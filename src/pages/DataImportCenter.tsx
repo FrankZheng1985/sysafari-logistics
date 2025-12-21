@@ -163,14 +163,21 @@ export default function DataImportCenter() {
 
     setLoading(true)
     try {
+      // 设置 5 分钟超时（大量数据导入需要较长时间）
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000)
+      
       const response = await fetch(`${API_BASE}/api/data-import/confirm/${selectedType}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           previewId: previewData.previewId,
           skipErrors
-        })
+        }),
+        signal: controller.signal
       })
+      
+      clearTimeout(timeoutId)
 
       // 检查 HTTP 状态
       if (!response.ok) {
@@ -196,7 +203,9 @@ export default function DataImportCenter() {
       }
     } catch (error: any) {
       console.error('导入失败:', error)
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      if (error.name === 'AbortError') {
+        alert('导入超时，数据量较大时请耐心等待。如果问题持续，请联系管理员。')
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
         alert('网络请求失败，请检查网络连接或稍后重试')
       } else {
         alert(`导入失败: ${error.message || '未知错误'}`)
@@ -269,7 +278,7 @@ export default function DataImportCenter() {
               <div
                 key={type.id}
                 onClick={() => handleSelectType(type.id)}
-                className={`bg-white rounded-lg border-2 p-6 cursor-pointer transition-all hover:shadow-lg ${
+                className={`bg-white rounded-lg border-2 px-6 pt-6 pb-3 cursor-pointer transition-all hover:shadow-lg flex flex-col h-[200px] ${
                   selectedType === type.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-primary-300'
                 }`}
               >
@@ -277,10 +286,10 @@ export default function DataImportCenter() {
                   <Icon className={`w-6 h-6 text-${type.color}-600`} />
                 </div>
                 <h3 className="font-medium text-gray-900 mb-1">{type.name}</h3>
-                <p className="text-xs text-gray-500">{type.description}</p>
+                <p className="text-xs text-gray-500 flex-grow">{type.description}</p>
                 <button
                   onClick={(e) => { e.stopPropagation(); downloadTemplate(type.id) }}
-                  className="mt-3 text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                  className="mt-auto pt-2 text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
                 >
                   <Download className="w-3 h-3" />
                   下载模板

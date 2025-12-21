@@ -225,8 +225,6 @@ export async function createBill(data) {
       etd, eta, status, ship_status, customs_status,
       inspection, delivery_status, remark, operator,
       customer_id, customer_name, customer_code,
-      ground_handling, seal_number, container_size,
-      reference_list,
       container_type, bill_type, transport_arrangement, consignee_type,
       container_return, full_container_transport, last_mile_transport,
       devanning, t1_declaration,
@@ -239,8 +237,6 @@ export async function createBill(data) {
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
-      ?, ?, ?,
-      ?,
       ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?,
@@ -275,13 +271,6 @@ export async function createBill(data) {
     data.customerId || null,
     data.customerName || null,
     data.customerCode || null,
-    // 航程信息
-    data.groundHandling || null,
-    // 集装箱信息
-    data.sealNumber || null,
-    data.containerSize || null,
-    // Reference List (JSON 字符串)
-    data.referenceList || null,
     // 附加属性字段
     data.containerType || null,
     data.billType || null,
@@ -341,13 +330,6 @@ export async function updateBill(id, data) {
     customerId: 'customer_id',
     customerName: 'customer_name',
     customerCode: 'customer_code',
-    // 航程信息
-    groundHandling: 'ground_handling',
-    // 集装箱信息
-    sealNumber: 'seal_number',
-    containerSize: 'container_size',
-    // Reference List
-    referenceList: 'reference_list',
     // 附加属性字段
     containerType: 'container_type',
     billType: 'bill_type',
@@ -908,13 +890,6 @@ export function convertBillToCamelCase(row) {
     creator: row.creator,
     createTime: row.created_at,
     updateTime: row.updated_at,
-    // 航程信息
-    groundHandling: row.ground_handling,
-    // 集装箱信息
-    sealNumber: row.seal_number,
-    containerSize: row.container_size,
-    // Reference List（JSON 字符串转对象）
-    referenceList: row.reference_list ? JSON.parse(row.reference_list) : [],
     // 附加属性字段
     containerType: row.container_type,
     billType: row.bill_type,

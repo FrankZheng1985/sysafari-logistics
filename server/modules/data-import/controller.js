@@ -109,12 +109,12 @@ export async function previewImport(req, res) {
       fileName: file.originalname
     }
     
-    // 5分钟后自动清理
+    // 30分钟后自动清理（延长时间以支持大量数据导入）
     setTimeout(() => {
       if (global.importPreviewCache && global.importPreviewCache[previewId]) {
         delete global.importPreviewCache[previewId]
       }
-    }, 5 * 60 * 1000)
+    }, 30 * 60 * 1000)
     
     return success(res, {
       previewId,

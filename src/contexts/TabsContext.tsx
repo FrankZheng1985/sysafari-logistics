@@ -110,6 +110,7 @@ const routeTitleMap: Record<string, string> = {
   '/system/alerts': '预警管理',
   '/system/info-center': '信息中心',
   '/system/api-integrations': 'API对接管理',
+  '/system/data-import': '数据导入',
 }
 
 // 获取路由标题

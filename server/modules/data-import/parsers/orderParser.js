@@ -15,7 +15,7 @@ const FIELD_MAPPING = {
   '正本提单': { field: 'original_bill_received', required: false },
   '是否授权': { field: 'is_authorized', required: false },
   '运输方式': { field: 'transport_method', required: false },
-  '型号': { field: 'container_size', required: false }, // 集装箱尺寸
+  '型号': { field: 'container_type', required: false }, // 集装箱类型(如40HQ、20GP)
   '船名航次': { field: 'vessel_voyage', required: false },
   '提单号': { field: 'bill_number', required: true, unique: true },
   '起运港': { field: 'port_of_loading', required: false },
@@ -227,7 +227,7 @@ export async function validateData(data) {
 }
 
 /**
- * 导入数据
+ * 导入数据（优化版：批量查询减少数据库请求）
  */
 export async function importData(data, options = {}) {
   const db = getDatabase()
@@ -235,44 +235,70 @@ export async function importData(data, options = {}) {
   let successCount = 0
   let errorCount = 0
   
+  // 1. 预先批量查询所有客户（减少数据库请求）
+  const customerNames = [...new Set(data.map(r => r.customer_name).filter(Boolean))]
+  const customerMap = new Map()
+  
+  if (customerNames.length > 0) {
+    const placeholders = customerNames.map(() => '?').join(',')
+    const existingCustomers = await db.prepare(`
+      SELECT id, customer_name, company_name FROM customers 
+      WHERE customer_name IN (${placeholders}) OR company_name IN (${placeholders})
+    `).all(...customerNames, ...customerNames)
+    
+    for (const c of existingCustomers) {
+      customerMap.set(c.customer_name, c.id)
+      if (c.company_name) customerMap.set(c.company_name, c.id)
+    }
+  }
+  
+  // 2. 预先批量查询所有提单号（减少数据库请求）
+  const billNumbers = [...new Set(data.map(r => r.bill_number).filter(Boolean))]
+  const existingBillSet = new Set()
+  
+  if (billNumbers.length > 0) {
+    const placeholders = billNumbers.map(() => '?').join(',')
+    const existingBills = await db.prepare(`
+      SELECT bill_number FROM bills_of_lading WHERE bill_number IN (${placeholders})
+    `).all(...billNumbers)
+    
+    for (const b of existingBills) {
+      existingBillSet.add(b.bill_number)
+    }
+  }
+  
+  // 3. 逐条处理数据
   for (const row of data) {
     try {
-      // 跳过错误行
-      if (options.skipErrors) {
-        const validation = await validateData([row])
-        if (validation.errorCount > 0) {
-          errors.push({ row: row._rowIndex, error: validation.errors[0].errors.join(', ') })
-          errorCount++
-          continue
-        }
+      // 跳过错误行（简化校验，不再重复查询数据库）
+      if (options.skipErrors && (!row.bill_number || !row.container_number)) {
+        errors.push({ row: row._rowIndex, error: '提单号或柜号为空' })
+        errorCount++
+        continue
       }
       
       // 查找或创建客户
       let customerId = null
       if (row.customer_name) {
-        const existingCustomer = await db.prepare(
-          'SELECT id FROM customers WHERE customer_name = ? OR company_name = ?'
-        ).get(row.customer_name, row.customer_name)
+        customerId = customerMap.get(row.customer_name)
         
-        if (existingCustomer) {
-          customerId = existingCustomer.id
-        } else {
-          // 创建新客户（自动生成客户编码）
+        if (!customerId) {
+          // 创建新客户（自动生成客户编码，设置默认级别）
           customerId = generateId()
           const customerCode = 'CUS' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase()
           await db.prepare(`
-            INSERT INTO customers (id, customer_code, customer_name, company_name, status, created_at)
-            VALUES (?, ?, ?, ?, 'active', NOW())
+            INSERT INTO customers (id, customer_code, customer_name, company_name, customer_level, customer_type, status, created_at)
+            VALUES (?, ?, ?, ?, 'normal', 'shipper', 'active', NOW())
           `).run(customerId, customerCode, row.customer_name, row.customer_name)
+          // 添加到缓存，避免重复创建
+          customerMap.set(row.customer_name, customerId)
         }
       }
       
       // 检查提单是否已存在
-      const existingBill = await db.prepare(
-        'SELECT id FROM bills_of_lading WHERE bill_number = ?'
-      ).get(row.bill_number)
+      const isExisting = existingBillSet.has(row.bill_number)
       
-      if (existingBill) {
+      if (isExisting) {
         // 更新现有记录（使用实际表字段）
         await db.prepare(`
           UPDATE bills_of_lading SET
@@ -287,7 +313,7 @@ export async function importData(data, options = {}) {
             weight = COALESCE(?, weight),
             volume = COALESCE(?, volume),
             pieces = COALESCE(?, pieces),
-            container_size = COALESCE(?, container_size),
+            container_type = COALESCE(?, container_type),
             transport_method = COALESCE(?, transport_method),
             cmr_delivery_address = COALESCE(?, cmr_delivery_address),
             updated_at = NOW()
@@ -304,7 +330,7 @@ export async function importData(data, options = {}) {
           row.weight,
           row.volume,
           row.package_count,
-          row.container_size,
+          row.container_type,
           row.transport_method,
           row.delivery_address,
           row.bill_number
@@ -316,7 +342,7 @@ export async function importData(data, options = {}) {
           INSERT INTO bills_of_lading (
             id, bill_number, container_number, customer_id, customer_name,
             port_of_loading, place_of_delivery, vessel, eta, etd,
-            weight, volume, pieces, container_size,
+            weight, volume, pieces, container_type,
             transport_method, cmr_delivery_address, status, create_time, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', COALESCE(?, NOW()), NOW())
         `).run(
@@ -333,11 +359,13 @@ export async function importData(data, options = {}) {
           row.weight,
           row.volume,
           row.package_count,
-          row.container_size,
+          row.container_type,
           row.transport_method,
           row.delivery_address,
           row.create_time
         )
+        // 添加到已存在集合，避免重复插入
+        existingBillSet.add(row.bill_number)
       }
       
       successCount++

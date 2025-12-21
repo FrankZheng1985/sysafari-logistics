@@ -197,19 +197,19 @@ export async function importData(data, options = {}) {
           row.credit_limit, existing.id
         )
       } else {
-        // 创建新客户（使用实际存在的字段）
+        // 创建新客户（使用实际存在的字段，设置默认级别）
         const customerId = generateId()
         const customerCode = 'CUS' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase()
         await db.prepare(`
           INSERT INTO customers (
             id, customer_code, customer_name, company_name, contact_person, contact_phone,
             contact_email, address, country_code, city, tax_number, notes,
-            customer_type, credit_limit, status, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())
+            customer_type, customer_level, credit_limit, status, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', ?, 'active', NOW())
         `).run(
           customerId, customerCode, row.company_name || '未命名客户', row.company_name, row.contact_name,
           row.contact_phone, row.email, row.address, row.country,
-          row.city, row.tax_number, row.remark, row.customer_type,
+          row.city, row.tax_number, row.remark, row.customer_type || 'shipper',
           row.credit_limit
         )
       }

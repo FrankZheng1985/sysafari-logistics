@@ -390,8 +390,8 @@ export default function CRMDashboard() {
                       {index + 1}
                     </span>
                   </td>
-                  <td className="py-2 font-medium text-gray-900">{customer.customerName}</td>
-                  <td className="py-2">{getLevelBadge(customer.customerLevel)}</td>
+                  <td className="py-2 font-medium text-gray-900">{customer?.customerName || '-'}</td>
+                  <td className="py-2">{getLevelBadge(customer?.customerLevel || 'normal')}</td>
                   <td className="py-2 text-center">{customer.followUpCount}</td>
                   <td className="py-2 text-center">{customer.opportunityCount}</td>
                   <td className="py-2 text-center">{customer.contractCount}</td>

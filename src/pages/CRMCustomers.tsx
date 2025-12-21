@@ -189,7 +189,9 @@ export default function CRMCustomers() {
       const data = await response.json()
       
       if (data.errCode === 200) {
-        setCustomers(data.data.list || [])
+        // 过滤掉 null/undefined 元素，并为缺失字段设置默认值
+        const customerList = (data.data.list || []).filter((c: Customer | null) => c !== null && c !== undefined)
+        setCustomers(customerList)
         setTotal(data.data.total || 0)
       }
     } catch (error) {
@@ -570,13 +572,13 @@ export default function CRMCustomers() {
       key: 'customerLevel',
       label: '级别',
       width: 80,
-      render: (item) => getLevelBadge(item.customerLevel)
+      render: (item) => getLevelBadge(item?.customerLevel || 'normal')
     },
     {
       key: 'customerType',
       label: '类型',
       width: 80,
-      render: (item) => getTypeBadge(item.customerType)
+      render: (item) => getTypeBadge(item?.customerType || 'shipper')
     },
     {
       key: 'contact',
