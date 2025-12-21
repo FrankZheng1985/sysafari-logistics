@@ -748,20 +748,25 @@ export default function CRMQuotations() {
                         </button>
                       </div>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={item.quantity}
-                        onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        min="0"
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, '')
+                          handleItemChange(index, 'quantity', parseFloat(val) || 0)
+                        }}
+                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-center"
                         placeholder="数量"
                       />
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         value={item.price}
-                        onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        min="0"
-                        step="0.01"
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9.]/g, '')
+                          handleItemChange(index, 'price', parseFloat(val) || 0)
+                        }}
+                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="单价"
                       />
                       <div className="col-span-2 text-xs text-gray-700 font-medium">
