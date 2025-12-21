@@ -274,8 +274,8 @@ export async function generateExcel(data) {
   items.forEach(item => {
     const row = worksheet.getRow(rowIndex)
     
-    // 获取集装箱号（优先使用 actualContainerNo）
-    const itemContainerNo = item.actualContainerNo || item.containerNumber || containerNo || ''
+    // 获取集装箱号
+    const itemContainerNo = item.containerNumber || containerNo || ''
     
     // 如果是同一个柜号/提单，不重复显示
     const showContainerNo = itemContainerNo !== currentContainerNo
@@ -633,12 +633,9 @@ export async function regenerateInvoiceFiles(invoiceId) {
   }
   
   if (containerNumbers.length === 0 && invoice.bill_id) {
-    const bill = await db.prepare('SELECT container_number, actual_container_no FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
-    if (bill) {
-      // 只显示集装箱号（actual_container_no）
-      if (bill.actual_container_no) {
-        containerNumbers.push(bill.actual_container_no)
-      }
+    const bill = await db.prepare('SELECT container_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+    if (bill && bill.container_number) {
+      containerNumbers.push(bill.container_number)
     }
   }
 
@@ -673,17 +670,17 @@ export async function regenerateInvoiceFiles(invoiceId) {
 
   // 生成Excel
   // 获取集装箱号
-  let actualContainerNo = ''
+  let excelContainerNo = ''
   if (containerNumbers && containerNumbers.length > 0) {
-    actualContainerNo = containerNumbers[0]
+    excelContainerNo = containerNumbers[0]
   }
 
-  // 获取提单号（container_number）
+  // 获取提单号
   let blNumber = ''
   if (invoice.bill_id) {
-    const billInfo = await db.prepare('SELECT container_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+    const billInfo = await db.prepare('SELECT bill_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
     if (billInfo) {
-      blNumber = billInfo.container_number || ''
+      blNumber = billInfo.bill_number || ''
     }
   }
 
@@ -700,7 +697,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
       feeGroups[feeName] += parseFloat(f.amount) || 0
     })
     excelItems = Object.entries(feeGroups).map(([feeName, amount]) => ({
-      actualContainerNo: actualContainerNo,
+      containerNo: excelContainerNo,
       billNumber: blNumber,
       feeName: feeName,
       amount: amount
@@ -708,7 +705,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
   } else {
     // 使用已合并的 items
     excelItems = items.map(item => ({
-      actualContainerNo: actualContainerNo,
+      containerNo: excelContainerNo,
       billNumber: blNumber,
       feeName: item.description,
       amount: item.amount
@@ -718,7 +715,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
   const excelData = {
     customerName: invoice.customer_name || '',
     date: invoice.invoice_date,
-    containerNo: actualContainerNo,
+    containerNo: excelContainerNo,
     items: excelItems,
     total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
     currency: invoice.currency || 'EUR'
@@ -876,12 +873,9 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
     // 获取关联订单的集装箱号
     let containerNumbers = []
     if (invoice.bill_id) {
-      const bill = await db.prepare('SELECT container_number, actual_container_no FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
-      if (bill) {
-        // 只显示集装箱号（actual_container_no）
-        if (bill.actual_container_no) {
-          containerNumbers.push(bill.actual_container_no)
-        }
+      const bill = await db.prepare('SELECT container_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+      if (bill && bill.container_number) {
+        containerNumbers.push(bill.container_number)
       }
     }
 
@@ -924,14 +918,14 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
 
     // 准备Excel数据
     // 获取集装箱号和提单号
-    const actualContainerNo = containerNumbers.length > 0 ? containerNumbers[0] : ''
+    const excelContainerNo = containerNumbers.length > 0 ? containerNumbers[0] : ''
     
     // 获取提单号
     let blNumber = ''
     if (invoice.bill_id) {
-      const billInfo = await db.prepare('SELECT container_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
+      const billInfo = await db.prepare('SELECT bill_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
       if (billInfo) {
-        blNumber = billInfo.container_number || ''
+        blNumber = billInfo.bill_number || ''
       }
     }
 
@@ -947,7 +941,7 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
         feeGroups[feeName] += parseFloat(item.amount) || 0
       })
       excelItems = Object.entries(feeGroups).map(([feeName, amount]) => ({
-        actualContainerNo: actualContainerNo,
+        containerNo: excelContainerNo,
         billNumber: blNumber,
         feeName: feeName,
         amount: amount
@@ -957,7 +951,7 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
     const excelData = {
       customerName: invoice.customer_name || '',
       date: invoice.invoice_date,
-      containerNo: actualContainerNo,
+      containerNo: excelContainerNo,
       items: excelItems,
       total: parseFloat(invoice.total_amount) || 0,
       currency: invoice.currency || 'EUR'

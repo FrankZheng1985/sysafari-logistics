@@ -119,14 +119,13 @@ export async function createBill(req, res) {
       }
     }
 
-    // 检查主单号+集装箱号组合是否重复
+    // 检查集装箱号是否重复
     const containerNumber = req.body.containerNumber || ''
-    const actualContainerNo = req.body.actualContainerNo || containerNumber
     
-    if (containerNumber && actualContainerNo) {
-      const duplicateBill = await model.checkDuplicateBill(containerNumber, actualContainerNo)
+    if (containerNumber) {
+      const duplicateBill = await model.checkDuplicateBill(containerNumber)
       if (duplicateBill) {
-        return conflict(res, `提单重复：主单号 "${containerNumber}" 和集装箱号 "${actualContainerNo}" 的组合已存在（提单号: ${duplicateBill.billNumber}）`)
+        return conflict(res, `提单重复：集装箱号 "${containerNumber}" 已存在（提单号: ${duplicateBill.billNumber}）`)
       }
     }
 
@@ -167,18 +166,13 @@ export async function updateBill(req, res) {
       return notFound(res, '提单不存在')
     }
     
-    // 如果更新了主单号或集装箱号，检查是否与其他提单重复
+    // 如果更新了集装箱号，检查是否与其他提单重复
     const newContainerNumber = req.body.containerNumber ?? existing.containerNumber
-    const newActualContainerNo = req.body.actualContainerNo ?? existing.actualContainerNo
     
-    if (newContainerNumber && newActualContainerNo) {
-      // 检查是否有变化
-      const hasChange = req.body.containerNumber !== undefined || req.body.actualContainerNo !== undefined
-      if (hasChange) {
-        const duplicateBill = await model.checkDuplicateBill(newContainerNumber, newActualContainerNo, id)
-        if (duplicateBill) {
-          return conflict(res, `提单重复：主单号 "${newContainerNumber}" 和集装箱号 "${newActualContainerNo}" 的组合已存在（提单号: ${duplicateBill.billNumber}）`)
-        }
+    if (newContainerNumber && req.body.containerNumber !== undefined) {
+      const duplicateBill = await model.checkDuplicateBill(newContainerNumber, id)
+      if (duplicateBill) {
+        return conflict(res, `提单重复：集装箱号 "${newContainerNumber}" 已存在（提单号: ${duplicateBill.billNumber}）`)
       }
     }
     

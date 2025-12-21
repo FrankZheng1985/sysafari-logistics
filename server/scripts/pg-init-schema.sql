@@ -85,7 +85,6 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     customer_id TEXT,
     customer_name TEXT,
     customer_code TEXT,
-    actual_container_no TEXT,
     cmr_exception_resolution TEXT,
     cmr_exception_resolved_time TEXT,
     doc_swap_status TEXT DEFAULT '未换单',

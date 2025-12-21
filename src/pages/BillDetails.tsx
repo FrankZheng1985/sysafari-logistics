@@ -685,7 +685,7 @@ export default function BillDetails() {
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">集装箱号:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.actualContainerNo || '-'}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.containerNumber || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">船名航次:</span>
@@ -2493,8 +2493,7 @@ export default function BillDetails() {
         editData={billDetail ? {
           id: billDetail.id,
           billNumber: billDetail.billNumber,
-          masterBillNumber: billDetail.containerNumber, // containerNumber 在数据库中存储的是主单号
-          containerNumber: billDetail.actualContainerNo,
+          containerNumber: billDetail.containerNumber, // 集装箱号
           shippingCompany: billDetail.shippingCompany,
           origin: billDetail.origin,
           destination: billDetail.destination,
@@ -2514,7 +2513,6 @@ export default function BillDetails() {
           voyage: billDetail.voyage,
           groundHandling: billDetail.groundHandling,
           // 集装箱信息
-          actualContainerNo: billDetail.actualContainerNo,
           sealNumber: billDetail.sealNumber,
           containerSize: billDetail.containerSize,
           // 发货人信息

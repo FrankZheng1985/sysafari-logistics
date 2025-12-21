@@ -126,14 +126,13 @@ export async function getBills(params = {}) {
     query += ` AND (
       bill_number LIKE ? OR 
       container_number LIKE ? OR 
-      actual_container_no LIKE ? OR
       customer_name LIKE ? OR
       shipper LIKE ? OR 
       consignee LIKE ? OR
       vessel LIKE ?
     )`
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   // 获取总数
@@ -177,27 +176,25 @@ export async function getBillByNumber(billNumber) {
 }
 
 /**
- * 检查提单是否重复（根据主单号+集装箱号组合）
- * @param {string} containerNumber - 主单号/海运提单号
- * @param {string} actualContainerNo - 实际集装箱号
+ * 检查提单是否重复（根据集装箱号）
+ * @param {string} containerNumber - 集装箱号
  * @param {string} excludeId - 排除的提单ID（用于更新时）
  * @returns {Object|null} 如果存在重复，返回已存在的提单；否则返回 null
  */
-export async function checkDuplicateBill(containerNumber, actualContainerNo, excludeId = null) {
+export async function checkDuplicateBill(containerNumber, excludeId = null) {
   const db = getDatabase()
   
-  // 只有当两个字段都有值时才检查重复
-  if (!containerNumber || !actualContainerNo) {
+  // 只有当集装箱号有值时才检查重复
+  if (!containerNumber) {
     return null
   }
   
   let query = `
     SELECT * FROM bills_of_lading 
     WHERE container_number = ? 
-    AND actual_container_no = ?
     AND is_void = 0
   `
-  const params = [containerNumber, actualContainerNo]
+  const params = [containerNumber]
   
   // 如果提供了排除ID（更新场景），则排除该记录
   if (excludeId) {
@@ -233,7 +230,7 @@ export async function createBill(data) {
   
   const result = await db.prepare(`
     INSERT INTO bills_of_lading (
-      id, order_seq, order_number, bill_number, container_number, actual_container_no, vessel, voyage,
+      id, order_seq, order_number, bill_number, container_number, vessel, voyage,
       shipper, consignee, notify_party,
       port_of_loading, port_of_discharge, place_of_delivery,
       pieces, weight, volume, description,
@@ -245,7 +242,7 @@ export async function createBill(data) {
       devanning, t1_declaration, is_void,
       created_at, updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
@@ -263,7 +260,6 @@ export async function createBill(data) {
     orderNumber,
     data.billNumber,
     data.containerNumber || '',
-    data.actualContainerNo || data.containerNumber || '', // 实际集装箱号
     data.vessel || '',
     data.voyage || '',
     data.shipper || '',
@@ -314,7 +310,6 @@ export async function updateBill(id, data) {
   const fieldMap = {
     billNumber: 'bill_number',
     containerNumber: 'container_number',
-    actualContainerNo: 'actual_container_no',
     vessel: 'vessel',
     voyage: 'voyage',
     shipper: 'shipper',
@@ -851,7 +846,6 @@ export function convertBillToCamelCase(row) {
     billId: row.bill_id,
     billNumber: row.bill_number,
     containerNumber: row.container_number,
-    actualContainerNo: row.actual_container_no,
     vessel: row.vessel,
     voyage: row.voyage,
     shipper: row.shipper,

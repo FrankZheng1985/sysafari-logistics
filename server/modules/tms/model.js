@@ -849,7 +849,6 @@ export function convertCMRToCamelCase(row) {
     id: row.id,
     billNumber: row.bill_number,
     containerNumber: row.container_number,
-    actualContainerNo: row.actual_container_no,
     vessel: row.vessel,
     shipper: row.shipper,
     consignee: row.consignee,

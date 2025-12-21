@@ -135,26 +135,6 @@ export default function BPHistory() {
       ),
     },
     {
-      key: 'actualContainerNo',
-      label: '集装箱号',
-      sorter: true,
-      filterable: true,
-      render: (_value, record: CompletedBillOfLading) => (
-        <div className="flex items-center gap-1">
-          <span className="text-xs">{record.actualContainerNo || '-'}</span>
-          {record.actualContainerNo && (
-            <button
-              onClick={(e) => handleCopy(record.actualContainerNo || '', e)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-              title="复制集装箱号"
-            >
-              <Copy className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      ),
-    },
-    {
       key: 'vessel',
       label: '航班号/船名航次',
       sorter: true,

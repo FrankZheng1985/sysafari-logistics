@@ -61,9 +61,8 @@ interface Payment {
 
 interface BillInfo {
   id: string
-  billNumber: string
-  containerNumber: string      // 提单号
-  actualContainerNo: string    // 集装箱号
+  billNumber: string           // 提单号
+  containerNumber: string      // 集装箱号
   customerName: string
   consignee: string
   pieces: number
@@ -438,7 +437,7 @@ export default function InvoiceDetail() {
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">集装箱号:</span>
-                    <span className="text-gray-900 font-medium font-mono">{billInfo.actualContainerNo || '-'}</span>
+                    <span className="text-gray-900 font-medium font-mono">{billInfo.containerNumber || '-'}</span>
                   </div>
                 </div>
                 

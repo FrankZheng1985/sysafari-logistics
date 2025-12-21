@@ -93,9 +93,8 @@ export interface BillOfLading {
   orderSeq?: number       // 订单序号
   orderNumber?: string    // 订单号 (BP25XXXXX)
   billId?: string
-  billNumber: string
-  containerNumber?: string
-  actualContainerNo?: string
+  billNumber: string      // 提单号
+  containerNumber?: string // 集装箱号
   vessel?: string
   eta?: string
   ata?: string

@@ -503,9 +503,8 @@ export interface BillOfLading {
   orderSeq?: number       // 订单序号
   orderNumber?: string    // 订单号 (BP25XXXXX)
   billId?: string
-  billNumber: string
-  containerNumber?: string
-  actualContainerNo?: string  // 实际集装箱号
+  billNumber: string      // 提单号
+  containerNumber?: string // 集装箱号
   vessel?: string
   voyage?: string  // 航次
   etd?: string  // 装船日期 (Date Laden on Board)

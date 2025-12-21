@@ -43,8 +43,7 @@ interface Bill {
   eta?: string
   createTime?: string
   // 扩展字段（匹配API返回的字段名）
-  containerNumber?: string      // 提单号（4字母+10数字，如APLU3456709862）
-  actualContainerNo?: string    // 集装箱号（4字母+7数字，如APZU3456782）
+  containerNumber?: string      // 集装箱号（4字母+7数字，如APZU3456782）
   ata?: string                  // ATA (实际到达时间)
   weight?: number               // 毛重
   volume?: number               // 体积
@@ -1246,7 +1245,7 @@ export default function CreateInvoice() {
                       key={bill.id}
                       className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 rounded text-xs text-blue-700"
                     >
-                      {bill.actualContainerNo || bill.billNumber}
+                      {bill.containerNumber || bill.billNumber}
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -1293,9 +1292,9 @@ export default function CreateInvoice() {
                               <div className="flex items-center gap-2">
                                 <Package className="w-4 h-4 text-gray-400" />
                                 <span className="text-sm font-medium text-gray-900">{bill.billNumber}</span>
-                                {bill.actualContainerNo && (
+                                {bill.containerNumber && (
                                   <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
-                                    柜号: {bill.actualContainerNo}
+                                    柜号: {bill.containerNumber}
                                   </span>
                                 )}
                               </div>
@@ -1334,7 +1333,7 @@ export default function CreateInvoice() {
                         <div className="flex flex-wrap gap-1 ml-2">
                           {selectedBills.map(bill => (
                             <span key={bill.id} className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                              {bill.actualContainerNo || bill.billNumber}
+                              {bill.containerNumber || bill.billNumber}
                             </span>
                           ))}
                         </div>
@@ -1342,9 +1341,9 @@ export default function CreateInvoice() {
                     ) : (
                       <>
                         <span className="text-base font-medium text-gray-900">{selectedBill.billNumber}</span>
-                        {selectedBill.actualContainerNo && (
+                        {selectedBill.containerNumber && (
                           <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded">
-                            柜号: {selectedBill.actualContainerNo}
+                            柜号: {selectedBill.containerNumber}
                           </span>
                         )}
                         <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
@@ -1361,7 +1360,7 @@ export default function CreateInvoice() {
                         <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">基本信息</div>
                         <div className="flex gap-1"><span className="text-gray-500">客户:</span><span className="text-gray-900">{selectedBill.customerName || selectedBill.consignee || '-'}</span></div>
                         <div className="flex gap-1"><span className="text-gray-500">提单号:</span><span className="text-gray-900 font-medium">{selectedBill.containerNumber || '-'}</span></div>
-                        <div className="flex gap-1"><span className="text-gray-500">集装箱号:</span><span className="text-gray-900 font-medium">{selectedBill.actualContainerNo || '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">集装箱号:</span><span className="text-gray-900 font-medium">{selectedBill.containerNumber || '-'}</span></div>
                       </div>
                       <div className="space-y-1">
                         <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">货物信息</div>
@@ -1399,7 +1398,7 @@ export default function CreateInvoice() {
                         <div className="flex flex-wrap gap-1">
                           {selectedBills.map(bill => (
                             <span key={bill.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
-                              {bill.actualContainerNo || bill.billNumber}
+                              {bill.containerNumber || bill.billNumber}
                             </span>
                           ))}
                         </div>
@@ -2174,11 +2173,11 @@ export default function CreateInvoice() {
                     </span>
                   </div>
                 )}
-                {selectedBill?.actualContainerNo && (
+                {selectedBill?.containerNumber && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">集装箱号</span>
-                    <span className="font-medium text-gray-900 truncate max-w-[120px]" title={selectedBill.actualContainerNo}>
-                      {selectedBill.actualContainerNo}
+                    <span className="font-medium text-gray-900 truncate max-w-[120px]" title={selectedBill.containerNumber}>
+                      {selectedBill.containerNumber}
                     </span>
                   </div>
                 )}

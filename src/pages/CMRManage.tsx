@@ -254,15 +254,6 @@ export default function CMRManage() {
       ),
     },
     {
-      key: 'actualContainerNo',
-      label: '集装箱号',
-      sorter: true,
-      filterable: true,
-      render: (_value, record: BillOfLading) => (
-        <span className="text-xs">{record.actualContainerNo || '-'}</span>
-      ),
-    },
-    {
       key: 'vessel',
       label: '航班号/船名航次',
       sorter: true,

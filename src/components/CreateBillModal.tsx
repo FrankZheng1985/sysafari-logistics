@@ -7,9 +7,7 @@ import { createBill, updateBill, getShippingCompanyByContainerCode, searchContai
 interface EditBillData {
   id: string
   billNumber?: string
-  masterBillNumber?: string
-  containerNumber?: string
-  actualContainerNo?: string
+  containerNumber?: string  // 集装箱号
   shippingCompany?: string
   origin?: string
   destination?: string
@@ -452,8 +450,8 @@ export default function CreateBillModal({
         estimatedArrival: editData.eta || '',
         flightNumber: flightNumber, // 航班号/船名航次
         groundHandling: editData.groundHandling || editData.terminal || '', // 地勤（码头）
-        // 集装箱信息 - 注意字段映射
-        containerNumber: editData.actualContainerNo || '', // 表单中的集装箱号来自 actualContainerNo
+        // 集装箱信息
+        containerNumber: editData.containerNumber || '', // 集装箱号
         sealNumber: editData.sealNumber || '', // 封号
         containerSize: editData.containerSize || '', // 柜型
         // 附加属性
@@ -1237,8 +1235,7 @@ export default function CreateBillModal({
       
       const billData = {
         // billNumber 不传，由后端自动生成
-        containerNumber: formData.masterBillNumber, // 主单号/海运提单号
-        actualContainerNo: formData.containerNumber || '', // 实际集装箱号（只用追踪API获取的，不要用主单号填充）
+        containerNumber: formData.containerNumber || formData.masterBillNumber, // 集装箱号
         transportMethod: transportMethodMap[selectedTransport || ''],
         vessel: vesselName,
         voyage: voyageNo, // 新增航次字段
@@ -1384,8 +1381,7 @@ export default function CreateBillModal({
       
       const draftData = {
         // billNumber 不传，由后端自动生成
-        containerNumber: formData.masterBillNumber || '', // 主单号/海运提单号
-        actualContainerNo: formData.containerNumber || '', // 实际集装箱号（只用追踪API获取的，不要用主单号填充）
+        containerNumber: formData.containerNumber || formData.masterBillNumber || '', // 集装箱号
         transportMethod: transportMethodMap[selectedTransport || ''] || '',
         vessel: draftVesselName,
         voyage: draftVoyageNo, // 新增航次字段

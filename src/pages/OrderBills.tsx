@@ -496,26 +496,6 @@ export default function OrderBills() {
       ),
     },
     {
-      key: 'actualContainerNo',
-      label: '集装箱号',
-      sorter: true,
-      filterable: true,
-      render: (_value, record: BillOfLading) => (
-        <div className="flex items-center gap-1">
-          <span className={`font-mono ${textPrimary}`}>{record.actualContainerNo || '-'}</span>
-          {record.actualContainerNo && (
-            <button
-              title="复制集装箱号"
-              className="text-gray-400 hover:text-gray-600"
-              onClick={(e) => copyToClipboard(record.actualContainerNo || '', e)}
-            >
-              <Copy className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      ),
-    },
-    {
       key: 'vessel',
       label: '航班号/船名航次',
       sorter: true,
@@ -756,7 +736,7 @@ export default function OrderBills() {
             data={displayBills}
             loading={loading}
             searchValue={searchValue}
-            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'companyName'] : ['billNumber', 'containerNumber', 'actualContainerNo', 'vessel']}
+            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'companyName'] : ['billNumber', 'containerNumber', 'vessel']}
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{
