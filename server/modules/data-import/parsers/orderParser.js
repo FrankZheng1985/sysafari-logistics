@@ -29,7 +29,7 @@ const FIELD_MAPPING = {
   'ETA': { field: 'eta', required: false, type: 'date' },
   '清关完成日期': { field: 'customs_cleared_date', required: false, type: 'date' },
   '提柜日期': { field: 'pickup_date', required: false, type: 'date' },
-  '卸货日期': { field: 'delivery_date', required: false, type: 'date' },
+  '卸货日期': { field: 'cmr_unloading_complete_time', required: false, type: 'date' },
   '箱/件数': { field: 'package_count', required: false, type: 'number' },
   '货量': { field: 'weight', required: false, type: 'number' },
   '体积': { field: 'volume', required: false, type: 'number' }
@@ -316,6 +316,7 @@ export async function importData(data, options = {}) {
             container_type = COALESCE(?, container_type),
             transport_method = COALESCE(?, transport_method),
             cmr_delivery_address = COALESCE(?, cmr_delivery_address),
+            cmr_unloading_complete_time = COALESCE(?, cmr_unloading_complete_time),
             updated_at = NOW()
           WHERE bill_number = ?
         `).run(
@@ -333,6 +334,7 @@ export async function importData(data, options = {}) {
           row.container_type,
           row.transport_method,
           row.delivery_address,
+          row.cmr_unloading_complete_time,
           row.bill_number
         )
       } else {
@@ -343,8 +345,9 @@ export async function importData(data, options = {}) {
             id, bill_number, container_number, customer_id, customer_name,
             port_of_loading, place_of_delivery, vessel, eta, etd,
             weight, volume, pieces, container_type,
-            transport_method, cmr_delivery_address, status, create_time, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', COALESCE(?, NOW()), NOW())
+            transport_method, cmr_delivery_address, cmr_unloading_complete_time,
+            status, is_void, create_time, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, COALESCE(?, NOW()), NOW())
         `).run(
           billId,
           row.bill_number,
@@ -362,6 +365,7 @@ export async function importData(data, options = {}) {
           row.container_type,
           row.transport_method,
           row.delivery_address,
+          row.cmr_unloading_complete_time,
           row.create_time
         )
         // 添加到已存在集合，避免重复插入

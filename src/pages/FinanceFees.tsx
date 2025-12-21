@@ -232,15 +232,15 @@ export default function FinanceFees() {
         </button>
       ) as unknown as string,
       width: 40,
-      render: (item) => (
+      render: (_value, record) => (
         <button
-          onClick={() => toggleFeeSelection(item.id)}
+          onClick={() => toggleFeeSelection(record.id)}
           className="p-1 hover:bg-gray-100 rounded"
-          disabled={item.invoiceStatus === 'invoiced'}
+          disabled={record.invoiceStatus === 'invoiced'}
         >
-          {item.invoiceStatus === 'invoiced' ? (
+          {record.invoiceStatus === 'invoiced' ? (
             <CheckSquare className="w-4 h-4 text-gray-300" />
-          ) : selectedFeeIds.includes(item.id) ? (
+          ) : selectedFeeIds.includes(record.id) ? (
             <CheckSquare className="w-4 h-4 text-primary-600" />
           ) : (
             <Square className="w-4 h-4 text-gray-400" />
@@ -252,10 +252,10 @@ export default function FinanceFees() {
       key: 'feeName',
       label: '费用名称',
       width: 180,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900">{item.feeName}</div>
-          <div className="text-xs text-gray-400">{item.feeDate}</div>
+          <div className="font-medium text-gray-900">{record.feeName}</div>
+          <div className="text-xs text-gray-400">{record.feeDate}</div>
         </div>
       )
     },
@@ -263,8 +263,8 @@ export default function FinanceFees() {
       key: 'category',
       label: '分类',
       width: 120,
-      render: (item) => {
-        const config = getCategoryConfig(item.category)
+      render: (_value, record) => {
+        const config = getCategoryConfig(record.category)
         const Icon = config.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
@@ -278,11 +278,11 @@ export default function FinanceFees() {
       key: 'billNumber',
       label: '关联提单',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          {item.billNumber ? (
+          {record.billNumber ? (
             <span className="text-sm text-primary-600 hover:underline cursor-pointer">
-              {item.billNumber}
+              {record.billNumber}
             </span>
           ) : (
             <span className="text-gray-400">-</span>
@@ -294,8 +294,8 @@ export default function FinanceFees() {
       key: 'customerName',
       label: '客户',
       width: 150,
-      render: (item) => (
-        <span className="text-sm text-gray-600">{item.customerName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-sm text-gray-600">{record.customerName || '-'}</span>
       )
     },
     {
@@ -303,9 +303,9 @@ export default function FinanceFees() {
       label: '金额',
       width: 120,
       align: 'right',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-right font-medium text-gray-900">
-          {formatCurrency(item.amount, item.currency)}
+          {formatCurrency(record.amount, record.currency)}
         </div>
       )
     },
@@ -313,9 +313,9 @@ export default function FinanceFees() {
       key: 'description',
       label: '说明',
       width: 200,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs text-gray-500 truncate block max-w-[200px]">
-          {item.description || '-'}
+          {record.description || '-'}
         </span>
       )
     },
@@ -323,11 +323,11 @@ export default function FinanceFees() {
       key: 'actions',
       label: '操作',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button
             onClick={() => {
-              setEditingFee(item)
+              setEditingFee(record)
               setModalVisible(true)
             }}
             className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
@@ -336,7 +336,7 @@ export default function FinanceFees() {
             <Edit2 className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => handleDelete(item.id)}
+            onClick={() => handleDelete(record.id)}
             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
             title="删除"
           >
