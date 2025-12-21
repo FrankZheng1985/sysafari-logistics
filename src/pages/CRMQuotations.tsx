@@ -709,8 +709,8 @@ export default function CRMQuotations() {
                 <div className="space-y-2">
                   <div className="grid grid-cols-12 gap-2 text-[10px] text-gray-500 font-medium">
                     <div className="col-span-3">项目名称（中文）</div>
-                    <div className="col-span-3">英文名称</div>
-                    <div className="col-span-1">数量</div>
+                    <div className="col-span-2">英文名称</div>
+                    <div className="col-span-2 text-center">数量</div>
                     <div className="col-span-2">单价</div>
                     <div className="col-span-2">金额</div>
                     <div className="col-span-1"></div>
@@ -725,7 +725,7 @@ export default function CRMQuotations() {
                         className="col-span-3 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="中文名称"
                       />
-                      <div className="col-span-3 flex gap-1">
+                      <div className="col-span-2 flex gap-1">
                         <input
                           type="text"
                           value={item.nameEn || ''}
@@ -751,16 +751,18 @@ export default function CRMQuotations() {
                         type="number"
                         value={item.quantity}
                         onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                        className="col-span-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         min="0"
+                        placeholder="数量"
                       />
                       <input
                         type="number"
                         value={item.price}
                         onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         min="0"
                         step="0.01"
+                        placeholder="单价"
                       />
                       <div className="col-span-2 text-xs text-gray-700 font-medium">
                         {formatCurrency(item.quantity * item.price, formData.currency)}
@@ -769,6 +771,7 @@ export default function CRMQuotations() {
                         onClick={() => removeItem(index)}
                         className="col-span-1 p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"
                         disabled={formData.items.length <= 1}
+                        title="删除"
                       >
                         <X className="w-3 h-3" />
                       </button>
