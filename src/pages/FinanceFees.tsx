@@ -16,6 +16,7 @@ interface Fee {
   id: string
   billId: string | null
   billNumber: string
+  orderNumber?: string      // 订单号
   customerId: string | null
   customerName: string
   category: string
@@ -273,6 +274,14 @@ export default function FinanceFees() {
           </span>
         )
       }
+    },
+    {
+      key: 'orderNumber',
+      label: '订单号',
+      width: 100,
+      render: (_value, record) => (
+        <span className="font-medium text-primary-600">{record.orderNumber || '-'}</span>
+      )
     },
     {
       key: 'billNumber',

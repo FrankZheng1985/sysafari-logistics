@@ -614,56 +614,61 @@ export async function getFees(params = {}) {
     page = 1, pageSize = 20 
   } = params
   
-  let query = 'SELECT * FROM fees WHERE 1=1'
+  // 关联 bills_of_lading 表获取订单号
+  let query = `
+    SELECT f.*, b.order_number 
+    FROM fees f 
+    LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
+    WHERE 1=1`
   const queryParams = []
   
   if (feeType) {
-    query += ' AND fee_type = ?'
+    query += ' AND f.fee_type = ?'
     queryParams.push(feeType)
   }
   
   if (category) {
-    query += ' AND category = ?'
+    query += ' AND f.category = ?'
     queryParams.push(category)
   }
   
   if (billId) {
-    query += ' AND bill_id = ?'
+    query += ' AND f.bill_id = ?'
     queryParams.push(billId)
   }
   
   if (customerId) {
-    query += ' AND customer_id = ?'
+    query += ' AND f.customer_id = ?'
     queryParams.push(customerId)
   }
   
   if (supplierId) {
-    query += ' AND supplier_id = ?'
+    query += ' AND f.supplier_id = ?'
     queryParams.push(supplierId)
   }
   
   if (startDate) {
-    query += ' AND fee_date >= ?'
+    query += ' AND f.fee_date >= ?'
     queryParams.push(startDate)
   }
   
   if (endDate) {
-    query += ' AND fee_date <= ?'
+    query += ' AND f.fee_date <= ?'
     queryParams.push(endDate)
   }
   
   if (search) {
-    query += ` AND (fee_name LIKE ? OR description LIKE ?)`
+    query += ` AND (f.fee_name LIKE ? OR f.description LIKE ?)`
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern)
   }
   
   // 获取总数
-  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const countQuery = query.replace('SELECT f.*, b.order_number', 'SELECT COUNT(*) as total')
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
-  query += ' ORDER BY fee_date DESC, created_at DESC LIMIT ? OFFSET ?'
+  query += ' ORDER BY f.fee_date DESC, f.created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
@@ -950,11 +955,12 @@ export async function getOrderFeeReport(params = {}) {
     queryParams.push(endDate, endDate)
   }
   
-  // 获取订单维度的费用汇总
+  // 获取订单维度的费用汇总（关联 bills_of_lading 获取订单号）
   const stats = await db.prepare(`
     SELECT 
       f.bill_id,
       f.bill_number,
+      b.order_number,
       f.customer_id,
       f.customer_name,
       COUNT(*) as fee_count,
@@ -969,8 +975,9 @@ export async function getOrderFeeReport(params = {}) {
       MIN(f.fee_date) as first_fee_date,
       MAX(f.fee_date) as last_fee_date
     FROM fees f
+    LEFT JOIN bills_of_lading b ON f.bill_id = b.id
     WHERE f.bill_id IS NOT NULL ${dateFilter}
-    GROUP BY f.bill_id, f.bill_number, f.customer_id, f.customer_name
+    GROUP BY f.bill_id, f.bill_number, b.order_number, f.customer_id, f.customer_name
     ORDER BY total_amount DESC
   `).all(...queryParams)
   
@@ -993,6 +1000,7 @@ export async function getOrderFeeReport(params = {}) {
     list: paginatedList.map(row => ({
       billId: row.bill_id,
       billNumber: row.bill_number,
+      orderNumber: row.order_number,  // 订单号
       customerId: row.customer_id,
       customerName: row.customer_name,
       feeCount: row.fee_count,
@@ -1202,6 +1210,7 @@ export function convertFeeToCamelCase(row) {
     id: row.id,
     billId: row.bill_id,
     billNumber: row.bill_number,
+    orderNumber: row.order_number,  // 订单号（来自关联的 bills_of_lading）
     customerId: row.customer_id,
     customerName: row.customer_name,
     supplierId: row.supplier_id,

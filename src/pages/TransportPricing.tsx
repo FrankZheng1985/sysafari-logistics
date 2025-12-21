@@ -329,7 +329,7 @@ export default function TransportPricing() {
       key: 'routeCode',
       label: '路线编码',
       width: '100px',
-      render: (_value, _record) => (
+      render: (_value, record) => (
         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
           {record.routeCode}
         </span>
@@ -338,7 +338,7 @@ export default function TransportPricing() {
     {
       key: 'routeName',
       label: '路线名称',
-      render: (_value, _record) => (
+      render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900">{record.routeName}</div>
           <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
@@ -373,7 +373,7 @@ export default function TransportPricing() {
       key: 'unitPrice',
       label: '单价',
       width: '120px',
-      render: (_value, _record) => (
+      render: (_value, record) => (
         <div>
           <div className="font-bold text-primary-600">
             {getCurrencySymbol(record.currency)} {record.unitPrice.toFixed(2)}
@@ -386,7 +386,7 @@ export default function TransportPricing() {
       key: 'providerName',
       label: '服务商',
       width: '120px',
-      render: (_value, _record) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1 text-gray-600">
           <Truck className="w-3 h-3" />
           {record.providerName || '-'}
@@ -397,7 +397,7 @@ export default function TransportPricing() {
       key: 'effectiveDate',
       label: '有效期',
       width: '160px',
-      render: (_value, _record) => (
+      render: (_value, record) => (
         <div className="text-xs text-gray-600">
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />

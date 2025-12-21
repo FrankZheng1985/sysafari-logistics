@@ -542,6 +542,7 @@ export async function updateBillInspection(id, inspectionData) {
 
 /**
  * 更新派送状态
+ * 注意：当设置了卸货完成时间(cmrUnloadingCompleteTime)时，自动将订单状态标记为"已完成"
  */
 export async function updateBillDelivery(id, deliveryData) {
   const db = getDatabase()
@@ -574,6 +575,14 @@ export async function updateBillDelivery(id, deliveryData) {
       values.push(value)
     }
   })
+  
+  // 如果设置了卸货完成时间，自动将订单状态标记为"已完成"
+  if (deliveryData.cmrUnloadingCompleteTime) {
+    fields.push("status = ?")
+    values.push('已完成')
+    fields.push("complete_time = ?")
+    values.push(new Date().toISOString())
+  }
   
   values.push(id)
   

@@ -437,14 +437,25 @@ export default function OrderBills() {
       },
     },
     {
+      key: 'orderNumber',
+      label: '订单号',
+      sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <span className={`font-medium ${record.isVoid ? 'text-gray-400 line-through' : 'text-primary-600'}`}>
+          {record.orderNumber || '-'}
+        </span>
+      ),
+    },
+    {
       key: 'billNumber',
-      label: '序号',
+      label: '提单号',
       sorter: true,
       filterable: true,
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
-            className={`font-semibold cursor-pointer hover:underline ${record.isVoid ? 'text-gray-400 line-through' : 'text-primary-600'}`}
+            className={`font-semibold cursor-pointer hover:underline ${record.isVoid ? 'text-gray-400 line-through' : 'text-gray-900'}`}
             onClick={(e) => {
               e.stopPropagation()
               navigate(`/bookings/bill/${record.id}`)
@@ -454,7 +465,7 @@ export default function OrderBills() {
           </span>
           {record.billNumber && (
             <button
-              title="复制序号"
+              title="复制提单号"
               className="text-gray-400 hover:text-gray-600"
               onClick={(e) => copyToClipboard(record.billNumber, e)}
             >

@@ -14,6 +14,7 @@ const API_BASE = getApiBaseUrl()
 interface OrderFeeReport {
   billId: string
   billNumber: string
+  orderNumber?: string      // 订单号
   customerId: string
   customerName: string
   feeCount: number
@@ -198,6 +199,7 @@ export default function FinanceOrderReport() {
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="text-left py-3 px-3 font-medium text-gray-600">订单号</th>
+                <th className="text-left py-3 px-3 font-medium text-gray-600">提单号</th>
                 <th className="text-left py-3 px-3 font-medium text-gray-600">客户</th>
                 <th className="text-right py-3 px-3 font-medium text-gray-600">费用笔数</th>
                 <th className="text-right py-3 px-3 font-medium text-blue-600">运费</th>
@@ -225,8 +227,13 @@ export default function FinanceOrderReport() {
                   return (
                     <tr key={item.billId + item.customerId} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-3">
+                        <span className="font-medium text-primary-600">
+                          {item.orderNumber || '-'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3">
                         <span 
-                          className="text-primary-600 hover:underline cursor-pointer font-medium"
+                          className="text-gray-900 hover:underline cursor-pointer"
                           onClick={() => navigate(`/finance/bill-details/${item.billId}`)}
                         >
                           {item.billNumber}
@@ -265,7 +272,7 @@ export default function FinanceOrderReport() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-400">
+                  <td colSpan={11} className="py-12 text-center text-gray-400">
                     {loading ? (
                       <div className="flex items-center justify-center gap-2">
                         <RefreshCw className="w-4 h-4 animate-spin" />
