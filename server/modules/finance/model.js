@@ -614,9 +614,13 @@ export async function getFees(params = {}) {
     page = 1, pageSize = 20 
   } = params
   
-  // 关联 bills_of_lading 表获取订单号
+  // 关联 bills_of_lading 表获取订单号和客户信息
+  // 如果费用本身没有客户信息，则从关联的提单中获取
   let query = `
-    SELECT f.*, b.order_number 
+    SELECT f.*, 
+           b.order_number,
+           COALESCE(NULLIF(f.customer_id, ''), b.customer_id) as resolved_customer_id,
+           COALESCE(NULLIF(f.customer_name, ''), b.customer_name) as resolved_customer_name
     FROM fees f 
     LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
     WHERE 1=1`
@@ -664,7 +668,7 @@ export async function getFees(params = {}) {
   }
   
   // 获取总数
-  const countQuery = query.replace('SELECT f.*, b.order_number', 'SELECT COUNT(*) as total')
+  const countQuery = query.replace(/SELECT f\.\*.*?FROM fees f/s, 'SELECT COUNT(*) as total FROM fees f')
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
@@ -1211,8 +1215,9 @@ export function convertFeeToCamelCase(row) {
     billId: row.bill_id,
     billNumber: row.bill_number,
     orderNumber: row.order_number,  // 订单号（来自关联的 bills_of_lading）
-    customerId: row.customer_id,
-    customerName: row.customer_name,
+    // 优先使用解析后的客户信息（费用本身的 > 关联提单的）
+    customerId: row.resolved_customer_id || row.customer_id,
+    customerName: row.resolved_customer_name || row.customer_name,
     supplierId: row.supplier_id,
     supplierName: row.supplier_name,
     feeType: row.fee_type || 'receivable',

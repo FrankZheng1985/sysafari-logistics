@@ -269,6 +269,7 @@ export async function recordDeliveryTime(id, data) {
 
 /**
  * 卸货完成（Step 4: 卸货完成时间）
+ * 注意：设置卸货完成时间时，自动将订单状态标记为"已完成"
  */
 export async function completeUnloading(id, data) {
   const db = getDatabase()
@@ -277,6 +278,8 @@ export async function completeUnloading(id, data) {
     UPDATE bills_of_lading 
     SET cmr_unloading_complete_time = ?,
         cmr_current_step = 4,
+        status = '已完成',
+        complete_time = NOW(),
         updated_at = NOW()
     WHERE id = ?
   `).run(
@@ -355,9 +358,16 @@ export async function updateCMRDetail(id, data) {
   }
   
   // Step 4: 卸货完成时间
+  // 注意：设置卸货完成时间时，自动将订单状态标记为"已完成"
   if (data.unloadingCompleteTime !== undefined) {
     fields.push('cmr_unloading_complete_time = ?')
     values.push(data.unloadingCompleteTime)
+    // 如果设置了卸货完成时间，自动将订单状态标记为"已完成"
+    if (data.unloadingCompleteTime) {
+      fields.push("status = ?")
+      values.push('已完成')
+      fields.push("complete_time = NOW()")
+    }
   }
   
   // Step 5: 确认时间

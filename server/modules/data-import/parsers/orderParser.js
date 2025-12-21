@@ -303,74 +303,157 @@ export async function importData(data, options = {}) {
       
       if (isExisting) {
         // 更新现有记录（使用实际表字段）
-        await db.prepare(`
-          UPDATE bills_of_lading SET
-            container_number = COALESCE(?, container_number),
-            customer_id = COALESCE(?, customer_id),
-            customer_name = COALESCE(?, customer_name),
-            port_of_loading = COALESCE(?, port_of_loading),
-            place_of_delivery = COALESCE(?, place_of_delivery),
-            vessel = COALESCE(?, vessel),
-            eta = COALESCE(?, eta),
-            etd = COALESCE(?, etd),
-            weight = COALESCE(?, weight),
-            volume = COALESCE(?, volume),
-            pieces = COALESCE(?, pieces),
-            container_type = COALESCE(?, container_type),
-            transport_method = COALESCE(?, transport_method),
-            cmr_delivery_address = COALESCE(?, cmr_delivery_address),
-            cmr_unloading_complete_time = COALESCE(?, cmr_unloading_complete_time),
-            updated_at = NOW()
-          WHERE bill_number = ?
-        `).run(
-          row.container_number,
-          customerId,
-          row.customer_name,
-          row.port_of_loading,
-          row.destination,
-          row.vessel_voyage,
-          row.eta,
-          row.etd,
-          row.weight,
-          row.volume,
-          row.package_count,
-          row.container_type,
-          row.transport_method,
-          row.delivery_address,
-          row.cmr_unloading_complete_time,
-          row.bill_number
-        )
+        // 注意：如果有卸货日期，自动将订单状态标记为"已完成"
+        const hasUnloadingTime = row.cmr_unloading_complete_time ? true : false
+        
+        if (hasUnloadingTime) {
+          // 有卸货日期时，同时更新状态为已完成
+          await db.prepare(`
+            UPDATE bills_of_lading SET
+              container_number = COALESCE(?, container_number),
+              customer_id = COALESCE(?, customer_id),
+              customer_name = COALESCE(?, customer_name),
+              port_of_loading = COALESCE(?, port_of_loading),
+              place_of_delivery = COALESCE(?, place_of_delivery),
+              vessel = COALESCE(?, vessel),
+              eta = COALESCE(?, eta),
+              etd = COALESCE(?, etd),
+              weight = COALESCE(?, weight),
+              volume = COALESCE(?, volume),
+              pieces = COALESCE(?, pieces),
+              container_type = COALESCE(?, container_type),
+              transport_method = COALESCE(?, transport_method),
+              cmr_delivery_address = COALESCE(?, cmr_delivery_address),
+              cmr_unloading_complete_time = COALESCE(?, cmr_unloading_complete_time),
+              status = '已完成',
+              complete_time = NOW(),
+              updated_at = NOW()
+            WHERE bill_number = ?
+          `).run(
+            row.container_number,
+            customerId,
+            row.customer_name,
+            row.port_of_loading,
+            row.destination,
+            row.vessel_voyage,
+            row.eta,
+            row.etd,
+            row.weight,
+            row.volume,
+            row.package_count,
+            row.container_type,
+            row.transport_method,
+            row.delivery_address,
+            row.cmr_unloading_complete_time,
+            row.bill_number
+          )
+        } else {
+          // 无卸货日期时，正常更新
+          await db.prepare(`
+            UPDATE bills_of_lading SET
+              container_number = COALESCE(?, container_number),
+              customer_id = COALESCE(?, customer_id),
+              customer_name = COALESCE(?, customer_name),
+              port_of_loading = COALESCE(?, port_of_loading),
+              place_of_delivery = COALESCE(?, place_of_delivery),
+              vessel = COALESCE(?, vessel),
+              eta = COALESCE(?, eta),
+              etd = COALESCE(?, etd),
+              weight = COALESCE(?, weight),
+              volume = COALESCE(?, volume),
+              pieces = COALESCE(?, pieces),
+              container_type = COALESCE(?, container_type),
+              transport_method = COALESCE(?, transport_method),
+              cmr_delivery_address = COALESCE(?, cmr_delivery_address),
+              cmr_unloading_complete_time = COALESCE(?, cmr_unloading_complete_time),
+              updated_at = NOW()
+            WHERE bill_number = ?
+          `).run(
+            row.container_number,
+            customerId,
+            row.customer_name,
+            row.port_of_loading,
+            row.destination,
+            row.vessel_voyage,
+            row.eta,
+            row.etd,
+            row.weight,
+            row.volume,
+            row.package_count,
+            row.container_type,
+            row.transport_method,
+            row.delivery_address,
+            row.cmr_unloading_complete_time,
+            row.bill_number
+          )
+        }
       } else {
         // 创建新记录（使用实际表字段）
+        // 注意：如果有卸货日期，自动将订单状态设为"已完成"
         const billId = generateId()
-        await db.prepare(`
-          INSERT INTO bills_of_lading (
-            id, bill_number, container_number, customer_id, customer_name,
-            port_of_loading, place_of_delivery, vessel, eta, etd,
-            weight, volume, pieces, container_type,
-            transport_method, cmr_delivery_address, cmr_unloading_complete_time,
-            status, is_void, create_time, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, COALESCE(?, NOW()), NOW())
-        `).run(
-          billId,
-          row.bill_number,
-          row.container_number,
-          customerId,
-          row.customer_name,
-          row.port_of_loading,
-          row.destination,
-          row.vessel_voyage,
-          row.eta,
-          row.etd,
-          row.weight,
-          row.volume,
-          row.package_count,
-          row.container_type,
-          row.transport_method,
-          row.delivery_address,
-          row.cmr_unloading_complete_time,
-          row.create_time
-        )
+        const hasUnloadingTime = row.cmr_unloading_complete_time ? true : false
+        
+        if (hasUnloadingTime) {
+          // 有卸货日期时，状态为已完成，同时设置完成时间
+          await db.prepare(`
+            INSERT INTO bills_of_lading (
+              id, bill_number, container_number, customer_id, customer_name,
+              port_of_loading, place_of_delivery, vessel, eta, etd,
+              weight, volume, pieces, container_type,
+              transport_method, cmr_delivery_address, cmr_unloading_complete_time,
+              status, complete_time, is_void, create_time, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '已完成', NOW(), 0, COALESCE(?, NOW()), NOW())
+          `).run(
+            billId,
+            row.bill_number,
+            row.container_number,
+            customerId,
+            row.customer_name,
+            row.port_of_loading,
+            row.destination,
+            row.vessel_voyage,
+            row.eta,
+            row.etd,
+            row.weight,
+            row.volume,
+            row.package_count,
+            row.container_type,
+            row.transport_method,
+            row.delivery_address,
+            row.cmr_unloading_complete_time,
+            row.create_time
+          )
+        } else {
+          // 无卸货日期时，状态为pending
+          await db.prepare(`
+            INSERT INTO bills_of_lading (
+              id, bill_number, container_number, customer_id, customer_name,
+              port_of_loading, place_of_delivery, vessel, eta, etd,
+              weight, volume, pieces, container_type,
+              transport_method, cmr_delivery_address, cmr_unloading_complete_time,
+              status, is_void, create_time, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, COALESCE(?, NOW()), NOW())
+          `).run(
+            billId,
+            row.bill_number,
+            row.container_number,
+            customerId,
+            row.customer_name,
+            row.port_of_loading,
+            row.destination,
+            row.vessel_voyage,
+            row.eta,
+            row.etd,
+            row.weight,
+            row.volume,
+            row.package_count,
+            row.container_type,
+            row.transport_method,
+            row.delivery_address,
+            row.cmr_unloading_complete_time,
+            row.create_time
+          )
+        }
         // 添加到已存在集合，避免重复插入
         existingBillSet.add(row.bill_number)
       }
