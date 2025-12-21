@@ -291,38 +291,38 @@ export default function SecuritySettings() {
     { 
       key: 'loginTime', 
       label: '登录时间',
-      render: (item: LoginLog) => new Date(item.loginTime).toLocaleString('zh-CN')
+      render: (_value, record: LoginLog) => new Date(record.loginTime).toLocaleString('zh-CN')
     },
     { key: 'username', label: '用户名' },
     { key: 'ipAddress', label: 'IP地址' },
     { 
       key: 'status', 
       label: '状态',
-      render: (item: LoginLog) => (
+      render: (_value, record: LoginLog) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
-          item.status === 'success' ? 'bg-green-100 text-green-700' :
-          item.status === 'failed' ? 'bg-red-100 text-red-700' :
-          item.status === 'locked' ? 'bg-orange-100 text-orange-700' :
-          item.status === 'disabled' ? 'bg-gray-100 text-gray-700' :
+          record.status === 'success' ? 'bg-green-100 text-green-700' :
+          record.status === 'failed' ? 'bg-red-100 text-red-700' :
+          record.status === 'locked' ? 'bg-orange-100 text-orange-700' :
+          record.status === 'disabled' ? 'bg-gray-100 text-gray-700' :
           'bg-gray-100 text-gray-700'
         }`}>
-          {item.status === 'success' ? '成功' :
-           item.status === 'failed' ? '失败' :
-           item.status === 'locked' ? '已锁定' :
-           item.status === 'disabled' ? '已禁用' : item.status}
+          {record.status === 'success' ? '成功' :
+           record.status === 'failed' ? '失败' :
+           record.status === 'locked' ? '已锁定' :
+           record.status === 'disabled' ? '已禁用' : record.status}
         </span>
       )
     },
     { 
       key: 'failureReason', 
       label: '失败原因',
-      render: (item: LoginLog) => item.failureReason || '-'
+      render: (_value, record: LoginLog) => record.failureReason || '-'
     },
     { 
       key: 'userAgent', 
       label: '设备',
-      render: (item: LoginLog) => {
-        const ua = item.userAgent || ''
+      render: (_value, record: LoginLog) => {
+        const ua = record.userAgent || ''
         if (ua.includes('Chrome')) return 'Chrome'
         if (ua.includes('Firefox')) return 'Firefox'
         if (ua.includes('Safari')) return 'Safari'

@@ -243,8 +243,8 @@ export default function OrderBills() {
       key: 'orderSeq',
       label: '序号',
       sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
-      render: (item: BillOfLading) => (
-        <span className="font-medium text-primary-600">{item.orderSeq || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="font-medium text-primary-600">{record.orderSeq || '-'}</span>
       ),
     },
     {
@@ -252,8 +252,8 @@ export default function OrderBills() {
       label: '提单ID',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={textPrimary}>{item.billId || item.id}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.billId || record.id}</span>
       ),
     },
     {
@@ -261,14 +261,14 @@ export default function OrderBills() {
       label: '提单号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          <span className={`font-medium ${textPrimary}`}>{item.billNumber}</span>
-          {item.billNumber && (
+          <span className={`font-medium ${textPrimary}`}>{record.billNumber}</span>
+          {record.billNumber && (
             <button
               title="复制提单号"
               className="text-gray-400 hover:text-gray-600"
-              onClick={(e) => copyToClipboard(item.billNumber, e)}
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
             >
               <Copy className="w-3 h-3" />
             </button>
@@ -281,7 +281,7 @@ export default function OrderBills() {
       label: '运输方式',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => {
+      render: (_value, record: BillOfLading) => {
         const methodIcon: Record<string, string> = {
           '海运': '🚢',
           '空运': '✈️',
@@ -291,7 +291,7 @@ export default function OrderBills() {
         }
         return (
           <span className={textPrimary}>
-            {methodIcon[item.transportMethod || ''] || ''} {item.transportMethod || '-'}
+            {methodIcon[record.transportMethod || ''] || ''} {record.transportMethod || '-'}
           </span>
         )
       },
@@ -300,8 +300,8 @@ export default function OrderBills() {
       key: 'pieces',
       label: '件数',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
-        <span className={`font-medium ${textPrimary}`}>{item.pieces}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={`font-medium ${textPrimary}`}>{record.pieces}</span>
       ),
     },
     {
@@ -309,8 +309,8 @@ export default function OrderBills() {
       label: '公司名',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={textPrimary}>{item.companyName || item.shipper || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.companyName || record.shipper || '-'}</span>
       ),
     },
     {
@@ -321,8 +321,8 @@ export default function OrderBills() {
         const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
-        <span className={textSecondary}>{formatDateTime(item.createTime)}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textSecondary}>{formatDateTime(record.createTime)}</span>
       ),
     },
     {
@@ -336,9 +336,9 @@ export default function OrderBills() {
         if (value === '已作废') return record.isVoid === true
         return record.status === value
       },
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1.5">
-          {item.isVoid ? (
+          {record.isVoid ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
               已作废
@@ -346,7 +346,7 @@ export default function OrderBills() {
           ) : (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
               <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-              {item.status || '草稿'}
+              {record.status || '草稿'}
             </span>
           )}
         </div>
@@ -355,13 +355,13 @@ export default function OrderBills() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          {item.isVoid ? (
+          {record.isVoid ? (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                handleRestoreBill(item)
+                handleRestoreBill(record)
               }}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
             >
@@ -373,7 +373,7 @@ export default function OrderBills() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handlePublishDraft(item)
+                  handlePublishDraft(record)
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
               >
@@ -383,7 +383,7 @@ export default function OrderBills() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  navigate(`/bookings/bill/${item.id}`)
+                  navigate(`/bookings/bill/${record.id}`)
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 rounded transition-colors"
               >
@@ -392,7 +392,7 @@ export default function OrderBills() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleVoidBill(item)
+                  handleVoidBill(record)
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
               >
@@ -426,10 +426,10 @@ export default function OrderBills() {
         const currentStatus = getSmartStatus(record)
         return currentStatus.text === value
       },
-      render: (item: BillOfLading) => {
-        const status = getSmartStatus(item)
+      render: (_value, record: BillOfLading) => {
+        const status = getSmartStatus(record)
         return (
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color} ${item.isVoid ? 'line-through' : ''}`}>
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color} ${record.isVoid ? 'line-through' : ''}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`}></span>
             {status.text}
           </span>
@@ -441,27 +441,27 @@ export default function OrderBills() {
       label: '序号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
-            className={`font-semibold cursor-pointer hover:underline ${item.isVoid ? 'text-gray-400 line-through' : 'text-primary-600'}`}
+            className={`font-semibold cursor-pointer hover:underline ${record.isVoid ? 'text-gray-400 line-through' : 'text-primary-600'}`}
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.billNumber}
+            {record.billNumber}
           </span>
-          {item.billNumber && (
+          {record.billNumber && (
             <button
               title="复制序号"
               className="text-gray-400 hover:text-gray-600"
-              onClick={(e) => copyToClipboard(item.billNumber, e)}
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
             >
               <Copy className="w-3 h-3" />
             </button>
           )}
-          {item.isVoid && (
+          {record.isVoid && (
             <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-600 rounded">作废</span>
           )}
         </div>
@@ -472,22 +472,22 @@ export default function OrderBills() {
       label: '提单号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="font-medium text-primary-600 hover:underline cursor-pointer"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.containerNumber || '-'}
+            {record.containerNumber || '-'}
           </span>
-          {item.containerNumber && (
+          {record.containerNumber && (
             <button
               title="复制提单号"
               className="text-gray-400 hover:text-gray-600"
-              onClick={(e) => copyToClipboard(item.containerNumber || '', e)}
+              onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
             >
               <Copy className="w-3 h-3" />
             </button>
@@ -500,14 +500,14 @@ export default function OrderBills() {
       label: '集装箱号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          <span className={`font-mono ${textPrimary}`}>{item.actualContainerNo || '-'}</span>
-          {item.actualContainerNo && (
+          <span className={`font-mono ${textPrimary}`}>{record.actualContainerNo || '-'}</span>
+          {record.actualContainerNo && (
             <button
               title="复制集装箱号"
               className="text-gray-400 hover:text-gray-600"
-              onClick={(e) => copyToClipboard(item.actualContainerNo || '', e)}
+              onClick={(e) => copyToClipboard(record.actualContainerNo || '', e)}
             >
               <Copy className="w-3 h-3" />
             </button>
@@ -520,8 +520,8 @@ export default function OrderBills() {
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={textPrimary}>{item.vessel || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.vessel || '-'}</span>
       ),
     },
     {
@@ -532,8 +532,8 @@ export default function OrderBills() {
         const dateB = b.etd ? new Date(b.etd).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
-        <span className={textPrimary}>{item.etd || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.etd || '-'}</span>
       ),
     },
     {
@@ -544,11 +544,11 @@ export default function OrderBills() {
         const dateB = b.eta ? new Date(b.eta).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
-          <div className={textPrimary}>{item.eta || '-'}</div>
-          {item.ata && (
-            <div className="text-green-600 text-xs">{item.ata}</div>
+          <div className={textPrimary}>{record.eta || '-'}</div>
+          {record.ata && (
+            <div className="text-green-600 text-xs">{record.ata}</div>
           )}
         </div>
       ),
@@ -557,10 +557,10 @@ export default function OrderBills() {
       key: 'pieces',
       label: '件数/毛重',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
-          <div className={`font-medium ${textPrimary}`}>{item.pieces} 件</div>
-          <div className="text-green-600 text-xs">{item.weight} KGS</div>
+          <div className={`font-medium ${textPrimary}`}>{record.pieces} 件</div>
+          <div className="text-green-600 text-xs">{record.weight} KGS</div>
         </div>
       ),
     },
@@ -575,8 +575,8 @@ export default function OrderBills() {
         if (value === '已查验') return record.inspection !== '-'
         return record.inspection === value
       },
-      render: (item: BillOfLading) => {
-        const inspection = item.inspection || '-'
+      render: (_value, record: BillOfLading) => {
+        const inspection = record.inspection || '-'
         if (inspection === '-') {
           return <span className={textMuted}>-</span>
         }
@@ -596,39 +596,39 @@ export default function OrderBills() {
     { 
       key: 'customsStats', 
       label: '报关统计',
-      render: (item: BillOfLading) => (
-        <span className={textSecondary}>{item.customsStats || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textSecondary}>{record.customsStats || '-'}</span>
       ),
     },
     {
       key: 'creator',
       label: '创建者/时间',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
-          <div className={`font-medium ${textPrimary}`}>{item.creator || '-'}</div>
-          <div className={`text-xs ${textMuted}`}>{formatDateTime(item.createTime)}</div>
+          <div className={`font-medium ${textPrimary}`}>{record.creator || '-'}</div>
+          <div className={`text-xs ${textMuted}`}>{formatDateTime(record.createTime)}</div>
         </div>
       ),
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
             className="px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             详情
           </button>
-          {item.isVoid ? (
+          {record.isVoid ? (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                handleRestoreBill(item)
+                handleRestoreBill(record)
               }}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
             >
@@ -639,7 +639,7 @@ export default function OrderBills() {
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                handleVoidBill(item)
+                handleVoidBill(record)
               }}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
             >

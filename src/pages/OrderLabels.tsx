@@ -83,10 +83,10 @@ export default function OrderLabels() {
       label: '订单号',
       sorter: true,
       filterable: true,
-      render: (item: Order) => (
+      render: (_value, record: Order) => (
         <div>
           <div className="text-primary-600 hover:underline cursor-pointer">
-            {item.orderNumber}
+            {record.orderNumber}
           </div>
         </div>
       ),
@@ -100,9 +100,9 @@ export default function OrderLabels() {
     {
       key: 'counts',
       label: '成功 / 失败 / 生成中 / 全部',
-      render: (item: Order) => (
+      render: (_value, record: Order) => (
         <span>
-          {item.success} / {item.failed} / {item.generating} / {item.total}
+          {record.success} / {record.failed} / {record.generating} / {record.total}
         </span>
       ),
     },
@@ -136,14 +136,14 @@ export default function OrderLabels() {
         { text: '失败', value: '失败' },
       ],
       onFilter: (value, record) => record.status === value,
-      render: (item: Order) => (
+      render: (_value, record: Order) => (
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            item.status === '成功' ? 'bg-green-500' :
-            item.status === '生成中' ? 'bg-yellow-500' :
+            record.status === '成功' ? 'bg-green-500' :
+            record.status === '生成中' ? 'bg-yellow-500' :
             'bg-red-500'
           }`}></span>
-          <span>{item.status}</span>
+          <span>{record.status}</span>
         </div>
       ),
     },
@@ -171,9 +171,9 @@ export default function OrderLabels() {
 
   const statusCounts = {
     all: mockData.length,
-    success: mockData.filter(item => item.status === '成功').length,
-    generating: mockData.filter(item => item.status === '生成中').length,
-    failed: mockData.filter(item => item.status === '失败').length,
+    success: mockData.filter(item => record.status === '成功').length,
+    generating: mockData.filter(item => record.status === '生成中').length,
+    failed: mockData.filter(item => record.status === '失败').length,
   }
 
   return (

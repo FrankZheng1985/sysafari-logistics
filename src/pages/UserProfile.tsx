@@ -36,8 +36,8 @@ export default function UserProfile() {
     {
       key: 'active',
       label: '激活',
-      render: (item: Account) => (
-        <div className={`w-12 h-6 rounded-full ${item.active ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+      render: (_value, record: Account) => (
+        <div className={`w-12 h-6 rounded-full ${record.active ? 'bg-green-500' : 'bg-gray-300'}`}></div>
       ),
     },
   ]

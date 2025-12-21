@@ -540,15 +540,15 @@ export default function BasicDataManage() {
     {
       key: 'website',
       label: '网站',
-      render: (item: ShippingCompany) => (
-        item.website ? (
+      render: (_value, record: ShippingCompany) => (
+        record.website ? (
           <a 
-            href={item.website} 
+            href={record.website} 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-xs text-primary-600 hover:underline"
           >
-            {item.website}
+            {record.website}
           </a>
         ) : (
           <span className="text-xs text-gray-400">-</span>
@@ -567,16 +567,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: ShippingCompany) => (
+      render: (_value, record: ShippingCompany) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleShippingCompanyEdit(item)}
+            onClick={() => handleShippingCompanyEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleShippingCompanyDelete(item.id)}
+            onClick={() => handleShippingCompanyDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -658,16 +658,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: ContainerCodeItem) => (
+      render: (_value, record: ContainerCodeItem) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleContainerEdit(item)}
+            onClick={() => handleContainerEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleContainerDelete(item.id)}
+            onClick={() => handleContainerDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -688,13 +688,13 @@ export default function BasicDataManage() {
       key: 'portNameCn',
       label: '港口/码头名称',
       sorter: (a, b) => a.portNameCn.localeCompare(b.portNameCn),
-      render: (item: PortOfLoadingItem) => (
+      render: (_value, record: PortOfLoadingItem) => (
         <div className="flex items-center gap-1">
-          {item.portType === 'terminal' && (
+          {record.portType === 'terminal' && (
             <span className="text-xs text-gray-400">└─</span>
           )}
-          <span>{item.portNameCn}</span>
-          {item.portType === 'terminal' && (
+          <span>{record.portNameCn}</span>
+          {record.portType === 'terminal' && (
             <span className="text-xs text-gray-500">(码头)</span>
           )}
         </div>
@@ -710,8 +710,8 @@ export default function BasicDataManage() {
       label: '国家',
       sorter: (a, b) => (a.country || '').localeCompare(b.country || ''),
       filters: countries.map(item => ({ 
-        text: item.country, 
-        value: item.country 
+        text: record.country, 
+        value: record.country 
       })),
       onFilter: (value, record) => record.country === value,
     },
@@ -723,20 +723,20 @@ export default function BasicDataManage() {
     {
       key: 'status',
       label: '状态',
-      render: (item: PortOfLoadingItem) => (
+      render: (_value, record: PortOfLoadingItem) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleTogglePortStatus(item)
+            handleTogglePortStatus(record)
           }}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
           }`}
-          title={item.status === 'active' ? '点击禁用' : '点击启用'}
+          title={record.status === 'active' ? '点击禁用' : '点击启用'}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -755,16 +755,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: PortOfLoadingItem) => (
+      render: (_value, record: PortOfLoadingItem) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handlePortEdit(item)}
+            onClick={() => handlePortEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handlePortDelete(item.id)}
+            onClick={() => handlePortDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -794,14 +794,14 @@ export default function BasicDataManage() {
     {
       key: 'transportType',
       label: '运输类型',
-      render: (item: DestinationPortItem) => {
+      render: (_value, record: DestinationPortItem) => {
         const typeMap: Record<string, string> = {
           'air': '空运',
           'sea': '海运',
           'rail': '铁运',
           'truck': '卡车运输',
         }
-        return <span className="text-xs">{typeMap[item.transportType] || item.transportType}</span>
+        return <span className="text-xs">{typeMap[record.transportType] || record.transportType}</span>
       },
       filters: [
         { text: '空运', value: 'air' },
@@ -830,8 +830,8 @@ export default function BasicDataManage() {
       label: '国家',
       sorter: (a, b) => (a.country || '').localeCompare(b.country || ''),
       filters: destinationCountries.map(item => ({ 
-        text: item.country, 
-        value: item.country 
+        text: record.country, 
+        value: record.country 
       })),
       onFilter: (value, record) => record.country === value,
     },
@@ -843,20 +843,20 @@ export default function BasicDataManage() {
     {
       key: 'status',
       label: '状态',
-      render: (item: DestinationPortItem) => (
+      render: (_value, record: DestinationPortItem) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleToggleDestinationPortStatus(item)
+            handleToggleDestinationPortStatus(record)
           }}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
           }`}
-          title={item.status === 'active' ? '点击禁用' : '点击启用'}
+          title={record.status === 'active' ? '点击禁用' : '点击启用'}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -875,16 +875,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: DestinationPortItem) => (
+      render: (_value, record: DestinationPortItem) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleDestinationPortEdit(item)}
+            onClick={() => handleDestinationPortEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleDestinationPortDelete(item.id)}
+            onClick={() => handleDestinationPortDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -916,8 +916,8 @@ export default function BasicDataManage() {
       label: '国家',
       sorter: (a, b) => (a.country || '').localeCompare(b.country || ''),
       filters: airPortCountries.map(item => ({ 
-        text: item.country, 
-        value: item.country 
+        text: record.country, 
+        value: record.country 
       })),
       onFilter: (value, record) => record.country === value,
     },
@@ -929,20 +929,20 @@ export default function BasicDataManage() {
     {
       key: 'status',
       label: '状态',
-      render: (item: AirPortItem) => (
+      render: (_value, record: AirPortItem) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleToggleAirPortStatus(item)
+            handleToggleAirPortStatus(record)
           }}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
           }`}
-          title={item.status === 'active' ? '点击禁用' : '点击启用'}
+          title={record.status === 'active' ? '点击禁用' : '点击启用'}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -961,16 +961,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: AirPortItem) => (
+      render: (_value, record: AirPortItem) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleAirPortEdit(item)}
+            onClick={() => handleAirPortEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleAirPortDelete(item.id)}
+            onClick={() => handleAirPortDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -1025,20 +1025,20 @@ export default function BasicDataManage() {
     {
       key: 'status',
       label: '状态',
-      render: (item: CountryItem) => (
+      render: (_value, record: CountryItem) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleToggleCountryStatus(item)
+            handleToggleCountryStatus(record)
           }}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
           }`}
-          title={item.status === 'active' ? '点击禁用' : '点击启用'}
+          title={record.status === 'active' ? '点击禁用' : '点击启用'}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -1057,16 +1057,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: CountryItem) => (
+      render: (_value, record: CountryItem) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleCountryEdit(item)}
+            onClick={() => handleCountryEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleCountryDelete(item.id)}
+            onClick={() => handleCountryDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -1100,20 +1100,20 @@ export default function BasicDataManage() {
     {
       key: 'status',
       label: '状态',
-      render: (item: ServiceFeeCategory) => (
+      render: (_value, record: ServiceFeeCategory) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleToggleFeeCategoryStatus(item)
+            handleToggleFeeCategoryStatus(record)
           }}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
           }`}
-          title={item.status === 'active' ? '点击禁用' : '点击启用'}
+          title={record.status === 'active' ? '点击禁用' : '点击启用'}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -1132,16 +1132,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: ServiceFeeCategory) => (
+      render: (_value, record: ServiceFeeCategory) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleFeeCategoryEdit(item)}
+            onClick={() => handleFeeCategoryEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleFeeCategoryDelete(item.id)}
+            onClick={() => handleFeeCategoryDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -1175,20 +1175,20 @@ export default function BasicDataManage() {
     {
       key: 'status',
       label: '状态',
-      render: (item: TransportMethod) => (
+      render: (_value, record: TransportMethod) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleToggleTransportMethodStatus(item)
+            handleToggleTransportMethodStatus(record)
           }}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
           }`}
-          title={item.status === 'active' ? '点击禁用' : '点击启用'}
+          title={record.status === 'active' ? '点击禁用' : '点击启用'}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -1207,16 +1207,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: TransportMethod) => (
+      render: (_value, record: TransportMethod) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleTransportMethodEdit(item)}
+            onClick={() => handleTransportMethodEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleTransportMethodDelete(item.id)}
+            onClick={() => handleTransportMethodDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -1242,16 +1242,16 @@ export default function BasicDataManage() {
       key: 'standardRate',
       label: '标准税率 (%)',
       sorter: (a, b) => a.standardRate - b.standardRate,
-      render: (item: VatRate) => (
-        <span className="text-xs font-medium text-blue-600">{item.standardRate}%</span>
+      render: (_value, record: VatRate) => (
+        <span className="text-xs font-medium text-blue-600">{record.standardRate}%</span>
       ),
     },
     {
       key: 'reducedRate',
       label: '优惠税率 (%)',
       sorter: (a, b) => a.reducedRate - b.reducedRate,
-      render: (item: VatRate) => (
-        <span className="text-xs">{item.reducedRate > 0 ? `${item.reducedRate}%` : '-'}</span>
+      render: (_value, record: VatRate) => (
+        <span className="text-xs">{record.reducedRate > 0 ? `${record.reducedRate}%` : '-'}</span>
       ),
     },
     {
@@ -1261,20 +1261,20 @@ export default function BasicDataManage() {
     {
       key: 'status',
       label: '状态',
-      render: (item: VatRate) => (
+      render: (_value, record: VatRate) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleToggleVatRateStatus(item)
+            handleToggleVatRateStatus(record)
           }}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
           }`}
-          title={item.status === 'active' ? '点击禁用' : '点击启用'}
+          title={record.status === 'active' ? '点击禁用' : '点击启用'}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -1293,16 +1293,16 @@ export default function BasicDataManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: VatRate) => (
+      render: (_value, record: VatRate) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleVatRateEdit(item)}
+            onClick={() => handleVatRateEdit(record)}
             className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             编辑
           </button>
           <button
-            onClick={() => handleVatRateDelete(item.id)}
+            onClick={() => handleVatRateDelete(record.id)}
             className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
           >
             删除
@@ -1352,16 +1352,16 @@ export default function BasicDataManage() {
 
   const handleToggleVatRateStatus = async (item: VatRate) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
-      const response = await updateVatRate(item.id, {
-        countryCode: item.countryCode,
-        countryName: item.countryName,
-        standardRate: item.standardRate,
-        reducedRate: item.reducedRate,
-        superReducedRate: item.superReducedRate,
-        parkingRate: item.parkingRate,
-        description: item.description,
-        effectiveDate: item.effectiveDate,
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const response = await updateVatRate(record.id, {
+        countryCode: record.countryCode,
+        countryName: record.countryName,
+        standardRate: record.standardRate,
+        reducedRate: record.reducedRate,
+        superReducedRate: record.superReducedRate,
+        parkingRate: record.parkingRate,
+        description: record.description,
+        effectiveDate: record.effectiveDate,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1415,13 +1415,13 @@ export default function BasicDataManage() {
 
   const handleToggleTransportMethodStatus = async (item: TransportMethod) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
-      const response = await updateTransportMethod(item.id, {
-        name: item.name,
-        code: item.code,
-        description: item.description,
-        icon: item.icon,
-        sortOrder: item.sortOrder,
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const response = await updateTransportMethod(record.id, {
+        name: record.name,
+        code: record.code,
+        description: record.description,
+        icon: record.icon,
+        sortOrder: record.sortOrder,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1475,12 +1475,12 @@ export default function BasicDataManage() {
 
   const handleToggleFeeCategoryStatus = async (item: ServiceFeeCategory) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
-      const response = await updateServiceFeeCategory(item.id, {
-        name: item.name,
-        code: item.code,
-        description: item.description,
-        sortOrder: item.sortOrder,
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const response = await updateServiceFeeCategory(record.id, {
+        name: record.name,
+        code: record.code,
+        description: record.description,
+        sortOrder: record.sortOrder,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1531,12 +1531,12 @@ export default function BasicDataManage() {
   // 切换基础数据状态
   const handleToggleBasicDataStatus = async (item: BasicDataItem) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
-      const response = await updateBasicData(item.id, {
-        name: item.name,
-        code: item.code,
-        category: item.category,
-        description: item.description,
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const response = await updateBasicData(record.id, {
+        name: record.name,
+        code: record.code,
+        category: record.category,
+        description: record.description,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1687,7 +1687,7 @@ export default function BasicDataManage() {
   // 切换起运地状态
   const handleTogglePortStatus = async (item: PortOfLoadingItem | AirPortItem) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
       
       // 如果选择的是空运港，更新空运港状态
       if (portTransportType === 'air') {
@@ -1815,15 +1815,15 @@ export default function BasicDataManage() {
   // 切换空运港状态
   const handleToggleAirPortStatus = async (item: AirPortItem) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
-      const response = await updateAirPort(item.id, {
-        portCode: item.portCode,
-        portNameCn: item.portNameCn,
-        portNameEn: item.portNameEn,
-        country: item.country,
-        countryCode: item.countryCode,
-        city: item.city,
-        description: item.description,
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const response = await updateAirPort(record.id, {
+        portCode: record.portCode,
+        portNameCn: record.portNameCn,
+        portNameEn: record.portNameEn,
+        country: record.country,
+        countryCode: record.countryCode,
+        city: record.city,
+        description: record.description,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1840,15 +1840,15 @@ export default function BasicDataManage() {
   // 切换目的地状态
   const handleToggleDestinationPortStatus = async (item: DestinationPortItem) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
-      const response = await updateDestinationPort(item.id, {
-        portCode: item.portCode,
-        portNameCn: item.portNameCn,
-        portNameEn: item.portNameEn,
-        country: item.country,
-        countryCode: item.countryCode,
-        city: item.city,
-        description: item.description,
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const response = await updateDestinationPort(record.id, {
+        portCode: record.portCode,
+        portNameCn: record.portNameCn,
+        portNameEn: record.portNameEn,
+        country: record.country,
+        countryCode: record.countryCode,
+        city: record.city,
+        description: record.description,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1904,19 +1904,19 @@ export default function BasicDataManage() {
   // 切换国家状态
   const handleToggleCountryStatus = async (item: CountryItem) => {
     try {
-      const newStatus = item.status === 'active' ? 'inactive' : 'active'
-      const response = await updateCountry(item.id, {
-        countryCode: item.countryCode,
-        countryNameCn: item.countryNameCn,
-        countryNameEn: item.countryNameEn,
-        continent: item.continent,
-        region: item.region,
-        capital: item.capital,
-        currencyCode: item.currencyCode,
-        currencyName: item.currencyName,
-        phoneCode: item.phoneCode,
-        timezone: item.timezone,
-        description: item.description,
+      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const response = await updateCountry(record.id, {
+        countryCode: record.countryCode,
+        countryNameCn: record.countryNameCn,
+        countryNameEn: record.countryNameEn,
+        continent: record.continent,
+        region: record.region,
+        capital: record.capital,
+        currencyCode: record.currencyCode,
+        currencyName: record.currencyName,
+        phoneCode: record.phoneCode,
+        timezone: record.timezone,
+        description: record.description,
         status: newStatus,
       })
       if (response.errCode === 200) {

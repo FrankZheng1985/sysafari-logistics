@@ -577,9 +577,9 @@ export default function BillDetails() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: Declaration) => (
+      render: (_value, record: Declaration) => (
         <button
-          onClick={() => handleDownload(item.declarationNumber)}
+          onClick={() => handleDownload(record.declarationNumber)}
           className="flex items-center gap-1 px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           title="下载文件"
         >

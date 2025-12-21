@@ -41,7 +41,7 @@ export default function LabelCreateBatch() {
 
   const handleItemChange = (id: string, field: string, value: string) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((record) => (record.id === id ? { ...item, [field]: value } : item))
     )
     // 清除该字段的错误
     if (errors[id]?.[field]) {
@@ -82,7 +82,7 @@ export default function LabelCreateBatch() {
       alert('至少需要保留一行数据')
       return
     }
-    setItems((prev) => prev.filter((item) => item.id !== id))
+    setItems((prev) => prev.filter((record) => record.id !== id))
     // 清除该行的错误
     setErrors((prev) => {
       const newErrors = { ...prev }
@@ -94,35 +94,35 @@ export default function LabelCreateBatch() {
   const validate = (): boolean => {
     const newErrors: Record<string, Record<string, string>> = {}
 
-    items.forEach((item) => {
+    items.forEach((record) => {
       const itemErrors: Record<string, string> = {}
 
-      if (!item.orderNumber.trim()) {
+      if (!record.orderNumber.trim()) {
         itemErrors.orderNumber = '订单号不能为空'
       }
-      if (!item.recipient.trim()) {
+      if (!record.recipient.trim()) {
         itemErrors.recipient = '收件人不能为空'
       }
-      if (!item.phone.trim()) {
+      if (!record.phone.trim()) {
         itemErrors.phone = '电话不能为空'
       }
-      if (!item.address.trim()) {
+      if (!record.address.trim()) {
         itemErrors.address = '地址不能为空'
       }
-      if (!item.city.trim()) {
+      if (!record.city.trim()) {
         itemErrors.city = '城市不能为空'
       }
-      if (!item.postalCode.trim()) {
+      if (!record.postalCode.trim()) {
         itemErrors.postalCode = '邮编不能为空'
       }
-      if (!item.weight.trim()) {
+      if (!record.weight.trim()) {
         itemErrors.weight = '重量不能为空'
-      } else if (isNaN(Number(item.weight)) || Number(item.weight) <= 0) {
+      } else if (isNaN(Number(record.weight)) || Number(record.weight) <= 0) {
         itemErrors.weight = '请输入有效的重量'
       }
 
       if (Object.keys(itemErrors).length > 0) {
-        newErrors[item.id] = itemErrors
+        newErrors[record.id] = itemErrors
       }
     })
 
@@ -185,19 +185,19 @@ export default function LabelCreateBatch() {
     {
       key: 'orderNumber',
       label: '订单号',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <div>
           <input
             type="text"
-            value={item.orderNumber}
-            onChange={(e) => handleItemChange(item.id, 'orderNumber', e.target.value)}
+            value={record.orderNumber}
+            onChange={(e) => handleItemChange(record.id, 'orderNumber', e.target.value)}
             className={`w-full px-2 py-1 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 ${
-              errors[item.id]?.orderNumber ? 'border-red-500' : 'border-gray-300'
+              errors[record.id]?.orderNumber ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="订单号"
           />
-          {errors[item.id]?.orderNumber && (
-            <p className="text-xs text-red-500 mt-1">{errors[item.id].orderNumber}</p>
+          {errors[record.id]?.orderNumber && (
+            <p className="text-xs text-red-500 mt-1">{errors[record.id].orderNumber}</p>
           )}
         </div>
       ),
@@ -205,19 +205,19 @@ export default function LabelCreateBatch() {
     {
       key: 'recipient',
       label: '收件人',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <div>
           <input
             type="text"
-            value={item.recipient}
-            onChange={(e) => handleItemChange(item.id, 'recipient', e.target.value)}
+            value={record.recipient}
+            onChange={(e) => handleItemChange(record.id, 'recipient', e.target.value)}
             className={`w-full px-2 py-1 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 ${
-              errors[item.id]?.recipient ? 'border-red-500' : 'border-gray-300'
+              errors[record.id]?.recipient ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="收件人"
           />
-          {errors[item.id]?.recipient && (
-            <p className="text-xs text-red-500 mt-1">{errors[item.id].recipient}</p>
+          {errors[record.id]?.recipient && (
+            <p className="text-xs text-red-500 mt-1">{errors[record.id].recipient}</p>
           )}
         </div>
       ),
@@ -225,19 +225,19 @@ export default function LabelCreateBatch() {
     {
       key: 'phone',
       label: '电话',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <div>
           <input
             type="tel"
-            value={item.phone}
-            onChange={(e) => handleItemChange(item.id, 'phone', e.target.value)}
+            value={record.phone}
+            onChange={(e) => handleItemChange(record.id, 'phone', e.target.value)}
             className={`w-full px-2 py-1 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 ${
-              errors[item.id]?.phone ? 'border-red-500' : 'border-gray-300'
+              errors[record.id]?.phone ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="电话"
           />
-          {errors[item.id]?.phone && (
-            <p className="text-xs text-red-500 mt-1">{errors[item.id].phone}</p>
+          {errors[record.id]?.phone && (
+            <p className="text-xs text-red-500 mt-1">{errors[record.id].phone}</p>
           )}
         </div>
       ),
@@ -245,19 +245,19 @@ export default function LabelCreateBatch() {
     {
       key: 'address',
       label: '地址',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <div>
           <input
             type="text"
-            value={item.address}
-            onChange={(e) => handleItemChange(item.id, 'address', e.target.value)}
+            value={record.address}
+            onChange={(e) => handleItemChange(record.id, 'address', e.target.value)}
             className={`w-full px-2 py-1 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 ${
-              errors[item.id]?.address ? 'border-red-500' : 'border-gray-300'
+              errors[record.id]?.address ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="地址"
           />
-          {errors[item.id]?.address && (
-            <p className="text-xs text-red-500 mt-1">{errors[item.id].address}</p>
+          {errors[record.id]?.address && (
+            <p className="text-xs text-red-500 mt-1">{errors[record.id].address}</p>
           )}
         </div>
       ),
@@ -265,19 +265,19 @@ export default function LabelCreateBatch() {
     {
       key: 'city',
       label: '城市',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <div>
           <input
             type="text"
-            value={item.city}
-            onChange={(e) => handleItemChange(item.id, 'city', e.target.value)}
+            value={record.city}
+            onChange={(e) => handleItemChange(record.id, 'city', e.target.value)}
             className={`w-full px-2 py-1 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 ${
-              errors[item.id]?.city ? 'border-red-500' : 'border-gray-300'
+              errors[record.id]?.city ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="城市"
           />
-          {errors[item.id]?.city && (
-            <p className="text-xs text-red-500 mt-1">{errors[item.id].city}</p>
+          {errors[record.id]?.city && (
+            <p className="text-xs text-red-500 mt-1">{errors[record.id].city}</p>
           )}
         </div>
       ),
@@ -285,19 +285,19 @@ export default function LabelCreateBatch() {
     {
       key: 'postalCode',
       label: '邮编',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <div>
           <input
             type="text"
-            value={item.postalCode}
-            onChange={(e) => handleItemChange(item.id, 'postalCode', e.target.value)}
+            value={record.postalCode}
+            onChange={(e) => handleItemChange(record.id, 'postalCode', e.target.value)}
             className={`w-full px-2 py-1 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 ${
-              errors[item.id]?.postalCode ? 'border-red-500' : 'border-gray-300'
+              errors[record.id]?.postalCode ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="邮编"
           />
-          {errors[item.id]?.postalCode && (
-            <p className="text-xs text-red-500 mt-1">{errors[item.id].postalCode}</p>
+          {errors[record.id]?.postalCode && (
+            <p className="text-xs text-red-500 mt-1">{errors[record.id].postalCode}</p>
           )}
         </div>
       ),
@@ -305,10 +305,10 @@ export default function LabelCreateBatch() {
     {
       key: 'country',
       label: '国家',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <select
-          value={item.country}
-          onChange={(e) => handleItemChange(item.id, 'country', e.target.value)}
+          value={record.country}
+          onChange={(e) => handleItemChange(record.id, 'country', e.target.value)}
           className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900"
         >
           <option value="NL">NL</option>
@@ -321,21 +321,21 @@ export default function LabelCreateBatch() {
     {
       key: 'weight',
       label: '重量(KG)',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <div>
           <input
             type="number"
             step="0.01"
             min="0"
-            value={item.weight}
-            onChange={(e) => handleItemChange(item.id, 'weight', e.target.value)}
+            value={record.weight}
+            onChange={(e) => handleItemChange(record.id, 'weight', e.target.value)}
             className={`w-full px-2 py-1 border rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 ${
-              errors[item.id]?.weight ? 'border-red-500' : 'border-gray-300'
+              errors[record.id]?.weight ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="重量"
           />
-          {errors[item.id]?.weight && (
-            <p className="text-xs text-red-500 mt-1">{errors[item.id].weight}</p>
+          {errors[record.id]?.weight && (
+            <p className="text-xs text-red-500 mt-1">{errors[record.id].weight}</p>
           )}
         </div>
       ),
@@ -343,10 +343,10 @@ export default function LabelCreateBatch() {
     {
       key: 'transferMethod',
       label: '转运方式',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <select
-          value={item.transferMethod}
-          onChange={(e) => handleItemChange(item.id, 'transferMethod', e.target.value)}
+          value={record.transferMethod}
+          onChange={(e) => handleItemChange(record.id, 'transferMethod', e.target.value)}
           className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900"
         >
           <option value="DECLARATION ONLY">DECLARATION ONLY</option>
@@ -358,11 +358,11 @@ export default function LabelCreateBatch() {
     {
       key: 'remarks',
       label: '备注',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <input
           type="text"
-          value={item.remarks}
-          onChange={(e) => handleItemChange(item.id, 'remarks', e.target.value)}
+          value={record.remarks}
+          onChange={(e) => handleItemChange(record.id, 'remarks', e.target.value)}
           className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500 bg-white text-gray-900"
           placeholder="备注（可选）"
         />
@@ -371,9 +371,9 @@ export default function LabelCreateBatch() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: BatchLabelItem) => (
+      render: (_value, record: BatchLabelItem) => (
         <button
-          onClick={() => handleDeleteRow(item.id)}
+          onClick={() => handleDeleteRow(record.id)}
           className="text-red-600 hover:text-red-700 p-1 transition-colors"
           title="删除"
         >

@@ -79,10 +79,10 @@ export default function PureLabels() {
       label: '标签号',
       sorter: true,
       filterable: true,
-      render: (item: PureLabel) => (
+      render: (_value, record: PureLabel) => (
         <div>
           <div className="text-primary-600 hover:underline cursor-pointer">
-            {item.labelNumber}
+            {record.labelNumber}
           </div>
         </div>
       ),
@@ -92,9 +92,9 @@ export default function PureLabels() {
       label: '订单号',
       sorter: true,
       filterable: true,
-      render: (item: PureLabel) => (
+      render: (_value, record: PureLabel) => (
         <div className="text-primary-600 hover:underline cursor-pointer">
-          {item.orderNumber}
+          {record.orderNumber}
         </div>
       ),
     },
@@ -108,9 +108,9 @@ export default function PureLabels() {
       key: 'address',
       label: '地址',
       filterable: true,
-      render: (item: PureLabel) => (
-        <div className="max-w-xs truncate" title={item.address}>
-          {item.address}
+      render: (_value, record: PureLabel) => (
+        <div className="max-w-xs truncate" title={record.address}>
+          {record.address}
         </div>
       ),
     },
@@ -119,7 +119,7 @@ export default function PureLabels() {
       key: 'weight',
       label: '重量 (KG)',
       sorter: (a, b) => a.weight - b.weight,
-      render: (item: PureLabel) => `${item.weight} KG`,
+      render: (_value, record: PureLabel) => `${record.weight} KG`,
     },
     {
       key: 'createTime',
@@ -138,12 +138,12 @@ export default function PureLabels() {
         { text: '未打印', value: '未打印' },
       ],
       onFilter: (value, record) => record.printStatus === value,
-      render: (item: PureLabel) => (
+      render: (_value, record: PureLabel) => (
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            item.printStatus === '已打印' ? 'bg-green-500' : 'bg-gray-400'
+            record.printStatus === '已打印' ? 'bg-green-500' : 'bg-gray-400'
           }`}></span>
-          <span>{item.printStatus}</span>
+          <span>{record.printStatus}</span>
         </div>
       ),
     },
@@ -174,8 +174,8 @@ export default function PureLabels() {
 
   const statusCounts = {
     all: mockData.length,
-    printed: mockData.filter(item => item.printStatus === '已打印').length,
-    unprinted: mockData.filter(item => item.printStatus === '未打印').length,
+    printed: mockData.filter(item => record.printStatus === '已打印').length,
+    unprinted: mockData.filter(item => record.printStatus === '未打印').length,
   }
 
   return (

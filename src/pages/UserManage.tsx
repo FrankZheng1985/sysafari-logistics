@@ -556,8 +556,8 @@ export default function UserManage() {
     {
       key: 'id',
       label: '用户ID',
-      render: (item: UserType) => (
-        <span className="font-mono text-xs text-gray-600">{item.id}</span>
+      render: (_value, record: UserType) => (
+        <span className="font-mono text-xs text-gray-600">{record.id}</span>
       )
     },
     { key: 'username', label: '用户名' },
@@ -565,48 +565,48 @@ export default function UserManage() {
     {
       key: 'department',
       label: '部门',
-      render: (item: UserType) => (
+      render: (_value, record: UserType) => (
         <span className="text-xs text-gray-600">
-          {item.department || '-'}
+          {record.department || '-'}
         </span>
       )
     },
     {
       key: 'roleName',
       label: '角色',
-      render: (item: UserType) => (
-        <span className={`px-2 py-0.5 rounded text-xs ${getRoleColor(item.role)}`}>
-          {item.roleName || item.role}
+      render: (_value, record: UserType) => (
+        <span className={`px-2 py-0.5 rounded text-xs ${getRoleColor(record.role)}`}>
+          {record.roleName || record.role}
         </span>
       )
     },
     {
       key: 'supervisorId',
       label: '上级',
-      render: (item: UserType) => (
+      render: (_value, record: UserType) => (
         <span className="text-xs text-gray-600">
-          {getSupervisorName(item.supervisorId)}
+          {getSupervisorName(record.supervisorId)}
         </span>
       )
     },
     {
       key: 'status',
       label: '状态',
-      render: (item: UserType) => (
+      render: (_value, record: UserType) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            handleToggleStatus(item.id, item.status)
+            handleToggleStatus(record.id, record.status)
           }}
-          disabled={item.id === currentUser?.id}
+          disabled={record.id === currentUser?.id}
           className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 ${
-            item.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
-          } ${item.id === currentUser?.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-          title={item.id === currentUser?.id ? '不能禁用自己' : (item.status === 'active' ? '点击禁用' : '点击启用')}
+            record.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+          } ${record.id === currentUser?.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title={record.id === currentUser?.id ? '不能禁用自己' : (record.status === 'active' ? '点击禁用' : '点击启用')}
         >
           <span
             className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform ${
-              item.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
+              record.status === 'active' ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
         </button>
@@ -615,17 +615,17 @@ export default function UserManage() {
     { 
       key: 'lastLoginTime', 
       label: '最后登录',
-      render: (item: UserType) => item.lastLoginTime ? new Date(item.lastLoginTime).toLocaleString('zh-CN') : '-'
+      render: (_value, record: UserType) => record.lastLoginTime ? new Date(record.lastLoginTime).toLocaleString('zh-CN') : '-'
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: UserType) => (
+      render: (_value, record: UserType) => (
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
               e.stopPropagation()
-              handleEdit(item)
+              handleEdit(record)
             }}
             className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
             title="编辑"
@@ -635,18 +635,18 @@ export default function UserManage() {
           <button
             onClick={(e) => {
               e.stopPropagation()
-              handleResetPassword(item.id, item.name)
+              handleResetPassword(record.id, record.name)
             }}
             className="p-1 text-orange-600 hover:bg-orange-50 rounded transition-colors"
             title="重置密码"
           >
             <Key className="w-4 h-4" />
           </button>
-          {item.id !== currentUser?.id && (
+          {record.id !== currentUser?.id && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                handleDelete(item.id, item.name)
+                handleDelete(record.id, record.name)
               }}
               className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
               title="删除"

@@ -64,9 +64,9 @@ export default function LastMile() {
 
   const pageKey = '/last-mile'
 
-  const filteredData = mockData.filter((item) => {
+  const filteredData = mockData.filter((record) => {
     if (selectedStatus === 'all') return true
-    return item.status === selectedStatus
+    return record.status === selectedStatus
   })
 
   const columns: Column<LastMileOrder>[] = [
@@ -74,16 +74,16 @@ export default function LastMile() {
     {
       key: 'orderNumber',
       label: '订单号',
-      render: (item: LastMileOrder) => (
-        <span className="text-primary-600 font-medium">{item.orderNumber}</span>
+      render: (_value, record: LastMileOrder) => (
+        <span className="text-primary-600 font-medium">{record.orderNumber}</span>
       ),
     },
     {
       key: 'billNumber',
       label: '提单号',
-      render: (item: LastMileOrder) => (
+      render: (_value, record: LastMileOrder) => (
         <span className="text-primary-600 hover:underline cursor-pointer">
-          {item.billNumber}
+          {record.billNumber}
         </span>
       ),
     },
@@ -91,10 +91,10 @@ export default function LastMile() {
     {
       key: 'address',
       label: '地址',
-      render: (item: LastMileOrder) => (
+      render: (_value, record: LastMileOrder) => (
         <div className="flex items-start gap-2">
           <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-          <span className="text-xs">{item.address}</span>
+          <span className="text-xs">{record.address}</span>
         </div>
       ),
     },
@@ -102,7 +102,7 @@ export default function LastMile() {
     {
       key: 'status',
       label: '状态',
-      render: (item: LastMileOrder) => {
+      render: (_value, record: LastMileOrder) => {
         const statusColors: Record<string, string> = {
           '待派送': 'bg-yellow-100 text-yellow-800',
           '派送中': 'bg-blue-100 text-blue-800',
@@ -112,10 +112,10 @@ export default function LastMile() {
         return (
           <span
             className={`px-2 py-1 rounded-full text-xs font-medium ${
-              statusColors[item.status] || 'bg-gray-100 text-gray-800'
+              statusColors[record.status] || 'bg-gray-100 text-gray-800'
             }`}
           >
-            {item.status}
+            {record.status}
           </span>
         )
       },
@@ -123,14 +123,14 @@ export default function LastMile() {
     {
       key: 'deliveryCompany',
       label: '派送公司',
-      render: (item: LastMileOrder) => item.deliveryCompany || '-',
+      render: (_value, record: LastMileOrder) => record.deliveryCompany || '-',
     },
     {
       key: 'trackingNumber',
       label: '跟踪号',
-      render: (item: LastMileOrder) => (
+      render: (_value, record: LastMileOrder) => (
         <span className="text-xs font-mono">
-          {item.trackingNumber || '-'}
+          {record.trackingNumber || '-'}
         </span>
       ),
     },
@@ -139,11 +139,11 @@ export default function LastMile() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: LastMileOrder) => (
+      render: (_value, record: LastMileOrder) => (
         <div className="flex gap-2">
           <button className="text-primary-600 hover:underline text-xs">编辑</button>
           <button className="text-primary-600 hover:underline text-xs">跟踪</button>
-          {item.status === '待派送' && (
+          {record.status === '待派送' && (
             <button className="text-green-600 hover:underline text-xs">派送</button>
           )}
         </div>
@@ -163,9 +163,9 @@ export default function LastMile() {
 
   const statusCounts = {
     all: mockData.length,
-    待派送: mockData.filter((item) => item.status === '待派送').length,
-    派送中: mockData.filter((item) => item.status === '派送中').length,
-    已送达: mockData.filter((item) => item.status === '已送达').length,
+    待派送: mockData.filter((record) => record.status === '待派送').length,
+    派送中: mockData.filter((record) => record.status === '派送中').length,
+    已送达: mockData.filter((record) => record.status === '已送达').length,
   }
 
   return (

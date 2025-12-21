@@ -579,7 +579,7 @@ export default function SecurityCenter() {
     { 
       key: 'createdAt', 
       label: '时间',
-      render: (item: AuditLog) => new Date(item.createdAt).toLocaleString('zh-CN')
+      render: (_value, record: AuditLog) => new Date(record.createdAt).toLocaleString('zh-CN')
     },
     { key: 'username', label: '用户' },
     { key: 'actionName', label: '操作' },
@@ -589,11 +589,11 @@ export default function SecurityCenter() {
     { 
       key: 'result', 
       label: '结果',
-      render: (item: AuditLog) => (
+      render: (_value, record: AuditLog) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
-          item.result === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+          record.result === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
         }`}>
-          {item.result === 'success' ? '成功' : '失败'}
+          {record.result === 'success' ? '成功' : '失败'}
         </span>
       )
     }
@@ -607,33 +607,33 @@ export default function SecurityCenter() {
     { 
       key: 'blockedAt', 
       label: '封禁时间',
-      render: (item: IpBlacklistItem) => new Date(item.blockedAt).toLocaleString('zh-CN')
+      render: (_value, record: IpBlacklistItem) => new Date(record.blockedAt).toLocaleString('zh-CN')
     },
     { 
       key: 'expiresAt', 
       label: '过期时间',
-      render: (item: IpBlacklistItem) => item.expiresAt 
-        ? new Date(item.expiresAt).toLocaleString('zh-CN') 
+      render: (_value, record: IpBlacklistItem) => record.expiresAt 
+        ? new Date(record.expiresAt).toLocaleString('zh-CN') 
         : '永久'
     },
     { 
       key: 'isActive', 
       label: '状态',
-      render: (item: IpBlacklistItem) => (
+      render: (_value, record: IpBlacklistItem) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
-          item.isActive ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+          record.isActive ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
         }`}>
-          {item.isActive ? '生效中' : '已解除'}
+          {record.isActive ? '生效中' : '已解除'}
         </span>
       )
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: IpBlacklistItem) => (
+      render: (_value, record: IpBlacklistItem) => (
         <button
-          onClick={() => handleRemoveIp(item.ipAddress)}
-          disabled={!item.isActive}
+          onClick={() => handleRemoveIp(record.ipAddress)}
+          disabled={!record.isActive}
           className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
           title="移除"
         >
@@ -651,19 +651,19 @@ export default function SecurityCenter() {
     { 
       key: 'loginTime', 
       label: '登录时间',
-      render: (item: ActiveSession) => new Date(item.loginTime).toLocaleString('zh-CN')
+      render: (_value, record: ActiveSession) => new Date(record.loginTime).toLocaleString('zh-CN')
     },
     { 
       key: 'lastActivity', 
       label: '最后活动',
-      render: (item: ActiveSession) => new Date(item.lastActivity).toLocaleString('zh-CN')
+      render: (_value, record: ActiveSession) => new Date(record.lastActivity).toLocaleString('zh-CN')
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: ActiveSession) => (
+      render: (_value, record: ActiveSession) => (
         <button
-          onClick={() => handleTerminateSession(item.sessionId)}
+          onClick={() => handleTerminateSession(record.sessionId)}
           className="p-1 text-red-600 hover:bg-red-50 rounded"
           title="强制下线"
         >
@@ -679,34 +679,34 @@ export default function SecurityCenter() {
     { 
       key: 'backupType', 
       label: '类型',
-      render: (item: BackupRecord) => item.backupType === 'full' ? '完整备份' : '增量备份'
+      render: (_value, record: BackupRecord) => record.backupType === 'full' ? '完整备份' : '增量备份'
     },
     { 
       key: 'backupStatus', 
       label: '状态',
-      render: (item: BackupRecord) => (
+      render: (_value, record: BackupRecord) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
-          item.backupStatus === 'completed' ? 'bg-green-100 text-green-700' :
-          item.backupStatus === 'running' ? 'bg-blue-100 text-blue-700' :
+          record.backupStatus === 'completed' ? 'bg-green-100 text-green-700' :
+          record.backupStatus === 'running' ? 'bg-blue-100 text-blue-700' :
           'bg-red-100 text-red-700'
         }`}>
-          {item.backupStatus === 'completed' ? '完成' :
-           item.backupStatus === 'running' ? '进行中' : '失败'}
+          {record.backupStatus === 'completed' ? '完成' :
+           record.backupStatus === 'running' ? '进行中' : '失败'}
         </span>
       )
     },
     { 
       key: 'startedAt', 
       label: '开始时间',
-      render: (item: BackupRecord) => item.startedAt 
-        ? new Date(item.startedAt).toLocaleString('zh-CN') 
+      render: (_value, record: BackupRecord) => record.startedAt 
+        ? new Date(record.startedAt).toLocaleString('zh-CN') 
         : '-'
     },
     { 
       key: 'completedAt', 
       label: '完成时间',
-      render: (item: BackupRecord) => item.completedAt 
-        ? new Date(item.completedAt).toLocaleString('zh-CN') 
+      render: (_value, record: BackupRecord) => record.completedAt 
+        ? new Date(record.completedAt).toLocaleString('zh-CN') 
         : '-'
     }
   ]

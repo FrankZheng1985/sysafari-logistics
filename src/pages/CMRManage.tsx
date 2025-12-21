@@ -212,19 +212,19 @@ export default function CMRManage() {
       label: '序号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.billNumber}
+            {record.billNumber}
           </span>
           <button
-            onClick={(e) => handleCopy(item.billNumber, e)}
+            onClick={(e) => handleCopy(record.billNumber, e)}
             className="text-gray-400 hover:text-gray-600"
             title="复制序号"
           >
@@ -238,12 +238,12 @@ export default function CMRManage() {
       label: '提单号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          <span className="text-xs">{item.containerNumber || '-'}</span>
-          {item.containerNumber && (
+          <span className="text-xs">{record.containerNumber || '-'}</span>
+          {record.containerNumber && (
             <button
-              onClick={(e) => handleCopy(item.containerNumber || '', e)}
+              onClick={(e) => handleCopy(record.containerNumber || '', e)}
               className="text-gray-400 hover:text-gray-600"
               title="复制提单号"
             >
@@ -258,8 +258,8 @@ export default function CMRManage() {
       label: '集装箱号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.actualContainerNo || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.actualContainerNo || '-'}</span>
       ),
     },
     {
@@ -267,10 +267,10 @@ export default function CMRManage() {
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <Ship className="w-3 h-3 text-gray-500" />
-          <span className="text-xs">{item.vessel || '-'}</span>
+          <span className="text-xs">{record.vessel || '-'}</span>
         </div>
       ),
     },
@@ -278,26 +278,26 @@ export default function CMRManage() {
       key: 'portOfDischarge',
       label: '目的港',
       sorter: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.portOfDischarge || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.portOfDischarge || '-'}</span>
       ),
     },
     {
       key: 'placeOfDelivery',
       label: '交货地',
       sorter: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.placeOfDelivery || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.placeOfDelivery || '-'}</span>
       ),
     },
     {
       key: 'pieces',
       label: '件数/毛重',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.pieces}</div>
-          <div className="text-green-600">{item.weight} KGS</div>
+          <div className="text-gray-900">{record.pieces}</div>
+          <div className="text-green-600">{record.weight} KGS</div>
         </div>
       ),
     },
@@ -312,8 +312,8 @@ export default function CMRManage() {
         { text: '已送达', value: '已送达' },
       ],
       onFilter: (value, record) => (record.deliveryStatus || '待派送') === value,
-      render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '待派送'
+      render: (_value, record: BillOfLading) => {
+        const status = record.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (
@@ -342,16 +342,16 @@ export default function CMRManage() {
     {
       key: 'status',
       label: '提单状态',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className={`w-1.5 h-1.5 rounded-full ${
-              item.status === '已到港' ? 'bg-green-500' : 
-              item.status === '船未到港' ? 'bg-yellow-500' :
+              record.status === '已到港' ? 'bg-green-500' : 
+              record.status === '船未到港' ? 'bg-yellow-500' :
               'bg-gray-500'
             }`}
           ></span>
-          <span className="text-xs">{item.status}</span>
+          <span className="text-xs">{record.status}</span>
         </div>
       ),
     },
@@ -363,15 +363,15 @@ export default function CMRManage() {
         const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.createTime}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.createTime}</span>
       ),
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '待派送'
+      render: (_value, record: BillOfLading) => {
+        const status = record.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (
@@ -379,7 +379,7 @@ export default function CMRManage() {
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                navigate(`/cmr-manage/${item.id}`)
+                navigate(`/cmr-manage/${record.id}`)
               }}
               className="text-primary-600 hover:text-primary-700 hover:underline text-xs flex items-center gap-0.5"
             >
@@ -390,7 +390,7 @@ export default function CMRManage() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  openCMRModal(item)
+                  openCMRModal(record)
                 }}
                 className="text-orange-600 hover:text-orange-700 hover:underline text-xs flex items-center gap-0.5"
               >
@@ -402,21 +402,21 @@ export default function CMRManage() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  openCMRModal(item)
+                  openCMRModal(record)
                 }}
                 className="text-green-600 hover:text-green-700 hover:underline text-xs flex items-center gap-0.5"
               >
                 <CheckCircle className="w-3 h-3" />
                 {/* 根据步骤显示不同的按钮文字 */}
-                {item.cmrUnloadingCompleteTime ? '完成派送' : 
-                 item.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
+                {record.cmrUnloadingCompleteTime ? '完成派送' : 
+                 record.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
               </button>
             )}
             {isException && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  openCMRModal(item)
+                  openCMRModal(record)
                 }}
                 className="text-red-600 hover:text-red-700 hover:underline text-xs flex items-center gap-0.5"
               >
@@ -424,11 +424,11 @@ export default function CMRManage() {
                 处理异常
               </button>
             )}
-            {status === '已送达' && item.status !== '已完成' && (
+            {status === '已送达' && record.status !== '已完成' && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleMarkComplete(item.id)
+                  handleMarkComplete(record.id)
                 }}
                 className="text-emerald-600 hover:text-emerald-700 hover:underline text-xs flex items-center gap-0.5"
               >
@@ -436,7 +436,7 @@ export default function CMRManage() {
                 标记完成
               </button>
             )}
-            {item.status === '已完成' && (
+            {record.status === '已完成' && (
               <span className="text-xs text-gray-400 flex items-center gap-0.5">
                 <Check className="w-3 h-3" />
                 已完成

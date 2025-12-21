@@ -55,9 +55,9 @@ export default function OrderDeclarations() {
     {
       key: 'declarationId',
       label: '申报 ID',
-      render: (item: Declaration) => (
+      render: (_value, record: Declaration) => (
         <div className="flex items-center gap-2">
-          <span className="text-primary-600">{item.declarationId}</span>
+          <span className="text-primary-600">{record.declarationId}</span>
         </div>
       ),
     },
@@ -66,9 +66,9 @@ export default function OrderDeclarations() {
     {
       key: 'status',
       label: '成功 / 生产中 / 失败 / 全部',
-      render: (item: Declaration) => (
+      render: (_value, record: Declaration) => (
         <span>
-          {item.success} / {item.producing} / {item.failed} / {item.total}
+          {record.success} / {record.producing} / {record.failed} / {record.total}
         </span>
       ),
     },
@@ -78,11 +78,11 @@ export default function OrderDeclarations() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: Declaration) => (
+      render: (_value, record: Declaration) => (
         <div className="flex gap-2">
           <button className="text-primary-600 hover:underline">详情</button>
           <button
-            onClick={() => handleDownload(item.declarationId)}
+            onClick={() => handleDownload(record.declarationId)}
             className="flex items-center gap-1 text-primary-600 hover:underline"
             title="下载文件"
           >

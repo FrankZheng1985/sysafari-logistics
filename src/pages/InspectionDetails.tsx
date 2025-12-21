@@ -155,19 +155,19 @@ export default function InspectionDetails() {
       label: '序号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.billNumber}
+            {record.billNumber}
           </span>
           <button
-            onClick={(e) => handleCopy(item.billNumber, e)}
+            onClick={(e) => handleCopy(record.billNumber, e)}
             className="text-gray-400 hover:text-gray-600"
             title="复制序号"
           >
@@ -181,12 +181,12 @@ export default function InspectionDetails() {
       label: '提单号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          <span className="text-xs">{item.containerNumber || '-'}</span>
-          {item.containerNumber && (
+          <span className="text-xs">{record.containerNumber || '-'}</span>
+          {record.containerNumber && (
             <button
-              onClick={(e) => handleCopy(item.containerNumber || '', e)}
+              onClick={(e) => handleCopy(record.containerNumber || '', e)}
               className="text-gray-400 hover:text-gray-600"
               title="复制提单号"
             >
@@ -201,8 +201,8 @@ export default function InspectionDetails() {
       label: '集装箱号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.actualContainerNo || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.actualContainerNo || '-'}</span>
       ),
     },
     {
@@ -210,10 +210,10 @@ export default function InspectionDetails() {
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <Ship className="w-3 h-3 text-gray-500" />
-          <span className="text-xs">{item.vessel || '-'}</span>
+          <span className="text-xs">{record.vessel || '-'}</span>
         </div>
       ),
     },
@@ -225,13 +225,13 @@ export default function InspectionDetails() {
         const dateB = b.eta ? new Date(b.eta).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <span>{item.eta || '-'}</span>
-          {item.ata && (
+          <span>{record.eta || '-'}</span>
+          {record.ata && (
             <>
               <span className="mx-0.5">/</span>
-              <span>{item.ata}</span>
+              <span>{record.ata}</span>
             </>
           )}
         </div>
@@ -241,10 +241,10 @@ export default function InspectionDetails() {
       key: 'pieces',
       label: '件数/毛重(KGS)',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.pieces}</div>
-          <div className="text-green-600">{item.weight}</div>
+          <div className="text-gray-900">{record.pieces}</div>
+          <div className="text-green-600">{record.weight}</div>
         </div>
       ),
     },
@@ -259,85 +259,85 @@ export default function InspectionDetails() {
         { text: '已放行', value: '已放行' },
       ],
       onFilter: (value, record) => record.inspection === value,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className={`w-1.5 h-1.5 rounded-full ${
-              item.inspection === '待查验' ? 'bg-yellow-500' :
-              item.inspection === '查验中' ? 'bg-orange-500' :
-              item.inspection === '已查验' ? 'bg-blue-500' :
-              item.inspection === '查验放行' ? 'bg-emerald-500' :
-              item.inspection === '已放行' ? 'bg-green-500' :
+              record.inspection === '待查验' ? 'bg-yellow-500' :
+              record.inspection === '查验中' ? 'bg-orange-500' :
+              record.inspection === '已查验' ? 'bg-blue-500' :
+              record.inspection === '查验放行' ? 'bg-emerald-500' :
+              record.inspection === '已放行' ? 'bg-green-500' :
               'bg-gray-500'
             }`}
           ></span>
-          <span className="text-xs">{item.inspection}</span>
+          <span className="text-xs">{record.inspection}</span>
         </div>
       ),
     },
     {
       key: 'creator',
       label: '创建者/创建时间',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div>{item.creator}</div>
-          <div className="text-[10px] text-gray-500">{item.createTime}</div>
+          <div>{record.creator}</div>
+          <div className="text-[10px] text-gray-500">{record.createTime}</div>
         </div>
       ),
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/inspection/${item.id}`)
+              navigate(`/inspection/${record.id}`)
             }}
             className="text-primary-600 hover:text-primary-700 hover:underline text-xs flex items-center gap-0.5"
           >
             <Eye className="w-3 h-3" />
             详情
           </button>
-          {!isReleasedTab && item.inspection === '待查验' && (
+          {!isReleasedTab && record.inspection === '待查验' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-orange-600 hover:text-orange-700 hover:underline text-xs"
             >
               开始查验
             </button>
           )}
-          {!isReleasedTab && item.inspection === '查验中' && (
+          {!isReleasedTab && record.inspection === '查验中' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-blue-600 hover:text-blue-700 hover:underline text-xs"
             >
               录入结果
             </button>
           )}
-          {!isReleasedTab && item.inspection === '已查验' && (
+          {!isReleasedTab && record.inspection === '已查验' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-green-600 hover:text-green-700 hover:underline text-xs"
             >
               查验放行
             </button>
           )}
-          {!isReleasedTab && item.inspection === '查验放行' && (
+          {!isReleasedTab && record.inspection === '查验放行' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-emerald-600 hover:text-emerald-700 hover:underline text-xs"
             >

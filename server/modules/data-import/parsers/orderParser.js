@@ -28,8 +28,11 @@ const FIELD_MAPPING = {
   'ETD': { field: 'etd', required: false, type: 'date' },
   'ETA': { field: 'eta', required: false, type: 'date' },
   '清关完成日期': { field: 'customs_cleared_date', required: false, type: 'date' },
+  '清关完成期限': { field: 'customs_cleared_date', required: false, type: 'date' }, // 别名
   '提柜日期': { field: 'pickup_date', required: false, type: 'date' },
+  '装柜日期': { field: 'pickup_date', required: false, type: 'date' }, // 别名（装柜=提柜）
   '卸货日期': { field: 'cmr_unloading_complete_time', required: false, type: 'date' },
+  '卸柜日期': { field: 'cmr_unloading_complete_time', required: false, type: 'date' }, // 别名
   '箱/件数': { field: 'package_count', required: false, type: 'number' },
   '货量': { field: 'weight', required: false, type: 'number' },
   '体积': { field: 'volume', required: false, type: 'number' }

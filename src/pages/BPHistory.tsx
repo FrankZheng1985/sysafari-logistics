@@ -87,19 +87,19 @@ export default function BPHistory() {
       label: '序号',
       sorter: true,
       filterable: true,
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.billNumber}
+            {record.billNumber}
           </span>
           <button
-            onClick={(e) => handleCopy(item.billNumber || '', e)}
+            onClick={(e) => handleCopy(record.billNumber || '', e)}
             className="text-gray-400 hover:text-gray-600 transition-colors"
             title="复制序号"
           >
@@ -113,19 +113,19 @@ export default function BPHistory() {
       label: '提单号',
       sorter: true,
       filterable: true,
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.containerNumber}
+            {record.containerNumber}
           </span>
           <button
-            onClick={(e) => handleCopy(item.containerNumber || '', e)}
+            onClick={(e) => handleCopy(record.containerNumber || '', e)}
             className="text-gray-400 hover:text-gray-600 transition-colors"
             title="复制提单号"
           >
@@ -139,12 +139,12 @@ export default function BPHistory() {
       label: '集装箱号',
       sorter: true,
       filterable: true,
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <div className="flex items-center gap-1">
-          <span className="text-xs">{item.actualContainerNo || '-'}</span>
-          {item.actualContainerNo && (
+          <span className="text-xs">{record.actualContainerNo || '-'}</span>
+          {record.actualContainerNo && (
             <button
-              onClick={(e) => handleCopy(item.actualContainerNo || '', e)}
+              onClick={(e) => handleCopy(record.actualContainerNo || '', e)}
               className="text-gray-400 hover:text-gray-600 transition-colors"
               title="复制集装箱号"
             >
@@ -159,10 +159,10 @@ export default function BPHistory() {
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <div className="flex items-center gap-1.5">
           <Ship className="w-3 h-3 text-gray-400" />
-          <span className="text-xs">{item.vessel}</span>
+          <span className="text-xs">{record.vessel}</span>
         </div>
       ),
     },
@@ -174,13 +174,13 @@ export default function BPHistory() {
         const dateB = b.eta ? new Date(b.eta).getTime() : 0
         return dateA - dateB
       },
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <div className="text-xs">
-          <span>{item.eta}</span>
-          {item.ata && (
+          <span>{record.eta}</span>
+          {record.ata && (
             <>
               <span className="mx-0.5 text-gray-400">/</span>
-              <span className="text-green-600">{item.ata}</span>
+              <span className="text-green-600">{record.ata}</span>
             </>
           )}
         </div>
@@ -190,10 +190,10 @@ export default function BPHistory() {
       key: 'pieces',
       label: '件数 / 毛重',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.pieces} 件</div>
-          <div className="text-green-600">{item.weight} KGS</div>
+          <div className="text-gray-900">{record.pieces} 件</div>
+          <div className="text-green-600">{record.weight} KGS</div>
         </div>
       ),
     },
@@ -208,17 +208,17 @@ export default function BPHistory() {
         if (value === '已查验') return record.inspection !== '-'
         return record.inspection === value
       },
-      render: (item: CompletedBillOfLading) => (
-        <span className={`text-xs ${item.inspection !== '-' ? 'text-orange-600' : 'text-gray-400'}`}>
-          {item.inspection}
+      render: (_value, record: CompletedBillOfLading) => (
+        <span className={`text-xs ${record.inspection !== '-' ? 'text-orange-600' : 'text-gray-400'}`}>
+          {record.inspection}
         </span>
       ),
     },
     {
       key: 'customsStats',
       label: '报关统计',
-      render: (item: CompletedBillOfLading) => (
-        <span className="text-xs">{item.customsStats}</span>
+      render: (_value, record: CompletedBillOfLading) => (
+        <span className="text-xs">{record.customsStats}</span>
       ),
     },
     {
@@ -237,11 +237,11 @@ export default function BPHistory() {
     {
       key: 'remarks',
       label: '备注',
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            setSelectedBill(item)
+            setSelectedBill(record)
             setRemarkModalVisible(true)
           }}
           className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded transition-colors"
@@ -254,10 +254,10 @@ export default function BPHistory() {
     {
       key: 'creator',
       label: '创建者 / 时间',
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.creator}</div>
-          <div className="text-[10px] text-gray-500">{item.createTime}</div>
+          <div className="text-gray-900">{record.creator}</div>
+          <div className="text-[10px] text-gray-500">{record.createTime}</div>
         </div>
       ),
     },
@@ -277,9 +277,9 @@ export default function BPHistory() {
         }
         return record.status === value
       },
-      render: (item: CompletedBillOfLading) => {
-        const isExceptionClosed = item.deliveryStatus === '异常关闭'
-        const displayStatus = isExceptionClosed ? '异常关闭' : item.status
+      render: (_value, record: CompletedBillOfLading) => {
+        const isExceptionClosed = record.deliveryStatus === '异常关闭'
+        const displayStatus = isExceptionClosed ? '异常关闭' : record.status
         const statusStyles: Record<string, string> = {
           '异常关闭': 'bg-gray-500',
           '已到港': 'bg-green-500',
@@ -298,11 +298,11 @@ export default function BPHistory() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: CompletedBillOfLading) => (
+      render: (_value, record: CompletedBillOfLading) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            navigate(`/bookings/bill/${item.id}`)
+            navigate(`/bookings/bill/${record.id}`)
           }}
           className="px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded transition-colors"
         >

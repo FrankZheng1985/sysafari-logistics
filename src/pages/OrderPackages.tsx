@@ -35,9 +35,9 @@ export default function OrderPackages() {
     {
       key: 'packageNumber',
       label: '包裹号',
-      render: (item: PackageItem) => (
+      render: (_value, record: PackageItem) => (
         <div className="flex items-center gap-2">
-          <span className="text-primary-600">{item.packageNumber}</span>
+          <span className="text-primary-600">{record.packageNumber}</span>
         </div>
       ),
     },
@@ -47,10 +47,10 @@ export default function OrderPackages() {
     {
       key: 'status',
       label: '状态',
-      render: (item: PackageItem) => (
+      render: (_value, record: PackageItem) => (
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-          <span>{item.status}</span>
+          <span>{record.status}</span>
         </div>
       ),
     },

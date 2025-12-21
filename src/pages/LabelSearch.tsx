@@ -68,10 +68,10 @@ export default function LabelSearch() {
     setTimeout(() => {
       // 简单的搜索逻辑：根据查询匹配订单号、标签号或提单号
       const filtered = mockSearchResults.filter(item =>
-        item.labelNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.billNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.recipient.toLowerCase().includes(searchQuery.toLowerCase())
+        record.labelNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.billNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.recipient.toLowerCase().includes(searchQuery.toLowerCase())
       )
       setSearchResults(filtered)
       setIsSearching(false)
@@ -92,10 +92,10 @@ export default function LabelSearch() {
       key: 'labelNumber',
       label: '标签号',
       sorter: true,
-      render: (item: SearchResult) => (
+      render: (_value, record: SearchResult) => (
         <div>
           <div className="text-primary-600 hover:underline cursor-pointer">
-            {item.labelNumber}
+            {record.labelNumber}
           </div>
         </div>
       ),
@@ -104,9 +104,9 @@ export default function LabelSearch() {
       key: 'orderNumber',
       label: '订单号',
       sorter: true,
-      render: (item: SearchResult) => (
+      render: (_value, record: SearchResult) => (
         <div className="text-primary-600 hover:underline cursor-pointer">
-          {item.orderNumber}
+          {record.orderNumber}
         </div>
       ),
     },
@@ -114,9 +114,9 @@ export default function LabelSearch() {
       key: 'billNumber',
       label: '提单号',
       sorter: true,
-      render: (item: SearchResult) => (
+      render: (_value, record: SearchResult) => (
         <div className="text-primary-600 hover:underline cursor-pointer">
-          {item.billNumber}
+          {record.billNumber}
         </div>
       ),
     },
@@ -128,9 +128,9 @@ export default function LabelSearch() {
     {
       key: 'address',
       label: '地址',
-      render: (item: SearchResult) => (
-        <div className="max-w-xs truncate" title={item.address}>
-          {item.address}
+      render: (_value, record: SearchResult) => (
+        <div className="max-w-xs truncate" title={record.address}>
+          {record.address}
         </div>
       ),
     },
@@ -151,19 +151,19 @@ export default function LabelSearch() {
         { text: '待打印', value: '待打印' },
       ],
       onFilter: (value, record) => record.status === value,
-      render: (item: SearchResult) => (
+      render: (_value, record: SearchResult) => (
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            item.status === '已打印' ? 'bg-green-500' : 'bg-yellow-500'
+            record.status === '已打印' ? 'bg-green-500' : 'bg-yellow-500'
           }`}></span>
-          <span>{item.status}</span>
+          <span>{record.status}</span>
         </div>
       ),
     },
     {
       key: 'printTime',
       label: '打印时间',
-      render: (item: SearchResult) => item.printTime || '-',
+      render: (_value, record: SearchResult) => record.printTime || '-',
     },
     {
       key: 'actions',

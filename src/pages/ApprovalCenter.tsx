@@ -280,18 +280,18 @@ export default function ApprovalCenter() {
     {
       key: 'requestNo',
       label: '审批单号',
-      render: (item: ApprovalRequest) => (
+      render: (_value, record: ApprovalRequest) => (
         <span className="font-mono text-xs text-primary-600 cursor-pointer hover:underline" 
-              onClick={() => handleViewDetail(item)}>
-          {item.requestNo}
+              onClick={() => handleViewDetail(record)}>
+          {record.requestNo}
         </span>
       )
     },
     {
       key: 'requestType',
       label: '类型',
-      render: (item: ApprovalRequest) => {
-        const typeInfo = REQUEST_TYPE_MAP[item.requestType] || REQUEST_TYPE_MAP.other
+      render: (_value, record: ApprovalRequest) => {
+        const typeInfo = REQUEST_TYPE_MAP[record.requestType] || REQUEST_TYPE_MAP.other
         return (
           <span className={`px-2 py-0.5 rounded text-xs ${typeInfo.color}`}>
             {typeInfo.label}
@@ -302,27 +302,27 @@ export default function ApprovalCenter() {
     {
       key: 'requestTitle',
       label: '标题',
-      render: (item: ApprovalRequest) => (
-        <div className="max-w-[200px] truncate" title={item.requestTitle}>
-          {item.requestTitle}
+      render: (_value, record: ApprovalRequest) => (
+        <div className="max-w-[200px] truncate" title={record.requestTitle}>
+          {record.requestTitle}
         </div>
       )
     },
     {
       key: 'requesterName',
       label: '申请人',
-      render: (item: ApprovalRequest) => (
+      render: (_value, record: ApprovalRequest) => (
         <div className="text-xs">
-          <div>{item.requesterName}</div>
-          <div className="text-gray-400">{item.requesterDepartment || '-'}</div>
+          <div>{record.requesterName}</div>
+          <div className="text-gray-400">{record.requesterDepartment || '-'}</div>
         </div>
       )
     },
     {
       key: 'priority',
       label: '优先级',
-      render: (item: ApprovalRequest) => {
-        const priorityInfo = PRIORITY_MAP[item.priority] || PRIORITY_MAP.normal
+      render: (_value, record: ApprovalRequest) => {
+        const priorityInfo = PRIORITY_MAP[record.priority] || PRIORITY_MAP.normal
         return (
           <span className={`text-xs ${priorityInfo.color}`}>
             {priorityInfo.label}
@@ -333,8 +333,8 @@ export default function ApprovalCenter() {
     {
       key: 'status',
       label: '状态',
-      render: (item: ApprovalRequest) => {
-        const statusInfo = STATUS_MAP[item.status] || STATUS_MAP.pending
+      render: (_value, record: ApprovalRequest) => {
+        const statusInfo = STATUS_MAP[record.status] || STATUS_MAP.pending
         const StatusIcon = statusInfo.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${statusInfo.color}`}>
@@ -347,29 +347,29 @@ export default function ApprovalCenter() {
     {
       key: 'createdAt',
       label: '申请时间',
-      render: (item: ApprovalRequest) => (
+      render: (_value, record: ApprovalRequest) => (
         <span className="text-xs text-gray-600">
-          {new Date(item.createdAt).toLocaleString('zh-CN')}
+          {new Date(record.createdAt).toLocaleString('zh-CN')}
         </span>
       )
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: ApprovalRequest) => (
+      render: (_value, record: ApprovalRequest) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleViewDetail(item)}
+            onClick={() => handleViewDetail(record)}
             className="p-1 text-blue-600 hover:bg-blue-50 rounded"
             title="查看详情"
           >
             <Eye className="w-4 h-4" />
           </button>
-          {item.status === 'pending' && canApprove && (
+          {record.status === 'pending' && canApprove && (
             <>
               <button
                 onClick={() => {
-                  setSelectedRequest(item)
+                  setSelectedRequest(record)
                   setShowApproveModal(true)
                 }}
                 className="p-1 text-green-600 hover:bg-green-50 rounded"
@@ -379,7 +379,7 @@ export default function ApprovalCenter() {
               </button>
               <button
                 onClick={() => {
-                  setSelectedRequest(item)
+                  setSelectedRequest(record)
                   setShowRejectModal(true)
                 }}
                 className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -389,9 +389,9 @@ export default function ApprovalCenter() {
               </button>
             </>
           )}
-          {item.status === 'pending' && item.requesterId === user?.id && (
+          {record.status === 'pending' && record.requesterId === user?.id && (
             <button
-              onClick={() => handleCancel(item)}
+              onClick={() => handleCancel(record)}
               className="p-1 text-gray-600 hover:bg-gray-50 rounded"
               title="取消"
             >
