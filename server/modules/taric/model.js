@@ -18,7 +18,7 @@ export async function createSyncLog(data) {
     INSERT INTO taric_sync_logs (
       id, sync_type, data_source, source_url, file_name,
       taric_version, status, started_at, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, 'running', CURRENT_TIMESTAMP, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, 'running', NOW(), ?)
   `).run(
     id,
     data.syncType || 'full',
@@ -77,7 +77,7 @@ export async function updateSyncLog(id, data) {
     values.push(data.taricVersion)
   }
   if (data.status === 'completed' || data.status === 'failed') {
-    updates.push('completed_at = CURRENT_TIMESTAMP')
+    updates.push('completed_at = NOW()')
   }
   
   if (updates.length === 0) return null
@@ -218,8 +218,8 @@ export async function upsertTariffRates(rates, syncLogId, taricVersion) {
             regulation_url = COALESCE(?, regulation_url),
             taric_version = ?,
             data_source = 'taric',
-            last_sync_time = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
+            last_sync_time = NOW(),
+            updated_at = NOW()
           WHERE id = ?
         `).run(
           rate.hsCode10 || null,
@@ -255,7 +255,7 @@ export async function upsertTariffRates(rates, syncLogId, taricVersion) {
             unit_code, unit_name, measure_type, measure_code, additional_code,
             start_date, end_date, regulation_id, regulation_url,
             taric_version, data_source, last_sync_time, is_active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'taric', CURRENT_TIMESTAMP, 1)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'taric', NOW(), 1)
         `).run(
           rate.hsCode,
           rate.hsCode10 || null,
@@ -324,8 +324,8 @@ export async function upsertTradeAgreements(agreements, taricVersion) {
             valid_from = COALESCE(?, valid_from),
             valid_to = COALESCE(?, valid_to),
             taric_version = ?,
-            last_sync_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
+            last_sync_at = NOW(),
+            updated_at = NOW()
           WHERE id = ?
         `).run(
           agreement.agreementName || null,
@@ -351,7 +351,7 @@ export async function upsertTradeAgreements(agreements, taricVersion) {
             country_code, country_name, country_name_cn, geographical_area,
             preferential_rate, conditions, document_code, valid_from, valid_to,
             taric_version, last_sync_at, is_active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
         `).run(
           id,
           agreement.agreementCode,

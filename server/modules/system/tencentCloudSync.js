@@ -470,9 +470,9 @@ export async function syncTencentOcr(db) {
           currency = 'CNY',
           health_status = 'online',
           health_check_message = '同步成功，API可用',
-          last_health_check = CURRENT_TIMESTAMP,
-          last_sync_time = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
+          last_health_check = NOW(),
+          last_sync_time = NOW(),
+          updated_at = NOW()
         WHERE api_code = 'tencent_ocr'
       `).run(balance)
       
@@ -484,7 +484,7 @@ export async function syncTencentOcr(db) {
         ON CONFLICT (api_code, usage_date) DO UPDATE SET
           call_count = $2,
           cost = $3,
-          updated_at = CURRENT_TIMESTAMP
+          updated_at = NOW()
       `).run(today, monthCalls, ocrCost)
       
       return {
@@ -647,9 +647,9 @@ export async function syncTencentCos(db) {
           currency = 'CNY',
           health_status = 'online',
           health_check_message = '同步成功，API可用',
-          last_health_check = CURRENT_TIMESTAMP,
-          last_sync_time = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
+          last_health_check = NOW(),
+          last_sync_time = NOW(),
+          updated_at = NOW()
         WHERE api_code = 'tencent_cos'
       `).run(balance)
       
@@ -661,7 +661,7 @@ export async function syncTencentCos(db) {
         ON CONFLICT (api_code, usage_date) DO UPDATE SET
           call_count = $2,
           cost = $3,
-          updated_at = CURRENT_TIMESTAMP
+          updated_at = NOW()
       `).run(today, cosRequests, cosCost)
       
       return {
@@ -716,9 +716,9 @@ export async function syncAllTencentServices(db) {
         currency = 'CNY',
         health_status = 'online',
         health_check_message = '同步成功，API可用',
-        last_health_check = CURRENT_TIMESTAMP,
-        last_sync_time = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
+        last_health_check = NOW(),
+        last_sync_time = NOW(),
+        updated_at = NOW()
       WHERE api_code = 'tencent_ocr'
     `).run(balance)
     
@@ -729,7 +729,7 @@ export async function syncAllTencentServices(db) {
       ON CONFLICT (api_code, usage_date) DO UPDATE SET
         call_count = $2,
         cost = $3,
-        updated_at = CURRENT_TIMESTAMP
+        updated_at = NOW()
     `).run(today, ocrCalls, ocrCost)
     
     // 更新COS（同步成功说明API可用）
@@ -739,9 +739,9 @@ export async function syncAllTencentServices(db) {
         currency = 'CNY',
         health_status = 'online',
         health_check_message = '同步成功，API可用',
-        last_health_check = CURRENT_TIMESTAMP,
-        last_sync_time = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
+        last_health_check = NOW(),
+        last_sync_time = NOW(),
+        updated_at = NOW()
       WHERE api_code = 'tencent_cos'
     `).run(balance)
     
@@ -752,7 +752,7 @@ export async function syncAllTencentServices(db) {
       ON CONFLICT (api_code, usage_date) DO UPDATE SET
         call_count = $2,
         cost = $3,
-        updated_at = CURRENT_TIMESTAMP
+        updated_at = NOW()
     `).run(today, cosRequests, finalCosCost)
     
     results.tencent_ocr = { success: true, balance, monthCalls: ocrCalls, monthCost: ocrCost }

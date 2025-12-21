@@ -70,7 +70,7 @@ export async function initSupplierTable() {
       bank_branch TEXT,
       currency TEXT DEFAULT 'EUR',
       payment_terms TEXT,
-      credit_limit REAL DEFAULT 0,
+      credit_limit NUMERIC(10,2) DEFAULT 0,
       
       -- 合作信息
       status TEXT DEFAULT 'active',
@@ -83,8 +83,8 @@ export async function initSupplierTable() {
       remark TEXT,
       
       -- 时间戳
-      created_at TEXT DEFAULT (NOW()),
-      updated_at TEXT DEFAULT (NOW()),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
       created_by TEXT,
       updated_by TEXT
     )
@@ -610,7 +610,7 @@ export async function updateSupplierPrice(id, data) {
     values.push(data.notes)
   }
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   db.prepare(`UPDATE supplier_prices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -685,7 +685,7 @@ export async function batchCreateSupplierPrices(supplierId, items, options = {})
           fee_category, unit, price, currency,
           effective_date, expiry_date, route_from, route_to,
           remark, import_batch_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `).run(
         id,
         supplierId,
@@ -725,7 +725,7 @@ export async function createImportRecord(data) {
       INSERT INTO import_records (
         supplier_id, supplier_name, file_name, file_type,
         record_count, status, created_by, created_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `).run(
       data.supplierId,
       data.supplierName || '',

@@ -81,13 +81,13 @@ export async function updateConfig(key, value, description = null) {
   if (description) {
     await db.prepare(`
       UPDATE contract_template_config 
-      SET config_value = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+      SET config_value = ?, description = ?, updated_at = NOW()
       WHERE config_key = ?
     `).run(configValue, description, key)
   } else {
     await db.prepare(`
       UPDATE contract_template_config 
-      SET config_value = ?, updated_at = CURRENT_TIMESTAMP
+      SET config_value = ?, updated_at = NOW()
       WHERE config_key = ?
     `).run(configValue, key)
   }
@@ -105,7 +105,7 @@ export async function updateConfigBatch(configs) {
     const configValue = typeof value === 'object' ? JSON.stringify(value) : String(value)
     await db.prepare(`
       UPDATE contract_template_config 
-      SET config_value = ?, updated_at = CURRENT_TIMESTAMP
+      SET config_value = ?, updated_at = NOW()
       WHERE config_key = ?
     `).run(configValue, key)
   }
@@ -173,7 +173,7 @@ export async function updateCompensationRule(id, data) {
   const db = getDb()
   await db.prepare(`
     UPDATE contract_compensation_rules 
-    SET category = ?, category_name = ?, max_compensation = ?, container_types = ?, notes = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+    SET category = ?, category_name = ?, max_compensation = ?, container_types = ?, notes = ?, is_active = ?, updated_at = NOW()
     WHERE id = ?
   `).run(
     data.category,
@@ -228,7 +228,7 @@ export async function updateInsuranceConfig(id, data) {
   const db = getDb()
   await db.prepare(`
     UPDATE contract_insurance_config 
-    SET category_name = ?, normal_cap = ?, insured_cap = ?, premium_per_10k = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+    SET category_name = ?, normal_cap = ?, insured_cap = ?, premium_per_10k = ?, is_active = ?, updated_at = NOW()
     WHERE id = ?
   `).run(
     data.category_name,
@@ -251,7 +251,7 @@ export async function updateInsuranceConfigBatch(configs) {
   for (const config of configs) {
     await db.prepare(`
       UPDATE contract_insurance_config 
-      SET category_name = ?, normal_cap = ?, insured_cap = ?, premium_per_10k = ?, updated_at = CURRENT_TIMESTAMP
+      SET category_name = ?, normal_cap = ?, insured_cap = ?, premium_per_10k = ?, updated_at = NOW()
       WHERE id = ?
     `).run(
       config.category_name,
@@ -516,7 +516,7 @@ export async function updateContract(id, data) {
     return { success: false, message: '没有可更新的字段' }
   }
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   await db.prepare(`
@@ -533,7 +533,7 @@ export async function submitContract(id) {
   const db = getDb()
   await db.prepare(`
     UPDATE customs_contracts 
-    SET status = 'pending', updated_at = CURRENT_TIMESTAMP
+    SET status = 'pending', updated_at = NOW()
     WHERE id = ? AND status = 'draft'
   `).run(id)
   
@@ -547,7 +547,7 @@ export async function approveContract(id, approverId) {
   const db = getDb()
   await db.prepare(`
     UPDATE customs_contracts 
-    SET status = 'approved', approved_by = ?, approved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    SET status = 'approved', approved_by = ?, approved_at = NOW(), updated_at = NOW()
     WHERE id = ? AND status = 'pending'
   `).run(approverId, id)
   
@@ -561,7 +561,7 @@ export async function rejectContract(id, approverId, reason) {
   const db = getDb()
   await db.prepare(`
     UPDATE customs_contracts 
-    SET status = 'rejected', approved_by = ?, reject_reason = ?, updated_at = CURRENT_TIMESTAMP
+    SET status = 'rejected', approved_by = ?, reject_reason = ?, updated_at = NOW()
     WHERE id = ? AND status = 'pending'
   `).run(approverId, reason, id)
   
@@ -574,7 +574,7 @@ export async function rejectContract(id, approverId, reason) {
 export async function updateContractPdfPath(id, pdfPath) {
   const db = getDb()
   await db.prepare(`
-    UPDATE customs_contracts SET pdf_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+    UPDATE customs_contracts SET pdf_path = ?, updated_at = NOW() WHERE id = ?
   `).run(pdfPath, id)
   
   return { success: true }

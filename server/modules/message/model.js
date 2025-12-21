@@ -144,7 +144,7 @@ export async function createMessages(messages) {
 export async function markAsRead(id) {
   const db = getDatabase()
   await db.prepare(`
-    UPDATE messages SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE id = $1
+    UPDATE messages SET is_read = 1, read_at = NOW() WHERE id = $1
   `).run(id)
   return { success: true }
 }
@@ -156,7 +156,7 @@ export async function markMultipleAsRead(ids) {
   const db = getDatabase()
   const placeholders = ids.map((_, i) => `$${i + 1}`).join(',')
   await db.prepare(`
-    UPDATE messages SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})
+    UPDATE messages SET is_read = 1, read_at = NOW() WHERE id IN (${placeholders})
   `).run(...ids)
   return { success: true, count: ids.length }
 }
@@ -167,7 +167,7 @@ export async function markMultipleAsRead(ids) {
 export async function markAllAsRead(receiverId) {
   const db = getDatabase()
   const result = await db.prepare(`
-    UPDATE messages SET is_read = 1, read_at = CURRENT_TIMESTAMP 
+    UPDATE messages SET is_read = 1, read_at = NOW() 
     WHERE receiver_id = $1 AND is_read = 0
   `).run(receiverId)
   return { success: true, count: result.changes || 0 }
@@ -296,7 +296,7 @@ export async function processApproval(id, data) {
   
   await db.prepare(`
     UPDATE approvals 
-    SET status = $1, remark = $2, reject_reason = $3, approver_id = $4, approver_name = $5, processed_at = CURRENT_TIMESTAMP
+    SET status = $1, remark = $2, reject_reason = $3, approver_id = $4, approver_name = $5, processed_at = NOW()
     WHERE id = $6
   `).run(
     data.status,
@@ -401,7 +401,7 @@ export async function updateAlertRule(id, data) {
     values.push(data.description)
   }
   
-  fields.push(`updated_at = CURRENT_TIMESTAMP`)
+  fields.push(`updated_at = NOW()`)
   
   if (fields.length > 1) {
     values.push(id)
@@ -503,7 +503,7 @@ export async function handleAlert(id, data) {
   
   await db.prepare(`
     UPDATE alert_logs 
-    SET status = 'handled', handled_by = $1, handled_at = CURRENT_TIMESTAMP, handle_remark = $2
+    SET status = 'handled', handled_by = $1, handled_at = NOW(), handle_remark = $2
     WHERE id = $3
   `).run(data.handledBy, data.handleRemark || null, id)
   
@@ -518,7 +518,7 @@ export async function ignoreAlert(id, data) {
   
   await db.prepare(`
     UPDATE alert_logs 
-    SET status = 'ignored', handled_by = $1, handled_at = CURRENT_TIMESTAMP, handle_remark = $2
+    SET status = 'ignored', handled_by = $1, handled_at = NOW(), handle_remark = $2
     WHERE id = $3
   `).run(data.handledBy, data.handleRemark || null, id)
   

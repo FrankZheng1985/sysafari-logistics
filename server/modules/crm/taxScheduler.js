@@ -72,11 +72,11 @@ export async function validateAllTaxNumbers() {
         await db.prepare(`
           UPDATE customer_tax_numbers
           SET is_verified = ?,
-              verified_at = CURRENT_TIMESTAMP,
+              verified_at = NOW(),
               verification_data = ?,
               company_name = COALESCE(NULLIF(?, ''), company_name),
               company_address = COALESCE(NULLIF(?, ''), company_address),
-              updated_at = CURRENT_TIMESTAMP
+              updated_at = NOW()
           WHERE id = ?
         `).run(isVerified, verificationData, result.companyName || '', result.companyAddress || '', tax.id)
         
@@ -120,7 +120,7 @@ export async function validateAllTaxNumbers() {
     try {
       await db.prepare(`
         INSERT INTO activity_logs (module, action, description, created_at)
-        VALUES ('crm', 'tax_auto_validate', ?, CURRENT_TIMESTAMP)
+        VALUES ('crm', 'tax_auto_validate', ?, NOW())
       `).run(JSON.stringify({
         total: taxNumbers.length,
         validated,

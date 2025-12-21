@@ -209,7 +209,7 @@ export async function updateConversation(conversationId, data) {
     values.push(data.avatar)
   }
   
-  fields.push(`updated_at = CURRENT_TIMESTAMP`)
+  fields.push(`updated_at = NOW()`)
   
   if (fields.length > 1) {
     values.push(conversationId)
@@ -239,7 +239,7 @@ export async function addParticipants(conversationId, members) {
       if (existing.left_at) {
         await db.prepare(`
           UPDATE chat_participants 
-          SET left_at = NULL, joined_at = CURRENT_TIMESTAMP, user_name = $3, user_avatar = $4
+          SET left_at = NULL, joined_at = NOW(), user_name = $3, user_avatar = $4
           WHERE id = $1
         `).run(existing.id, member.userId, member.userName, member.userAvatar || null)
       }
@@ -264,7 +264,7 @@ export async function removeParticipant(conversationId, userId) {
   const db = getDatabase()
   
   await db.prepare(`
-    UPDATE chat_participants SET left_at = CURRENT_TIMESTAMP
+    UPDATE chat_participants SET left_at = NOW()
     WHERE conversation_id = $1 AND user_id = $2
   `).run(conversationId, userId)
   
@@ -409,8 +409,8 @@ export async function sendMessage(data) {
     UPDATE chat_conversations 
     SET last_message_id = $2, 
         last_message_content = $3, 
-        last_message_time = CURRENT_TIMESTAMP,
-        updated_at = CURRENT_TIMESTAMP
+        last_message_time = NOW(),
+        updated_at = NOW()
     WHERE id = $1
   `).run(conversationId, messageId, contentSummary)
   
@@ -449,7 +449,7 @@ export async function recallMessage(messageId, userId) {
   
   await db.prepare(`
     UPDATE chat_messages 
-    SET is_recalled = 1, recalled_at = CURRENT_TIMESTAMP, content = '消息已撤回'
+    SET is_recalled = 1, recalled_at = NOW(), content = '消息已撤回'
     WHERE id = $1
   `).run(messageId)
   
@@ -465,7 +465,7 @@ export async function markMessagesAsRead(conversationId, userId, lastMessageId) 
   await db.prepare(`
     UPDATE chat_participants 
     SET unread_count = 0, 
-        last_read_at = CURRENT_TIMESTAMP,
+        last_read_at = NOW(),
         last_read_message_id = $3
     WHERE conversation_id = $1 AND user_id = $2
   `).run(conversationId, userId, lastMessageId)
@@ -605,7 +605,7 @@ export async function deleteDiscussion(id, userId) {
   // 软删除，只能删除自己的评论
   const result = await db.prepare(`
     UPDATE business_discussions 
-    SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+    SET is_deleted = 1, updated_at = NOW()
     WHERE id = $1 AND user_id = $2
   `).run(id, userId)
   
@@ -634,14 +634,14 @@ export async function updateOnlineStatus(userId, userName, isOnline, socketId, d
   
   await db.prepare(`
     INSERT INTO user_online_status (user_id, user_name, is_online, socket_id, device_type, last_active_at, updated_at)
-    VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
     ON CONFLICT (user_id) DO UPDATE SET
       user_name = $2,
       is_online = $3,
       socket_id = $4,
       device_type = $5,
-      last_active_at = CURRENT_TIMESTAMP,
-      updated_at = CURRENT_TIMESTAMP
+      last_active_at = NOW(),
+      updated_at = NOW()
   `).run(userId, userName, isOnline ? 1 : 0, socketId, deviceType)
   
   return { success: true }

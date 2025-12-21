@@ -85,7 +85,7 @@ export async function createProduct(data) {
     INSERT INTO products (
       id, product_code, product_name, product_name_en, category,
       description, is_active, sort_order, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     productCode,
@@ -131,7 +131,7 @@ export async function updateProduct(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(
@@ -176,7 +176,7 @@ export async function addProductFeeItem(productId, data) {
       product_id, fee_name, fee_name_en, fee_category, unit,
       standard_price, min_price, max_price, currency, is_required,
       description, sort_order, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     RETURNING id
   `).get(
     productId,
@@ -231,7 +231,7 @@ export async function updateProductFeeItem(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(
@@ -267,7 +267,7 @@ export async function setProductFeeItems(productId, items) {
         product_id, fee_name, fee_name_en, fee_category, unit,
         standard_price, min_price, max_price, currency, is_required,
         description, sort_order, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `).run(
       productId,
       item.feeName,
@@ -373,8 +373,8 @@ export async function seedDemoData() {
   for (const p of products) {
     await db.prepare(`
       INSERT INTO products (id, product_code, product_name, product_name_en, category, description, is_active, sort_order, created_by, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'admin', CURRENT_TIMESTAMP)
-      ON CONFLICT (id) DO UPDATE SET product_name = EXCLUDED.product_name, updated_at = CURRENT_TIMESTAMP
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'admin', NOW())
+      ON CONFLICT (id) DO UPDATE SET product_name = EXCLUDED.product_name, updated_at = NOW()
     `).run(p.id, p.code, p.name, p.nameEn, p.category, p.desc, 1, p.sort)
   }
 
@@ -415,7 +415,7 @@ export async function seedDemoData() {
   for (const f of productFeeItems) {
     await db.prepare(`
       INSERT INTO product_fee_items (product_id, fee_name, fee_name_en, fee_category, unit, standard_price, min_price, max_price, currency, is_required, description, sort_order, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EUR', ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EUR', ?, ?, ?, NOW())
     `).run(f.productId, f.name, f.nameEn, f.category, f.unit, f.price, f.minPrice || null, f.maxPrice || null, f.required ? 1 : 0, f.desc, f.sort)
   }
 
@@ -452,7 +452,7 @@ export async function seedDemoData() {
   for (const s of supplierPrices) {
     await db.prepare(`
       INSERT INTO supplier_price_items (supplier_id, supplier_name, fee_name, fee_name_en, fee_category, unit, price, currency, effective_date, expiry_date, route_from, route_to, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'EUR', '2025-01-01', '2025-12-31', ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'EUR', '2025-01-01', '2025-12-31', ?, ?, NOW())
     `).run(s.supplierId, s.supplierName, s.name, s.nameEn, s.category, s.unit, s.price, s.routeFrom, s.routeTo)
   }
   

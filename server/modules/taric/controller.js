@@ -293,8 +293,8 @@ export async function lookupHsCodeRealtime(req, res) {
               requires_license = ?,
               requires_sps = ?,
               api_source = 'taric_api',
-              last_api_sync = CURRENT_TIMESTAMP,
-              updated_at = CURRENT_TIMESTAMP
+              last_api_sync = NOW(),
+              updated_at = NOW()
             WHERE id = ?
           `).run(
             result.hsCode10 || null,
@@ -317,7 +317,7 @@ export async function lookupHsCodeRealtime(req, res) {
               anti_dumping_rate, countervailing_rate,
               has_quota, requires_license, requires_sps,
               api_source, last_api_sync, data_source, is_active
-            ) VALUES (?, ?, ?, ?, ?, 19, ?, ?, ?, ?, ?, 'taric_api', CURRENT_TIMESTAMP, 'taric', 1)
+            ) VALUES (?, ?, ?, ?, ?, 19, ?, ?, ?, ?, ?, 'taric_api', NOW(), 'taric', 1)
           `).run(
             result.hsCode,
             result.hsCode10 || null,
@@ -582,7 +582,7 @@ async function runTranslationTask() {
           try {
             await db.prepare(`
               UPDATE tariff_rates 
-              SET goods_description_cn = $1, updated_at = CURRENT_TIMESTAMP
+              SET goods_description_cn = $1, updated_at = NOW()
               WHERE goods_description = $2 
                 AND (goods_description_cn IS NULL OR goods_description_cn = '')
             `).run(cnDesc, desc)

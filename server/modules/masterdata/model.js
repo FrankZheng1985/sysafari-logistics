@@ -130,7 +130,7 @@ export async function updateCountry(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(`UPDATE countries SET ${fields.join(', ')} WHERE id = ?`).run(...values)

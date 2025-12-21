@@ -51,17 +51,30 @@ export async function initSecuritySettings(req, res) {
   try {
     const db = getDatabase()
     
-    // 先检查表结构，添加缺少的列
+    // 先检查表结构，添加缺少的列（兼容已有表）
     try {
       await db.prepare(`
         ALTER TABLE security_settings ADD COLUMN IF NOT EXISTS setting_type TEXT DEFAULT 'string'
       `).run()
+    } catch (e) {
+      // 列可能已存在，忽略
+    }
+    
+    try {
       await db.prepare(`
         ALTER TABLE security_settings ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'general'
       `).run()
     } catch (e) {
-      // PostgreSQL 可能不支持 ADD COLUMN IF NOT EXISTS，忽略错误
-      console.log('列可能已存在:', e.message)
+      // 列可能已存在，忽略
+    }
+    
+    // 确保 setting_key 有唯一约束（ON CONFLICT 需要）
+    try {
+      await db.prepare(`
+        ALTER TABLE security_settings ADD CONSTRAINT security_settings_setting_key_unique UNIQUE (setting_key)
+      `).run()
+    } catch (e) {
+      // 约束可能已存在，忽略
     }
     
     // 检查是否已有数据
@@ -71,16 +84,24 @@ export async function initSecuritySettings(req, res) {
       return success(res, { initialized: false, message: '安全设置已存在' })
     }
     
-    // 插入默认设置
+    // 插入默认设置（使用先查询后插入的方式，避免依赖唯一约束）
+    let insertedCount = 0
     for (const setting of DEFAULT_SECURITY_SETTINGS) {
-      await db.prepare(`
-        INSERT INTO security_settings (setting_key, setting_value, setting_type, category, description)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT (setting_key) DO NOTHING
-      `).run(setting.key, setting.value, setting.type, setting.category, setting.description)
+      // 先检查是否已存在
+      const exists = await db.prepare(
+        'SELECT 1 FROM security_settings WHERE setting_key = ?'
+      ).get(setting.key)
+      
+      if (!exists) {
+        await db.prepare(`
+          INSERT INTO security_settings (setting_key, setting_value, setting_type, category, description)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(setting.key, setting.value, setting.type, setting.category, setting.description)
+        insertedCount++
+      }
     }
     
-    return success(res, { initialized: true, count: DEFAULT_SECURITY_SETTINGS.length }, '安全设置初始化成功')
+    return success(res, { initialized: true, count: insertedCount }, '安全设置初始化成功')
   } catch (error) {
     console.error('初始化安全设置失败:', error)
     return serverError(res, '初始化安全设置失败: ' + error.message)

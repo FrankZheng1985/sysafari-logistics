@@ -33,8 +33,8 @@ export async function runMigrations() {
         is_active INTEGER DEFAULT 1,
         sort_order INTEGER DEFAULT 0,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     
@@ -59,8 +59,8 @@ export async function runMigrations() {
         is_required INTEGER DEFAULT 0,
         description TEXT,
         sort_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     
@@ -86,8 +86,8 @@ export async function runMigrations() {
         route_to TEXT,
         remark TEXT,
         import_batch_id TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     
@@ -109,7 +109,7 @@ export async function runMigrations() {
         status TEXT DEFAULT 'pending',
         error_message TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
         completed_at TIMESTAMP
       )
     `)
@@ -204,7 +204,7 @@ export async function runMigrations() {
         related_id TEXT,
         is_read INTEGER DEFAULT 0,
         read_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id)`)
@@ -229,7 +229,7 @@ export async function runMigrations() {
         status TEXT DEFAULT 'pending',
         remark TEXT,
         reject_reason TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
         processed_at TIMESTAMP
       )
     `)
@@ -252,8 +252,8 @@ export async function runMigrations() {
         is_active INTEGER DEFAULT 1,
         description TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_alert_rules_type ON alert_rules(rule_type)`)
@@ -276,7 +276,7 @@ export async function runMigrations() {
         handled_by TEXT,
         handled_at TIMESTAMP,
         handle_remark TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_alert_logs_rule ON alert_logs(rule_id)`)
@@ -402,7 +402,7 @@ export async function runMigrations() {
         currency TEXT DEFAULT 'EUR',
         created_by TEXT,
         created_by_name TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_financial_reports_type ON financial_reports(report_type)`)
@@ -512,8 +512,8 @@ export async function runMigrations() {
         is_active INTEGER DEFAULT 1,
         taric_version TEXT,
         last_sync_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trade_agreements_code ON trade_agreements(agreement_code)`)
@@ -542,7 +542,7 @@ export async function runMigrations() {
         started_at TIMESTAMP,
         completed_at TIMESTAMP,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_taric_sync_status ON taric_sync_logs(status)`)
@@ -576,7 +576,7 @@ export async function runMigrations() {
         excluded_areas JSONB,
         taric_version TEXT,
         last_sync_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_taric_measures_type ON taric_measures(measure_type)`)
@@ -612,8 +612,8 @@ export async function runMigrations() {
         import_file_name TEXT,
         import_file_path TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_cargo_imports_no ON cargo_imports(import_no)`)
@@ -700,7 +700,7 @@ export async function runMigrations() {
         review_note TEXT,
         reviewed_by TEXT,
         reviewed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_cargo_items_import ON cargo_items(import_id)`)
@@ -711,7 +711,7 @@ export async function runMigrations() {
     // 添加产品图片字段
     try {
       await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS product_image TEXT`)
-      await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+      await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`)
     } catch (e) {
       // 字段可能已存在
     }
@@ -726,8 +726,8 @@ export async function runMigrations() {
         material TEXT,
         matched_hs_code TEXT NOT NULL,
         match_count INTEGER DEFAULT 1,
-        last_matched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        last_matched_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_hs_match_history_name ON hs_match_history(product_name)`)
@@ -754,8 +754,8 @@ export async function runMigrations() {
         latitude NUMERIC,
         longitude NUMERIC,
         raw_data TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tracking_bill_id ON tracking_records(bill_id)`)
@@ -779,8 +779,8 @@ export async function runMigrations() {
         extra_config TEXT,
         status TEXT DEFAULT 'active',
         description TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_api_config_provider ON tracking_api_configs(provider_code)`)
@@ -805,8 +805,8 @@ export async function runMigrations() {
         photo_url TEXT,
         remark TEXT,
         operator TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_nodes_bill_id ON tracking_nodes(bill_id)`)
@@ -834,31 +834,31 @@ export async function runMigrations() {
            'Jan van der Berg', '+31-10-123-4567', 'jan@rotterdam-ps.nl',
            '荷兰', 'Rotterdam', 'Europaweg 100, 3199 LD Rotterdam',
            'active', 'a', 'EUR', '鹿特丹港口换单代理，服务快速',
-           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+           NOW(), NOW()),
            
           ('dsa002', 'DSA002', 'Amsterdam Shipping Agency', 'ASA', 'doc_swap_agent',
            'Peter de Vries', '+31-20-456-7890', 'peter@asa-agency.nl',
            '荷兰', 'Amsterdam', 'Havenstraat 50, 1019 BA Amsterdam',
            'active', 'b', 'EUR', '阿姆斯特丹港口换单代理',
-           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+           NOW(), NOW()),
            
           ('dsa003', 'DSA003', 'Hamburg Dokumenten Service GmbH', 'HDS', 'doc_swap_agent',
            'Hans Mueller', '+49-40-789-0123', 'hans@hds-hamburg.de',
            '德国', 'Hamburg', 'Hafenstraße 88, 20457 Hamburg',
            'active', 'a', 'EUR', '汉堡港口换单代理，德国最大换单服务商',
-           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+           NOW(), NOW()),
            
           ('dsa004', 'DSA004', 'Bremen Shipping Docs', 'BSD', 'doc_swap_agent',
            'Klaus Schmidt', '+49-421-234-5678', 'klaus@bremen-docs.de',
            '德国', 'Bremen', 'Überseestraße 12, 28217 Bremen',
            'active', 'b', 'EUR', '不来梅港口换单代理',
-           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+           NOW(), NOW()),
            
           ('dsa005', 'DSA005', 'Antwerp Document Exchange NV', 'ADE', 'doc_swap_agent',
            'Marc Janssen', '+32-3-456-7890', 'marc@ade-antwerp.be',
            '比利时', 'Antwerp', 'Noorderlaan 147, 2030 Antwerpen',
            'active', 'a', 'EUR', '安特卫普港口换单代理，欧洲主要换单点',
-           CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           NOW(), NOW())
         ON CONFLICT (supplier_code) DO NOTHING
       `)
       console.log('  ✅ 换单代理测试数据已插入')
@@ -881,8 +881,8 @@ export async function runMigrations() {
         port_type TEXT DEFAULT 'main',
         parent_port_code TEXT,
         status TEXT DEFAULT 'active',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
         sort_order INTEGER DEFAULT 0,
         continent TEXT
       )
@@ -971,8 +971,8 @@ export async function runMigrations() {
         last_message_time TIMESTAMP,
         member_count INTEGER DEFAULT 2,
         is_active INTEGER DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_conversations_type ON chat_conversations(type)`)
@@ -995,7 +995,7 @@ export async function runMigrations() {
         unread_count INTEGER DEFAULT 0,
         last_read_at TIMESTAMP,
         last_read_message_id VARCHAR(50),
-        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        joined_at TIMESTAMP DEFAULT NOW(),
         left_at TIMESTAMP,
         UNIQUE(conversation_id, user_id)
       )
@@ -1025,7 +1025,7 @@ export async function runMigrations() {
         related_title VARCHAR(200),
         is_recalled INTEGER DEFAULT 0,
         recalled_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON chat_messages(conversation_id)`)
@@ -1049,8 +1049,8 @@ export async function runMigrations() {
         attachment_url VARCHAR(500),
         attachment_name VARCHAR(200),
         is_deleted INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_discussions_business ON business_discussions(business_type, business_id)`)
@@ -1064,10 +1064,10 @@ export async function runMigrations() {
         user_id VARCHAR(50) PRIMARY KEY,
         user_name VARCHAR(100),
         is_online INTEGER DEFAULT 0,
-        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_active_at TIMESTAMP DEFAULT NOW(),
         socket_id VARCHAR(100),
         device_type VARCHAR(20) DEFAULT 'web',
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_online_status_active ON user_online_status(is_online, last_active_at DESC)`)
@@ -1192,8 +1192,8 @@ export async function runMigrations() {
         is_verified INTEGER DEFAULT 0,
         verified_by TEXT,
         verified_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
 
@@ -1213,7 +1213,7 @@ export async function runMigrations() {
         vat_amount NUMERIC DEFAULT 0,
         other_tax_amount NUMERIC DEFAULT 0,
         total_tax NUMERIC DEFAULT 0,
-        declared_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        declared_at TIMESTAMP DEFAULT NOW()
       )
     `)
 
@@ -1244,8 +1244,8 @@ export async function runMigrations() {
         api_config JSONB,
         status TEXT DEFAULT 'active',
         remark TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_last_mile_carriers_code ON last_mile_carriers(carrier_code)`)
@@ -1262,8 +1262,8 @@ export async function runMigrations() {
         cities TEXT[],
         description TEXT,
         sort_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_last_mile_zones_carrier ON last_mile_zones(carrier_id)`)
@@ -1286,8 +1286,8 @@ export async function runMigrations() {
         version INTEGER DEFAULT 1,
         remark TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_unified_rate_cards_carrier ON unified_rate_cards(carrier_id)`)
@@ -1308,7 +1308,7 @@ export async function runMigrations() {
         price_unit TEXT DEFAULT 'per_kg',
         margin_rate NUMERIC(5,2),
         margin_amount NUMERIC(10,2),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_rate_card_tiers_card ON rate_card_tiers(rate_card_id)`)
@@ -1326,7 +1326,7 @@ export async function runMigrations() {
         percentage NUMERIC(5,2),
         is_mandatory INTEGER DEFAULT 0,
         conditions JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_rate_card_surcharges_card ON rate_card_surcharges(rate_card_id)`)
@@ -1372,10 +1372,10 @@ export async function runMigrations() {
         label_data TEXT,
         api_request JSONB,
         api_response JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
         shipped_at TIMESTAMP,
         delivered_at TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_last_mile_shipments_no ON last_mile_shipments(shipment_no)`)
@@ -1392,7 +1392,7 @@ export async function runMigrations() {
         event_description TEXT,
         event_location TEXT,
         raw_data JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_last_mile_tracking_shipment ON last_mile_tracking(shipment_id)`)
@@ -1422,8 +1422,8 @@ export async function runMigrations() {
         attachments JSONB,
         remark TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_carrier_settlements_no ON carrier_settlements(settlement_no)`)
@@ -1445,7 +1445,7 @@ export async function runMigrations() {
         status TEXT DEFAULT 'pending',
         adjust_amount NUMERIC(10,2),
         adjust_reason TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_carrier_settlement_items_settlement ON carrier_settlement_items(settlement_id)`)
@@ -1465,8 +1465,8 @@ export async function runMigrations() {
         preprocess_rules JSONB,
         is_active INTEGER DEFAULT 1,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     
@@ -1488,7 +1488,7 @@ export async function runMigrations() {
         imported_by TEXT,
         confirmed_by TEXT,
         confirmed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     
@@ -1524,8 +1524,8 @@ export async function runMigrations() {
         priority INTEGER DEFAULT 0,
         notes TEXT,
         created_by INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commission_rules_customer_level ON commission_rules(customer_level)`)
@@ -1539,7 +1539,7 @@ export async function runMigrations() {
         min_count INTEGER NOT NULL,
         max_count INTEGER,
         bonus_amount NUMERIC NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commission_tiers_rule_id ON commission_tiers(rule_id)`)
@@ -1569,8 +1569,8 @@ export async function runMigrations() {
         settlement_id TEXT,
         status TEXT DEFAULT 'pending',
         notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commission_records_salesperson ON commission_records(salesperson_id)`)
@@ -1594,8 +1594,8 @@ export async function runMigrations() {
         review_time TIMESTAMP,
         review_comment TEXT,
         paid_time TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commission_settlements_salesperson ON commission_settlements(salesperson_id)`)
@@ -1610,7 +1610,7 @@ export async function runMigrations() {
         username TEXT NOT NULL,
         ip_address TEXT,
         user_agent TEXT,
-        attempt_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        attempt_time TIMESTAMP DEFAULT NOW(),
         success BOOLEAN DEFAULT FALSE,
         failure_reason TEXT,
         country TEXT,
@@ -1642,7 +1642,7 @@ export async function runMigrations() {
         request_method TEXT,
         result TEXT DEFAULT 'success',
         error_message TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_user ON security_audit_logs(user_id)`)
@@ -1654,11 +1654,11 @@ export async function runMigrations() {
         id SERIAL PRIMARY KEY,
         ip_address TEXT NOT NULL UNIQUE,
         reason TEXT,
-        blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        blocked_at TIMESTAMP DEFAULT NOW(),
         blocked_by TEXT,
         expires_at TIMESTAMP,
         is_active BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_blacklist_ip ON ip_blacklist(ip_address)`)
@@ -1671,8 +1671,8 @@ export async function runMigrations() {
         identifier_type TEXT NOT NULL,
         endpoint TEXT,
         request_count INTEGER DEFAULT 1,
-        window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        window_start TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_rate_limit_identifier ON api_rate_limits(identifier, identifier_type)`)
@@ -1682,7 +1682,7 @@ export async function runMigrations() {
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
         password_hash TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_password_history_user ON password_history(user_id)`)
@@ -1695,8 +1695,8 @@ export async function runMigrations() {
         ip_address TEXT,
         user_agent TEXT,
         device_info TEXT,
-        login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        login_time TIMESTAMP DEFAULT NOW(),
+        last_activity TIMESTAMP DEFAULT NOW(),
         expires_at TIMESTAMP,
         is_active BOOLEAN DEFAULT TRUE
       )
@@ -1716,7 +1716,7 @@ export async function runMigrations() {
         completed_at TIMESTAMP,
         error_message TEXT,
         created_by TEXT DEFAULT 'system',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_backup_status ON backup_records(backup_status)`)
@@ -1742,8 +1742,8 @@ export async function runMigrations() {
         priority INTEGER DEFAULT 0,
         notes TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_penalty_rules_code ON penalty_rules(rule_code)`)
@@ -1778,8 +1778,8 @@ export async function runMigrations() {
         appeal_reviewed_at TIMESTAMP,
         notes TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_penalty_records_customer ON penalty_records(customer_id)`)
@@ -1810,8 +1810,8 @@ export async function runMigrations() {
         due_date TIMESTAMP,
         attachments JSONB,
         form_data JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_approval_requests_type ON approval_requests(request_type)`)
@@ -1829,8 +1829,8 @@ export async function runMigrations() {
         conditions JSONB,
         is_active INTEGER DEFAULT 1,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_approval_workflows_type ON approval_workflows(request_type)`)
@@ -1846,7 +1846,7 @@ export async function runMigrations() {
         approver_name TEXT,
         action TEXT NOT NULL,
         comment TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_approval_records_request ON approval_records(request_id)`)
@@ -1868,8 +1868,8 @@ export async function runMigrations() {
         is_default INTEGER DEFAULT 0,
         description TEXT,
         created_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_contract_templates_type ON contract_templates(template_type)`)
@@ -1890,7 +1890,7 @@ export async function runMigrations() {
         user_agent TEXT,
         verification_code TEXT,
         status TEXT DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_contract_signatures_contract ON contract_signatures(contract_id)`)

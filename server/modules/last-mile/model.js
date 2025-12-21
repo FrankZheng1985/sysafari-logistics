@@ -190,7 +190,7 @@ export async function updateCarrier(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(`UPDATE last_mile_carriers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -295,7 +295,7 @@ export async function updateZone(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(`UPDATE last_mile_zones SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -511,7 +511,7 @@ export async function updateRateCard(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(`UPDATE unified_rate_cards SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -945,7 +945,7 @@ export async function updateShipment(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(`UPDATE last_mile_shipments SET ${fields.join(', ')} WHERE id = ?`).run(...values)

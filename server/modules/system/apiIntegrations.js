@@ -49,8 +49,8 @@ async function initTables() {
         description TEXT,
         icon TEXT,
         sort_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
       )
     `).run()
     
@@ -66,8 +66,8 @@ async function initTables() {
         fail_count INTEGER DEFAULT 0,
         data_volume NUMERIC DEFAULT 0,
         cost NUMERIC DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(api_code, usage_date)
       )
     `).run()
@@ -80,12 +80,12 @@ async function initTables() {
         api_code TEXT NOT NULL,
         amount NUMERIC NOT NULL,
         currency TEXT DEFAULT 'USD',
-        recharge_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        recharge_time TIMESTAMP DEFAULT NOW(),
         payment_method TEXT,
         reference_no TEXT,
         operator TEXT,
         remark TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT NOW()
       )
     `).run()
     
@@ -263,7 +263,7 @@ export async function updateApi(apiCode, data) {
   
   if (updates.length === 0) return false
   
-  updates.push(`updated_at = CURRENT_TIMESTAMP`)
+  updates.push(`updated_at = NOW()`)
   values.push(apiCode)
   
   await db.prepare(`
@@ -362,7 +362,7 @@ export async function recordUsage(apiCode, data) {
       fail_count = api_usage_records.fail_count + EXCLUDED.fail_count,
       data_volume = api_usage_records.data_volume + EXCLUDED.data_volume,
       cost = api_usage_records.cost + EXCLUDED.cost,
-      updated_at = CURRENT_TIMESTAMP
+      updated_at = NOW()
   `).run(
     api.id, apiCode, today,
     data.callCount || 1,
@@ -376,7 +376,7 @@ export async function recordUsage(apiCode, data) {
   if (data.cost) {
     await db.prepare(`
       UPDATE api_integrations 
-      SET total_consumed = total_consumed + $1, balance = balance - $1, updated_at = CURRENT_TIMESTAMP
+      SET total_consumed = total_consumed + $1, balance = balance - $1, updated_at = NOW()
       WHERE api_code = $2
     `).run(data.cost, apiCode)
   }
@@ -426,7 +426,7 @@ export async function recordRecharge(apiCode, data) {
   // 更新余额和累计充值
   await db.prepare(`
     UPDATE api_integrations 
-    SET balance = balance + $1, total_recharged = total_recharged + $1, updated_at = CURRENT_TIMESTAMP
+    SET balance = balance + $1, total_recharged = total_recharged + $1, updated_at = NOW()
     WHERE api_code = $2
   `).run(data.amount, apiCode)
   
@@ -716,10 +716,10 @@ export async function performHealthCheck(apiCode) {
   await db.prepare(`
     UPDATE api_integrations SET
       health_status = $1,
-      last_health_check = CURRENT_TIMESTAMP,
+      last_health_check = NOW(),
       health_check_message = $2,
       response_time_ms = $3,
-      updated_at = CURRENT_TIMESTAMP
+      updated_at = NOW()
     WHERE api_code = $4
   `).run(result.status, result.message, result.responseTime, apiCode)
   

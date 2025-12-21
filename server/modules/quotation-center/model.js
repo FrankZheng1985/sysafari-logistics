@@ -156,7 +156,7 @@ export async function updateImportTemplate(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = CURRENT_TIMESTAMP')
+  fields.push('updated_at = NOW()')
   values.push(id)
   
   const result = await db.prepare(`UPDATE rate_import_templates SET ${fields.join(', ')} WHERE id = ?`).run(...values)

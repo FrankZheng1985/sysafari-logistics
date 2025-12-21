@@ -396,7 +396,7 @@ export async function updatePortOfLoading(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE ports_of_loading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -552,7 +552,7 @@ export async function updateDestinationPort(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE destination_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -700,7 +700,7 @@ export async function updateAirPort(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE air_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -821,7 +821,7 @@ export async function updateShippingCompany(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE shipping_companies SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -945,7 +945,7 @@ export async function updateContainerCode(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE container_codes SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1095,7 +1095,7 @@ export async function updateVatRate(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE vat_rates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1214,7 +1214,7 @@ export async function updateTransportMethod(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE transport_methods SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1330,7 +1330,7 @@ export async function updateServiceFeeCategory(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE service_fee_categories SET ${fields.join(', ')} WHERE id = ?`).run(...values)
