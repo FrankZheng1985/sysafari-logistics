@@ -191,7 +191,11 @@ export default function RolePermissions() {
   }
 
   const getGroupPermissions = (groupKey: string) => {
-    return permissions.filter(p => p.category === groupKey)
+    // 优先使用 category，如果 category 为空或为 'general'，则使用 module
+    return permissions.filter(p => {
+      const effectiveCategory = (p.category && p.category !== 'general') ? p.category : p.module
+      return effectiveCategory === groupKey
+    })
   }
 
   const isGroupChecked = (roleCode: string, groupKey: string) => {
