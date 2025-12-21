@@ -477,10 +477,10 @@ export default function CRMPenaltyRecords() {
       key: 'recordNo',
       label: '记录编号',
       width: 130,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900 text-xs">{item.recordNo}</div>
-          <div className="text-[10px] text-gray-500">{item.incidentDate}</div>
+          <div className="font-medium text-gray-900 text-xs">{record.recordNo}</div>
+          <div className="text-[10px] text-gray-500">{record.incidentDate}</div>
         </div>
       )
     },
@@ -488,17 +488,17 @@ export default function CRMPenaltyRecords() {
       key: 'customer',
       label: '客户',
       width: 120,
-      render: (item) => (
-        <span className="text-xs text-gray-700">{item.customerName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-700">{record.customerName || '-'}</span>
       )
     },
     {
       key: 'order',
       label: '关联订单',
       width: 120,
-      render: (item) => (
-        item.relatedOrderNo ? (
-          <span className="text-xs text-blue-600">{item.relatedOrderNo}</span>
+      render: (_value, record) => (
+        record.relatedOrderNo ? (
+          <span className="text-xs text-blue-600">{record.relatedOrderNo}</span>
         ) : (
           <span className="text-xs text-gray-400">-</span>
         )
@@ -508,8 +508,8 @@ export default function CRMPenaltyRecords() {
       key: 'penaltyType',
       label: '惩罚类型',
       width: 90,
-      render: (item) => {
-        const info = getPenaltyTypeInfo(item.penaltyType)
+      render: (_value, record) => {
+        const info = getPenaltyTypeInfo(record.penaltyType)
         return (
           <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
             {info.label}
@@ -521,9 +521,9 @@ export default function CRMPenaltyRecords() {
       key: 'description',
       label: '事件描述',
       width: 180,
-      render: (item) => (
-        <span className="text-xs text-gray-600 truncate block max-w-[180px]" title={item.incidentDescription}>
-          {item.incidentDescription}
+      render: (_value, record) => (
+        <span className="text-xs text-gray-600 truncate block max-w-[180px]" title={record.incidentDescription}>
+          {record.incidentDescription}
         </span>
       )
     },
@@ -531,9 +531,9 @@ export default function CRMPenaltyRecords() {
       key: 'amount',
       label: '惩罚金额',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs font-medium text-red-600">
-          {formatCurrency(item.totalPenalty)}
+          {formatCurrency(record.totalPenalty)}
         </span>
       )
     },
@@ -541,14 +541,14 @@ export default function CRMPenaltyRecords() {
       key: 'status',
       label: '状态',
       width: 80,
-      render: (item) => {
-        const info = getStatusInfo(item.status)
+      render: (_value, record) => {
+        const info = getStatusInfo(record.status)
         return (
           <div>
             <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
               {info.label}
             </span>
-            {item.isTrialPeriod && (
+            {record.isTrialPeriod && (
               <div className="text-[9px] text-amber-600 mt-0.5">试用期</div>
             )}
           </div>
@@ -559,27 +559,27 @@ export default function CRMPenaltyRecords() {
       key: 'actions',
       label: '操作',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button 
-            onClick={() => { setSelectedRecord(item); setShowDetailModal(true) }}
+            onClick={() => { setSelectedRecord(record); setShowDetailModal(true) }}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
             title="查看详情"
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
           
-          {(item.status === 'pending' || item.status === 'communicated') && (
+          {(record.status === 'pending' || record.status === 'communicated') && (
             <>
               <button
-                onClick={() => handleOpenModal(item)}
+                onClick={() => handleOpenModal(record)}
                 className="p-1 hover:bg-gray-100 rounded text-gray-500"
                 title="编辑"
               >
                 <Edit className="w-3.5 h-3.5" />
               </button>
               
-              {item.status === 'pending' && (
+              {record.status === 'pending' && (
                 <button
                   onClick={() => handleUpdateStatus(item, 'communicated')}
                   className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
@@ -588,7 +588,7 @@ export default function CRMPenaltyRecords() {
                 </button>
               )}
               
-              {item.status === 'communicated' && (
+              {record.status === 'communicated' && (
                 <button
                   onClick={() => handleUpdateStatus(item, 'confirmed')}
                   className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
@@ -598,7 +598,7 @@ export default function CRMPenaltyRecords() {
               )}
               
               <button
-                onClick={() => handleDelete(item)}
+                onClick={() => handleDelete(record)}
                 className="p-1 hover:bg-red-100 rounded text-gray-500 hover:text-red-600"
                 title="删除"
               >

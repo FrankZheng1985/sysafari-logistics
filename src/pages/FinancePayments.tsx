@@ -194,10 +194,10 @@ export default function FinancePayments() {
       key: 'paymentNumber',
       label: '付款单号',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900">{item.paymentNumber}</div>
-          <div className="text-xs text-gray-400">{item.paymentDate}</div>
+          <div className="font-medium text-gray-900">{record.paymentNumber}</div>
+          <div className="text-xs text-gray-400">{record.paymentDate}</div>
         </div>
       )
     },
@@ -205,13 +205,13 @@ export default function FinancePayments() {
       key: 'paymentType',
       label: '类型',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-          item.paymentType === 'income' 
+          record.paymentType === 'income' 
             ? 'bg-green-100 text-green-700'
             : 'bg-red-100 text-red-700'
         }`}>
-          {item.paymentType === 'income' ? (
+          {record.paymentType === 'income' ? (
             <><ArrowUpRight className="w-3 h-3" /> 收款</>
           ) : (
             <><ArrowDownRight className="w-3 h-3" /> 付款</>
@@ -223,11 +223,11 @@ export default function FinancePayments() {
       key: 'customerName',
       label: '客户/供应商',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="text-sm text-gray-900">{item.customerName || '-'}</div>
-          {item.invoiceNumber && (
-            <div className="text-xs text-gray-400">发票: {item.invoiceNumber}</div>
+          <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
+          {record.invoiceNumber && (
+            <div className="text-xs text-gray-400">发票: {record.invoiceNumber}</div>
           )}
         </div>
       )
@@ -237,11 +237,11 @@ export default function FinancePayments() {
       label: '金额',
       width: 120,
       align: 'right',
-      render: (item) => (
+      render: (_value, record) => (
         <div className={`text-right font-medium ${
-          item.paymentType === 'income' ? 'text-green-600' : 'text-red-600'
+          record.paymentType === 'income' ? 'text-green-600' : 'text-red-600'
         }`}>
-          {item.paymentType === 'income' ? '+' : '-'}{formatCurrency(item.amount, item.currency)}
+          {record.paymentType === 'income' ? '+' : '-'}{formatCurrency(record.amount, record.currency)}
         </div>
       )
     },
@@ -249,8 +249,8 @@ export default function FinancePayments() {
       key: 'paymentMethod',
       label: '支付方式',
       width: 120,
-      render: (item) => {
-        const config = getMethodConfig(item.paymentMethod)
+      render: (_value, record) => {
+        const config = getMethodConfig(record.paymentMethod)
         const Icon = config.icon
         return (
           <span className="inline-flex items-center gap-1 text-xs text-gray-600">
@@ -264,17 +264,17 @@ export default function FinancePayments() {
       key: 'referenceNumber',
       label: '参考号',
       width: 150,
-      render: (item) => (
-        <span className="text-xs text-gray-600">{item.referenceNumber || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-600">{record.referenceNumber || '-'}</span>
       )
     },
     {
       key: 'description',
       label: '说明',
       width: 200,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs text-gray-500 truncate block max-w-[200px]">
-          {item.description || '-'}
+          {record.description || '-'}
         </span>
       )
     },
@@ -282,10 +282,10 @@ export default function FinancePayments() {
       key: 'actions',
       label: '操作',
       width: 80,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => handleDelete(item.id)}
+            onClick={() => handleDelete(record.id)}
             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
             title="删除"
           >

@@ -329,21 +329,21 @@ export default function TransportPricing() {
       key: 'routeCode',
       label: '路线编码',
       width: '100px',
-      render: (item) => (
+      render: (_value, _record) => (
         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
-          {item.routeCode}
+          {record.routeCode}
         </span>
       ),
     },
     {
       key: 'routeName',
       label: '路线名称',
-      render: (item) => (
+      render: (_value, _record) => (
         <div>
-          <div className="font-medium text-gray-900">{item.routeName}</div>
+          <div className="font-medium text-gray-900">{record.routeName}</div>
           <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
             <MapPin className="w-3 h-3" />
-            {item.origin} → {item.destination}
+            {record.origin} → {record.destination}
           </div>
         </div>
       ),
@@ -352,7 +352,7 @@ export default function TransportPricing() {
       key: 'serviceType',
       label: '服务类型',
       width: '100px',
-      render: (item) => {
+      render: (_value, record) => {
         const typeConfig: Record<string, { bg: string; text: string }> = {
           fcl: { bg: 'bg-blue-100', text: 'text-blue-700' },
           lcl: { bg: 'bg-cyan-100', text: 'text-cyan-700' },
@@ -361,10 +361,10 @@ export default function TransportPricing() {
           trucking: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
           delivery: { bg: 'bg-green-100', text: 'text-green-700' },
         }
-        const config = typeConfig[item.serviceType] || { bg: 'bg-gray-100', text: 'text-gray-700' }
+        const config = typeConfig[record.serviceType] || { bg: 'bg-gray-100', text: 'text-gray-700' }
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
-            {getServiceTypeName(item.serviceType)}
+            {getServiceTypeName(record.serviceType)}
           </span>
         )
       },
@@ -373,12 +373,12 @@ export default function TransportPricing() {
       key: 'unitPrice',
       label: '单价',
       width: '120px',
-      render: (item) => (
+      render: (_value, _record) => (
         <div>
           <div className="font-bold text-primary-600">
-            {getCurrencySymbol(item.currency)} {item.unitPrice.toFixed(2)}
+            {getCurrencySymbol(record.currency)} {record.unitPrice.toFixed(2)}
           </div>
-          <div className="text-xs text-gray-500">{getPriceTypeName(item.priceType)}</div>
+          <div className="text-xs text-gray-500">{getPriceTypeName(record.priceType)}</div>
         </div>
       ),
     },
@@ -386,10 +386,10 @@ export default function TransportPricing() {
       key: 'providerName',
       label: '服务商',
       width: '120px',
-      render: (item) => (
+      render: (_value, _record) => (
         <div className="flex items-center gap-1 text-gray-600">
           <Truck className="w-3 h-3" />
-          {item.providerName || '-'}
+          {record.providerName || '-'}
         </div>
       ),
     },
@@ -397,14 +397,14 @@ export default function TransportPricing() {
       key: 'effectiveDate',
       label: '有效期',
       width: '160px',
-      render: (item) => (
+      render: (_value, _record) => (
         <div className="text-xs text-gray-600">
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
-            {item.effectiveDate}
+            {record.effectiveDate}
           </div>
-          {item.expiryDate && (
-            <div className="text-gray-400">至 {item.expiryDate}</div>
+          {record.expiryDate && (
+            <div className="text-gray-400">至 {record.expiryDate}</div>
           )}
         </div>
       ),
@@ -413,14 +413,14 @@ export default function TransportPricing() {
       key: 'status',
       label: '状态',
       width: '80px',
-      render: (item) => {
+      render: (_value, record) => {
         const statusConfig: Record<string, { bg: string; text: string }> = {
           active: { bg: 'bg-green-100', text: 'text-green-700' },
           inactive: { bg: 'bg-gray-100', text: 'text-gray-500' },
           expired: { bg: 'bg-red-100', text: 'text-red-600' },
         }
-        const config = statusConfig[item.status] || statusConfig.inactive
-        const label = item.status === 'active' ? '生效中' : item.status === 'expired' ? '已过期' : '未启用'
+        const config = statusConfig[record.status] || statusConfig.inactive
+        const label = record.status === 'active' ? '生效中' : record.status === 'expired' ? '已过期' : '未启用'
         return (
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
             {label}
@@ -432,24 +432,24 @@ export default function TransportPricing() {
       key: 'actions',
       label: '操作',
       width: '120px',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleCalculate(item)}
+            onClick={() => handleCalculate(record)}
             className="p-1 text-gray-400 hover:text-green-600 rounded"
             title="计算运费"
           >
             <Calculator className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleOpenModal(item)}
+            onClick={() => handleOpenModal(record)}
             className="p-1 text-gray-400 hover:text-primary-600 rounded"
             title="编辑"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 text-gray-400 hover:text-red-600 rounded"
             title="删除"
           >

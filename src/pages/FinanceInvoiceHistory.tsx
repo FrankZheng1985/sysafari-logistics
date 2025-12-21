@@ -153,10 +153,10 @@ export default function FinanceInvoiceHistory() {
       key: 'invoiceNumber',
       label: '发票号',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900">{item.invoiceNumber}</div>
-          <div className="text-xs text-gray-400">{item.invoiceDate}</div>
+          <div className="font-medium text-gray-900">{record.invoiceNumber}</div>
+          <div className="text-xs text-gray-400">{record.invoiceDate}</div>
         </div>
       )
     },
@@ -164,13 +164,13 @@ export default function FinanceInvoiceHistory() {
       key: 'invoiceType',
       label: '类型',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-          item.invoiceType === 'sales' 
+          record.invoiceType === 'sales' 
             ? 'bg-blue-100 text-blue-700'
             : 'bg-orange-100 text-orange-700'
         }`}>
-          {item.invoiceType === 'sales' ? '销售发票' : '采购发票'}
+          {record.invoiceType === 'sales' ? '销售发票' : '采购发票'}
         </span>
       )
     },
@@ -178,11 +178,11 @@ export default function FinanceInvoiceHistory() {
       key: 'customerName',
       label: '客户/供应商',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="text-sm text-gray-900">{item.customerName || '-'}</div>
-          {item.billNumber && (
-            <div className="text-xs text-gray-400">提单: {item.billNumber}</div>
+          <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
+          {record.billNumber && (
+            <div className="text-xs text-gray-400">提单: {record.billNumber}</div>
           )}
         </div>
       )
@@ -192,11 +192,11 @@ export default function FinanceInvoiceHistory() {
       label: '金额',
       width: 120,
       align: 'right',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-right">
-          <div className="font-medium text-gray-900">{formatCurrency(item.totalAmount, item.currency)}</div>
-          {item.taxAmount > 0 && (
-            <div className="text-xs text-gray-400">含税 {formatCurrency(item.taxAmount, item.currency)}</div>
+          <div className="font-medium text-gray-900">{formatCurrency(record.totalAmount, record.currency)}</div>
+          {record.taxAmount > 0 && (
+            <div className="text-xs text-gray-400">含税 {formatCurrency(record.taxAmount, record.currency)}</div>
           )}
         </div>
       )
@@ -206,10 +206,10 @@ export default function FinanceInvoiceHistory() {
       label: '已付金额',
       width: 120,
       align: 'right',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-right">
           <div className="font-medium text-green-600">
-            {formatCurrency(item.paidAmount, item.currency)}
+            {formatCurrency(record.paidAmount, record.currency)}
           </div>
         </div>
       )
@@ -218,8 +218,8 @@ export default function FinanceInvoiceHistory() {
       key: 'status',
       label: '状态',
       width: 100,
-      render: (item) => {
-        const config = getStatusConfig(item.status)
+      render: (_value, record) => {
+        const config = getStatusConfig(record.status)
         const Icon = config.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
@@ -233,9 +233,9 @@ export default function FinanceInvoiceHistory() {
       key: 'updateTime',
       label: '完成时间',
       width: 140,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs text-gray-500">
-          {formatDateTime(item.updateTime || item.createTime)}
+          {formatDateTime(record.updateTime || record.createTime)}
         </span>
       )
     },
@@ -243,27 +243,27 @@ export default function FinanceInvoiceHistory() {
       key: 'actions',
       label: '操作',
       width: 120,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => navigate(`/finance/invoices/${item.id}`)}
+            onClick={() => navigate(`/finance/invoices/${record.id}`)}
             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
             title="查看"
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
-          {item.pdfUrl && (
+          {record.pdfUrl && (
             <button
-              onClick={() => window.open(`${API_BASE}/api/invoices/${item.id}/pdf`, '_blank')}
+              onClick={() => window.open(`${API_BASE}/api/invoices/${record.id}/pdf`, '_blank')}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
               title="下载PDF发票"
             >
               <Download className="w-3.5 h-3.5" />
             </button>
           )}
-          {item.excelUrl && (
+          {record.excelUrl && (
             <button
-              onClick={() => window.open(`${API_BASE}/api/invoices/${item.id}/excel`, '_blank')}
+              onClick={() => window.open(`${API_BASE}/api/invoices/${record.id}/excel`, '_blank')}
               className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
               title="下载Excel对账单"
             >

@@ -294,17 +294,17 @@ export default function TMSConditions() {
       key: 'conditionCode',
       label: '条件编码',
       width: '100px',
-      render: (item) => (
+      render: (_value, _record) => (
         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
-          {item.conditionCode}
+          {record.conditionCode}
         </span>
       ),
     },
     {
       key: 'conditionName',
       label: '条件名称',
-      render: (item) => {
-        const typeConfig = getConditionTypeConfig(item.conditionType)
+      render: (_value, record) => {
+        const typeConfig = getConditionTypeConfig(record.conditionType)
         const TypeIcon = typeConfig.icon
         const colorMap: Record<string, string> = {
           blue: 'bg-blue-100 text-blue-600',
@@ -318,9 +318,9 @@ export default function TMSConditions() {
               <TypeIcon className="w-4 h-4" />
             </div>
             <div>
-              <div className="font-medium text-gray-900">{item.conditionName}</div>
-              {item.metricName && (
-                <div className="text-xs text-gray-500">{item.metricName}</div>
+              <div className="font-medium text-gray-900">{record.conditionName}</div>
+              {record.metricName && (
+                <div className="text-xs text-gray-500">{record.metricName}</div>
               )}
             </div>
           </div>
@@ -331,8 +331,8 @@ export default function TMSConditions() {
       key: 'conditionType',
       label: '类型',
       width: '100px',
-      render: (item) => {
-        const typeConfig = getConditionTypeConfig(item.conditionType)
+      render: (_value, record) => {
+        const typeConfig = getConditionTypeConfig(record.conditionType)
         const bgMap: Record<string, string> = {
           blue: 'bg-blue-100 text-blue-700',
           green: 'bg-green-100 text-green-700',
@@ -350,15 +350,15 @@ export default function TMSConditions() {
       key: 'threshold',
       label: '阈值标准',
       width: '150px',
-      render: (item) => (
+      render: (_value, _record) => (
         <div>
           <div className="font-medium text-gray-900">
-            {item.operator === 'between' 
-              ? `${item.thresholdValue} ~ ${item.thresholdValue2} ${item.unit}`
-              : `${item.operator} ${item.thresholdValue} ${item.unit}`
+            {record.operator === 'between' 
+              ? `${record.thresholdValue} ~ ${record.thresholdValue2} ${record.unit}`
+              : `${record.operator} ${record.thresholdValue} ${record.unit}`
             }
           </div>
-          <div className="text-xs text-gray-500">权重: {item.weight}</div>
+          <div className="text-xs text-gray-500">权重: {record.weight}</div>
         </div>
       ),
     },
@@ -366,9 +366,9 @@ export default function TMSConditions() {
       key: 'scopeType',
       label: '适用范围',
       width: '100px',
-      render: (item) => (
+      render: (_value, _record) => (
         <span className="text-sm text-gray-600">
-          {getScopeTypeLabel(item.scopeType)}
+          {getScopeTypeLabel(record.scopeType)}
         </span>
       ),
     },
@@ -376,17 +376,17 @@ export default function TMSConditions() {
       key: 'alertEnabled',
       label: '预警',
       width: '80px',
-      render: (item) => (
+      render: (_value, _record) => (
         <div className="flex items-center gap-1">
-          {item.alertEnabled ? (
+          {record.alertEnabled ? (
             <>
               <Bell className="w-4 h-4 text-amber-500" />
               <span className={`text-xs px-1.5 py-0.5 rounded ${
-                item.alertLevel === 'critical' ? 'bg-red-100 text-red-700' :
-                item.alertLevel === 'error' ? 'bg-orange-100 text-orange-700' :
+                record.alertLevel === 'critical' ? 'bg-red-100 text-red-700' :
+                record.alertLevel === 'error' ? 'bg-orange-100 text-orange-700' :
                 'bg-yellow-100 text-yellow-700'
               }`}>
-                {ALERT_LEVELS.find(a => a.value === item.alertLevel)?.label || item.alertLevel}
+                {ALERT_LEVELS.find(a => a.value === record.alertLevel)?.label || record.alertLevel}
               </span>
             </>
           ) : (
@@ -399,17 +399,17 @@ export default function TMSConditions() {
       key: 'status',
       label: '状态',
       width: '80px',
-      render: (item) => (
+      render: (_value, _record) => (
         <button
-          onClick={() => handleToggleStatus(item)}
+          onClick={() => handleToggleStatus(record)}
           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-            item.status === 'active' 
+            record.status === 'active' 
               ? 'bg-green-100 text-green-700' 
               : 'bg-gray-100 text-gray-500'
           }`}
         >
-          {item.status === 'active' ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-          {item.status === 'active' ? '启用' : '禁用'}
+          {record.status === 'active' ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+          {record.status === 'active' ? '启用' : '禁用'}
         </button>
       ),
     },
@@ -417,17 +417,17 @@ export default function TMSConditions() {
       key: 'actions',
       label: '操作',
       width: '100px',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleOpenModal(item)}
+            onClick={() => handleOpenModal(record)}
             className="p-1 text-gray-400 hover:text-primary-600 rounded"
             title="编辑"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 text-gray-400 hover:text-red-600 rounded"
             title="删除"
           >

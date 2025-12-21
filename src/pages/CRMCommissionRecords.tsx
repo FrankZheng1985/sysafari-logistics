@@ -286,10 +286,10 @@ export default function CRMCommissionRecords() {
       key: 'recordNo',
       label: '记录编号',
       width: 140,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900 text-xs">{item.recordNo}</div>
-          <div className="text-[10px] text-gray-500">{item.settlementMonth}</div>
+          <div className="font-medium text-gray-900 text-xs">{record.recordNo}</div>
+          <div className="text-[10px] text-gray-500">{record.settlementMonth}</div>
         </div>
       )
     },
@@ -297,19 +297,19 @@ export default function CRMCommissionRecords() {
       key: 'salesperson',
       label: '业务员',
       width: 100,
-      render: (item) => (
-        <span className="text-xs text-gray-700">{item.salespersonName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-700">{record.salespersonName || '-'}</span>
       )
     },
     {
       key: 'customer',
       label: '客户',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="text-xs text-gray-900">{item.customerName || '-'}</div>
+          <div className="text-xs text-gray-900">{record.customerName || '-'}</div>
           <div className="text-[10px] text-gray-500">
-            {CUSTOMER_LEVELS.find(l => l.value === item.customerLevel)?.label || item.customerLevel}
+            {CUSTOMER_LEVELS.find(l => l.value === record.customerLevel)?.label || record.customerLevel}
           </div>
         </div>
       )
@@ -318,10 +318,10 @@ export default function CRMCommissionRecords() {
       key: 'rule',
       label: '规则',
       width: 120,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="text-xs text-gray-700">{item.ruleName || '-'}</div>
-          <div className="text-[10px] text-gray-500">{getRuleTypeLabel(item.ruleType)}</div>
+          <div className="text-xs text-gray-700">{record.ruleName || '-'}</div>
+          <div className="text-[10px] text-gray-500">{getRuleTypeLabel(record.ruleType)}</div>
         </div>
       )
     },
@@ -329,17 +329,17 @@ export default function CRMCommissionRecords() {
       key: 'baseAmount',
       label: '基数金额',
       width: 110,
-      render: (item) => (
-        <span className="text-xs text-gray-600">{formatCurrency(item.baseAmount)}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-600">{formatCurrency(record.baseAmount)}</span>
       )
     },
     {
       key: 'commissionAmount',
       label: '提成金额',
       width: 110,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs font-medium text-primary-600">
-          {formatCurrency(item.commissionAmount)}
+          {formatCurrency(record.commissionAmount)}
         </span>
       )
     },
@@ -347,10 +347,10 @@ export default function CRMCommissionRecords() {
       key: 'source',
       label: '来源',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="text-xs text-gray-600">{getSourceTypeLabel(item.sourceType)}</div>
-          <div className="text-[10px] text-gray-400">{item.sourceNo || '-'}</div>
+          <div className="text-xs text-gray-600">{getSourceTypeLabel(record.sourceType)}</div>
+          <div className="text-[10px] text-gray-400">{record.sourceNo || '-'}</div>
         </div>
       )
     },
@@ -358,8 +358,8 @@ export default function CRMCommissionRecords() {
       key: 'status',
       label: '状态',
       width: 80,
-      render: (item) => {
-        const info = getStatusInfo(item.status)
+      render: (_value, record) => {
+        const info = getStatusInfo(record.status)
         return (
           <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
             {info.label}
@@ -371,9 +371,9 @@ export default function CRMCommissionRecords() {
       key: 'actions',
       label: '操作',
       width: 80,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
-          {item.status === 'pending' && (
+          {record.status === 'pending' && (
             <button 
               onClick={() => handleCancelRecord(item)}
               className="px-2 py-1 text-[10px] text-red-600 hover:bg-red-50 rounded"

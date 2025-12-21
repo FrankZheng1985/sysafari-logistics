@@ -511,24 +511,24 @@ export default function SupplierManage() {
       key: 'supplierCode',
       label: '供应商编码',
       width: '110px',
-      render: (item) => (
+      render: (_value, _record) => (
         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
-          {item.supplierCode}
+          {record.supplierCode}
         </span>
       ),
     },
     {
       key: 'supplierName',
       label: '供应商名称',
-      render: (item) => (
+      render: (_value, _record) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
             <Building2 className="w-4 h-4 text-primary-600" />
           </div>
           <div className="min-w-0">
-            <div className="font-medium text-gray-900 truncate">{item.supplierName}</div>
-            {item.shortName && (
-              <div className="text-xs text-gray-500 truncate">{item.shortName}</div>
+            <div className="font-medium text-gray-900 truncate">{record.supplierName}</div>
+            {record.shortName && (
+              <div className="text-xs text-gray-500 truncate">{record.shortName}</div>
             )}
           </div>
         </div>
@@ -538,9 +538,9 @@ export default function SupplierManage() {
       key: 'supplierType',
       label: '类型',
       width: '90px',
-      render: (item) => (
+      render: (_value, _record) => (
         <span className="text-xs text-gray-600">
-          {getTypeLabel(item.supplierType)}
+          {getTypeLabel(record.supplierType)}
         </span>
       ),
     },
@@ -548,11 +548,11 @@ export default function SupplierManage() {
       key: 'level',
       label: '级别',
       width: '80px',
-      render: (item) => {
-        const config = getLevelConfig(item.level)
+      render: (_value, record) => {
+        const config = getLevelConfig(record.level)
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
-            {item.level === 'vip' && <Star className="w-3 h-3" />}
+            {record.level === 'vip' && <Star className="w-3 h-3" />}
             {config.label}
           </span>
         )
@@ -562,10 +562,10 @@ export default function SupplierManage() {
       key: 'contactPerson',
       label: '联系人',
       width: '100px',
-      render: (item) => (
+      render: (_value, _record) => (
         <div className="flex items-center gap-1 text-gray-600 text-xs">
           <User className="w-3 h-3" />
-          {item.contactPerson || '-'}
+          {record.contactPerson || '-'}
         </div>
       ),
     },
@@ -573,18 +573,18 @@ export default function SupplierManage() {
       key: 'contactPhone',
       label: '联系电话',
       width: '120px',
-      render: (item) => (
+      render: (_value, _record) => (
         <div className="flex items-center gap-1 text-gray-600 text-xs">
           <Phone className="w-3 h-3" />
-          {item.contactPhone || item.contactMobile || '-'}
+          {record.contactPhone || record.contactMobile || '-'}
         </div>
       ),
     },
     {
       key: 'address',
       label: '地址',
-      render: (item) => {
-        const fullAddress = [item.country, item.province, item.city, item.address]
+      render: (_value, record) => {
+        const fullAddress = [record.country, record.province, record.city, record.address]
           .filter(Boolean)
           .join(' ')
         return (
@@ -598,14 +598,14 @@ export default function SupplierManage() {
       key: 'status',
       label: '状态',
       width: '80px',
-      render: (item) => {
-        const config = getStatusConfig(item.status)
+      render: (_value, record) => {
+        const config = getStatusConfig(record.status)
         return (
           <button
-            onClick={() => handleToggleStatus(item)}
+            onClick={() => handleToggleStatus(record)}
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.color}`}
           >
-            {item.status === 'active' ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+            {record.status === 'active' ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
             {config.label}
           </button>
         )
@@ -615,24 +615,24 @@ export default function SupplierManage() {
       key: 'actions',
       label: '操作',
       width: '140px',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleOpenPriceList(item)}
+            onClick={() => handleOpenPriceList(record)}
             className="p-1 text-gray-400 hover:text-green-600 rounded"
             title="采购价管理"
           >
             <DollarSign className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleOpenModal(item)}
+            onClick={() => handleOpenModal(record)}
             className="p-1 text-gray-400 hover:text-primary-600 rounded"
             title="编辑"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 text-gray-400 hover:text-red-600 rounded"
             title="删除"
           >

@@ -181,10 +181,10 @@ export default function FinanceInvoices() {
       key: 'invoiceNumber',
       label: '发票号',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900">{item.invoiceNumber}</div>
-          <div className="text-xs text-gray-400">{item.invoiceDate}</div>
+          <div className="font-medium text-gray-900">{record.invoiceNumber}</div>
+          <div className="text-xs text-gray-400">{record.invoiceDate}</div>
         </div>
       )
     },
@@ -192,13 +192,13 @@ export default function FinanceInvoices() {
       key: 'invoiceType',
       label: '类型',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-          item.invoiceType === 'sales' 
+          record.invoiceType === 'sales' 
             ? 'bg-blue-100 text-blue-700'
             : 'bg-orange-100 text-orange-700'
         }`}>
-          {item.invoiceType === 'sales' ? '销售发票' : '采购发票'}
+          {record.invoiceType === 'sales' ? '销售发票' : '采购发票'}
         </span>
       )
     },
@@ -206,11 +206,11 @@ export default function FinanceInvoices() {
       key: 'customerName',
       label: '客户/供应商',
       width: 150,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="text-sm text-gray-900">{item.customerName || '-'}</div>
-          {item.billNumber && (
-            <div className="text-xs text-gray-400">提单: {item.billNumber}</div>
+          <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
+          {record.billNumber && (
+            <div className="text-xs text-gray-400">提单: {record.billNumber}</div>
           )}
         </div>
       )
@@ -220,11 +220,11 @@ export default function FinanceInvoices() {
       label: '金额',
       width: 120,
       align: 'right',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-right">
-          <div className="font-medium text-gray-900">{formatCurrency(item.totalAmount, item.currency)}</div>
-          {item.taxAmount > 0 && (
-            <div className="text-xs text-gray-400">含税 {formatCurrency(item.taxAmount, item.currency)}</div>
+          <div className="font-medium text-gray-900">{formatCurrency(record.totalAmount, record.currency)}</div>
+          {record.taxAmount > 0 && (
+            <div className="text-xs text-gray-400">含税 {formatCurrency(record.taxAmount, record.currency)}</div>
           )}
         </div>
       )
@@ -234,14 +234,14 @@ export default function FinanceInvoices() {
       label: '已付金额',
       width: 120,
       align: 'right',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-right">
-          <div className={`font-medium ${item.paidAmount >= item.totalAmount ? 'text-green-600' : 'text-gray-900'}`}>
-            {formatCurrency(item.paidAmount, item.currency)}
+          <div className={`font-medium ${record.paidAmount >= record.totalAmount ? 'text-green-600' : 'text-gray-900'}`}>
+            {formatCurrency(record.paidAmount, record.currency)}
           </div>
-          {item.paidAmount < item.totalAmount && (
+          {record.paidAmount < record.totalAmount && (
             <div className="text-xs text-red-500">
-              未付 {formatCurrency(item.totalAmount - item.paidAmount, item.currency)}
+              未付 {formatCurrency(record.totalAmount - record.paidAmount, record.currency)}
             </div>
           )}
         </div>
@@ -251,8 +251,8 @@ export default function FinanceInvoices() {
       key: 'status',
       label: '状态',
       width: 100,
-      render: (item) => {
-        const config = getStatusConfig(item.status)
+      render: (_value, record) => {
+        const config = getStatusConfig(record.status)
         const Icon = config.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
@@ -266,12 +266,12 @@ export default function FinanceInvoices() {
       key: 'dueDate',
       label: '到期日',
       width: 100,
-      render: (item) => {
-        if (!item.dueDate) return <span className="text-gray-400">-</span>
-        const isOverdue = new Date(item.dueDate) < new Date() && item.status !== 'paid'
+      render: (_value, record) => {
+        if (!record.dueDate) return <span className="text-gray-400">-</span>
+        const isOverdue = new Date(record.dueDate) < new Date() && record.status !== 'paid'
         return (
           <span className={isOverdue ? 'text-red-500' : 'text-gray-600'}>
-            {item.dueDate}
+            {record.dueDate}
           </span>
         )
       }
@@ -280,27 +280,27 @@ export default function FinanceInvoices() {
       key: 'actions',
       label: '操作',
       width: 180,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button
-            onClick={() => navigate(`/finance/invoices/${item.id}`)}
+            onClick={() => navigate(`/finance/invoices/${record.id}`)}
             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
             title="查看"
           >
             <Eye className="w-3.5 h-3.5" />
           </button>
-          {item.pdfUrl && (
+          {record.pdfUrl && (
             <button
-              onClick={() => window.open(`${API_BASE}/api/invoices/${item.id}/pdf`, '_blank')}
+              onClick={() => window.open(`${API_BASE}/api/invoices/${record.id}/pdf`, '_blank')}
               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
               title="下载PDF发票"
             >
               <Download className="w-3.5 h-3.5" />
             </button>
           )}
-          {item.excelUrl && (
+          {record.excelUrl && (
             <button
-              onClick={() => window.open(`${API_BASE}/api/invoices/${item.id}/excel`, '_blank')}
+              onClick={() => window.open(`${API_BASE}/api/invoices/${record.id}/excel`, '_blank')}
               className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
               title="下载Excel对账单"
             >
@@ -314,15 +314,15 @@ export default function FinanceInvoices() {
             }}
             className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
             title="编辑"
-            disabled={item.status === 'paid'}
+            disabled={record.status === 'paid'}
           >
             <Edit2 className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => handleDelete(item.id)}
+            onClick={() => handleDelete(record.id)}
             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
             title="删除"
-            disabled={item.paidAmount > 0}
+            disabled={record.paidAmount > 0}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

@@ -194,10 +194,10 @@ export default function CRMFeedbacks() {
   }
 
   const handleDelete = async (item: Feedback) => {
-    if (!confirm(`确定要删除反馈"${item.subject}"吗？`)) return
+    if (!confirm(`确定要删除反馈"${record.subject}"吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE}/api/feedbacks/${item.id}`, {
+      const response = await fetch(`${API_BASE}/api/feedbacks/${record.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -244,16 +244,16 @@ export default function CRMFeedbacks() {
       key: 'feedbackNumber',
       label: '反馈编号',
       width: 130,
-      render: (item) => (
-        <span className="text-primary-600 font-medium text-xs">{item.feedbackNumber}</span>
+      render: (_value, record) => (
+        <span className="text-primary-600 font-medium text-xs">{record.feedbackNumber}</span>
       )
     },
     {
       key: 'feedbackType',
       label: '类型',
       width: 80,
-      render: (item) => {
-        const info = getTypeInfo(item.feedbackType)
+      render: (_value, record) => {
+        const info = getTypeInfo(record.feedbackType)
         const Icon = info.icon
         return (
           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
@@ -267,10 +267,10 @@ export default function CRMFeedbacks() {
       key: 'subject',
       label: '主题',
       width: 200,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900 text-xs line-clamp-1">{item.subject}</div>
-          <div className="text-[10px] text-gray-500 line-clamp-1">{item.content}</div>
+          <div className="font-medium text-gray-900 text-xs line-clamp-1">{record.subject}</div>
+          <div className="text-[10px] text-gray-500 line-clamp-1">{record.content}</div>
         </div>
       )
     },
@@ -278,16 +278,16 @@ export default function CRMFeedbacks() {
       key: 'customerName',
       label: '客户',
       width: 120,
-      render: (item) => (
-        <span className="text-xs text-gray-700">{item.customerName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-700">{record.customerName || '-'}</span>
       )
     },
     {
       key: 'priority',
       label: '优先级',
       width: 70,
-      render: (item) => {
-        const info = getPriorityInfo(item.priority)
+      render: (_value, record) => {
+        const info = getPriorityInfo(record.priority)
         return (
           <span className={`text-xs font-medium ${info.color}`}>
             {info.label}
@@ -299,16 +299,16 @@ export default function CRMFeedbacks() {
       key: 'assignedName',
       label: '处理人',
       width: 80,
-      render: (item) => (
-        <span className="text-xs text-gray-600">{item.assignedName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-600">{record.assignedName || '-'}</span>
       )
     },
     {
       key: 'status',
       label: '状态',
       width: 90,
-      render: (item) => {
-        const info = getStatusInfo(item.status)
+      render: (_value, record) => {
+        const info = getStatusInfo(record.status)
         const Icon = info.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
@@ -322,9 +322,9 @@ export default function CRMFeedbacks() {
       key: 'createTime',
       label: '创建时间',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs text-gray-500">
-          {item.createTime ? new Date(item.createTime).toLocaleDateString() : '-'}
+          {record.createTime ? new Date(record.createTime).toLocaleDateString() : '-'}
         </span>
       )
     },
@@ -332,20 +332,20 @@ export default function CRMFeedbacks() {
       key: 'actions',
       label: '操作',
       width: 160,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
-          {item.status === 'open' && (
+          {record.status === 'open' && (
             <button
-              onClick={() => handleUpdateStatus(item.id, 'processing')}
+              onClick={() => handleUpdateStatus(record.id, 'processing')}
               className="px-2 py-1 text-[10px] bg-amber-50 text-amber-600 rounded hover:bg-amber-100"
             >
               处理
             </button>
           )}
-          {(item.status === 'open' || item.status === 'processing') && (
+          {(record.status === 'open' || record.status === 'processing') && (
             <button
               onClick={() => {
-                setSelectedFeedback(item)
+                setSelectedFeedback(record)
                 setShowResolveModal(true)
               }}
               className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
@@ -354,7 +354,7 @@ export default function CRMFeedbacks() {
             </button>
           )}
           <button 
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
             title="删除"
           >

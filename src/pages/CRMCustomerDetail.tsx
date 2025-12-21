@@ -264,12 +264,12 @@ export default function CRMCustomerDetail() {
       key: 'billNumber',
       label: '提单号',
       width: 140,
-      render: (item) => (
+      render: (_value, record) => (
         <button
-          onClick={() => navigate(`/bookings/bill/${item.id}`)}
+          onClick={() => navigate(`/bookings/bill/${record.id}`)}
           className="text-primary-600 hover:text-primary-800 hover:underline font-medium"
         >
-          {item.billNumber}
+          {record.billNumber}
         </button>
       )
     },
@@ -292,9 +292,9 @@ export default function CRMCustomerDetail() {
       key: 'shipStatus',
       label: '船运状态',
       width: 90,
-      render: (item) => (
-        <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusStyle(item.shipStatus)}`}>
-          {item.shipStatus}
+      render: (_value, record) => (
+        <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusStyle(record.shipStatus)}`}>
+          {record.shipStatus}
         </span>
       )
     },
@@ -302,9 +302,9 @@ export default function CRMCustomerDetail() {
       key: 'deliveryStatus',
       label: '派送状态',
       width: 90,
-      render: (item) => (
-        <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusStyle(item.deliveryStatus)}`}>
-          {item.deliveryStatus}
+      render: (_value, record) => (
+        <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusStyle(record.deliveryStatus)}`}>
+          {record.deliveryStatus}
         </span>
       )
     },
@@ -312,33 +312,33 @@ export default function CRMCustomerDetail() {
       key: 'pieces',
       label: '件数',
       width: 60,
-      render: (item) => item.pieces || '-'
+      render: (_value, record) => record.pieces || '-'
     },
     {
       key: 'weight',
       label: '重量(KG)',
       width: 80,
-      render: (item) => item.weight ? Number(item.weight).toFixed(2) : '-'
+      render: (_value, record) => record.weight ? Number(record.weight).toFixed(2) : '-'
     },
     {
       key: 'eta',
       label: 'ETA',
       width: 100,
-      render: (item) => item.eta ? item.eta.split('T')[0] : '-'
+      render: (_value, record) => record.eta ? record.eta.split('T')[0] : '-'
     },
     {
       key: 'createTime',
       label: '创建时间',
       width: 100,
-      render: (item) => item.createTime ? item.createTime.split('T')[0] : '-'
+      render: (_value, record) => record.createTime ? record.createTime.split('T')[0] : '-'
     },
     {
       key: 'actions',
       label: '操作',
       width: 60,
-      render: (item) => (
+      render: (_value, record) => (
         <button
-          onClick={() => navigate(`/bookings/bill/${item.id}`)}
+          onClick={() => navigate(`/bookings/bill/${record.id}`)}
           className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
           title="查看详情"
         >

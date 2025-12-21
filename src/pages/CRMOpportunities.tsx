@@ -144,19 +144,19 @@ export default function CRMOpportunities() {
   }
 
   const handleOpenModal = (item?: Opportunity) => {
-    if (item) {
-      setEditingItem(item)
+    if (record) {
+      setEditingItem(record)
       setFormData({
-        opportunityName: item.opportunityName,
-        customerId: item.customerId || '',
-        customerName: item.customerName || '',
-        stage: item.stage,
-        inquiryCount: item.inquiryCount || 0,
-        orderCount: item.orderCount || 0,
-        expectedCloseDate: item.expectedCloseDate || '',
-        source: item.source || '',
-        description: item.description || '',
-        contractId: item.contractId || ''
+        opportunityName: record.opportunityName,
+        customerId: record.customerId || '',
+        customerName: record.customerName || '',
+        stage: record.stage,
+        inquiryCount: record.inquiryCount || 0,
+        orderCount: record.orderCount || 0,
+        expectedCloseDate: record.expectedCloseDate || '',
+        source: record.source || '',
+        description: record.description || '',
+        contractId: record.contractId || ''
       })
     } else {
       setEditingItem(null)
@@ -178,11 +178,11 @@ export default function CRMOpportunities() {
 
   // 打开跟进记录弹窗
   const handleOpenFollowUp = async (item: Opportunity) => {
-    setEditingItem(item)
+    setEditingItem(record)
     setFollowUpForm({ followUpType: 'phone', content: '', nextFollowUpDate: '' })
     // 加载该商机的跟进记录
     try {
-      const response = await fetch(`${API_BASE}/api/opportunities/${item.id}/follow-ups`)
+      const response = await fetch(`${API_BASE}/api/opportunities/${record.id}/follow-ups`)
       const data = await response.json()
       if (data.errCode === 200) {
         setFollowUpRecords(data.data || [])
@@ -320,19 +320,19 @@ export default function CRMOpportunities() {
   // 检查是否可以成交
   const handleCheckCanClose = async (item: Opportunity) => {
     try {
-      const response = await fetch(`${API_BASE}/api/opportunities/${item.id}/can-close`)
+      const response = await fetch(`${API_BASE}/api/opportunities/${record.id}/can-close`)
       const data = await response.json()
       
       if (data.errCode === 200) {
         const result = data.data
         if (result.canClose) {
           // 可以成交，执行成交操作
-          handleUpdateStage(item.id, 'closed_won')
+          handleUpdateStage(record.id, 'closed_won')
         } else {
           // 不能成交，显示原因
           if (result.needGenerateContract) {
             if (confirm(`${result.reason}\n\n是否立即为该机会生成合同？`)) {
-              await handleGenerateContract(item.id)
+              await handleGenerateContract(record.id)
             }
           } else if (result.needSign) {
             alert(`${result.reason}\n\n请前往【合同管理】页面上传已签署的合同文件。`)
@@ -347,10 +347,10 @@ export default function CRMOpportunities() {
   }
 
   const handleDelete = async (item: Opportunity) => {
-    if (!confirm(`确定要删除销售机会"${item.opportunityName}"吗？`)) return
+    if (!confirm(`确定要删除销售机会"${record.opportunityName}"吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE}/api/opportunities/${item.id}`, {
+      const response = await fetch(`${API_BASE}/api/opportunities/${record.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -379,10 +379,10 @@ export default function CRMOpportunities() {
       key: 'opportunityName',
       label: '机会名称',
       width: 200,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900 text-xs">{item.opportunityName}</div>
-          <div className="text-[10px] text-gray-500">{item.customerName || '-'}</div>
+          <div className="font-medium text-gray-900 text-xs">{record.opportunityName}</div>
+          <div className="text-[10px] text-gray-500">{record.customerName || '-'}</div>
         </div>
       )
     },
@@ -390,8 +390,8 @@ export default function CRMOpportunities() {
       key: 'stage',
       label: '阶段',
       width: 100,
-      render: (item) => {
-        const info = getStageInfo(item.stage)
+      render: (_value, record) => {
+        const info = getStageInfo(record.stage)
         return (
           <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
             {info.label}
@@ -403,9 +403,9 @@ export default function CRMOpportunities() {
       key: 'inquiryCount',
       label: '询价次数',
       width: 80,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs font-medium text-gray-900">
-          {item.inquiryCount || 0} 次
+          {record.inquiryCount || 0} 次
         </span>
       )
     },
@@ -413,9 +413,9 @@ export default function CRMOpportunities() {
       key: 'orderCount',
       label: '成交订单',
       width: 80,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs font-medium text-green-600">
-          {item.orderCount || 0} 单
+          {record.orderCount || 0} 单
         </span>
       )
     },
@@ -423,9 +423,9 @@ export default function CRMOpportunities() {
       key: 'conversionRate',
       label: '转化率',
       width: 100,
-      render: (item) => {
-        const rate = item.inquiryCount > 0 
-          ? Math.round((item.orderCount / item.inquiryCount) * 100) 
+      render: (_value, record) => {
+        const rate = record.inquiryCount > 0 
+          ? Math.round((record.orderCount / record.inquiryCount) * 100) 
           : 0
         return (
           <div className="flex items-center gap-2">
@@ -444,9 +444,9 @@ export default function CRMOpportunities() {
       key: 'expectedCloseDate',
       label: '预计成交',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs text-gray-500">
-          {item.expectedCloseDate || '-'}
+          {record.expectedCloseDate || '-'}
         </span>
       )
     },
@@ -454,19 +454,19 @@ export default function CRMOpportunities() {
       key: 'source',
       label: '来源',
       width: 80,
-      render: (item) => (
-        <span className="text-xs text-gray-600">{item.source || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-600">{record.source || '-'}</span>
       )
     },
     {
       key: 'followUpCount',
       label: '跟进',
       width: 80,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-center">
-          <div className="text-xs font-medium text-gray-900">{item.followUpCount || 0} 次</div>
-          {item.lastFollowUpTime && (
-            <div className="text-[10px] text-gray-400">{item.lastFollowUpTime.split(' ')[0]}</div>
+          <div className="text-xs font-medium text-gray-900">{record.followUpCount || 0} 次</div>
+          {record.lastFollowUpTime && (
+            <div className="text-[10px] text-gray-400">{record.lastFollowUpTime.split(' ')[0]}</div>
           )}
         </div>
       )
@@ -475,9 +475,9 @@ export default function CRMOpportunities() {
       key: 'contractNumber',
       label: '关联合同',
       width: 100,
-      render: (item) => (
-        item.contractNumber ? (
-          <span className="text-xs text-primary-600 font-medium">{item.contractNumber}</span>
+      render: (_value, record) => (
+        record.contractNumber ? (
+          <span className="text-xs text-primary-600 font-medium">{record.contractNumber}</span>
         ) : (
           <span className="text-xs text-gray-400">未关联</span>
         )
@@ -487,31 +487,31 @@ export default function CRMOpportunities() {
       key: 'assignedName',
       label: '负责人',
       width: 80,
-      render: (item) => (
-        <span className="text-xs text-gray-600">{item.assignedName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-600">{record.assignedName || '-'}</span>
       )
     },
     {
       key: 'actions',
       label: '操作',
       width: 220,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           {/* 跟进按钮 */}
           <button
-            onClick={() => handleOpenFollowUp(item)}
+            onClick={() => handleOpenFollowUp(record)}
             className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
           >
             跟进
           </button>
-          {item.stage !== 'closed_won' && item.stage !== 'closed_lost' && (
+          {record.stage !== 'closed_won' && record.stage !== 'closed_lost' && (
             <>
               <button
                 onClick={() => {
                   const stages = ['lead', 'qualification', 'proposal', 'negotiation']
-                  const currentIndex = stages.indexOf(item.stage)
+                  const currentIndex = stages.indexOf(record.stage)
                   if (currentIndex < stages.length - 1) {
-                    handleUpdateStage(item.id, stages[currentIndex + 1])
+                    handleUpdateStage(record.id, stages[currentIndex + 1])
                   }
                 }}
                 className="px-2 py-1 text-[10px] bg-primary-50 text-primary-600 rounded hover:bg-primary-100"
@@ -519,7 +519,7 @@ export default function CRMOpportunities() {
                 推进
               </button>
               <button
-                onClick={() => handleCheckCanClose(item)}
+                onClick={() => handleCheckCanClose(record)}
                 className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
               >
                 成交
@@ -528,7 +528,7 @@ export default function CRMOpportunities() {
                 onClick={() => {
                   const reason = prompt('请输入失败原因：')
                   if (reason !== null) {
-                    handleUpdateStage(item.id, 'closed_lost', reason)
+                    handleUpdateStage(record.id, 'closed_lost', reason)
                   }
                 }}
                 className="px-2 py-1 text-[10px] bg-red-50 text-red-600 rounded hover:bg-red-100"
@@ -538,13 +538,13 @@ export default function CRMOpportunities() {
             </>
           )}
           <button 
-            onClick={() => handleOpenModal(item)}
+            onClick={() => handleOpenModal(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
           >
             <Edit className="w-3.5 h-3.5" />
           </button>
           <button 
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
           >
             <Trash2 className="w-3.5 h-3.5" />

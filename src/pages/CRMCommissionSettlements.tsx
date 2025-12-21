@@ -486,10 +486,10 @@ export default function CRMCommissionSettlements() {
       key: 'settlementNo',
       label: '结算单号',
       width: 140,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900 text-xs">{item.settlementNo}</div>
-          <div className="text-[10px] text-gray-500">{item.settlementMonth}</div>
+          <div className="font-medium text-gray-900 text-xs">{record.settlementNo}</div>
+          <div className="text-[10px] text-gray-500">{record.settlementMonth}</div>
         </div>
       )
     },
@@ -497,18 +497,18 @@ export default function CRMCommissionSettlements() {
       key: 'salesperson',
       label: '业务员',
       width: 100,
-      render: (item) => (
-        <span className="text-xs text-gray-700">{item.salespersonName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-700">{record.salespersonName || '-'}</span>
       )
     },
     {
       key: 'reward',
       label: '奖励',
       width: 110,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-right">
-          <div className="text-xs font-medium text-green-600">+{formatCurrency(item.totalReward || 0)}</div>
-          <div className="text-[10px] text-gray-400">{item.rewardRecordCount || 0}条</div>
+          <div className="text-xs font-medium text-green-600">+{formatCurrency(record.totalReward || 0)}</div>
+          <div className="text-[10px] text-gray-400">{record.rewardRecordCount || 0}条</div>
         </div>
       )
     },
@@ -516,10 +516,10 @@ export default function CRMCommissionSettlements() {
       key: 'penalty',
       label: '惩罚',
       width: 110,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="text-right">
-          <div className="text-xs font-medium text-red-600">-{formatCurrency(item.totalPenalty || 0)}</div>
-          <div className="text-[10px] text-gray-400">{item.penaltyRecordCount || 0}条</div>
+          <div className="text-xs font-medium text-red-600">-{formatCurrency(record.totalPenalty || 0)}</div>
+          <div className="text-[10px] text-gray-400">{record.penaltyRecordCount || 0}条</div>
         </div>
       )
     },
@@ -527,8 +527,8 @@ export default function CRMCommissionSettlements() {
       key: 'netAmount',
       label: '净额',
       width: 120,
-      render: (item) => {
-        const netAmount = (item.totalReward || 0) - (item.totalPenalty || 0)
+      render: (_value, record) => {
+        const netAmount = (record.totalReward || 0) - (record.totalPenalty || 0)
         return (
           <span className={`text-xs font-bold ${netAmount >= 0 ? 'text-primary-600' : 'text-red-600'}`}>
             {formatCurrency(netAmount)}
@@ -540,8 +540,8 @@ export default function CRMCommissionSettlements() {
       key: 'status',
       label: '状态',
       width: 90,
-      render: (item) => {
-        const info = getStatusInfo(item.status)
+      render: (_value, record) => {
+        const info = getStatusInfo(record.status)
         const Icon = info.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
@@ -555,9 +555,9 @@ export default function CRMCommissionSettlements() {
       key: 'financial',
       label: '财务凭证',
       width: 100,
-      render: (item) => (
-        item.financialVoucherNo ? (
-          <span className="text-xs text-blue-600">{item.financialVoucherNo}</span>
+      render: (_value, record) => (
+        record.financialVoucherNo ? (
+          <span className="text-xs text-blue-600">{record.financialVoucherNo}</span>
         ) : (
           <span className="text-[10px] text-gray-400">-</span>
         )
@@ -567,7 +567,7 @@ export default function CRMCommissionSettlements() {
       key: 'actions',
       label: '操作',
       width: 180,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button 
             onClick={() => loadSettlementDetail(item)}
@@ -585,7 +585,7 @@ export default function CRMCommissionSettlements() {
             <Download className="w-3.5 h-3.5" />
           </button>
           
-          {item.status === 'draft' && (
+          {record.status === 'draft' && (
             <button
               onClick={() => handleSubmit(item)}
               className="px-2 py-1 text-[10px] bg-primary-50 text-primary-600 rounded hover:bg-primary-100"
@@ -594,7 +594,7 @@ export default function CRMCommissionSettlements() {
             </button>
           )}
           
-          {item.status === 'pending' && (
+          {record.status === 'pending' && (
             <>
               <button
                 onClick={() => handleApprove(item)}
@@ -614,7 +614,7 @@ export default function CRMCommissionSettlements() {
             </>
           )}
           
-          {item.status === 'approved' && (
+          {record.status === 'approved' && (
             <button
               onClick={() => handleMarkPaid(item)}
               className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
@@ -734,19 +734,19 @@ export default function CRMCommissionSettlements() {
           { status: 'paid', label: '已发放', icon: Banknote, color: 'blue' }
         ].map(item => (
           <div 
-            key={item.status}
-            className={`bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:border-${item.color}-300 transition-colors ${
-              filterStatus === item.status ? `border-${item.color}-500 bg-${item.color}-50` : ''
+            key={record.status}
+            className={`bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:border-${record.color}-300 transition-colors ${
+              filterStatus === record.status ? `border-${record.color}-500 bg-${record.color}-50` : ''
             }`}
             onClick={() => {
-              setFilterStatus(filterStatus === item.status ? '' : item.status)
+              setFilterStatus(filterStatus === record.status ? '' : record.status)
               setPage(1)
             }}
           >
             <div className="flex items-center gap-2">
-              <item.icon className={`w-4 h-4 text-${item.color}-600`} />
-              <span className="text-xs text-gray-600">{item.label}</span>
-              <span className="ml-auto text-sm font-bold text-gray-900">{statusCounts[item.status] || 0}</span>
+              <record.icon className={`w-4 h-4 text-${record.color}-600`} />
+              <span className="text-xs text-gray-600">{record.label}</span>
+              <span className="ml-auto text-sm font-bold text-gray-900">{statusCounts[record.status] || 0}</span>
             </div>
           </div>
         ))}

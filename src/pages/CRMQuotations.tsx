@@ -162,22 +162,22 @@ export default function CRMQuotations() {
       const feeItems = await loadProductFeeItems(productId)
       feeItems.forEach(item => {
         newItems.push({
-          name: item.feeName,
-          nameEn: item.feeNameEn || '',
+          name: record.feeName,
+          nameEn: record.feeNameEn || '',
           description: '',
           quantity: 1,
-          unit: item.unit || '',
-          price: item.standardPrice,
-          amount: item.standardPrice,
+          unit: record.unit || '',
+          price: record.standardPrice,
+          amount: record.standardPrice,
           productId,
-          feeItemId: item.id
+          feeItemId: record.id
         })
       })
     }
 
     if (newItems.length > 0) {
       // 合并到现有项目（移除空白项）
-      const existingItems = formData.items.filter(item => item.name.trim())
+      const existingItems = formData.items.filter(item => record.name.trim())
       setFormData(prev => ({
         ...prev,
         items: [...existingItems, ...newItems]
@@ -219,18 +219,18 @@ export default function CRMQuotations() {
   }
 
   const handleOpenModal = (item?: Quotation) => {
-    if (item) {
-      setEditingItem(item)
+    if (record) {
+      setEditingItem(record)
       setFormData({
-        customerId: item.customerId || '',
-        customerName: item.customerName || '',
-        subject: item.subject || '',
-        quoteDate: item.quoteDate || new Date().toISOString().split('T')[0],
-        validUntil: item.validUntil || '',
-        currency: item.currency || 'EUR',
+        customerId: record.customerId || '',
+        customerName: record.customerName || '',
+        subject: record.subject || '',
+        quoteDate: record.quoteDate || new Date().toISOString().split('T')[0],
+        validUntil: record.validUntil || '',
+        currency: record.currency || 'EUR',
         terms: '',
         notes: '',
-        items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: record.items?.length > 0 ? record.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
       })
     } else {
       setEditingItem(null)
@@ -250,7 +250,7 @@ export default function CRMQuotations() {
   }
 
   const calculateTotals = () => {
-    const subtotal = formData.items.reduce((sum, item) => sum + (item.quantity * item.price), 0)
+    const subtotal = formData.items.reduce((sum, item) => sum + (record.quantity * record.price), 0)
     return { subtotal, totalAmount: subtotal }
   }
 
@@ -273,14 +273,14 @@ export default function CRMQuotations() {
   // 翻译费用名称
   const handleTranslateItem = async (index: number) => {
     const item = formData.items[index]
-    if (!item.name.trim()) return
+    if (!record.name.trim()) return
 
     setTranslatingIndex(index)
     try {
       const response = await fetch(`${API_BASE}/api/translate/fee`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: item.name })
+        body: JSON.stringify({ name: record.name })
       })
       const result = await response.json()
       
@@ -324,7 +324,7 @@ export default function CRMQuotations() {
           ...formData,
           subtotal,
           totalAmount,
-          items: formData.items.filter(item => item.name)
+          items: formData.items.filter(item => record.name)
         })
       })
 
@@ -358,10 +358,10 @@ export default function CRMQuotations() {
   }
 
   const handleDelete = async (item: Quotation) => {
-    if (!confirm(`确定要删除报价单"${item.quoteNumber}"吗？`)) return
+    if (!confirm(`确定要删除报价单"${record.quoteNumber}"吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE}/api/quotations/${item.id}`, {
+      const response = await fetch(`${API_BASE}/api/quotations/${record.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -395,33 +395,33 @@ export default function CRMQuotations() {
       key: 'quoteNumber',
       label: '报价单号',
       width: 140,
-      render: (item) => (
-        <span className="text-primary-600 font-medium text-xs">{item.quoteNumber}</span>
+      render: (_value, record) => (
+        <span className="text-primary-600 font-medium text-xs">{record.quoteNumber}</span>
       )
     },
     {
       key: 'customerName',
       label: '客户',
       width: 140,
-      render: (item) => (
-        <span className="text-xs text-gray-900">{item.customerName || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-900">{record.customerName || '-'}</span>
       )
     },
     {
       key: 'subject',
       label: '主题',
       width: 180,
-      render: (item) => (
-        <span className="text-xs text-gray-700 line-clamp-1">{item.subject || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-700 line-clamp-1">{record.subject || '-'}</span>
       )
     },
     {
       key: 'totalAmount',
       label: '金额',
       width: 120,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs font-medium text-gray-900">
-          {formatCurrency(item.totalAmount, item.currency)}
+          {formatCurrency(record.totalAmount, record.currency)}
         </span>
       )
     },
@@ -429,24 +429,24 @@ export default function CRMQuotations() {
       key: 'quoteDate',
       label: '报价日期',
       width: 100,
-      render: (item) => (
-        <span className="text-xs text-gray-500">{item.quoteDate || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-500">{record.quoteDate || '-'}</span>
       )
     },
     {
       key: 'validUntil',
       label: '有效期至',
       width: 100,
-      render: (item) => (
-        <span className="text-xs text-gray-500">{item.validUntil || '-'}</span>
+      render: (_value, record) => (
+        <span className="text-xs text-gray-500">{record.validUntil || '-'}</span>
       )
     },
     {
       key: 'status',
       label: '状态',
       width: 90,
-      render: (item) => {
-        const info = getStatusInfo(item.status)
+      render: (_value, record) => {
+        const info = getStatusInfo(record.status)
         const Icon = info.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
@@ -460,26 +460,26 @@ export default function CRMQuotations() {
       key: 'actions',
       label: '操作',
       width: 180,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
-          {item.status === 'draft' && (
+          {record.status === 'draft' && (
             <button
-              onClick={() => handleUpdateStatus(item.id, 'sent')}
+              onClick={() => handleUpdateStatus(record.id, 'sent')}
               className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
             >
               发送
             </button>
           )}
-          {item.status === 'sent' && (
+          {record.status === 'sent' && (
             <>
               <button
-                onClick={() => handleUpdateStatus(item.id, 'accepted')}
+                onClick={() => handleUpdateStatus(record.id, 'accepted')}
                 className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
               >
                 接受
               </button>
               <button
-                onClick={() => handleUpdateStatus(item.id, 'rejected')}
+                onClick={() => handleUpdateStatus(record.id, 'rejected')}
                 className="px-2 py-1 text-[10px] bg-red-50 text-red-600 rounded hover:bg-red-100"
               >
                 拒绝
@@ -487,7 +487,7 @@ export default function CRMQuotations() {
             </>
           )}
           <button 
-            onClick={() => handleGeneratePdf(item)}
+            onClick={() => handleGeneratePdf(record)}
             disabled={generatingPdf}
             className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-orange-600"
             title="下载报价单PDF"
@@ -495,14 +495,14 @@ export default function CRMQuotations() {
             <Download className="w-3.5 h-3.5" />
           </button>
           <button 
-            onClick={() => handleOpenModal(item)}
+            onClick={() => handleOpenModal(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
             title="编辑"
           >
             <Edit className="w-3.5 h-3.5" />
           </button>
           <button 
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
             title="删除"
           >
@@ -720,7 +720,7 @@ export default function CRMQuotations() {
                     <div key={index} className="grid grid-cols-12 gap-2 items-center">
                       <input
                         type="text"
-                        value={item.name}
+                        value={record.name}
                         onChange={(e) => handleItemChange(index, 'name', e.target.value)}
                         className="col-span-3 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="中文名称"
@@ -728,7 +728,7 @@ export default function CRMQuotations() {
                       <div className="col-span-3 flex gap-1">
                         <input
                           type="text"
-                          value={item.nameEn || ''}
+                          value={record.nameEn || ''}
                           onChange={(e) => handleItemChange(index, 'nameEn', e.target.value)}
                           className="flex-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                           placeholder="英文名称"
@@ -736,7 +736,7 @@ export default function CRMQuotations() {
                         <button
                           type="button"
                           onClick={() => handleTranslateItem(index)}
-                          disabled={translatingIndex === index || !item.name.trim()}
+                          disabled={translatingIndex === index || !record.name.trim()}
                           className="px-1.5 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
                           title="翻译"
                         >
@@ -749,21 +749,21 @@ export default function CRMQuotations() {
                       </div>
                       <input
                         type="number"
-                        value={item.quantity}
+                        value={record.quantity}
                         onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                         className="col-span-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         min="0"
                       />
                       <input
                         type="number"
-                        value={item.price}
+                        value={record.price}
                         onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
                         className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         min="0"
                         step="0.01"
                       />
                       <div className="col-span-2 text-xs text-gray-700 font-medium">
-                        {formatCurrency(item.quantity * item.price, formData.currency)}
+                        {formatCurrency(record.quantity * record.price, formData.currency)}
                       </div>
                       <button
                         onClick={() => removeItem(index)}

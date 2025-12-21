@@ -538,10 +538,10 @@ export default function CRMCommissionRules() {
       key: 'ruleName',
       label: '规则名称',
       width: 180,
-      render: (item) => (
+      render: (_value, record) => (
         <div>
-          <div className="font-medium text-gray-900 text-xs">{item.ruleName}</div>
-          <div className="text-[10px] text-gray-500">优先级: {item.priority}</div>
+          <div className="font-medium text-gray-900 text-xs">{record.ruleName}</div>
+          <div className="text-[10px] text-gray-500">优先级: {record.priority}</div>
         </div>
       )
     },
@@ -549,8 +549,8 @@ export default function CRMCommissionRules() {
       key: 'ruleType',
       label: '类型',
       width: 100,
-      render: (item) => {
-        const info = getRuleTypeInfo(item.ruleType)
+      render: (_value, record) => {
+        const info = getRuleTypeInfo(record.ruleType)
         return (
           <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
             {info.label}
@@ -562,9 +562,9 @@ export default function CRMCommissionRules() {
       key: 'customerLevel',
       label: '客户级别',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <span className="text-xs text-gray-600">
-          {getCustomerLevelLabel(item.customerLevel)}
+          {getCustomerLevelLabel(record.customerLevel)}
         </span>
       )
     },
@@ -572,32 +572,32 @@ export default function CRMCommissionRules() {
       key: 'config',
       label: '配置',
       width: 200,
-      render: (item) => {
-        if (item.ruleType === 'percentage') {
+      render: (_value, record) => {
+        if (record.ruleType === 'percentage') {
           return (
             <div className="text-xs">
-              <span className="text-primary-600 font-medium">{item.commissionRate}%</span>
+              <span className="text-primary-600 font-medium">{record.commissionRate}%</span>
               <span className="text-gray-400 ml-1">
-                ({COMMISSION_BASES.find(b => b.value === item.commissionBase)?.label || item.commissionBase})
+                ({COMMISSION_BASES.find(b => b.value === record.commissionBase)?.label || record.commissionBase})
               </span>
             </div>
           )
-        } else if (item.ruleType === 'fixed') {
+        } else if (record.ruleType === 'fixed') {
           return (
             <span className="text-xs text-green-600 font-medium">
-              {formatCurrency(item.fixedAmount)}/单
+              {formatCurrency(record.fixedAmount)}/单
             </span>
           )
-        } else if (item.ruleType === 'tiered' && item.tiers) {
+        } else if (record.ruleType === 'tiered' && record.tiers) {
           return (
             <div className="text-[10px] text-gray-600">
-              {item.tiers.slice(0, 2).map((tier, i) => (
+              {record.tiers.slice(0, 2).map((tier, i) => (
                 <span key={i}>
                   {tier.minCount}-{tier.maxCount || '∞'}单: {formatCurrency(tier.bonusAmount)}
-                  {i < Math.min(item.tiers!.length - 1, 1) && ', '}
+                  {i < Math.min(record.tiers!.length - 1, 1) && ', '}
                 </span>
               ))}
-              {item.tiers.length > 2 && <span>...</span>}
+              {record.tiers.length > 2 && <span>...</span>}
             </div>
           )
         }
@@ -608,9 +608,9 @@ export default function CRMCommissionRules() {
       key: 'isStackable',
       label: '可叠加',
       width: 70,
-      render: (item) => (
-        <span className={`text-xs ${item.isStackable ? 'text-green-600' : 'text-gray-400'}`}>
-          {item.isStackable ? '是' : '否'}
+      render: (_value, record) => (
+        <span className={`text-xs ${record.isStackable ? 'text-green-600' : 'text-gray-400'}`}>
+          {record.isStackable ? '是' : '否'}
         </span>
       )
     },
@@ -618,13 +618,13 @@ export default function CRMCommissionRules() {
       key: 'isActive',
       label: '状态',
       width: 80,
-      render: (item) => (
+      render: (_value, record) => (
         <button
-          onClick={() => handleToggleActive(item)}
-          className={`flex items-center gap-1 text-xs ${item.isActive ? 'text-green-600' : 'text-gray-400'}`}
+          onClick={() => handleToggleActive(record)}
+          className={`flex items-center gap-1 text-xs ${record.isActive ? 'text-green-600' : 'text-gray-400'}`}
         >
-          {item.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-          {item.isActive ? '启用' : '禁用'}
+          {record.isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+          {record.isActive ? '启用' : '禁用'}
         </button>
       )
     },
@@ -632,17 +632,17 @@ export default function CRMCommissionRules() {
       key: 'actions',
       label: '操作',
       width: 100,
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button 
-            onClick={() => handleOpenModal(item)}
+            onClick={() => handleOpenModal(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
             title="编辑"
           >
             <Edit className="w-3.5 h-3.5" />
           </button>
           <button 
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
             title="删除"
           >
