@@ -78,7 +78,21 @@ app.use(securityHeaders())
 
 // CORS配置
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5173'],
+  origin: [
+    // 本地开发
+    'http://localhost:5173', 
+    'http://localhost:3000', 
+    'http://localhost:3001', 
+    'http://127.0.0.1:5173',
+    // 生产环境
+    'https://erp.xianfeng-eu.com',
+    'https://www.erp.xianfeng-eu.com',
+    // 演示环境
+    'https://demo.xianfeng-eu.com',
+    'https://sysafari-logistics.vercel.app',
+    // Vercel 预览域名
+    /\.vercel\.app$/
+  ],
   credentials: true
 }))
 
