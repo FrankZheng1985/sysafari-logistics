@@ -37,11 +37,15 @@ const ROLE_LEVELS = {
  */
 async function authenticateSimpleToken(token) {
   try {
+    console.log('[SimpleToken] 开始验证, token:', token)
+    
     // Token 应该是用户 ID
     const userId = parseInt(token, 10)
     if (isNaN(userId)) {
+      console.log('[SimpleToken] Token 不是有效的数字')
       return null
     }
+    console.log('[SimpleToken] 解析的用户ID:', userId)
 
     const db = getDatabase()
     const userResult = await db.prepare(`
@@ -50,6 +54,8 @@ async function authenticateSimpleToken(token) {
       LEFT JOIN roles r ON u.role = r.role_code
       WHERE u.id = $1 AND u.status = 'active'
     `).get(userId)
+
+    console.log('[SimpleToken] 数据库查询结果:', userResult ? `找到用户: ${userResult.username}` : '未找到用户')
 
     if (!userResult) {
       return null
@@ -111,7 +117,10 @@ export function authenticate(req, res, next) {
 
   // 获取 Authorization header
   const authHeader = req.headers.authorization
+  console.log('[Auth] Authorization header:', authHeader ? `${authHeader.substring(0, 30)}...` : '无')
+  
   if (!authHeader) {
+    console.log('[Auth] 缺少认证信息')
     return res.status(401).json({
       errCode: 401,
       msg: '缺少认证信息',
@@ -121,21 +130,25 @@ export function authenticate(req, res, next) {
 
   // 提取 token
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
+  console.log('[Auth] 提取的 token:', token.length > 20 ? `${token.substring(0, 20)}...` : token)
 
   // 判断是否是简单 Token（用户ID，数字格式）
   // 简单 Token 通常是纯数字（用户ID），而 JWT 是包含点号的长字符串
   const isSimpleToken = /^\d+$/.test(token)
+  console.log('[Auth] 是否为简单Token:', isSimpleToken)
 
   if (isSimpleToken) {
     // 使用简单 Token 验证（密码登录）
     authenticateSimpleToken(token).then(user => {
       if (!user) {
+        console.log('[Auth] 简单Token验证失败')
         return res.status(401).json({
           errCode: 401,
           msg: '认证失败：Token 无效或已过期',
           data: null
         })
       }
+      console.log('[Auth] 简单Token验证成功:', user.username)
       req.user = user
       next()
     }).catch(error => {
