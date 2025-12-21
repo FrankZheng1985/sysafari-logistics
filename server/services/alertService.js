@@ -332,11 +332,14 @@ export async function checkSupplierContractExpire(days = 30) {
   
   try {
     // 查找供应商合同即将到期
+    // contract_expire_date 是 TEXT 类型，需要转换为 DATE 进行比较
     const expiringSuppliers = await db.prepare(`
       SELECT id, supplier_code, supplier_name, contract_expire_date
       FROM suppliers
       WHERE status = 'active'
-        AND contract_expire_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days} days'
+        AND contract_expire_date IS NOT NULL
+        AND contract_expire_date != ''
+        AND contract_expire_date::DATE BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days} days'
         AND id NOT IN (
           SELECT related_id FROM alert_logs 
           WHERE alert_type = 'license_expire' 
