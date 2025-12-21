@@ -16,6 +16,7 @@ import {
 
 interface CustomerOrder {
   id: string
+  orderNumber: string
   billNumber: string
   containerNumber: string
   shipper: string
@@ -260,6 +261,14 @@ export default function CRMCustomerDetail() {
   }
 
   const orderColumns: Column<CustomerOrder>[] = [
+    {
+      key: 'orderNumber',
+      label: '订单号',
+      width: 110,
+      render: (_value, record) => (
+        <span className="text-gray-900 font-medium">{record.orderNumber || '-'}</span>
+      )
+    },
     {
       key: 'billNumber',
       label: '提单号',

@@ -746,6 +746,7 @@ export async function getCustomerOrders(customerId, params = {}) {
   return {
     list: list.map(row => ({
       id: row.id,
+      orderNumber: row.order_number,
       billNumber: row.bill_number,
       containerNumber: row.container_number,
       shipper: row.shipper,

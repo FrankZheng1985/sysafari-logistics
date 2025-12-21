@@ -86,8 +86,8 @@ export default function InspectionDashboard() {
       const recentData = await recentRes.json()
 
       if (pendingData.errCode === 200 && releasedData.errCode === 200) {
-        const pendingCount = pendingData.data?.stats?.pending || pendingData.data?.total || 0
-        const releasedCount = releasedData.data?.stats?.released || releasedData.data?.total || 0
+        const pendingCount = Number(pendingData.data?.stats?.pending || pendingData.data?.total || 0)
+        const releasedCount = Number(releasedData.data?.stats?.released || releasedData.data?.total || 0)
         
         setStats({
           pending: pendingCount,

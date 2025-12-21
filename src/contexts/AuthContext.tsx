@@ -286,9 +286,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // 获取 Access Token（用于 API 调用）
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (state.isTestMode) {
+    // 如果有存储的 token（来自密码登录），直接使用
+    // 这样即使 isTestMode 是 false，也能使用密码登录的 token
+    if (state.token) {
       return state.token
     }
+    // 否则尝试获取 Auth0 token
     try {
       const token = await getAccessTokenSilently()
       return token
@@ -296,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('获取 Access Token 失败:', error)
       return null
     }
-  }, [getAccessTokenSilently, state.isTestMode, state.token])
+  }, [getAccessTokenSilently, state.token])
 
   // 检查是否有某个权限
   const hasPermission = useCallback((permission: string): boolean => {

@@ -160,24 +160,24 @@ export default function CRMQuotations() {
     
     for (const productId of selectedProducts) {
       const feeItems = await loadProductFeeItems(productId)
-      feeItems.forEach(item => {
+      feeItems.forEach(feeItem => {
         newItems.push({
-          name: record.feeName,
-          nameEn: record.feeNameEn || '',
+          name: feeItem.feeName,
+          nameEn: feeItem.feeNameEn || '',
           description: '',
           quantity: 1,
-          unit: record.unit || '',
-          price: record.standardPrice,
-          amount: record.standardPrice,
+          unit: feeItem.unit || '',
+          price: feeItem.standardPrice,
+          amount: feeItem.standardPrice,
           productId,
-          feeItemId: record.id
+          feeItemId: feeItem.id
         })
       })
     }
 
     if (newItems.length > 0) {
       // 合并到现有项目（移除空白项）
-      const existingItems = formData.items.filter(item => record.name.trim())
+      const existingItems = formData.items.filter(item => item.name.trim())
       setFormData(prev => ({
         ...prev,
         items: [...existingItems, ...newItems]
@@ -219,18 +219,18 @@ export default function CRMQuotations() {
   }
 
   const handleOpenModal = (item?: Quotation) => {
-    if (record) {
-      setEditingItem(record)
+    if (item) {
+      setEditingItem(item)
       setFormData({
-        customerId: record.customerId || '',
-        customerName: record.customerName || '',
-        subject: record.subject || '',
-        quoteDate: record.quoteDate || new Date().toISOString().split('T')[0],
-        validUntil: record.validUntil || '',
-        currency: record.currency || 'EUR',
+        customerId: item.customerId || '',
+        customerName: item.customerName || '',
+        subject: item.subject || '',
+        quoteDate: item.quoteDate || new Date().toISOString().split('T')[0],
+        validUntil: item.validUntil || '',
+        currency: item.currency || 'EUR',
         terms: '',
         notes: '',
-        items: record.items?.length > 0 ? record.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
       })
     } else {
       setEditingItem(null)
@@ -250,7 +250,7 @@ export default function CRMQuotations() {
   }
 
   const calculateTotals = () => {
-    const subtotal = formData.items.reduce((sum, item) => sum + (record.quantity * record.price), 0)
+    const subtotal = formData.items.reduce((sum, item) => sum + (item.quantity * item.price), 0)
     return { subtotal, totalAmount: subtotal }
   }
 
@@ -273,14 +273,14 @@ export default function CRMQuotations() {
   // 翻译费用名称
   const handleTranslateItem = async (index: number) => {
     const item = formData.items[index]
-    if (!record.name.trim()) return
+    if (!item.name.trim()) return
 
     setTranslatingIndex(index)
     try {
       const response = await fetch(`${API_BASE}/api/translate/fee`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: record.name })
+        body: JSON.stringify({ name: item.name })
       })
       const result = await response.json()
       
@@ -324,7 +324,7 @@ export default function CRMQuotations() {
           ...formData,
           subtotal,
           totalAmount,
-          items: formData.items.filter(item => record.name)
+          items: formData.items.filter(item => item.name)
         })
       })
 
@@ -358,10 +358,10 @@ export default function CRMQuotations() {
   }
 
   const handleDelete = async (item: Quotation) => {
-    if (!confirm(`确定要删除报价单"${record.quoteNumber}"吗？`)) return
+    if (!confirm(`确定要删除报价单"${item.quoteNumber}"吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE}/api/quotations/${record.id}`, {
+      const response = await fetch(`${API_BASE}/api/quotations/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -720,7 +720,7 @@ export default function CRMQuotations() {
                     <div key={index} className="grid grid-cols-12 gap-2 items-center">
                       <input
                         type="text"
-                        value={record.name}
+                        value={item.name}
                         onChange={(e) => handleItemChange(index, 'name', e.target.value)}
                         className="col-span-3 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="中文名称"
@@ -728,7 +728,7 @@ export default function CRMQuotations() {
                       <div className="col-span-3 flex gap-1">
                         <input
                           type="text"
-                          value={record.nameEn || ''}
+                          value={item.nameEn || ''}
                           onChange={(e) => handleItemChange(index, 'nameEn', e.target.value)}
                           className="flex-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                           placeholder="英文名称"
@@ -736,7 +736,7 @@ export default function CRMQuotations() {
                         <button
                           type="button"
                           onClick={() => handleTranslateItem(index)}
-                          disabled={translatingIndex === index || !record.name.trim()}
+                          disabled={translatingIndex === index || !item.name.trim()}
                           className="px-1.5 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
                           title="翻译"
                         >
@@ -749,21 +749,21 @@ export default function CRMQuotations() {
                       </div>
                       <input
                         type="number"
-                        value={record.quantity}
+                        value={item.quantity}
                         onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                         className="col-span-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         min="0"
                       />
                       <input
                         type="number"
-                        value={record.price}
+                        value={item.price}
                         onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
                         className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         min="0"
                         step="0.01"
                       />
                       <div className="col-span-2 text-xs text-gray-700 font-medium">
-                        {formatCurrency(record.quantity * record.price, formData.currency)}
+                        {formatCurrency(item.quantity * item.price, formData.currency)}
                       </div>
                       <button
                         onClick={() => removeItem(index)}
