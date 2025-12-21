@@ -107,7 +107,7 @@ export default function BPView() {
     },
     {
       key: 'containerNumber',
-      label: '提单号',
+      label: '集装箱号',
       sorter: true,
       filterable: true,
       render: (_value, record: BillOfLading) => (
