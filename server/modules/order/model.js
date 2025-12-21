@@ -216,9 +216,24 @@ export async function createBill(data) {
   const db = getDatabase()
   const id = generateId()
   
+  // 获取下一个订单序号
+  const seqResult = await db.prepare(
+    "SELECT current_seq FROM order_sequences WHERE business_type = 'BILL'"
+  ).get()
+  const nextSeq = (seqResult?.current_seq || 0) + 1
+  
+  // 生成订单号: BP + 年份(25) + 5位序号
+  const year = new Date().getFullYear().toString().slice(-2)
+  const orderNumber = `BP${year}${String(nextSeq).padStart(5, '0')}`
+  
+  // 更新序列计数器
+  await db.prepare(
+    "UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'BILL'"
+  ).run(nextSeq)
+  
   const result = await db.prepare(`
     INSERT INTO bills_of_lading (
-      id, bill_number, container_number, actual_container_no, vessel, voyage,
+      id, order_seq, order_number, bill_number, container_number, actual_container_no, vessel, voyage,
       shipper, consignee, notify_party,
       port_of_loading, port_of_discharge, place_of_delivery,
       pieces, weight, volume, description,
@@ -227,10 +242,10 @@ export async function createBill(data) {
       customer_id, customer_name, customer_code,
       container_type, bill_type, transport_arrangement, consignee_type,
       container_return, full_container_transport, last_mile_transport,
-      devanning, t1_declaration,
+      devanning, t1_declaration, is_void,
       created_at, updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
@@ -239,11 +254,13 @@ export async function createBill(data) {
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
-      ?, ?,
+      ?, ?, 0,
       NOW(), NOW()
     )
   `).run(
     id,
+    nextSeq,
+    orderNumber,
     data.billNumber,
     data.containerNumber || '',
     data.actualContainerNo || data.containerNumber || '', // 实际集装箱号
@@ -829,6 +846,8 @@ export function convertBillToCamelCase(row) {
   
   return {
     id: row.id,
+    orderSeq: row.order_seq,
+    orderNumber: row.order_number,
     billId: row.bill_id,
     billNumber: row.bill_number,
     containerNumber: row.container_number,

@@ -240,11 +240,11 @@ export default function OrderBills() {
   // 草稿页面的列定义
   const draftColumns: Column<BillOfLading>[] = [
     {
-      key: 'orderSeq',
-      label: '序号',
+      key: 'orderNumber',
+      label: '订单号',
       sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
       render: (_value, record: BillOfLading) => (
-        <span className="font-medium text-primary-600">{record.orderSeq || '-'}</span>
+        <span className="font-medium text-primary-600">{record.orderNumber || '-'}</span>
       ),
     },
     {

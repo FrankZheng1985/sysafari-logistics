@@ -90,6 +90,8 @@ export interface Permission {
 
 export interface BillOfLading {
   id: string
+  orderSeq?: number       // 订单序号
+  orderNumber?: string    // 订单号 (BP25XXXXX)
   billId?: string
   billNumber: string
   containerNumber?: string
