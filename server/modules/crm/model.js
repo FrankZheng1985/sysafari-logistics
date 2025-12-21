@@ -744,27 +744,36 @@ export async function getCustomerOrders(customerId, params = {}) {
   const list = await db.prepare(query).all(...queryParams)
   
   return {
-    list: list.map(row => ({
-      id: row.id,
-      orderNumber: row.order_number,
-      billNumber: row.bill_number,
-      containerNumber: row.container_number,
-      shipper: row.shipper,
-      consignee: row.consignee,
-      status: row.status,
-      shipStatus: row.ship_status,
-      customsStatus: row.customs_status,
-      inspection: row.inspection,
-      deliveryStatus: row.delivery_status,
-      pieces: row.pieces,
-      weight: row.weight,
-      eta: row.eta,
-      portOfLoading: row.port_of_loading,
-      portOfDischarge: row.port_of_discharge,
-      customerId: row.customer_id,
-      customerName: row.customer_name,
-      createTime: row.created_at
-    })),
+    list: list.map(row => {
+      // 根据 order_seq 和创建时间生成订单号
+      let orderNumber = null
+      if (row.order_seq) {
+        const createDate = row.created_at ? new Date(row.created_at) : new Date()
+        const year = createDate.getFullYear().toString().slice(-2)
+        orderNumber = `BP${year}${String(row.order_seq).padStart(5, '0')}`
+      }
+      return {
+        id: row.id,
+        orderNumber,
+        billNumber: row.bill_number,
+        containerNumber: row.container_number,
+        shipper: row.shipper,
+        consignee: row.consignee,
+        status: row.status,
+        shipStatus: row.ship_status,
+        customsStatus: row.customs_status,
+        inspection: row.inspection,
+        deliveryStatus: row.delivery_status,
+        pieces: row.pieces,
+        weight: row.weight,
+        eta: row.eta,
+        portOfLoading: row.port_of_loading,
+        portOfDischarge: row.port_of_discharge,
+        customerId: row.customer_id,
+        customerName: row.customer_name,
+        createTime: row.created_at
+      }
+    }),
     total: totalResult.total,
     page,
     pageSize

@@ -266,7 +266,12 @@ export default function CRMCustomerDetail() {
       label: '订单号',
       width: 110,
       render: (_value, record) => (
-        <span className="text-gray-900 font-medium">{record.orderNumber || '-'}</span>
+        <button
+          onClick={() => navigate(`/crm/bill/${record.id}`)}
+          className="text-primary-600 hover:text-primary-800 hover:underline font-medium"
+        >
+          {record.orderNumber || '-'}
+        </button>
       )
     },
     {
@@ -274,12 +279,7 @@ export default function CRMCustomerDetail() {
       label: '提单号',
       width: 140,
       render: (_value, record) => (
-        <button
-          onClick={() => navigate(`/bookings/bill/${record.id}`)}
-          className="text-primary-600 hover:text-primary-800 hover:underline font-medium"
-        >
-          {record.billNumber}
-        </button>
+        <span className="text-gray-900">{record.billNumber}</span>
       )
     },
     {

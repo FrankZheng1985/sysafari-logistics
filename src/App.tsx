@@ -43,6 +43,7 @@ import TariffRateManage from './pages/TariffRateManage'
 import CRMDashboard from './pages/CRMDashboard'
 import CRMCustomers from './pages/CRMCustomers'
 import CRMCustomerDetail from './pages/CRMCustomerDetail'
+import CRMBillDetails from './pages/CRMBillDetails'
 import CRMOpportunities from './pages/CRMOpportunities'
 import CRMQuotations from './pages/CRMQuotations'
 import CRMContracts from './pages/CRMContracts'
@@ -213,6 +214,7 @@ function AppRoutes() {
         <Route path="/crm" element={<CRMDashboard />} />
         <Route path="/crm/customers" element={<CRMCustomers />} />
         <Route path="/crm/customers/:id" element={<CRMCustomerDetail />} />
+        <Route path="/crm/bill/:id" element={<CRMBillDetails />} />
         <Route path="/crm/opportunities" element={<CRMOpportunities />} />
         <Route path="/crm/quotations" element={<CRMQuotations />} />
         <Route path="/crm/contracts" element={<CRMContracts />} />

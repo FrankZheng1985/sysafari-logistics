@@ -48,8 +48,10 @@ async function authenticateSimpleToken(token) {
     console.log('[SimpleToken] 解析的用户ID:', userId)
 
     const db = getDatabase()
+    // 注意: roles 表可能没有 role_level, can_manage_team, can_approve 列
+    // 先尝试简单查询用户，角色权限从 ROLE_LEVELS 常量获取
     const userResult = await db.prepare(`
-      SELECT u.*, r.role_name, r.role_level, r.can_manage_team, r.can_approve
+      SELECT u.*, r.role_name
       FROM users u 
       LEFT JOIN roles r ON u.role = r.role_code
       WHERE u.id = $1 AND u.status = 'active'
@@ -80,9 +82,9 @@ async function authenticateSimpleToken(token) {
       phone: userResult.phone,
       role: userResult.role,
       roleName: userResult.role_name,
-      roleLevel: userResult.role_level || ROLE_LEVELS[userResult.role] || 4,
-      canManageTeam: userResult.can_manage_team || false,
-      canApprove: userResult.can_approve || false,
+      roleLevel: ROLE_LEVELS[userResult.role] || 4,
+      canManageTeam: ['admin', 'boss', 'manager'].includes(userResult.role),
+      canApprove: ['admin', 'boss', 'manager', 'finance_director'].includes(userResult.role),
       supervisorId: userResult.supervisor_id,
       department: userResult.department,
       position: userResult.position,
