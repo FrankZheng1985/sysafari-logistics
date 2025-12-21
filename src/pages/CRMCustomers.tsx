@@ -551,18 +551,18 @@ export default function CRMCustomers() {
       key: 'customerCode',
       label: '客户编号',
       width: 120,
-      render: (item) => (
-        <span className="text-primary-600 font-medium text-xs">{item.customerCode}</span>
+      render: (_value, item) => (
+        <span className="text-primary-600 font-medium text-xs">{item?.customerCode || '-'}</span>
       )
     },
     {
       key: 'customerName',
       label: '客户名称',
       width: 160,
-      render: (item) => (
+      render: (_value, item) => (
         <div>
-          <div className="font-medium text-gray-900 text-xs">{item.customerName}</div>
-          {item.companyName && (
+          <div className="font-medium text-gray-900 text-xs">{item?.customerName || '-'}</div>
+          {item?.companyName && (
             <div className="text-[10px] text-gray-500">{item.companyName}</div>
           )}
         </div>
@@ -572,26 +572,26 @@ export default function CRMCustomers() {
       key: 'customerLevel',
       label: '级别',
       width: 80,
-      render: (item) => getLevelBadge(item?.customerLevel || 'normal')
+      render: (_value, item) => getLevelBadge(item?.customerLevel || 'normal')
     },
     {
       key: 'customerType',
       label: '类型',
       width: 80,
-      render: (item) => getTypeBadge(item?.customerType || 'shipper')
+      render: (_value, item) => getTypeBadge(item?.customerType || 'shipper')
     },
     {
-      key: 'contact',
+      key: 'contactPerson',
       label: '联系方式',
       width: 180,
-      render: (item) => (
+      render: (_value, item) => (
         <div className="text-xs">
           <div className="flex items-center gap-1 text-gray-700">
             <Phone className="w-3 h-3 text-gray-400" />
-            {item.contactPerson || '-'}
-            {item.contactPhone && <span className="text-gray-400">({item.contactPhone})</span>}
+            {item?.contactPerson || '-'}
+            {item?.contactPhone && <span className="text-gray-400">({item.contactPhone})</span>}
           </div>
-          {item.contactEmail && (
+          {item?.contactEmail && (
             <div className="flex items-center gap-1 text-gray-500">
               <Mail className="w-3 h-3 text-gray-400" />
               {item.contactEmail}
@@ -601,13 +601,13 @@ export default function CRMCustomers() {
       )
     },
     {
-      key: 'location',
+      key: 'address',
       label: '地址',
       width: 200,
-      render: (item) => (
+      render: (_value, item) => (
         <div className="flex items-center gap-1 text-xs text-gray-600">
           <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
-          <span className="truncate">{[item.countryCode, item.city, item.address].filter(Boolean).join(' ') || '-'}</span>
+          <span className="truncate">{[item?.countryCode, item?.city, item?.address].filter(Boolean).join(' ') || '-'}</span>
         </div>
       )
     },
@@ -615,11 +615,11 @@ export default function CRMCustomers() {
       key: 'status',
       label: '状态',
       width: 80,
-      render: (item) => (
+      render: (_value, item) => (
         <span className={`px-2 py-0.5 rounded text-[10px] ${
-          item.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+          item?.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
         }`}>
-          {item.status === 'active' ? '活跃' : '停用'}
+          {item?.status === 'active' ? '活跃' : '停用'}
         </span>
       )
     },
@@ -627,24 +627,24 @@ export default function CRMCustomers() {
       key: 'actions',
       label: '操作',
       width: 120,
-      render: (item) => (
+      render: (_value, item) => (
         <div className="flex items-center gap-1">
           <button 
-            onClick={() => navigate(`/crm/customers/${item.id}`)}
+            onClick={() => item?.id && navigate(`/crm/customers/${item.id}`)}
             className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded"
             title="查看详情"
           >
             <Eye className="w-4 h-4" />
           </button>
           <button 
-            onClick={() => handleOpenModal(item)}
+            onClick={() => item && handleOpenModal(item)}
             className="p-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded"
             title="编辑"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button 
-            onClick={() => handleDelete(item)}
+            onClick={() => item && handleDelete(item)}
             className="p-1 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
             title="删除"
           >
