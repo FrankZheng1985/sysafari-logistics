@@ -14,7 +14,6 @@ const menuItems: MenuItem[] = [
   { path: '/bookings/packages', label: '打包', category: '订单管理' },
   { path: '/bookings/bill', label: '提单', category: '订单管理' },
   { path: '/bookings/declarations', label: '报关', category: '订单管理' },
-  { path: '/last-mile', label: '最后里程', category: '其他模块' },
 ]
 
 export default function MenuSettings() {

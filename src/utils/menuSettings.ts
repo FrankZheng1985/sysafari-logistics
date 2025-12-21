@@ -16,7 +16,6 @@ const defaultConfig: Record<string, boolean> = {
   '/bookings/packages': true, // 打包 - 默认开启
   '/bookings/bill': true, // 提单 - 默认开启
   '/bookings/declarations': true, // 报关 - 默认开启
-  '/last-mile': true, // 最后里程 - 默认开启
 }
 
 // 内存缓存

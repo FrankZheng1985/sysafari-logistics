@@ -1,12 +1,36 @@
-import { Shield, Save, Loader2, RefreshCw, Info, Lock, Mail, Clock, Key, History } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Shield, Save, Loader2, RefreshCw, Info, Lock, Clock, Key, History } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { useAuth } from '../contexts/AuthContext'
 
-// API 基础地址
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
+// API 基础地址 - 根据域名自动选择
+function getApiBaseUrl(): string {
+  // 开发环境
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3001'
+  }
+  
+  // 根据当前域名自动选择 API
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    
+    // 演示环境 -> 演示 API
+    if (hostname === 'demo.xianfeng-eu.com') {
+      return 'https://sysafari-logistics-demo-api.onrender.com'
+    }
+    
+    // 生产环境 -> 生产 API
+    if (hostname === 'erp.xianfeng-eu.com') {
+      return 'https://sysafari-logistics-api.onrender.com'
+    }
+  }
+  
+  return ''
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 interface SecuritySetting {
   key: string
@@ -29,7 +53,7 @@ interface LoginLog {
 export default function SecuritySettings() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { hasPermission } = useAuth()
+  const { hasPermission, getAccessToken } = useAuth()
   const [activeTab, setActiveTab] = useState<'settings' | 'logs'>(() => 
     location.pathname.includes('logs') ? 'logs' : 'settings'
   )
@@ -40,6 +64,15 @@ export default function SecuritySettings() {
   const [initializing, setInitializing] = useState(false)
   const [logsLoading, setLogsLoading] = useState(false)
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 })
+
+  // 获取带认证的请求头
+  const getAuthHeaders = useCallback(async (): Promise<HeadersInit> => {
+    const token = await getAccessToken()
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  }, [getAccessToken])
 
   // 设置分组
   const settingGroups = [
@@ -88,10 +121,11 @@ export default function SecuritySettings() {
     },
   ]
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/security/settings`)
+      const headers = await getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/security/settings`, { headers })
       const data = await response.json()
       if (data.errCode === 200) {
         // 后端返回的是分组对象，需要转换为扁平数组
@@ -115,41 +149,44 @@ export default function SecuritySettings() {
         }
         
         setSettings(flatSettings)
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
       }
     } catch (error) {
       console.error('加载安全配置失败:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [getAuthHeaders])
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async (page: number, pageSize: number) => {
     setLogsLoading(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login-logs?page=${pagination.page}&pageSize=${pagination.pageSize}`)
+      const headers = await getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/auth/login-logs?page=${page}&pageSize=${pageSize}`, { headers })
       const data = await response.json()
       if (data.errCode === 200) {
         setLogs(data.data.list)
         setPagination(prev => ({ ...prev, total: data.data.total }))
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
       }
     } catch (error) {
       console.error('加载登录日志失败:', error)
     } finally {
       setLogsLoading(false)
     }
-  }
+  }, [getAuthHeaders])
 
   useEffect(() => {
     loadSettings()
-  }, [])
+  }, [loadSettings])
 
-   
   useEffect(() => {
     if (activeTab === 'logs') {
-      loadLogs()
+      loadLogs(pagination.page, pagination.pageSize)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, pagination.page])
+  }, [activeTab, pagination.page, pagination.pageSize, loadLogs])
 
   const handleSettingChange = (key: string, value: string) => {
     setSettings(prev => prev.map(s => s.key === key ? { ...s, value } : s))
@@ -163,14 +200,17 @@ export default function SecuritySettings() {
     
     setInitializing(true)
     try {
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE_URL}/api/security/settings/init`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers
       })
       const data = await response.json()
       if (data.errCode === 200) {
         alert(data.msg || '初始化成功')
         loadSettings() // 重新加载设置
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
       } else {
         alert(data.msg || '初始化失败')
       }
@@ -198,14 +238,17 @@ export default function SecuritySettings() {
         settingsObj[s.key] = value
       }
       
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE_URL}/api/security/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ settings: settingsObj })
       })
       const data = await response.json()
       if (data.errCode === 200) {
         alert('配置保存成功')
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
       } else {
         alert(data.msg || '保存失败')
       }
@@ -464,7 +507,7 @@ export default function SecuritySettings() {
                 共 {pagination.total} 条登录记录
               </div>
               <button
-                onClick={loadLogs}
+                onClick={() => loadLogs(pagination.page, pagination.pageSize)}
                 disabled={logsLoading}
                 className="px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-100 rounded flex items-center gap-1"
               >
@@ -510,6 +553,8 @@ export default function SecuritySettings() {
                   <select
                     value={pagination.pageSize}
                     onChange={(e) => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), page: 1 }))}
+                    title="每页显示条数"
+                    aria-label="每页显示条数"
                     className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                   >
                     <option value={10}>10 条/页</option>

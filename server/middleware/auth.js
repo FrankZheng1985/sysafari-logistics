@@ -32,8 +32,65 @@ const ROLE_LEVELS = {
 }
 
 /**
+ * 从简单 Token（用户ID）验证用户
+ * 用于密码登录的用户
+ */
+async function authenticateSimpleToken(token) {
+  try {
+    // Token 应该是用户 ID
+    const userId = parseInt(token, 10)
+    if (isNaN(userId)) {
+      return null
+    }
+
+    const db = getDatabase()
+    const userResult = await db.prepare(`
+      SELECT u.*, r.role_name, r.role_level, r.can_manage_team, r.can_approve
+      FROM users u 
+      LEFT JOIN roles r ON u.role = r.role_code
+      WHERE u.id = $1 AND u.status = 'active'
+    `).get(userId)
+
+    if (!userResult) {
+      return null
+    }
+
+    // 获取用户权限
+    const permissionsResult = await db.prepare(`
+      SELECT permission_code FROM role_permissions 
+      WHERE role_code = $1
+    `).all(userResult.role)
+
+    const permissions = Array.isArray(permissionsResult) 
+      ? permissionsResult.map(p => p.permission_code)
+      : []
+
+    return {
+      id: userResult.id,
+      auth0Id: userResult.auth0_id,
+      username: userResult.username,
+      name: userResult.name,
+      email: userResult.email,
+      phone: userResult.phone,
+      role: userResult.role,
+      roleName: userResult.role_name,
+      roleLevel: userResult.role_level || ROLE_LEVELS[userResult.role] || 4,
+      canManageTeam: userResult.can_manage_team || false,
+      canApprove: userResult.can_approve || false,
+      supervisorId: userResult.supervisor_id,
+      department: userResult.department,
+      position: userResult.position,
+      permissions: permissions
+    }
+  } catch (error) {
+    console.error('简单 Token 验证失败:', error)
+    return null
+  }
+}
+
+/**
  * 基础认证中间件
- * 验证 Auth0 JWT Token
+ * 支持 Auth0 JWT Token 和简单 Token（用户ID，用于密码登录）
  */
 export function authenticate(req, res, next) {
   // 开发模式下允许无认证访问（可选）
@@ -52,95 +109,134 @@ export function authenticate(req, res, next) {
     return next()
   }
 
-  // 使用 Auth0 JWT 验证
-  jwtCheck(req, res, async (err) => {
-    if (err) {
-      console.error('JWT 验证失败:', err.message)
-      return res.status(401).json({
-        errCode: 401,
-        msg: '认证失败：' + (err.message || 'Token 无效'),
-        data: null
-      })
-    }
+  // 获取 Authorization header
+  const authHeader = req.headers.authorization
+  if (!authHeader) {
+    return res.status(401).json({
+      errCode: 401,
+      msg: '缺少认证信息',
+      data: null
+    })
+  }
 
-    try {
-      // 从 Token 中获取 Auth0 用户 ID
-      const auth0Id = req.auth?.payload?.sub
-      
-      if (!auth0Id) {
+  // 提取 token
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
+
+  // 判断是否是简单 Token（用户ID，数字格式）
+  // 简单 Token 通常是纯数字（用户ID），而 JWT 是包含点号的长字符串
+  const isSimpleToken = /^\d+$/.test(token)
+
+  if (isSimpleToken) {
+    // 使用简单 Token 验证（密码登录）
+    authenticateSimpleToken(token).then(user => {
+      if (!user) {
         return res.status(401).json({
           errCode: 401,
-          msg: '无法获取用户身份',
+          msg: '认证失败：Token 无效或已过期',
           data: null
         })
       }
-
-      // 从数据库查询用户（通过 auth0_id）
-      const db = getDatabase()
-      const userResult = await db.prepare(`
-        SELECT u.*, r.role_name, r.role_level, r.can_manage_team, r.can_approve
-        FROM users u 
-        LEFT JOIN roles r ON u.role = r.role_code
-        WHERE u.auth0_id = $1 AND u.status = 'active'
-      `).get(auth0Id)
-
-      console.log('Auth0 ID:', auth0Id, '查询结果:', userResult ? '找到用户' : '未找到')
-
-      if (userResult) {
-        // 获取用户权限
-        const permissionsResult = await db.prepare(`
-          SELECT permission_code FROM role_permissions 
-          WHERE role_code = $1
-        `).all(userResult.role)
-
-        const permissions = Array.isArray(permissionsResult) 
-          ? permissionsResult.map(p => p.permission_code)
-          : []
-
-        req.user = {
-          id: userResult.id,
-          auth0Id: auth0Id,
-          username: userResult.username,
-          name: userResult.name,
-          email: userResult.email,
-          phone: userResult.phone,
-          role: userResult.role,
-          roleName: userResult.role_name,
-          roleLevel: userResult.role_level || ROLE_LEVELS[userResult.role] || 4,
-          canManageTeam: userResult.can_manage_team || false,
-          canApprove: userResult.can_approve || false,
-          supervisorId: userResult.supervisor_id,
-          department: userResult.department,
-          position: userResult.position,
-          permissions: permissions
-        }
-      } else {
-        // 用户不在数据库中，使用 Token 中的基本信息
-        req.user = {
-          id: null,
-          auth0Id: auth0Id,
-          username: req.auth?.payload?.email || 'unknown',
-          name: req.auth?.payload?.name || '新用户',
-          email: req.auth?.payload?.email || '',
-          role: 'operator',
-          roleName: '操作员',
-          roleLevel: 4,
-          canManageTeam: false,
-          canApprove: false,
-          permissions: []
-        }
-      }
-
+      req.user = user
       next()
-    } catch (error) {
-      console.error('获取用户信息失败:', error)
+    }).catch(error => {
+      console.error('认证失败:', error)
       return res.status(500).json({
         errCode: 500,
         msg: '服务器错误',
         data: null
       })
-    }
-  })
+    })
+  } else {
+    // 使用 Auth0 JWT 验证
+    jwtCheck(req, res, async (err) => {
+      if (err) {
+        console.error('JWT 验证失败:', err.message)
+        return res.status(401).json({
+          errCode: 401,
+          msg: '认证失败：' + (err.message || 'Token 无效'),
+          data: null
+        })
+      }
+
+      try {
+        // 从 Token 中获取 Auth0 用户 ID
+        const auth0Id = req.auth?.payload?.sub
+        
+        if (!auth0Id) {
+          return res.status(401).json({
+            errCode: 401,
+            msg: '无法获取用户身份',
+            data: null
+          })
+        }
+
+        // 从数据库查询用户（通过 auth0_id）
+        const db = getDatabase()
+        const userResult = await db.prepare(`
+          SELECT u.*, r.role_name, r.role_level, r.can_manage_team, r.can_approve
+          FROM users u 
+          LEFT JOIN roles r ON u.role = r.role_code
+          WHERE u.auth0_id = $1 AND u.status = 'active'
+        `).get(auth0Id)
+
+        console.log('Auth0 ID:', auth0Id, '查询结果:', userResult ? '找到用户' : '未找到')
+
+        if (userResult) {
+          // 获取用户权限
+          const permissionsResult = await db.prepare(`
+            SELECT permission_code FROM role_permissions 
+            WHERE role_code = $1
+          `).all(userResult.role)
+
+          const permissions = Array.isArray(permissionsResult) 
+            ? permissionsResult.map(p => p.permission_code)
+            : []
+
+          req.user = {
+            id: userResult.id,
+            auth0Id: auth0Id,
+            username: userResult.username,
+            name: userResult.name,
+            email: userResult.email,
+            phone: userResult.phone,
+            role: userResult.role,
+            roleName: userResult.role_name,
+            roleLevel: userResult.role_level || ROLE_LEVELS[userResult.role] || 4,
+            canManageTeam: userResult.can_manage_team || false,
+            canApprove: userResult.can_approve || false,
+            supervisorId: userResult.supervisor_id,
+            department: userResult.department,
+            position: userResult.position,
+            permissions: permissions
+          }
+        } else {
+          // 用户不在数据库中，使用 Token 中的基本信息
+          req.user = {
+            id: null,
+            auth0Id: auth0Id,
+            username: req.auth?.payload?.email || 'unknown',
+            name: req.auth?.payload?.name || '新用户',
+            email: req.auth?.payload?.email || '',
+            role: 'operator',
+            roleName: '操作员',
+            roleLevel: 4,
+            canManageTeam: false,
+            canApprove: false,
+            permissions: []
+          }
+        }
+
+        next()
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        return res.status(500).json({
+          errCode: 500,
+          msg: '服务器错误',
+          data: null
+        })
+      }
+    })
+  }
 }
 
 /**
