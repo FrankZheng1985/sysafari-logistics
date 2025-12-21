@@ -634,36 +634,50 @@ export default function DocumentImport() {
         
         {/* 发货方和进口商信息 */}
         <div className="grid grid-cols-2 gap-4 mb-4">
-          {/* 发货方信息（从提单自动获取） */}
+          {/* 发货方信息（从提单自动获取，可手动编辑） */}
           <div className="border border-gray-200 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-3">
               <User className="w-4 h-4 text-blue-600" />
               <span className="text-sm font-medium text-gray-900">发货方信息</span>
-              <span className="text-xs text-gray-400">(从提单获取)</span>
+              <span className="text-xs text-gray-400">(可编辑)</span>
             </div>
-            {selectedBill ? (
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">发货方名称</label>
-                  <div className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-700">
-                    {shipperInfo.name || '-'}
-                  </div>
-                </div>
-                {shipperInfo.address && (
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">地址</label>
-                    <div className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-700">
-                      {shipperInfo.address}
-                    </div>
-                  </div>
-                )}
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">发货方名称</label>
+                <input
+                  type="text"
+                  value={shipperInfo.name}
+                  onChange={(e) => setShipperInfo(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="输入发货方名称"
+                />
               </div>
-            ) : (
-              <div className="text-center py-4">
-                <User className="w-6 h-6 text-gray-300 mx-auto mb-1" />
-                <p className="text-xs text-gray-400">请先选择提单</p>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">地址</label>
+                <input
+                  type="text"
+                  value={shipperInfo.address}
+                  onChange={(e) => setShipperInfo(prev => ({ ...prev, address: e.target.value }))}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="输入发货方地址"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">联系方式</label>
+                <input
+                  type="text"
+                  value={shipperInfo.contact}
+                  onChange={(e) => setShipperInfo(prev => ({ ...prev, contact: e.target.value }))}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="输入联系方式（选填）"
+                />
+              </div>
+              {selectedBill?.shipper && (
+                <p className="text-[10px] text-gray-400 mt-1">
+                  💡 已从提单自动填充，如需修改可直接编辑
+                </p>
+              )}
+            </div>
           </div>
           
           {/* 进口商信息 */}
