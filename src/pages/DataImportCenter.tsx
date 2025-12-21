@@ -122,17 +122,36 @@ export default function DataImportCenter() {
         body: formData
       })
 
+      // 检查 HTTP 状态
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMsg = `HTTP ${response.status}: ${response.statusText}`
+        try {
+          const errorJson = JSON.parse(errorText)
+          errorMsg = errorJson.msg || errorJson.message || errorMsg
+        } catch {
+          // 非 JSON 响应
+        }
+        alert(`预览失败: ${errorMsg}`)
+        return
+      }
+
       const result = await response.json()
 
       if (result.errCode === 200) {
         setPreviewData(result.data)
         setStep('preview')
       } else {
-        alert(result.msg || '预览失败')
+        alert(result.msg || '预览失败，请检查文件格式是否正确')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('预览失败:', error)
-      alert('预览失败')
+      // 提供更详细的错误信息
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        alert('网络请求失败，请检查网络连接或稍后重试')
+      } else {
+        alert(`预览失败: ${error.message || '未知错误'}`)
+      }
     } finally {
       setLoading(false)
     }
@@ -153,17 +172,35 @@ export default function DataImportCenter() {
         })
       })
 
+      // 检查 HTTP 状态
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMsg = `HTTP ${response.status}: ${response.statusText}`
+        try {
+          const errorJson = JSON.parse(errorText)
+          errorMsg = errorJson.msg || errorJson.message || errorMsg
+        } catch {
+          // 非 JSON 响应
+        }
+        alert(`导入失败: ${errorMsg}`)
+        return
+      }
+
       const result = await response.json()
 
       if (result.errCode === 200) {
         setImportResult(result.data)
         setStep('result')
       } else {
-        alert(result.msg || '导入失败')
+        alert(result.msg || '导入失败，请稍后重试')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('导入失败:', error)
-      alert('导入失败')
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        alert('网络请求失败，请检查网络连接或稍后重试')
+      } else {
+        alert(`导入失败: ${error.message || '未知错误'}`)
+      }
     } finally {
       setLoading(false)
     }
