@@ -264,7 +264,7 @@ export default function LastMileZones() {
     <div className="space-y-4">
       <PageHeader
         title="Zone区域配置"
-        subtitle="配置各承运商的服务区域划分，用于费率计算"
+        description="配置各承运商的服务区域划分，用于费率计算"
       />
 
       <div className="flex gap-4">

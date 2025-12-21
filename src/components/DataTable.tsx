@@ -5,14 +5,16 @@ export type SortOrder = 'asc' | 'desc' | null
 
 export interface Column<T> {
   key: string
-  label: string
-  render?: (item: T) => ReactNode
+  label?: string
+  title?: string  // 兼容旧格式
+  render?: (value: any, record: T) => ReactNode  // 支持 antd 风格的 (value, record) 格式
   sorter?: boolean | ((a: T, b: T) => number)
   filterable?: boolean
   filters?: { text: string; value: string }[]
   onFilter?: (value: string, record: T) => boolean
   width?: string | number
   align?: 'left' | 'center' | 'right'
+  fixed?: 'left' | 'right'  // 兼容旧格式
 }
 
 export interface DataTableProps<T> {
@@ -386,7 +388,7 @@ export default function DataTable<T extends Record<string, any>>({
                     style={column.width ? { width: column.width } : undefined}
                   >
                     <div className={`flex items-center ${compact ? 'gap-1' : 'gap-2'}`}>
-                      <span>{column.label}</span>
+                      <span>{column.label || column.title}</span>
                       <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'}`}>
                         {column.sorter && (
                           <button
@@ -470,7 +472,7 @@ export default function DataTable<T extends Record<string, any>>({
                           : ''
                       }`}
                     >
-                      {column.render ? column.render(item) : item[column.key]}
+                      {column.render ? column.render(item[column.key], item) : item[column.key]}
                     </td>
                   ))}
                 </tr>

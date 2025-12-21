@@ -409,7 +409,7 @@ export default function LastMileCarriers() {
     <div className="space-y-4">
       <PageHeader
         title="最后里程承运商"
-        subtitle="管理海外快递和卡车公司，配置Zone和费率"
+        description="管理海外快递和卡车公司，配置Zone和费率"
       />
 
       {/* 工具栏 */}

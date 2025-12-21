@@ -6,6 +6,8 @@
 import { success, error, serverError } from '../../utils/response.js'
 import * as orderParser from './parsers/orderParser.js'
 import * as feeParser from './parsers/feeParser.js'
+import * as receivableFeeParser from './parsers/receivableFeeParser.js'
+import * as payableFeeParser from './parsers/payableFeeParser.js'
 import * as customerParser from './parsers/customerParser.js'
 import * as providerParser from './parsers/providerParser.js'
 import * as hsRecordParser from './parsers/hsRecordParser.js'
@@ -20,6 +22,8 @@ const __dirname = path.dirname(__filename)
 const PARSERS = {
   orders: orderParser,
   fees: feeParser,
+  receivable_fees: receivableFeeParser,
+  payable_fees: payableFeeParser,
   customers: customerParser,
   providers: providerParser,
   hs_records: hsRecordParser
@@ -29,6 +33,8 @@ const PARSERS = {
 const TYPE_NAMES = {
   orders: '订单数据',
   fees: '费用数据',
+  receivable_fees: '应收费用',
+  payable_fees: '应付费用',
   customers: '客户数据',
   providers: '服务商数据',
   hs_records: 'HS匹配记录'

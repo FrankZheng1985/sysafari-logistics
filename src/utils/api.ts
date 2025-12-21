@@ -4310,38 +4310,6 @@ export async function getCustomerOrderStats(customerId: string): Promise<ApiResp
   }
 }
 
-/**
- * 客户税号类型
- */
-export interface CustomerTaxNumber {
-  id: string
-  customerId: string
-  taxType: 'vat' | 'eori' | 'other'
-  taxNumber: string
-  countryCode?: string
-  companyName?: string
-  address?: string
-  isVerified?: boolean
-  verifiedAt?: string
-  createTime?: string
-  updateTime?: string
-}
-
-/**
- * 获取客户税号列表
- */
-export async function getCustomerTaxNumbers(customerId: string): Promise<ApiResponse<CustomerTaxNumber[]>> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers`)
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-    return await response.json()
-  } catch (error) {
-    console.error('获取客户税号列表失败:', error)
-    throw error
-  }
-}
 
 // ==================== 客户地址 API 接口 ====================
 
@@ -4471,6 +4439,22 @@ export interface TaxValidationResult {
   companyAddress?: string
   verifiedAt?: string
   error?: string
+}
+
+/**
+ * 获取客户税号列表
+ */
+export async function getCustomerTaxNumbers(customerId: string): Promise<ApiResponse<CustomerTaxNumber[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取客户税号列表失败:', error)
+    throw error
+  }
 }
 
 /**

@@ -737,7 +737,8 @@ export default function OrderBills() {
         }
       />
       
-      <ContentCard noPadding className="flex flex-col" style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}>
+      <div style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}>
+      <ContentCard noPadding className="flex flex-col h-full">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <LoadingSpinner />
@@ -772,6 +773,7 @@ export default function OrderBills() {
           />
         )}
       </ContentCard>
+      </div>
 
       {/* Column Settings Modal */}
       <ColumnSettingsModal

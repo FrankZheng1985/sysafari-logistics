@@ -542,7 +542,7 @@ export default function LastMileRates() {
     <div className="space-y-4">
       <PageHeader
         title="费率卡管理"
-        subtitle="管理各承运商的费率配置，支持按Zone和重量段设置价格"
+        description="管理各承运商的费率配置，支持按Zone和重量段设置价格"
       />
 
       {/* 工具栏 */}

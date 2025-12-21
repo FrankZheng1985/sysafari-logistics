@@ -322,9 +322,9 @@ export default function LastMileShipments() {
   const columns: Column<Shipment>[] = [
     {
       key: 'shipmentNo',
-      title: '运单号',
+      label: '运单号',
       width: 140,
-      render: (_, record) => (
+      render: (record: Shipment) => (
         <div>
           <span className="font-mono font-medium text-blue-600">{record.shipmentNo}</span>
           {record.carrierTrackingNo && (
@@ -335,17 +335,17 @@ export default function LastMileShipments() {
     },
     {
       key: 'carrier',
-      title: '承运商',
+      label: '承运商',
       width: 100,
-      render: (_, record) => (
+      render: (record: Shipment) => (
         <span className="px-2 py-0.5 bg-gray-100 rounded text-sm">{record.carrierCode}</span>
       )
     },
     {
       key: 'receiver',
-      title: '收件人',
+      label: '收件人',
       width: 180,
-      render: (_, record) => (
+      render: (record: Shipment) => (
         <div className="text-sm">
           <div className="font-medium">{record.receiverName}</div>
           <div className="text-gray-500 truncate max-w-[160px]" title={record.receiverAddress}>
@@ -356,10 +356,10 @@ export default function LastMileShipments() {
     },
     {
       key: 'weight',
-      title: '重量/件数',
+      label: '重量/件数',
       width: 100,
       align: 'right',
-      render: (_, record) => (
+      render: (record: Shipment) => (
         <div className="text-sm">
           <div>{record.chargeableWeight || record.weight} kg</div>
           <div className="text-gray-500">{record.pieces} 件</div>
@@ -368,10 +368,10 @@ export default function LastMileShipments() {
     },
     {
       key: 'zoneCode',
-      title: 'Zone',
+      label: 'Zone',
       width: 70,
       align: 'center',
-      render: (_, record) => (
+      render: (record: Shipment) => (
         record.zoneCode ? (
           <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs font-mono">
             {record.zoneCode}
@@ -381,10 +381,10 @@ export default function LastMileShipments() {
     },
     {
       key: 'cost',
-      title: '费用',
+      label: '费用',
       width: 120,
       align: 'right',
-      render: (_, record) => (
+      render: (record: Shipment) => (
         <div className="text-sm">
           {record.salesAmount ? (
             <>
@@ -401,10 +401,10 @@ export default function LastMileShipments() {
     },
     {
       key: 'status',
-      title: '状态',
+      label: '状态',
       width: 100,
       align: 'center',
-      render: (_, record) => {
+      render: (record: Shipment) => {
         const config = STATUS_CONFIG[record.status] || STATUS_CONFIG.pending
         const Icon = config.icon
         return (
@@ -417,9 +417,9 @@ export default function LastMileShipments() {
     },
     {
       key: 'createdAt',
-      title: '创建时间',
+      label: '创建时间',
       width: 140,
-      render: (_, record) => (
+      render: (record: Shipment) => (
         <span className="text-sm text-gray-600">
           {record.createdAt ? new Date(record.createdAt).toLocaleString('zh-CN', {
             month: '2-digit',
@@ -432,10 +432,9 @@ export default function LastMileShipments() {
     },
     {
       key: 'actions',
-      title: '操作',
+      label: '操作',
       width: 150,
-      fixed: 'right',
-      render: (_, record) => (
+      render: (record: Shipment) => (
         <div className="flex items-center gap-1">
           <button
             onClick={() => handleView(record)}

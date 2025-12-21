@@ -7,7 +7,7 @@ import { useState, useCallback } from 'react'
 import { 
   Upload, FileSpreadsheet, Download, CheckCircle, XCircle, 
   AlertTriangle, Loader2, RefreshCw, FileText, Users, 
-  Truck, Package, Database
+  Truck, Package, Database, TrendingUp, TrendingDown
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
@@ -24,11 +24,18 @@ const IMPORT_TYPES = [
     color: 'blue'
   },
   { 
-    id: 'fees', 
-    name: '费用数据', 
-    icon: Database,
-    description: '导入服务成本和销售报价',
+    id: 'receivable_fees', 
+    name: '应收费用', 
+    icon: TrendingUp,
+    description: '导入销售报价（向客户收取）',
     color: 'green'
+  },
+  { 
+    id: 'payable_fees', 
+    name: '应付费用', 
+    icon: TrendingDown,
+    description: '导入服务成本（支付给服务商）',
+    color: 'amber'
   },
   { 
     id: 'customers', 
@@ -218,7 +225,7 @@ export default function DataImportCenter() {
 
       {/* 步骤1: 选择导入类型 */}
       {step === 'select' && (
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-6 gap-4">
           {IMPORT_TYPES.map((type) => {
             const Icon = type.icon
             return (

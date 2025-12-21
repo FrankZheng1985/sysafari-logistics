@@ -257,7 +257,7 @@ export default function LastMileQuickQuote() {
     <div className="space-y-4">
       <PageHeader
         title="快速报价计算器"
-        subtitle="根据承运商、Zone、重量快速计算运费和利润"
+        description="根据承运商、Zone、重量快速计算运费和利润"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

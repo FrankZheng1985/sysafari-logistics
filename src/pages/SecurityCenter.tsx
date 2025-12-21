@@ -556,7 +556,7 @@ export default function SecurityCenter() {
                     ) : (
                       <input
                         type={setting.type === 'number' ? 'number' : 'text'}
-                        value={modifiedSettings[setting.key] ?? setting.value}
+                        value={String(modifiedSettings[setting.key] ?? setting.value ?? '')}
                         onChange={(e) => handleSettingChange(
                           setting.key, 
                           setting.type === 'number' ? Number(e.target.value) : e.target.value
