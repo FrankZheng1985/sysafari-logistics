@@ -61,6 +61,14 @@ export const CONTRACT_STATUS = {
   TERMINATED: 'terminated'  // 已终止
 }
 
+// 合同签署状态
+export const CONTRACT_SIGN_STATUS = {
+  UNSIGNED: 'unsigned',         // 未签署
+  PENDING_SIGN: 'pending_sign', // 待签署（合同已生成，待跟单人员签署）
+  SIGNED: 'signed',             // 已签署
+  REJECTED: 'rejected'          // 已拒签
+}
+
 export const FEEDBACK_TYPE = {
   COMPLAINT: 'complaint',   // 投诉
   SUGGESTION: 'suggestion', // 建议
@@ -806,16 +814,18 @@ export async function createCustomerAddress(customerId, data) {
     `).run(customerId)
   }
   
-  const result = await db.prepare(`
+  const id = crypto.randomUUID()
+  
+  await db.prepare(`
     INSERT INTO customer_addresses (
-      customer_id, address_code, company_name, contact_person, phone,
+      id, customer_id, address_code, company_name, contact_person, phone,
       country, city, address, postal_code, is_default, address_type
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).get(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
     customerId,
     data.addressCode || null,
-    data.companyName,
+    data.companyName || null,
     data.contactPerson || null,
     data.phone || null,
     data.country || null,
@@ -826,7 +836,7 @@ export async function createCustomerAddress(customerId, data) {
     data.addressType || 'both'
   )
   
-  return { id: result.id }
+  return { id }
 }
 
 /**
@@ -944,14 +954,16 @@ export async function createCustomerTaxNumber(customerId, data) {
     `).run(customerId, data.taxType)
   }
   
-  const result = await db.prepare(`
+  const id = crypto.randomUUID()
+  
+  await db.prepare(`
     INSERT INTO customer_tax_numbers (
-      customer_id, tax_type, tax_number, country, 
+      id, customer_id, tax_type, tax_number, country, 
       company_short_name, company_name, company_address, is_verified, verified_at, verification_data,
       is_default
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    RETURNING id
-  `).get(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
     customerId,
     data.taxType,
     data.taxNumber,
@@ -965,7 +977,7 @@ export async function createCustomerTaxNumber(customerId, data) {
     data.isDefault ? 1 : 0
   )
   
-  return { id: result.id }
+  return { id }
 }
 
 /**
@@ -1615,6 +1627,112 @@ export async function deleteQuotation(id) {
   return result.changes > 0
 }
 
+/**
+ * 为新客户自动创建报价单
+ * @param {Object} options - 报价选项
+ * @param {string} options.customerId - 客户ID
+ * @param {string} options.customerName - 客户名称
+ * @param {string} options.productId - 产品ID
+ * @param {Array<number>} options.selectedFeeItemIds - 选中的费用项ID列表
+ * @param {Object} options.user - 创建人信息
+ * @returns {Promise<Object>} - 报价单信息
+ */
+export async function createQuotationForCustomer({ customerId, customerName, productId, selectedFeeItemIds, user }) {
+  const db = getDatabase()
+  const id = generateId()
+  const quoteNumber = await generateQuoteNumber()
+  
+  // 获取产品信息
+  const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(productId)
+  if (!product) {
+    throw new Error('产品不存在')
+  }
+  
+  // 获取选中的费用项
+  let feeItems = []
+  if (selectedFeeItemIds && selectedFeeItemIds.length > 0) {
+    const placeholders = selectedFeeItemIds.map(() => '?').join(',')
+    feeItems = await db.prepare(`
+      SELECT * FROM product_fee_items 
+      WHERE product_id = ? AND id IN (${placeholders})
+      ORDER BY sort_order, id
+    `).all(productId, ...selectedFeeItemIds)
+  }
+  
+  // 构建报价明细
+  const items = feeItems.map(item => {
+    const price = parseFloat(item.standard_price) || 0
+    return {
+      name: item.fee_name,
+      nameEn: item.fee_name_en || '',
+      description: item.description || '',
+      quantity: 1,
+      unit: item.unit || '',
+      price: price,
+      amount: price,
+      productId: productId,
+      feeItemId: item.id
+    }
+  })
+  
+  // 计算总金额
+  const subtotal = items.reduce((sum, item) => sum + parseFloat(item.amount) || 0, 0)
+  const totalAmount = subtotal
+  
+  // 设置报价日期和有效期（30天）
+  const quoteDate = new Date().toISOString().split('T')[0]
+  const validUntilDate = new Date()
+  validUntilDate.setDate(validUntilDate.getDate() + 30)
+  const validUntil = validUntilDate.toISOString().split('T')[0]
+  
+  // 报价主题
+  const subject = `${customerName} - ${product.product_name || '服务报价'}`
+  
+  await db.prepare(`
+    INSERT INTO quotations (
+      id, quote_number, customer_id, customer_name, opportunity_id,
+      contact_id, contact_name, subject, quote_date, valid_until,
+      subtotal, discount, tax_amount, total_amount, currency,
+      terms, notes, items, status, created_by, created_by_name,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+  `).run(
+    id,
+    quoteNumber,
+    customerId,
+    customerName,
+    null,  // opportunityId
+    null,  // contactId
+    '',    // contactName
+    subject,
+    quoteDate,
+    validUntil,
+    subtotal,
+    0,     // discount
+    0,     // taxAmount
+    totalAmount,
+    'EUR',
+    '',    // terms
+    '自动生成的客户报价单',  // notes
+    JSON.stringify(items),
+    'draft',
+    user?.id || null,
+    user?.name || '系统'
+  )
+  
+  return { 
+    id, 
+    quoteNumber,
+    subject,
+    quoteDate,
+    validUntil,
+    totalAmount,
+    items,
+    customerId,
+    customerName
+  }
+}
+
 // ==================== 合同管理 ====================
 
 /**
@@ -1784,6 +1902,283 @@ export async function deleteContract(id) {
   const db = getDatabase()
   const result = await db.prepare('DELETE FROM contracts WHERE id = ?').run(id)
   return result.changes > 0
+}
+
+// ==================== 合同签署管理 ====================
+
+/**
+ * 为销售机会自动生成合同
+ * @param {Object} opportunityData - 销售机会数据
+ * @param {Object} user - 操作用户
+ */
+export async function generateContractForOpportunity(opportunityData, user) {
+  const db = getDatabase()
+  const id = generateId()
+  const contractNumber = await generateContractNumber()
+  
+  // 生成合同名称
+  const contractName = `${opportunityData.customerName || '客户'} - 服务合同`
+  
+  await db.prepare(`
+    INSERT INTO contracts (
+      id, contract_number, contract_name, customer_id, customer_name,
+      opportunity_id, contract_type, contract_amount, currency,
+      status, sign_status, auto_generated,
+      created_by, created_by_name,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+  `).run(
+    id,
+    contractNumber,
+    contractName,
+    opportunityData.customerId || null,
+    opportunityData.customerName || '',
+    opportunityData.opportunityId,
+    'service',
+    opportunityData.expectedValue || 0,
+    'EUR',
+    'draft',
+    'pending_sign',  // 待签署状态
+    true,            // 自动生成标记
+    user?.id || null,
+    user?.name || '系统'
+  )
+  
+  // 记录签署历史
+  await addContractSignHistory(id, 'generate', '自动生成合同', user?.id, user?.name, null, 'pending_sign', null, `从销售机会 ${opportunityData.opportunityName} 自动生成`)
+  
+  return { id, contractNumber }
+}
+
+/**
+ * 上传已签署合同
+ * @param {string} contractId - 合同ID
+ * @param {Object} fileData - 文件数据
+ * @param {Object} user - 签署人
+ */
+export async function uploadSignedContract(contractId, fileData, user) {
+  const db = getDatabase()
+  
+  const contract = await getContractById(contractId)
+  if (!contract) {
+    throw new Error('合同不存在')
+  }
+  
+  const oldStatus = contract.signStatus
+  
+  await db.prepare(`
+    UPDATE contracts SET
+      signed_file_path = ?,
+      signed_file_name = ?,
+      signed_at = NOW(),
+      signed_by = ?,
+      signed_by_name = ?,
+      sign_status = 'signed',
+      status = 'active',
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    fileData.filePath,
+    fileData.fileName,
+    user?.id || null,
+    user?.name || '系统',
+    contractId
+  )
+  
+  // 记录签署历史
+  await addContractSignHistory(
+    contractId, 
+    'sign', 
+    '上传已签署合同', 
+    user?.id, 
+    user?.name, 
+    oldStatus, 
+    'signed', 
+    fileData.filePath,
+    `签署人: ${user?.name || '系统'}`
+  )
+  
+  return true
+}
+
+/**
+ * 更新合同签署状态
+ */
+export async function updateContractSignStatus(contractId, signStatus, user, remark = '') {
+  const db = getDatabase()
+  
+  const contract = await getContractById(contractId)
+  if (!contract) {
+    throw new Error('合同不存在')
+  }
+  
+  const oldStatus = contract.signStatus
+  
+  await db.prepare(`
+    UPDATE contracts SET sign_status = ?, updated_at = NOW() WHERE id = ?
+  `).run(signStatus, contractId)
+  
+  // 记录历史
+  const actionMap = {
+    'pending_sign': 'send',
+    'signed': 'sign',
+    'rejected': 'reject',
+    'unsigned': 'reset'
+  }
+  const actionNameMap = {
+    'pending_sign': '发送待签署',
+    'signed': '完成签署',
+    'rejected': '拒绝签署',
+    'unsigned': '重置状态'
+  }
+  
+  await addContractSignHistory(
+    contractId,
+    actionMap[signStatus] || 'update',
+    actionNameMap[signStatus] || '更新签署状态',
+    user?.id,
+    user?.name,
+    oldStatus,
+    signStatus,
+    null,
+    remark
+  )
+  
+  return true
+}
+
+/**
+ * 添加合同签署历史记录
+ */
+async function addContractSignHistory(contractId, action, actionName, operatorId, operatorName, oldStatus, newStatus, filePath, remark) {
+  const db = getDatabase()
+  
+  await db.prepare(`
+    INSERT INTO contract_sign_history (
+      contract_id, action, action_name, operator_id, operator_name,
+      old_status, new_status, file_path, remark
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    contractId,
+    action,
+    actionName,
+    operatorId || null,
+    operatorName || '系统',
+    oldStatus || null,
+    newStatus,
+    filePath || null,
+    remark || null
+  )
+}
+
+/**
+ * 获取合同签署历史
+ */
+export async function getContractSignHistory(contractId) {
+  const db = getDatabase()
+  const history = await db.prepare(`
+    SELECT * FROM contract_sign_history 
+    WHERE contract_id = ? 
+    ORDER BY created_at DESC
+  `).all(contractId)
+  
+  return history.map(h => ({
+    id: h.id,
+    contractId: h.contract_id,
+    action: h.action,
+    actionName: h.action_name,
+    operatorId: h.operator_id,
+    operatorName: h.operator_name,
+    oldStatus: h.old_status,
+    newStatus: h.new_status,
+    filePath: h.file_path,
+    remark: h.remark,
+    createTime: h.created_at
+  }))
+}
+
+/**
+ * 根据销售机会ID获取合同
+ */
+export async function getContractByOpportunityId(opportunityId) {
+  const db = getDatabase()
+  const contract = await db.prepare('SELECT * FROM contracts WHERE opportunity_id = ?').get(opportunityId)
+  return contract ? convertContractToCamelCase(contract) : null
+}
+
+/**
+ * 获取客户的待签署合同
+ */
+export async function getPendingSignContracts(customerId) {
+  const db = getDatabase()
+  const contracts = await db.prepare(`
+    SELECT * FROM contracts 
+    WHERE customer_id = ? AND sign_status = 'pending_sign'
+    ORDER BY created_at DESC
+  `).all(customerId)
+  
+  return contracts.map(convertContractToCamelCase)
+}
+
+/**
+ * 检查销售机会是否可以成交（合同已签署）
+ */
+export async function canOpportunityClose(opportunityId) {
+  const db = getDatabase()
+  
+  // 获取销售机会
+  const opportunity = await db.prepare('SELECT * FROM sales_opportunities WHERE id = ?').get(opportunityId)
+  if (!opportunity) {
+    return { canClose: false, reason: '销售机会不存在' }
+  }
+  
+  // 检查是否需要合同
+  if (opportunity.require_contract === false) {
+    return { canClose: true, reason: '该机会无需合同' }
+  }
+  
+  // 检查是否有关联合同
+  const contract = await getContractByOpportunityId(opportunityId)
+  if (!contract) {
+    return { 
+      canClose: false, 
+      reason: '尚未生成合同，请先生成合同',
+      needGenerateContract: true 
+    }
+  }
+  
+  // 检查合同签署状态
+  if (contract.signStatus !== 'signed') {
+    const statusText = {
+      'unsigned': '合同尚未发起签署',
+      'pending_sign': '合同待签署，请上传已签署的合同文件',
+      'rejected': '合同已被拒签，请重新处理'
+    }
+    return { 
+      canClose: false, 
+      reason: statusText[contract.signStatus] || '合同未签署',
+      contract,
+      needSign: contract.signStatus === 'pending_sign'
+    }
+  }
+  
+  return { 
+    canClose: true, 
+    reason: '合同已签署，可以成交',
+    contract 
+  }
+}
+
+/**
+ * 更新销售机会的合同关联
+ */
+export async function updateOpportunityContract(opportunityId, contractId, contractNumber) {
+  const db = getDatabase()
+  await db.prepare(`
+    UPDATE sales_opportunities 
+    SET contract_id = ?, contract_number = ?, updated_at = NOW()
+    WHERE id = ?
+  `).run(contractId, contractNumber, opportunityId)
 }
 
 // ==================== 客户反馈/投诉管理 ====================
@@ -2327,6 +2722,17 @@ export function convertContractToCamelCase(row) {
     terms: row.terms,
     notes: row.notes,
     status: row.status,
+    // 签署相关字段
+    signStatus: row.sign_status || 'unsigned',
+    signedFilePath: row.signed_file_path,
+    signedFileName: row.signed_file_name,
+    signedAt: row.signed_at,
+    signedBy: row.signed_by,
+    signedByName: row.signed_by_name,
+    contractFilePath: row.contract_file_path,
+    templateId: row.template_id,
+    autoGenerated: row.auto_generated,
+    // 基础字段
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createTime: row.created_at,
@@ -2368,6 +2774,7 @@ export default {
   OPPORTUNITY_STAGE,
   QUOTATION_STATUS,
   CONTRACT_STATUS,
+  CONTRACT_SIGN_STATUS,
   FEEDBACK_TYPE,
   FEEDBACK_STATUS,
   FEEDBACK_PRIORITY,
@@ -2435,14 +2842,24 @@ export default {
   createQuotation,
   updateQuotation,
   deleteQuotation,
-  
+  createQuotationForCustomer,
+
   // 合同管理
   getContracts,
   getContractById,
   createContract,
   updateContract,
   deleteContract,
-  
+  // 合同签署管理
+  generateContractForOpportunity,
+  uploadSignedContract,
+  updateContractSignStatus,
+  getContractSignHistory,
+  getContractByOpportunityId,
+  getPendingSignContracts,
+  canOpportunityClose,
+  updateOpportunityContract,
+
   // 客户反馈
   getFeedbacks,
   getFeedbackStats,
@@ -2455,15 +2872,68 @@ export default {
   // 客户分析
   getCustomerValueAnalysis,
   getSalesFunnel,
-  getCustomerActivityRanking,
+  getCustomerActivityRanking
+}
+
+// ==================== 最后里程费率集成 ====================
+
+/**
+ * 获取最后里程费率用于报价单
+ * @param {Object} params - 查询参数
+ * @param {number} params.carrierId - 承运商ID
+ * @param {string} params.zoneCode - Zone编码
+ * @param {number} params.weight - 重量
+ * @returns {Object} 费率信息
+ */
+export async function getLastMileRateForQuotation(params) {
+  const db = getDatabase()
+  const { carrierId, zoneCode, weight } = params
   
-  // 转换函数
-  convertCustomerToCamelCase,
-  convertContactToCamelCase,
-  convertFollowUpToCamelCase,
-  convertOpportunityToCamelCase,
-  convertQuotationToCamelCase,
-  convertContractToCamelCase,
-  convertFeedbackToCamelCase
+  // 获取当前有效的费率卡
+  const today = new Date().toISOString().split('T')[0]
+  const rateCard = await db.prepare(`
+    SELECT r.*, c.carrier_name, c.carrier_code 
+    FROM unified_rate_cards r
+    LEFT JOIN last_mile_carriers c ON r.carrier_id = c.id
+    WHERE r.carrier_id = ? 
+    AND r.status = 'active'
+    AND r.valid_from <= ?
+    AND (r.valid_until IS NULL OR r.valid_until >= ?)
+    ORDER BY r.is_default DESC, r.created_at DESC
+    LIMIT 1
+  `).get(carrierId, today, today)
+  
+  if (!rateCard) {
+    return null
+  }
+  
+  // 查找匹配的费率
+  const tier = await db.prepare(`
+    SELECT * FROM rate_card_tiers
+    WHERE rate_card_id = ?
+    AND zone_code = ?
+    AND weight_from <= ?
+    AND weight_to >= ?
+    ORDER BY weight_from
+    LIMIT 1
+  `).get(rateCard.id, zoneCode, weight, weight)
+  
+  if (!tier) {
+    return null
+  }
+  
+  return {
+    carrierId: rateCard.carrier_id,
+    carrierCode: rateCard.carrier_code,
+    carrierName: rateCard.carrier_name,
+    rateCardId: rateCard.id,
+    rateCardName: rateCard.rate_card_name,
+    currency: rateCard.currency,
+    zoneCode: tier.zone_code,
+    weightRange: `${tier.weight_from}-${tier.weight_to}`,
+    purchasePrice: tier.purchase_price ? parseFloat(tier.purchase_price) : null,
+    salesPrice: tier.sales_price ? parseFloat(tier.sales_price) : null,
+    priceUnit: tier.price_unit
+  }
 }
 

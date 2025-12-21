@@ -131,8 +131,10 @@ export default function CreateInvoice() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [showBillDropdown, setShowBillDropdown] = useState(false)
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null)
+  const [selectedBills, setSelectedBills] = useState<Bill[]>([]) // 多选订单
   const [loadingFees, setLoadingFees] = useState(false)
   const [paymentDays, setPaymentDays] = useState<number | ''>('')  // 账期天数
+  const [customerBillCounts, setCustomerBillCounts] = useState<Record<string, number>>({})  // 每个客户的可开票订单数
   
   // 采购发票专用状态
   const [supplierSearch, setSupplierSearch] = useState('')
@@ -337,6 +339,7 @@ export default function CreateInvoice() {
     }
     // 切换发票类型时，清空所有选择
     setSelectedBill(null)
+    setSelectedBills([])
     setBillSearch('')
     setBillFees([])
     setCustomerSearch('')
@@ -386,7 +389,31 @@ export default function CreateInvoice() {
       const response = await fetch(`${API_BASE}/api/customers?${params}`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
-        setCustomers(data.data.list)
+        const customerList = data.data.list
+        setCustomers(customerList)
+        
+        // 异步获取每个客户的可开票订单数量
+        const counts: Record<string, number> = {}
+        for (const customer of customerList) {
+          try {
+            const billParams = new URLSearchParams({
+              pageSize: '100',
+              type: 'history',
+              forInvoiceType: formData.invoiceType,
+              customerId: customer.id
+            })
+            const billResponse = await fetch(`${API_BASE}/api/bills?${billParams}`)
+            const billData = await billResponse.json()
+            if (billData.errCode === 200 && billData.data?.list) {
+              counts[customer.id] = billData.data.list.length
+            } else {
+              counts[customer.id] = 0
+            }
+          } catch {
+            counts[customer.id] = 0
+          }
+        }
+        setCustomerBillCounts(counts)
       }
     } catch (error) {
       console.error('获取客户列表失败:', error)
@@ -409,13 +436,14 @@ export default function CreateInvoice() {
   }
 
   // 获取已完成的订单（排除已开票并完成收付款的订单）
-  const fetchCompletedBills = async (search = '', invoiceType = formData.invoiceType) => {
+  const fetchCompletedBills = async (search = '', invoiceType = formData.invoiceType, customerId = '') => {
     try {
       const params = new URLSearchParams({ 
         pageSize: '50',
         type: 'history', // 获取已完成的订单
         forInvoiceType: invoiceType // 排除该类型已完成收付款的订单
       })
+      if (customerId) params.append('customerId', customerId)
       if (search) params.append('search', search)
       
       const response = await fetch(`${API_BASE}/api/bills?${params}`)
@@ -704,9 +732,36 @@ export default function CreateInvoice() {
     }))
     setCustomerSearch(customer.customerName)
     setShowCustomerDropdown(false)
+    
+    // 清空之前选择的订单
+    setSelectedBill(null)
+    setSelectedBills([])
+    setBillSearch('')
+    setBillFees([])
+    
+    // 根据客户筛选订单
+    fetchCompletedBills('', formData.invoiceType, customer.id)
+  }
+  
+  // 清除客户选择
+  const clearCustomerSelection = () => {
+    setFormData(prev => ({
+      ...prev,
+      customerId: '',
+      customerName: '',
+      billId: '',
+      billNumber: '',
+      items: [{ id: '1', description: '', quantity: 1, unitPrice: 0, currency: 'EUR', amount: 0, taxRate: 0, taxAmount: 0, discountPercent: 0, discountAmount: 0, finalAmount: 0, isFromOrder: false }]
+    }))
+    setCustomerSearch('')
+    setSelectedBill(null)
+    setSelectedBills([])
+    setBillSearch('')
+    setBillFees([])
+    setBills([])
   }
 
-  // 选择订单
+  // 选择订单（单选模式，用于向后兼容）
   const selectBill = async (bill: Bill) => {
     setSelectedBill(bill)
     setBillSearch(bill.billNumber)
@@ -726,9 +781,89 @@ export default function CreateInvoice() {
     await fetchBillFees(bill.id)
   }
 
+  // 切换订单选择（多选模式）
+  const toggleBillSelection = (bill: Bill) => {
+    setSelectedBills(prev => {
+      const isSelected = prev.some(b => b.id === bill.id)
+      if (isSelected) {
+        return prev.filter(b => b.id !== bill.id)
+      } else {
+        return [...prev, bill]
+      }
+    })
+  }
+
+  // 确认多选订单
+  const confirmMultiBillSelection = async () => {
+    if (selectedBills.length === 0) return
+    
+    // 使用第一个订单的客户信息
+    const firstBill = selectedBills[0]
+    setFormData(prev => ({
+      ...prev,
+      billId: selectedBills.map(b => b.id).join(','),
+      billNumber: selectedBills.map(b => b.billNumber).join(', '),
+      customerId: firstBill.customerId || '',
+      customerName: firstBill.customerName || firstBill.consignee || ''
+    }))
+    setCustomerSearch(firstBill.customerName || firstBill.consignee || '')
+    
+    // 获取所有订单的费用
+    setLoadingFees(true)
+    try {
+      const allFees: Fee[] = []
+      for (const bill of selectedBills) {
+        const response = await fetch(`${API_BASE}/api/fees?billId=${bill.id}&pageSize=100`)
+        const data = await response.json()
+        if (data.errCode === 200 && data.data?.list) {
+          // 为每个费用添加订单信息
+          const feesWithBillInfo = data.data.list.map((fee: Fee) => ({
+            ...fee,
+            billId: bill.id,
+            billNumber: bill.billNumber
+          }))
+          allFees.push(...feesWithBillInfo)
+        }
+      }
+      setBillFees(allFees)
+      
+      // 转换为发票明细
+      const items: InvoiceItem[] = allFees.map((fee: Fee & { billNumber?: string }, index: number) => ({
+        id: (index + 1).toString(),
+        description: fee.feeName || feeCategoryMap[fee.category] || '费用',
+        quantity: 1,
+        unitPrice: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
+        currency: fee.currency || 'EUR',
+        amount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
+        taxRate: typeof fee.taxRate === 'string' ? parseFloat(fee.taxRate) || 0 : fee.taxRate || 0,
+        taxAmount: 0,
+        discountPercent: 0,
+        discountAmount: 0,
+        finalAmount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
+        feeId: fee.id,
+        billId: (fee as any).billId,
+        billNumber: (fee as any).billNumber,
+        isFromOrder: true
+      }))
+      
+      if (items.length > 0) {
+        setFormData(prev => ({ ...prev, items }))
+      }
+    } catch (error) {
+      console.error('获取费用失败:', error)
+    } finally {
+      setLoadingFees(false)
+    }
+    
+    setShowBillDropdown(false)
+    // 设置 selectedBill 为第一个订单（向后兼容）
+    setSelectedBill(firstBill)
+  }
+
   // 清除订单选择
   const clearBillSelection = () => {
     setSelectedBill(null)
+    setSelectedBills([])
     setBillSearch('')
     setBillFees([])
     setFormData(prev => ({
@@ -948,65 +1083,240 @@ export default function CreateInvoice() {
         </div>
       </div>
 
-      {/* 步骤2：销售发票选择订单 / 采购发票选择供应商 */}
+      {/* 步骤2：销售发票选择客户 / 采购发票选择供应商 */}
       {formData.invoiceType === 'sales' ? (
-        // 销售发票：选择订单
+        <>
+        {/* 销售发票：步骤2 选择客户 */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center gap-2 mb-4">
             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-              selectedBill ? 'bg-green-500 text-white' : 'bg-primary-600 text-white'
+              formData.customerId ? 'bg-green-500 text-white' : 'bg-primary-600 text-white'
             }`}>
-              {selectedBill ? <Check className="w-4 h-4" /> : '2'}
+              {formData.customerId ? <Check className="w-4 h-4" /> : '2'}
+            </div>
+            <h2 className="text-sm font-medium text-gray-900">选择客户</h2>
+            <span className="text-xs text-gray-500">（选择开票客户）</span>
+          </div>
+          
+          {!formData.customerId ? (
+            <div className="relative" ref={customerDropdownRef}>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={customerSearch}
+                  onChange={(e) => {
+                    setCustomerSearch(e.target.value)
+                    fetchCustomers(e.target.value)
+                    setShowCustomerDropdown(true)
+                  }}
+                  onFocus={() => {
+                    fetchCustomers(customerSearch)
+                    setShowCustomerDropdown(true)
+                  }}
+                  placeholder="搜索客户名称..."
+                  className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              {showCustomerDropdown && customers.length > 0 && (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                  {customers.map(customer => {
+                    const billCount = customerBillCounts[customer.id] ?? -1
+                    return (
+                      <div
+                        key={customer.id}
+                        onClick={() => selectCustomer(customer)}
+                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">{customer.customerName}</span>
+                            {/* 显示可开票订单数量 */}
+                            {billCount >= 0 ? (
+                              billCount > 0 ? (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                                  {billCount}个柜
+                                </span>
+                              ) : (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-400">
+                                  0柜
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-xs text-gray-300">...</span>
+                            )}
+                          </div>
+                          {customer.customerType && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                              {customer.customerType}
+                            </span>
+                          )}
+                        </div>
+                        {customer.contactPerson && (
+                          <div className="mt-1 text-xs text-gray-500">
+                            联系人: {customer.contactPerson} {customer.phone && `| ${customer.phone}`}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {showCustomerDropdown && customers.length === 0 && customerSearch && (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500">
+                  未找到匹配的客户
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-primary-600" />
+                  <span className="text-sm font-medium text-gray-900">{formData.customerName}</span>
+                  {/* 显示可开票订单数量 */}
+                  {bills.length > 0 ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                      {bills.length} 个柜子可开票
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                      暂无可开票订单
+                    </span>
+                  )}
+                </div>
+                <button 
+                  onClick={clearCustomerSelection} 
+                  className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors"
+                >
+                  更换客户
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* 销售发票：步骤3 选择订单 */}
+        <div className={`bg-white rounded-lg border border-gray-200 p-4 ${!formData.customerId ? 'opacity-50' : ''}`}>
+          <div className="flex items-center gap-2 mb-4">
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+              selectedBill ? 'bg-green-500 text-white' : formData.customerId ? 'bg-primary-600 text-white' : 'bg-gray-300 text-white'
+            }`}>
+              {selectedBill ? <Check className="w-4 h-4" /> : '3'}
             </div>
             <h2 className="text-sm font-medium text-gray-900">选择订单</h2>
-            <span className="text-xs text-gray-500">（从已完成的订单中选择）</span>
+            <span className="text-xs text-gray-500">
+              {formData.customerId ? '（从该客户的已完成订单中选择，支持多选）' : '（请先选择客户）'}
+            </span>
           </div>
 
           {!selectedBill ? (
-            <div className="relative" ref={billDropdownRef}>
+            <div className="space-y-3" ref={billDropdownRef}>
+              {/* 搜索框 */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
                   value={billSearch}
                   onChange={(e) => {
+                    if (!formData.customerId) return
                     setBillSearch(e.target.value)
-                    fetchCompletedBills(e.target.value, formData.invoiceType)
+                    fetchCompletedBills(e.target.value, formData.invoiceType, formData.customerId)
                     setShowBillDropdown(true)
                   }}
-                  onFocus={() => setShowBillDropdown(true)}
-                  placeholder="搜索提单号、柜号、客户名称..."
-                  className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  onFocus={() => {
+                    if (formData.customerId) {
+                      setShowBillDropdown(true)
+                    }
+                  }}
+                  disabled={!formData.customerId}
+                  placeholder={formData.customerId ? "搜索提单号、集装箱号..." : "请先选择客户"}
+                  className={`w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                    !formData.customerId ? 'bg-gray-100 cursor-not-allowed' : ''
+                  }`}
                 />
               </div>
-              {showBillDropdown && bills.length > 0 && (
-                <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                  {bills.map(bill => (
-                    <div
+              
+              {/* 已选订单标签 */}
+              {selectedBills.length > 0 && (
+                <div className="flex flex-wrap gap-2 p-2 bg-blue-50 rounded-lg">
+                  <span className="text-xs text-blue-600 font-medium">已选 {selectedBills.length} 个订单:</span>
+                  {selectedBills.map(bill => (
+                    <span 
                       key={bill.id}
-                      onClick={() => selectBill(bill)}
-                      className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 rounded text-xs text-blue-700"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Package className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-900">{bill.billNumber}</span>
-                        </div>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                          {bill.deliveryStatus || bill.status || '已完成'}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
-                        <span>客户: {bill.customerName || bill.consignee || '-'}</span>
-                        {bill.portOfDischarge && <span>目的港: {bill.portOfDischarge}</span>}
-                        {bill.eta && <span>ETA: {bill.eta}</span>}
-                      </div>
-                    </div>
+                      {bill.actualContainerNo || bill.billNumber}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleBillSelection(bill)
+                        }}
+                        className="text-blue-400 hover:text-blue-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
                   ))}
+                  <button
+                    onClick={confirmMultiBillSelection}
+                    className="ml-auto px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700"
+                  >
+                    确认选择
+                  </button>
+                </div>
+              )}
+              
+              {/* 订单列表 */}
+              {showBillDropdown && bills.length > 0 && (
+                <div className="border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
+                  {bills.map(bill => {
+                    const isSelected = selectedBills.some(b => b.id === bill.id)
+                    return (
+                      <div
+                        key={bill.id}
+                        onClick={() => toggleBillSelection(bill)}
+                        className={`px-4 py-3 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                          isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* 复选框 */}
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                            isSelected ? 'bg-primary-600 border-primary-600' : 'border-gray-300'
+                          }`}>
+                            {isSelected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Package className="w-4 h-4 text-gray-400" />
+                                <span className="text-sm font-medium text-gray-900">{bill.billNumber}</span>
+                                {bill.actualContainerNo && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                                    柜号: {bill.actualContainerNo}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                {bill.deliveryStatus || bill.status || '已完成'}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
+                              <span>客户: {bill.customerName || bill.consignee || '-'}</span>
+                              {bill.portOfDischarge && <span>目的港: {bill.portOfDischarge}</span>}
+                              {bill.eta && <span>ETA: {bill.eta}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
               {showBillDropdown && bills.length === 0 && billSearch && (
-                <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500">
+                <div className="border border-gray-200 rounded-lg shadow-lg p-4 text-center text-sm text-gray-500">
                   未找到匹配的订单
                 </div>
               )}
@@ -1015,38 +1325,88 @@ export default function CreateInvoice() {
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-start justify-between">
                 <div className="space-y-3 flex-1">
-                  <div className="flex items-center gap-2">
+                  {/* 多订单标题 */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Package className="w-5 h-5 text-primary-600" />
-                    <span className="text-base font-medium text-gray-900">{selectedBill.billNumber}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                      {selectedBill.deliveryStatus || selectedBill.status || '已完成'}
-                    </span>
+                    {selectedBills.length > 1 ? (
+                      <>
+                        <span className="text-base font-medium text-gray-900">已选择 {selectedBills.length} 个订单</span>
+                        <div className="flex flex-wrap gap-1 ml-2">
+                          {selectedBills.map(bill => (
+                            <span key={bill.id} className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                              {bill.actualContainerNo || bill.billNumber}
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-base font-medium text-gray-900">{selectedBill.billNumber}</span>
+                        {selectedBill.actualContainerNo && (
+                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded">
+                            柜号: {selectedBill.actualContainerNo}
+                          </span>
+                        )}
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                          {selectedBill.deliveryStatus || selectedBill.status || '已完成'}
+                        </span>
+                      </>
+                    )}
                   </div>
-                  <div className="grid grid-cols-4 gap-4 text-xs">
-                    <div className="space-y-1">
-                      <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">基本信息</div>
-                      <div className="flex gap-1"><span className="text-gray-500">客户:</span><span className="text-gray-900">{selectedBill.customerName || selectedBill.consignee || '-'}</span></div>
-                      <div className="flex gap-1"><span className="text-gray-500">提单号:</span><span className="text-gray-900 font-medium">{selectedBill.containerNumber || '-'}</span></div>
-                      <div className="flex gap-1"><span className="text-gray-500">集装箱号:</span><span className="text-gray-900 font-medium">{selectedBill.actualContainerNo || '-'}</span></div>
+                  
+                  {/* 订单信息（单选时显示详情，多选时显示汇总） */}
+                  {selectedBills.length <= 1 ? (
+                    <div className="grid grid-cols-4 gap-4 text-xs">
+                      <div className="space-y-1">
+                        <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">基本信息</div>
+                        <div className="flex gap-1"><span className="text-gray-500">客户:</span><span className="text-gray-900">{selectedBill.customerName || selectedBill.consignee || '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">提单号:</span><span className="text-gray-900 font-medium">{selectedBill.containerNumber || '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">集装箱号:</span><span className="text-gray-900 font-medium">{selectedBill.actualContainerNo || '-'}</span></div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">货物信息</div>
+                        <div className="flex gap-1"><span className="text-gray-500">件数:</span><span className="text-gray-900">{selectedBill.pieces || '-'} 件</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">毛重:</span><span className="text-gray-900">{selectedBill.weight || '-'} KG</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">体积:</span><span className="text-gray-900">{selectedBill.volume || '-'} CBM</span></div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">集装箱运输</div>
+                        <div className="flex gap-1"><span className="text-gray-500">目的港:</span><span className="text-gray-900">{selectedBill.portOfDischarge || '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">ATA:</span><span className="text-gray-900">{selectedBill.ata || '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">ETA:</span><span className="text-gray-900">{selectedBill.eta || '-'}</span></div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">海外运输</div>
+                        <div className="flex gap-1"><span className="text-gray-500">提货时间:</span><span className="text-gray-900">{selectedBill.cmrEstimatedPickupTime ? selectedBill.cmrEstimatedPickupTime.split('T')[0] : '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">送达时间:</span><span className="text-gray-900">{selectedBill.cmrConfirmedTime ? selectedBill.cmrConfirmedTime.split('T')[0] : '-'}</span></div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">货物信息</div>
-                      <div className="flex gap-1"><span className="text-gray-500">件数:</span><span className="text-gray-900">{selectedBill.pieces || '-'} 件</span></div>
-                      <div className="flex gap-1"><span className="text-gray-500">毛重:</span><span className="text-gray-900">{selectedBill.weight || '-'} KG</span></div>
-                      <div className="flex gap-1"><span className="text-gray-500">体积:</span><span className="text-gray-900">{selectedBill.volume || '-'} CBM</span></div>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-4 text-xs">
+                      <div className="space-y-1">
+                        <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">汇总信息</div>
+                        <div className="flex gap-1"><span className="text-gray-500">客户:</span><span className="text-gray-900">{selectedBills[0].customerName || selectedBills[0].consignee || '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">订单数:</span><span className="text-gray-900 font-medium">{selectedBills.length} 个</span></div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">货物汇总</div>
+                        <div className="flex gap-1"><span className="text-gray-500">总件数:</span><span className="text-gray-900">{selectedBills.reduce((sum, b) => sum + (b.pieces || 0), 0)} 件</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">总毛重:</span><span className="text-gray-900">{selectedBills.reduce((sum, b) => sum + (parseFloat(String(b.weight)) || 0), 0).toFixed(2)} KG</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">总体积:</span><span className="text-gray-900">{selectedBills.reduce((sum, b) => sum + (parseFloat(String(b.volume)) || 0), 0).toFixed(2)} CBM</span></div>
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">集装箱列表</div>
+                        <div className="flex flex-wrap gap-1">
+                          {selectedBills.map(bill => (
+                            <span key={bill.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
+                              {bill.actualContainerNo || bill.billNumber}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">集装箱运输</div>
-                      <div className="flex gap-1"><span className="text-gray-500">目的港:</span><span className="text-gray-900">{selectedBill.portOfDischarge || '-'}</span></div>
-                      <div className="flex gap-1"><span className="text-gray-500">ATA:</span><span className="text-gray-900">{selectedBill.ata || '-'}</span></div>
-                      <div className="flex gap-1"><span className="text-gray-500">ETA:</span><span className="text-gray-900">{selectedBill.eta || '-'}</span></div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">海外运输</div>
-                      <div className="flex gap-1"><span className="text-gray-500">提货时间:</span><span className="text-gray-900">{selectedBill.cmrEstimatedPickupTime ? selectedBill.cmrEstimatedPickupTime.split('T')[0] : '-'}</span></div>
-                      <div className="flex gap-1"><span className="text-gray-500">送达时间:</span><span className="text-gray-900">{selectedBill.cmrConfirmedTime ? selectedBill.cmrConfirmedTime.split('T')[0] : '-'}</span></div>
-                    </div>
-                  </div>
+                  )}
+                  
                   {billFees.length > 0 && (
                     <div className="flex items-center gap-1 text-xs text-green-600">
                       <Check className="w-3.5 h-3.5" />已加载 {billFees.length} 条费用记录
@@ -1058,6 +1418,7 @@ export default function CreateInvoice() {
             </div>
           )}
         </div>
+        </>
       ) : (
         // 采购发票：选择供应商
         <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -1345,128 +1706,151 @@ export default function CreateInvoice() {
                 </span>
               </div>
               
-              {/* 紧凑的表单布局 */}
-              <div className="flex flex-wrap items-end gap-4">
-                {/* 发票日期 */}
-                <div className="w-36">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    发票日期 <span className="text-red-500">*</span>
-                  </label>
-                  <DatePicker
-                    value={formData.invoiceDate}
-                    onChange={handleInvoiceDateChange}
-                    placeholder="选择日期"
-                    className="!px-2 !py-2 !text-sm !rounded-lg"
-                  />
-                </div>
-
-                {/* 账期天数 */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    账期天数
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={paymentDays}
-                      onChange={(e) => handlePaymentDaysChange(e.target.value ? parseInt(e.target.value) : '')}
-                      min="0"
-                      placeholder="输入天数"
-                      className="w-20 px-2 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-center"
-                    />
-                    <span className="text-xs text-gray-500">天</span>
-                  </div>
-                </div>
-
-                {/* 到期日期显示 */}
-                {formData.dueDate && (
-                  <div className="flex items-center text-xs text-gray-600 bg-gray-100 px-3 py-2.5 rounded-lg">
-                    到期: {formData.dueDate}
-                  </div>
-                )}
-
-                {/* 客户/供应商 - 销售发票显示客户，采购发票显示供应商（已在步骤2选择） */}
-                <div className="relative flex-1 min-w-[200px]" ref={customerDropdownRef}>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {formData.invoiceType === 'sales' ? '客户' : '供应商'} <span className="text-red-500">*</span>
-                    {(formData.billId || formData.supplierId) && <span className="text-xs text-gray-400 ml-1">(锁定)</span>}
-                  </label>
-                  <div className="relative">
-                    {formData.invoiceType === 'sales' ? (
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                    ) : (
-                      <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-500" />
-                    )}
-                    <input
-                      type="text"
-                      value={formData.invoiceType === 'sales' ? customerSearch : formData.supplierName}
-                      onChange={(e) => {
-                        if (formData.invoiceType === 'sales') {
-                          if (formData.billId) return // 已选择订单，禁止修改
-                          setCustomerSearch(e.target.value)
-                          setFormData(prev => ({ ...prev, customerName: e.target.value }))
-                          fetchCustomers(e.target.value)
-                          setShowCustomerDropdown(true)
-                        }
-                        // 采购发票的供应商不能在这里修改
-                      }}
-                      onFocus={() => {
-                        if (formData.invoiceType === 'sales' && !formData.billId) {
-                          setShowCustomerDropdown(true)
-                        }
-                      }}
-                      disabled={formData.invoiceType === 'sales' ? !!formData.billId : true}
-                      placeholder={formData.invoiceType === 'sales' && !formData.billId ? '搜索客户...' : ''}
-                      className={`w-full pl-7 pr-2 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 ${
-                        formData.invoiceType === 'sales' ? 'focus:ring-primary-500' : 'focus:ring-orange-500'
-                      } ${(formData.billId || formData.supplierId) ? 'bg-gray-100 text-gray-700 cursor-not-allowed' : ''}`}
+              {/* 表单布局 - 紧凑对齐设计 */}
+              <div className="space-y-3">
+                {/* 第一行：日期相关 */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* 发票日期 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      发票日期 <span className="text-red-500">*</span>
+                    </label>
+                    <DatePicker
+                      value={formData.invoiceDate}
+                      onChange={handleInvoiceDateChange}
+                      placeholder="选择日期"
                     />
                   </div>
-                  {/* 客户下拉列表 - 仅销售发票且未选订单时显示 */}
-                  {formData.invoiceType === 'sales' && !formData.billId && showCustomerDropdown && customers.length > 0 && (
-                    <div className="absolute z-10 w-64 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {customers.map(customer => (
-                        <div
-                          key={customer.id}
-                          onClick={() => selectCustomer(customer)}
-                          className="px-3 py-2 hover:bg-gray-50 cursor-pointer"
-                        >
-                          <div className="text-sm text-gray-900">{customer.customerName}</div>
-                          {customer.customerCode && (
-                            <div className="text-xs text-gray-500">{customer.customerCode}</div>
-                          )}
-                        </div>
-                      ))}
+
+                  {/* 账期天数 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      账期天数
+                    </label>
+                    <div className="flex items-center h-8">
+                      <input
+                        type="number"
+                        value={paymentDays}
+                        onChange={(e) => handlePaymentDaysChange(e.target.value ? parseInt(e.target.value) : '')}
+                        min="0"
+                        placeholder="输入"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded-l-md focus:outline-none focus:ring-1 focus:ring-primary-500 h-8"
+                      />
+                      <span className="px-2 py-1.5 text-xs bg-gray-100 border border-l-0 border-gray-200 rounded-r-md text-gray-500 h-8 flex items-center">天</span>
                     </div>
-                  )}
-                </div>
-
-                {/* 货币 */}
-                <div className="w-28">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    货币
-                  </label>
-                  <select
-                    value={formData.currency}
-                    onChange={(e) => {
-                      const newCurrency = e.target.value
-                      setFormData(prev => ({ ...prev, currency: newCurrency }))
-                      fetchExchangeRate(newCurrency)
-                    }}
-                    className="w-full px-2 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                  >
-                    {currencies.map(c => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 汇率显示 */}
-                {formData.currency !== 'CNY' && (
-                  <div className="flex items-center text-xs text-gray-600 bg-gray-100 px-3 py-2.5 rounded-lg">
-                    <span>汇率: 1 {formData.currency} = {Number(formData.exchangeRate || 1).toFixed(4)} CNY</span>
                   </div>
-                )}
+
+                  {/* 到期日期 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      到期日期
+                    </label>
+                    <div className={`px-2 py-1.5 text-xs rounded-md border h-8 flex items-center ${
+                      formData.dueDate 
+                        ? 'bg-green-50 border-green-200 text-green-700' 
+                        : 'bg-gray-50 border-gray-200 text-gray-400'
+                    }`}>
+                      {formData.dueDate || '自动计算'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 第二行：客户、货币、汇率 */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* 客户/供应商 */}
+                  <div className="relative" ref={customerDropdownRef}>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      {formData.invoiceType === 'sales' ? '客户' : '供应商'} <span className="text-red-500">*</span>
+                      {(formData.billId || formData.supplierId) && (
+                        <span className="ml-1 text-[10px] font-normal text-gray-400">(锁定)</span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      {formData.invoiceType === 'sales' ? (
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                      ) : (
+                        <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-500" />
+                      )}
+                      <input
+                        type="text"
+                        value={formData.invoiceType === 'sales' ? customerSearch : formData.supplierName}
+                        onChange={(e) => {
+                          if (formData.invoiceType === 'sales') {
+                            if (formData.billId) return
+                            setCustomerSearch(e.target.value)
+                            setFormData(prev => ({ ...prev, customerName: e.target.value }))
+                            fetchCustomers(e.target.value)
+                            setShowCustomerDropdown(true)
+                          }
+                        }}
+                        onFocus={() => {
+                          if (formData.invoiceType === 'sales' && !formData.billId) {
+                            setShowCustomerDropdown(true)
+                          }
+                        }}
+                        disabled={formData.invoiceType === 'sales' ? !!formData.billId : true}
+                        placeholder={formData.invoiceType === 'sales' && !formData.billId ? '搜索客户...' : ''}
+                        title={formData.invoiceType === 'sales' ? customerSearch : formData.supplierName}
+                        className={`w-full pl-7 pr-2 py-1.5 text-xs border rounded-md focus:outline-none focus:ring-1 h-8 truncate ${
+                          formData.invoiceType === 'sales' ? 'focus:ring-primary-500' : 'focus:ring-orange-500'
+                        } ${(formData.billId || formData.supplierId) 
+                          ? 'bg-gray-50 border-gray-200 text-gray-700 cursor-not-allowed' 
+                          : 'border-gray-200'
+                        }`}
+                      />
+                    </div>
+                    {formData.invoiceType === 'sales' && !formData.billId && showCustomerDropdown && customers.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {customers.map(customer => (
+                          <div
+                            key={customer.id}
+                            onClick={() => selectCustomer(customer)}
+                            className="px-2 py-1.5 hover:bg-gray-50 cursor-pointer"
+                          >
+                            <div className="text-xs text-gray-900">{customer.customerName}</div>
+                            {customer.customerCode && (
+                              <div className="text-[10px] text-gray-500">{customer.customerCode}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 货币 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      货币
+                    </label>
+                    <select
+                      value={formData.currency}
+                      onChange={(e) => {
+                        const newCurrency = e.target.value
+                        setFormData(prev => ({ ...prev, currency: newCurrency }))
+                        fetchExchangeRate(newCurrency)
+                      }}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
+                    >
+                      {currencies.map(c => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 汇率 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      汇率
+                    </label>
+                    <div className="px-2 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded-md text-blue-700 h-8 flex items-center">
+                      {formData.currency === 'CNY' ? (
+                        <span className="text-gray-500">无需换算</span>
+                      ) : (
+                        <span>1 {formData.currency} = <span className="font-semibold">{Number(formData.exchangeRate || 1).toFixed(4)}</span> CNY</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

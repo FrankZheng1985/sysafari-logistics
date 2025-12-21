@@ -227,7 +227,7 @@ export default function FinanceOrderReport() {
                       <td className="py-3 px-3">
                         <span 
                           className="text-primary-600 hover:underline cursor-pointer font-medium"
-                          onClick={() => navigate(`/bill-details/${item.billId}`)}
+                          onClick={() => navigate(`/finance/bill-details/${item.billId}`)}
                         >
                           {item.billNumber}
                         </span>

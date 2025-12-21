@@ -1,8 +1,9 @@
-import { User, Key, LogOut, Shield } from 'lucide-react'
+import { User, Key, LogOut, Shield, MessageCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import UserPasswordModal from './UserPasswordModal'
 import NotificationBell from './NotificationBell'
+import MessageCenterModal from './MessageCenterModal'
 import { useAuth } from '../contexts/AuthContext'
 import { changePassword } from '../utils/api'
 
@@ -11,6 +12,7 @@ export default function Header() {
   const { user: currentUser, logout, isAdmin, isManager, isTestMode } = useAuth()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [showMessageCenter, setShowMessageCenter] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // 点击外部关闭下拉菜单
@@ -78,6 +80,15 @@ export default function Header() {
         <h1 className="text-lg font-semibold text-gray-900">BP Logistics 物流管理系统</h1>
       </div>
       <div className="flex items-center gap-3 relative" ref={dropdownRef}>
+        {/* 消息中心按钮 */}
+        <button
+          onClick={() => setShowMessageCenter(true)}
+          className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          title="消息中心"
+        >
+          <MessageCircle className="w-5 h-5" />
+        </button>
+        
         {/* 通知铃铛 */}
         <NotificationBell />
         
@@ -159,6 +170,12 @@ export default function Header() {
           visible={showPasswordModal}
           onClose={() => setShowPasswordModal(false)}
           onSubmit={handlePasswordSubmit}
+        />
+
+        {/* 消息中心模态框 (使用Portal渲染到body) */}
+        <MessageCenterModal
+          visible={showMessageCenter}
+          onClose={() => setShowMessageCenter(false)}
         />
       </div>
     </header>

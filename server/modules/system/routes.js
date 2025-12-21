@@ -1,11 +1,13 @@
 /**
  * 系统管理模块 - 路由定义
+ * 包含用户管理、角色权限、审批流程等
  */
 
 import express from 'express'
 import * as controller from './controller.js'
 import * as apiIntegrationsController from './apiIntegrationsController.js'
-import { authenticate } from '../../middleware/auth.js'
+import * as securityController from './securityController.js'
+import { authenticate, authorize, requireRole, requireTeamManager, requireApprover } from '../../middleware/auth.js'
 
 const router = express.Router()
 
@@ -154,6 +156,86 @@ router.post('/api-integrations/:code/recharge', apiIntegrationsController.record
 
 // 获取充值记录
 router.get('/api-integrations/:code/recharge-history', apiIntegrationsController.getRechargeHistory)
+
+// ==================== 安全管理路由 ====================
+
+// 安全概览（需要管理员权限）
+router.get('/security/overview', authenticate, requireRole('admin'), securityController.getSecurityOverview)
+
+// 安全设置
+router.post('/security/settings/init', authenticate, requireRole('admin'), securityController.initSecuritySettings)
+router.get('/security/settings', authenticate, requireRole('admin'), securityController.getSecuritySettings)
+router.put('/security/settings', authenticate, requireRole('admin'), securityController.updateSecuritySettings)
+
+// 审计日志
+router.get('/security/audit-logs', authenticate, requireRole('admin'), securityController.getAuditLogs)
+router.get('/security/audit-logs/statistics', authenticate, requireRole('admin'), securityController.getAuditStatistics)
+router.get('/security/audit-logs/action-types', authenticate, securityController.getAuditActionTypes)
+
+// IP黑名单
+router.get('/security/ip-blacklist', authenticate, requireRole('admin'), securityController.getIpBlacklist)
+router.post('/security/ip-blacklist', authenticate, requireRole('admin'), securityController.addIpToBlacklist)
+router.delete('/security/ip-blacklist/:ipAddress', authenticate, requireRole('admin'), securityController.removeIpFromBlacklist)
+
+// 登录尝试记录
+router.get('/security/login-attempts', authenticate, requireRole('admin'), securityController.getLoginAttempts)
+
+// 活动会话
+router.get('/security/active-sessions', authenticate, requireRole('admin'), securityController.getActiveSessions)
+router.delete('/security/active-sessions/:sessionId', authenticate, requireRole('admin'), securityController.terminateSession)
+
+// 备份管理
+router.get('/security/backups', authenticate, requireRole('admin'), securityController.getBackups)
+router.post('/security/backups', authenticate, requireRole('admin'), securityController.createBackup)
+
+// ==================== 审批管理路由 ====================
+
+// 获取审批列表（全部）
+router.get('/approvals', authenticate, controller.getApprovals)
+
+// 获取待审批列表（审批人视角）
+router.get('/approvals/pending', authenticate, controller.getPendingApprovals)
+
+// 获取待审批数量
+router.get('/approvals/pending/count', authenticate, controller.getPendingApprovalCount)
+
+// 获取我的申请
+router.get('/approvals/my', authenticate, controller.getMyApprovals)
+
+// 获取审批详情
+router.get('/approvals/:id', authenticate, controller.getApprovalById)
+
+// 创建审批请求
+router.post('/approvals', authenticate, controller.createApprovalRequest)
+
+// 审批通过
+router.post('/approvals/:id/approve', authenticate, requireApprover, controller.approveRequest)
+
+// 审批拒绝
+router.post('/approvals/:id/reject', authenticate, requireApprover, controller.rejectRequest)
+
+// 取消审批请求
+router.post('/approvals/:id/cancel', authenticate, controller.cancelApprovalRequest)
+
+// 获取审批通知
+router.get('/approval-notifications', authenticate, controller.getApprovalNotifications)
+
+// 标记通知已读
+router.put('/approval-notifications/:id/read', authenticate, controller.markNotificationRead)
+
+// ==================== 团队管理路由 ====================
+
+// 获取团队成员
+router.get('/team/members', authenticate, requireTeamManager, controller.getTeamMembersList)
+
+// 获取可授予的权限列表
+router.get('/team/grantable-permissions', authenticate, requireTeamManager, controller.getGrantablePermissionsList)
+
+// 检查操作是否需要审批
+router.post('/team/check-approval', authenticate, controller.checkApprovalRequired)
+
+// 获取可选择的上级列表
+router.get('/supervisors', authenticate, controller.getSupervisorCandidates)
 
 export default router
 

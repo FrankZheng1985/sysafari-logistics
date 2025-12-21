@@ -3,44 +3,42 @@
  * 统一管理各类单据的编号生成
  */
 
-const { getDatabase } = require('../config/database')
-const { SEQUENCE_RULES } = require('../config/constants')
+import { getDatabase } from '../config/database.js'
+import { SEQUENCE_RULES } from '../config/constants.js'
 
 /**
  * 初始化序列表
  */
-function initSequenceTable() {
+export async function initSequenceTable() {
   const db = getDatabase()
   
-  // 确保序列表存在
-  db.exec(`
+  // 确保序列表存在（使用 PostgreSQL 语法）
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS order_sequences (
       business_type TEXT PRIMARY KEY,
       current_seq INTEGER DEFAULT 0,
       prefix TEXT,
       description TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `)
   
   // 初始化各业务类型的序列
-  const insertStmt = db.prepare(`
-    INSERT INTO order_sequences (business_type, prefix, description, current_seq)
-    VALUES (?, ?, ?, 0)
-    ON CONFLICT (business_type) DO NOTHING
-  `)
-  
-  Object.entries(SEQUENCE_RULES).forEach(([type, rule]) => {
-    insertStmt.run(type, rule.prefix, rule.description)
-  })
+  for (const [type, rule] of Object.entries(SEQUENCE_RULES)) {
+    await db.prepare(`
+      INSERT INTO order_sequences (business_type, prefix, description, current_seq)
+      VALUES (?, ?, ?, 0)
+      ON CONFLICT (business_type) DO NOTHING
+    `).run(type, rule.prefix, rule.description)
+  }
 }
 
 /**
  * 生成下一个序列号
  * @param {string} businessType - 业务类型（如 BILL, PKG, DEC 等）
- * @returns {string} 格式化的序列号
+ * @returns {Promise<string>} 格式化的序列号
  */
-function getNextSequence(businessType) {
+export async function getNextSequence(businessType) {
   const db = getDatabase()
   const rule = SEQUENCE_RULES[businessType]
   
@@ -57,17 +55,17 @@ function getNextSequence(businessType) {
     : `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
   
   // 原子性地获取并更新序列号
-  const result = db.transaction(() => {
+  const result = await db.transaction(async () => {
     // 获取当前序列号
-    const row = db.prepare(
+    const row = await db.prepare(
       'SELECT current_seq FROM order_sequences WHERE business_type = ?'
     ).get(businessType)
     
     const nextSeq = (row?.current_seq || 0) + 1
     
-    // 更新序列号
-    db.prepare(
-      'UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = ?'
+    // 更新序列号（使用 PostgreSQL NOW() 函数）
+    await db.prepare(
+      'UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = ?'
     ).run(nextSeq, businessType)
     
     return nextSeq
@@ -81,9 +79,9 @@ function getNextSequence(businessType) {
 /**
  * 生成简单序列号（不含年月）
  * @param {string} businessType - 业务类型
- * @returns {string} 格式化的序列号
+ * @returns {Promise<string>} 格式化的序列号
  */
-function getSimpleSequence(businessType) {
+export async function getSimpleSequence(businessType) {
   const db = getDatabase()
   const rule = SEQUENCE_RULES[businessType]
   
@@ -91,15 +89,15 @@ function getSimpleSequence(businessType) {
     throw new Error(`未知的业务类型: ${businessType}`)
   }
   
-  const result = db.transaction(() => {
-    const row = db.prepare(
+  const result = await db.transaction(async () => {
+    const row = await db.prepare(
       'SELECT current_seq FROM order_sequences WHERE business_type = ?'
     ).get(businessType)
     
     const nextSeq = (row?.current_seq || 0) + 1
     
-    db.prepare(
-      'UPDATE order_sequences SET current_seq = ?, updated_at = CURRENT_TIMESTAMP WHERE business_type = ?'
+    await db.prepare(
+      'UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = ?'
     ).run(nextSeq, businessType)
     
     return nextSeq
@@ -113,34 +111,33 @@ function getSimpleSequence(businessType) {
  * 重置序列号（通常在新年或新月时使用）
  * @param {string} businessType - 业务类型
  */
-function resetSequence(businessType) {
+export async function resetSequence(businessType) {
   const db = getDatabase()
   
-  db.prepare(
-    'UPDATE order_sequences SET current_seq = 0, updated_at = CURRENT_TIMESTAMP WHERE business_type = ?'
+  await db.prepare(
+    'UPDATE order_sequences SET current_seq = 0, updated_at = NOW() WHERE business_type = ?'
   ).run(businessType)
 }
 
 /**
  * 获取当前序列号（不递增）
  * @param {string} businessType - 业务类型
- * @returns {number} 当前序列号
+ * @returns {Promise<number>} 当前序列号
  */
-function getCurrentSequence(businessType) {
+export async function getCurrentSequence(businessType) {
   const db = getDatabase()
   
-  const row = db.prepare(
+  const row = await db.prepare(
     'SELECT current_seq FROM order_sequences WHERE business_type = ?'
   ).get(businessType)
   
   return row?.current_seq || 0
 }
 
-module.exports = {
+export default {
   initSequenceTable,
   getNextSequence,
   getSimpleSequence,
   resetSequence,
   getCurrentSequence
 }
-

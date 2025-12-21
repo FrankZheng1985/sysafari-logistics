@@ -146,18 +146,18 @@ export async function getRecommendations(params, limit = 5) {
  */
 export async function searchTariffByHsCode(hsCodePrefix, limit = 20) {
   const db = getDatabase()
-  
+
   const rows = await db.prepare(`
-    SELECT 
+    SELECT
       hs_code, goods_description_cn, goods_description, material,
       duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
-      unit_code, unit_name
+      unit_code, unit_name, origin_country, origin_country_code
     FROM tariff_rates
     WHERE hs_code LIKE ?
     ORDER BY hs_code ASC
     LIMIT ?
   `).all(hsCodePrefix + '%', limit)
-  
+
   return (rows || []).map(row => ({
     hsCode: row.hs_code,
     productName: row.goods_description_cn || row.goods_description,
@@ -168,7 +168,9 @@ export async function searchTariffByHsCode(hsCodePrefix, limit = 20) {
     antiDumpingRate: parseFloat(row.anti_dumping_rate) || 0,
     countervailingRate: parseFloat(row.countervailing_rate) || 0,
     unitCode: row.unit_code,
-    unitName: row.unit_name
+    unitName: row.unit_name,
+    originCountry: row.origin_country || '',
+    originCountryCode: row.origin_country_code || ''
   }))
 }
 

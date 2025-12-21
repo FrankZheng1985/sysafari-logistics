@@ -56,7 +56,7 @@ export async function getBills(req, res) {
   try {
     const {
       type, status, shipStatus, customsStatus, inspection, deliveryStatus,
-      search, page, pageSize, sortField, sortOrder, forInvoiceType
+      search, page, pageSize, sortField, sortOrder, forInvoiceType, customerId
     } = req.query
 
     const result = await model.getBills({
@@ -71,7 +71,8 @@ export async function getBills(req, res) {
       pageSize: parseInt(pageSize) || 20,
       sortField,
       sortOrder,
-      forInvoiceType  // 用于新建发票时过滤已完成财务流程的订单
+      forInvoiceType,  // 用于新建发票时过滤已完成财务流程的订单
+      customerId  // 按客户ID筛选
     })
     
     return successWithPagination(res, result.list, {
@@ -117,7 +118,18 @@ export async function createBill(req, res) {
         return conflict(res, '提单号已存在')
       }
     }
+
+    // 检查主单号+集装箱号组合是否重复
+    const containerNumber = req.body.containerNumber || ''
+    const actualContainerNo = req.body.actualContainerNo || containerNumber
     
+    if (containerNumber && actualContainerNo) {
+      const duplicateBill = await model.checkDuplicateBill(containerNumber, actualContainerNo)
+      if (duplicateBill) {
+        return conflict(res, `提单重复：主单号 "${containerNumber}" 和集装箱号 "${actualContainerNo}" 的组合已存在（提单号: ${duplicateBill.billNumber}）`)
+      }
+    }
+
     const result = await model.createBill({
       ...req.body,
       billNumber, // 使用自动生成或用户提供的提单号
@@ -153,6 +165,21 @@ export async function updateBill(req, res) {
     const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
+    }
+    
+    // 如果更新了主单号或集装箱号，检查是否与其他提单重复
+    const newContainerNumber = req.body.containerNumber ?? existing.containerNumber
+    const newActualContainerNo = req.body.actualContainerNo ?? existing.actualContainerNo
+    
+    if (newContainerNumber && newActualContainerNo) {
+      // 检查是否有变化
+      const hasChange = req.body.containerNumber !== undefined || req.body.actualContainerNo !== undefined
+      if (hasChange) {
+        const duplicateBill = await model.checkDuplicateBill(newContainerNumber, newActualContainerNo, id)
+        if (duplicateBill) {
+          return conflict(res, `提单重复：主单号 "${newContainerNumber}" 和集装箱号 "${newActualContainerNo}" 的组合已存在（提单号: ${duplicateBill.billNumber}）`)
+        }
+      }
     }
     
     const updated = await model.updateBill(id, req.body)

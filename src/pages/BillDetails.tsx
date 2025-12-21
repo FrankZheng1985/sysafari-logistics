@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag } from 'lucide-react'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
 // DataTable available if needed
 import Timeline, { TimelineItem } from '../components/Timeline'
 import FeeModal from '../components/FeeModal'
 import OrderFeePanel from '../components/OrderFeePanel'
+import OrderDocuments from '../components/OrderDocuments'
+import CreateBillModal from '../components/CreateBillModal'
 import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
 import { getBillById as getBillByIdFromMock } from '../data/mockOrders'
 
@@ -110,6 +112,13 @@ function ModuleWrapper({
 export default function BillDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  
+  // 检测来源：支持财务模块访问
+  const source = searchParams.get('source') || (location.state as any)?.source || ''
+  const isFromFinance = source === 'finance' || location.pathname.startsWith('/finance')
+  
   const [activeTab, setActiveTab] = useState<string>('info')
   const [billDetail, setBillDetail] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -150,6 +159,9 @@ export default function BillDetails() {
   const [docSwapSubmitting, setDocSwapSubmitting] = useState(false)
   const [docSwapAgentList, setDocSwapAgentList] = useState<Supplier[]>([])
   const [docSwapAgentLoading, setDocSwapAgentLoading] = useState(false)
+  
+  // 编辑提单模态窗口状态
+  const [showEditModal, setShowEditModal] = useState(false)
   
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -473,6 +485,18 @@ export default function BillDetails() {
       try {
         const response = await getBillByIdFromAPI(id)
         if (response.errCode === 200 && response.data) {
+          // 调试日志：打印后端返回的附加属性字段
+          console.log('📦 提单详情 - 附加属性字段:', {
+            containerType: response.data.containerType,
+            billType: response.data.billType,
+            transportArrangement: response.data.transportArrangement,
+            consigneeType: response.data.consigneeType,
+            containerReturn: response.data.containerReturn,
+            fullContainerTransport: response.data.fullContainerTransport,
+            lastMileTransport: response.data.lastMileTransport,
+            devanning: response.data.devanning,
+            t1Declaration: response.data.t1Declaration,
+          })
           setBillDetail(response.data)
         } else {
           // 降级到 mock 数据
@@ -566,24 +590,44 @@ export default function BillDetails() {
     },
   ]
 
+  // 根据来源设置面包屑和返回路径
+  const breadcrumbs = isFromFinance 
+    ? [
+        { label: '财务管理', path: '/finance' },
+        { label: '订单报表', path: '/finance/order-report' },
+        { label: '提单详情' }
+      ]
+    : [
+        { label: '订单管理', path: '/bookings/bill' },
+        { label: '提单', path: '/bookings/bill' },
+        { label: '详情' }
+      ]
+  
+  const backPath = isFromFinance ? '/finance/order-report' : '/bookings/bill'
+
   return (
     <div className="h-full flex flex-col">
       <PageHeader
         title="提单详情"
         icon={<FileText className="w-6 h-6 text-primary-600" />}
-        breadcrumbs={[
-          { label: '订单管理', path: '/bookings/bill' },
-          { label: '提单', path: '/bookings/bill' },
-          { label: '详情' }
-        ]}
+        breadcrumbs={breadcrumbs}
         actionButtons={
-          <button
-            onClick={() => navigate('/bookings/bill')}
-            className="px-1.5 py-0.5 text-xs text-gray-700 bg-gray-100 rounded hover:bg-gray-200 flex items-center gap-1"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>返回</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="px-2 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 flex items-center gap-1"
+            >
+              <Edit className="w-4 h-4" />
+              <span>编辑</span>
+            </button>
+            <button
+              onClick={() => navigate(backPath)}
+              className="px-1.5 py-0.5 text-xs text-gray-700 bg-gray-100 rounded hover:bg-gray-200 flex items-center gap-1"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>返回</span>
+            </button>
+          </div>
         }
       />
 
@@ -591,7 +635,9 @@ export default function BillDetails() {
         {/* 标签页 - 可拖拽排序 */}
         <div className="mb-4 border-b border-gray-200">
           <div className="flex gap-1 items-center">
-            {tabOrder.map((tabId) => {
+            {tabOrder
+              .filter(tabId => !(isFromFinance && tabId === 'actions')) // 财务模块隐藏操作标签
+              .map((tabId) => {
               const config = tabConfig[tabId]
               if (!config) return null
               const isDragging = draggedTab === tabId
@@ -681,89 +727,7 @@ export default function BillDetails() {
                   <span className="text-xs text-gray-500">创建时间:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.createTime}</span>
                 </div>
-                {/* 附加属性字段 - 显示在基础信息中 */}
-                {billDetail.containerType && (
-                  <div>
-                    <span className="text-xs text-gray-500">箱型:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.containerType === 'cfs' ? '拼箱(CFS)' : 
-                       billDetail.containerType === 'fcl' ? '整箱(FCL)' : billDetail.containerType}
-                    </span>
-                  </div>
-                )}
-                {billDetail.billType && (
-                  <div>
-                    <span className="text-xs text-gray-500">提单类型:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.billType === 'master' ? '船东单(Master Bill)' : 
-                       billDetail.billType === 'house' ? '货代单(House Bill)' : billDetail.billType}
-                    </span>
-                  </div>
-                )}
-                {billDetail.transportArrangement && (
-                  <div>
-                    <span className="text-xs text-gray-500">运输:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.transportArrangement === 'entrust' ? '委托我司运输' : 
-                       billDetail.transportArrangement === 'self' ? '自行运输' : billDetail.transportArrangement}
-                    </span>
-                  </div>
-                )}
-                {billDetail.consigneeType && (
-                  <div>
-                    <span className="text-xs text-gray-500">收货人:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.consigneeType === 'asl' ? 'ASL为收货人' : 
-                       billDetail.consigneeType === 'not-asl' ? 'ASL不是提单收货人' : billDetail.consigneeType}
-                    </span>
-                  </div>
-                )}
-                {billDetail.containerReturn && (
-                  <div>
-                    <span className="text-xs text-gray-500">异地还柜:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.containerReturn === 'off-site' ? '异地还柜(非Rotterdam)' : 
-                       billDetail.containerReturn === 'local' ? '本地还柜' : billDetail.containerReturn}
-                    </span>
-                  </div>
-                )}
-                {billDetail.fullContainerTransport && (
-                  <div>
-                    <span className="text-xs text-gray-500">全程整柜运输:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.fullContainerTransport === 'must-full' ? '必须整柜派送' : 
-                       billDetail.fullContainerTransport === 'can-split' ? '可拆柜后托盘送货' : billDetail.fullContainerTransport}
-                    </span>
-                  </div>
-                )}
-                {billDetail.lastMileTransport && (
-                  <div>
-                    <span className="text-xs text-gray-500">末端运输方式:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.lastMileTransport === 'truck' ? '卡车派送' : 
-                       billDetail.lastMileTransport === 'train' ? '铁路运输' : 
-                       billDetail.lastMileTransport === 'air' ? '空运' : billDetail.lastMileTransport}
-                    </span>
-                  </div>
-                )}
-                {billDetail.devanning && (
-                  <div>
-                    <span className="text-xs text-gray-500">拆柜:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.devanning === 'required' ? '需要拆柜分货服务' : 
-                       billDetail.devanning === 'not-required' ? '不需要拆柜' : billDetail.devanning}
-                    </span>
-                  </div>
-                )}
-                {billDetail.t1Declaration && (
-                  <div>
-                    <span className="text-xs text-gray-500">T1报关:</span>
-                    <span className="ml-2 font-medium text-xs">
-                      {billDetail.t1Declaration === 'yes' ? '是' : 
-                       billDetail.t1Declaration === 'no' ? '否' : billDetail.t1Declaration}
-                    </span>
-                  </div>
-                )}
+                {/* 附加属性字段已移至独立的"附加属性"区块显示 */}
               </div>
             </div>
 
@@ -829,98 +793,123 @@ export default function BillDetails() {
               </div>
             </div>
 
-            {/* 附加属性 */}
-            {(billDetail.containerType || billDetail.billType || billDetail.transportArrangement || 
-              billDetail.consigneeType || billDetail.containerReturn || billDetail.fullContainerTransport ||
-              billDetail.lastMileTransport || billDetail.devanning || billDetail.t1Declaration) && (
+            {/* 附加属性 - 始终显示，未填写的显示"-" */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <Settings className="w-3 h-3 text-primary-600" />
+                附加属性
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-xs text-gray-500">箱型:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.containerType === 'cfs' ? '拼箱(CFS)' : 
+                     billDetail.containerType === 'fcl' ? '整箱(FCL)' : 
+                     billDetail.containerType || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">提单:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.billType === 'master' ? '船东单(Master Bill)' : 
+                     billDetail.billType === 'house' ? '货代单(House Bill)' : 
+                     billDetail.billType || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">运输:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.transportArrangement === 'entrust' ? '委托我司运输' : 
+                     billDetail.transportArrangement === 'self' ? '自行运输' : 
+                     billDetail.transportArrangement || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">收货人:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.consigneeType === 'asl' ? 'ASL为收货人' : 
+                     billDetail.consigneeType === 'not-asl' ? 'ASL不是提单收货人' : 
+                     billDetail.consigneeType || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">异地还柜:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.containerReturn === 'off-site' ? '异地还柜(非Rotterdam)' : 
+                     billDetail.containerReturn === 'local' ? '本地还柜' : 
+                     billDetail.containerReturn || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">全程整柜运输:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.fullContainerTransport === 'must-full' ? '必须整柜派送' : 
+                     billDetail.fullContainerTransport === 'can-split' ? '可拆柜后托盘送货' : 
+                     billDetail.fullContainerTransport || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">末端运输方式:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.lastMileTransport === 'truck' ? '卡车派送' : 
+                     billDetail.lastMileTransport === 'train' ? '铁路运输' : 
+                     billDetail.lastMileTransport === 'air' ? '空运' : 
+                     billDetail.lastMileTransport || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">拆柜:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.devanning === 'required' ? '需要拆柜分货服务' : 
+                     billDetail.devanning === 'not-required' ? '不需要拆柜' : 
+                     billDetail.devanning || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">T1报关:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.t1Declaration === 'yes' ? '是' : 
+                     billDetail.t1Declaration === 'no' ? '否' : 
+                     billDetail.t1Declaration || '-'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Reference List - 参考号列表 */}
+            {billDetail.referenceList && billDetail.referenceList.length > 0 && (
               <div className="bg-white rounded-lg border border-gray-200 p-3">
                 <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                  <Settings className="w-3 h-3 text-primary-600" />
-                  附加属性
+                  <FileText className="w-3 h-3 text-primary-600" />
+                  Reference List
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {billDetail.containerType && (
-                    <div>
-                      <span className="text-xs text-gray-500">箱型:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.containerType === 'cfs' ? '拼箱(CFS)' : 
-                         billDetail.containerType === 'fcl' ? '整箱(FCL)' : billDetail.containerType}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.billType && (
-                    <div>
-                      <span className="text-xs text-gray-500">提单:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.billType === 'master' ? '船东单(Master Bill)' : 
-                         billDetail.billType === 'house' ? '货代单(House Bill)' : billDetail.billType}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.transportArrangement && (
-                    <div>
-                      <span className="text-xs text-gray-500">运输:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.transportArrangement === 'entrust' ? '委托我司运输' : 
-                         billDetail.transportArrangement === 'self' ? '自行运输' : billDetail.transportArrangement}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.consigneeType && (
-                    <div>
-                      <span className="text-xs text-gray-500">收货人:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.consigneeType === 'asl' ? 'ASL为收货人' : 
-                         billDetail.consigneeType === 'not-asl' ? 'ASL不是提单收货人' : billDetail.consigneeType}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.containerReturn && (
-                    <div>
-                      <span className="text-xs text-gray-500">异地还柜:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.containerReturn === 'off-site' ? '异地还柜(非Rotterdam)' : 
-                         billDetail.containerReturn === 'local' ? '本地还柜' : billDetail.containerReturn}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.fullContainerTransport && (
-                    <div>
-                      <span className="text-xs text-gray-500">全程整柜运输:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.fullContainerTransport === 'must-full' ? '必须整柜派送' : 
-                         billDetail.fullContainerTransport === 'can-split' ? '可拆柜后托盘送货' : billDetail.fullContainerTransport}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.lastMileTransport && (
-                    <div>
-                      <span className="text-xs text-gray-500">末端运输方式:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.lastMileTransport === 'truck' ? '卡车派送' : 
-                         billDetail.lastMileTransport === 'train' ? '铁路运输' : 
-                         billDetail.lastMileTransport === 'air' ? '空运' : billDetail.lastMileTransport}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.devanning && (
-                    <div>
-                      <span className="text-xs text-gray-500">拆柜:</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.devanning === 'required' ? '需要拆柜分货服务' : 
-                         billDetail.devanning === 'not-required' ? '不需要拆柜' : billDetail.devanning}
-                      </span>
-                    </div>
-                  )}
-                  {billDetail.t1Declaration && (
-                    <div>
-                      <span className="text-xs text-gray-500">海关经停报关服务(T1报关):</span>
-                      <span className="ml-2 font-medium text-xs">
-                        {billDetail.t1Declaration === 'yes' ? '是' : 
-                         billDetail.t1Declaration === 'no' ? '否' : billDetail.t1Declaration}
-                      </span>
-                    </div>
-                  )}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">参考号</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">件数</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">毛重</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">发货人</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">发货人详情</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">收货地址</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">收货地址详情</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {billDetail.referenceList.map((ref: any, idx: number) => (
+                        <tr key={idx}>
+                          <td className="px-2 py-1.5 text-gray-900">{ref.referenceNumber || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.pieces || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.grossWeight || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.shipper || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.shipperDetails || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.consigneeAddress || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.consigneeAddressDetails || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
@@ -1324,134 +1313,14 @@ export default function BillDetails() {
           </div>
         )}
 
-        {/* 文件管理 */}
+        {/* 文件管理 - 云端文档（腾讯云COS） */}
         {activeTab === 'files' && (
-          <div className="space-y-4">
-            {/* 上传区域 */}
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-gray-900 flex items-center gap-2">
-                  <Upload className="w-3 h-3 text-primary-600" />
-                  文件上传
-                </h3>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                  <span className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded transition-colors ${
-                    uploading 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-primary-600 text-white hover:bg-primary-700'
-                  }`}>
-                    {uploading ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        上传中 {uploadProgress}%
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3 h-3" />
-                        选择文件
-                      </>
-                    )}
-                  </span>
-                </label>
-              </div>
-              <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center">
-                <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-xs text-gray-500">点击上方按钮或拖拽文件到此处上传</p>
-                <p className="text-xs text-gray-400 mt-1">支持所有类型文件，文件会自动压缩存储以节省空间</p>
-              </div>
-            </div>
-
-            {/* 文件列表 */}
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <FileText className="w-3 h-3 text-primary-600" />
-                文件列表 ({billFiles.length})
-              </h3>
-              {billFiles.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-xs">
-                  暂无文件，请上传文件
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {billFiles.map((file) => (
-                    <div 
-                      key={file.id} 
-                      className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {getFileIcon(file.fileType)}
-                        <div>
-                          <p className="text-xs font-medium text-gray-900">{file.fileName}</p>
-                          <p className="text-xs text-gray-400">
-                            原始: {formatFileSize(file.originalSize)} → 压缩后: {formatFileSize(file.compressedSize)}
-                            <span className="ml-2 text-green-600">
-                              (节省 {Math.round((1 - file.compressedSize / file.originalSize) * 100)}%)
-                            </span>
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            上传时间: {new Date(file.uploadTime).toLocaleString()} | 上传者: {file.uploadBy}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleFileDownload(file.id, file.fileName)}
-                          className="p-1.5 text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                          title="下载文件（恢复原始大小）"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleFileDelete(file.id, file.fileName)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="删除文件"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 存储统计 */}
-            {billFiles.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                  <FileArchive className="w-3 h-3 text-primary-600" />
-                  存储统计
-                </h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-2 bg-blue-50 rounded-lg">
-                    <p className="text-lg font-bold text-blue-600">
-                      {formatFileSize(billFiles.reduce((sum, f) => sum + f.originalSize, 0))}
-                    </p>
-                    <p className="text-xs text-gray-500">原始总大小</p>
-                  </div>
-                  <div className="p-2 bg-green-50 rounded-lg">
-                    <p className="text-lg font-bold text-green-600">
-                      {formatFileSize(billFiles.reduce((sum, f) => sum + f.compressedSize, 0))}
-                    </p>
-                    <p className="text-xs text-gray-500">压缩后总大小</p>
-                  </div>
-                  <div className="p-2 bg-purple-50 rounded-lg">
-                    <p className="text-lg font-bold text-purple-600">
-                      {formatFileSize(billFiles.reduce((sum, f) => sum + (f.originalSize - f.compressedSize), 0))}
-                    </p>
-                    <p className="text-xs text-gray-500">节省空间</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <OrderDocuments
+            billId={id || ''}
+            billNumber={billDetail?.billNumber}
+            customerId={billDetail?.customerId}
+            customerName={billDetail?.customerName}
+          />
         )}
 
         {/* 时间线 */}
@@ -2600,6 +2469,72 @@ export default function BillDetails() {
         defaultCustomerId={billDetail?.customerId}
         defaultCustomerName={billDetail?.customerName}
         defaultFeeType={currentFeeType}
+      />
+
+      {/* 编辑提单弹窗 */}
+      <CreateBillModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={async () => {
+          setShowEditModal(false)
+          // 重新加载提单详情
+          if (id) {
+            try {
+              const response = await getBillByIdFromAPI(id)
+              if (response.errCode === 200 && response.data) {
+                setBillDetail(response.data)
+              }
+            } catch (error) {
+              console.error('重新加载提单详情失败:', error)
+            }
+          }
+        }}
+        mode="edit"
+        editData={billDetail ? {
+          id: billDetail.id,
+          billNumber: billDetail.billNumber,
+          masterBillNumber: billDetail.containerNumber, // containerNumber 在数据库中存储的是主单号
+          containerNumber: billDetail.actualContainerNo,
+          shippingCompany: billDetail.shippingCompany,
+          origin: billDetail.origin,
+          destination: billDetail.destination,
+          portOfLoading: billDetail.portOfLoading,
+          portOfDischarge: billDetail.portOfDischarge,
+          pieces: billDetail.pieces,
+          weight: billDetail.weight,
+          volume: billDetail.volume,
+          eta: billDetail.eta,
+          etd: billDetail.etd,
+          transportMethod: billDetail.transportMethod === '海运' ? 'sea' : 
+                           billDetail.transportMethod === '空运' ? 'air' : 
+                           billDetail.transportMethod === '铁路' ? 'rail' : 
+                           billDetail.transportMethod === '卡车' ? 'truck' : 'sea',
+          // 航程信息
+          vessel: billDetail.vessel,
+          voyage: billDetail.voyage,
+          groundHandling: billDetail.groundHandling,
+          // 集装箱信息
+          actualContainerNo: billDetail.actualContainerNo,
+          sealNumber: billDetail.sealNumber,
+          containerSize: billDetail.containerSize,
+          // 发货人信息
+          shipper: billDetail.shipper,
+          // Reference List
+          referenceList: billDetail.referenceList,
+          // 附加属性
+          containerType: billDetail.containerType,
+          billType: billDetail.billType,
+          consigneeType: billDetail.consigneeType,
+          containerReturn: billDetail.containerReturn,
+          fullContainerTransport: billDetail.fullContainerTransport,
+          lastMileTransport: billDetail.lastMileTransport,
+          devanning: billDetail.devanning,
+          t1Declaration: billDetail.t1Declaration,
+          transportArrangement: billDetail.transportArrangement,
+          customerId: billDetail.customerId,
+          customerName: billDetail.customerName,
+          status: billDetail.status,
+        } : null}
       />
     </div>
   )

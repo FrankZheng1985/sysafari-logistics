@@ -912,3 +912,24 @@ export async function getAssessmentSummary(req, res) {
   }
 }
 
+// ==================== 最后里程集成 ====================
+
+/**
+ * 获取最后里程承运商列表（用于派送服务商选择）
+ */
+export async function getLastMileCarriers(req, res) {
+  try {
+    const { type, status } = req.query
+    
+    const carriers = await model.getLastMileCarriers({
+      type,
+      status: status || 'active'
+    })
+    
+    return success(res, carriers)
+  } catch (error) {
+    console.error('获取最后里程承运商列表失败:', error)
+    return serverError(res, '获取最后里程承运商列表失败')
+  }
+}
+

@@ -232,9 +232,9 @@ export async function generateDocumentNo(documentType) {
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
   const prefix = documentType || 'DOC'
   
-  // 获取当日最大序号
+  // 获取当日最大序号（使用 PostgreSQL RIGHT() 函数获取最后4位）
   const result = await db.prepare(`
-    SELECT MAX(CAST(SUBSTR(document_no, -4) AS INTEGER)) as max_seq
+    SELECT MAX(CAST(RIGHT(document_no, 4) AS INTEGER)) as max_seq
     FROM clearance_documents
     WHERE document_no LIKE ?
   `).get(`${prefix}${dateStr}%`)

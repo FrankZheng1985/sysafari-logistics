@@ -22,6 +22,7 @@ import {
   Building2,
   TrendingUp,
   MessageSquare,
+  MessageCircle,
   Clock,
   CheckCircle,
   CreditCard,
@@ -76,6 +77,7 @@ const menuItems: MenuItem[] = [
       { path: '/documents/matching', label: 'HS匹配审核', icon: CheckCircle },
       { path: '/documents/tax-calc', label: '税费计算', icon: Calculator },
       { path: '/documents/supplement', label: '数据补充', icon: FilePlus },
+      { path: '/documents/match-records', label: '匹配记录库', icon: FileCheck },
     ],
   },
   {
@@ -150,9 +152,8 @@ const menuItems: MenuItem[] = [
     label: '系统管理',
     icon: Settings,
     children: [
-      { path: '/system/messages', label: '消息中心', icon: MessageSquare },
-      { path: '/system/approvals', label: '审批工作台', icon: ClipboardCheck },
-      { path: '/system/alerts', label: '预警管理', icon: Clock },
+      { path: '/system/info-center', label: '信息中心', icon: MessageCircle },
+      { path: '/system/data-import', label: '数据导入', icon: Upload },
       { path: '/system/menu-settings', label: '板块开关', icon: ToggleLeft },
       { path: '/system/user-manage', label: '用户管理', icon: Users },
       { path: '/system/security-settings', label: '安全设置', icon: Shield },

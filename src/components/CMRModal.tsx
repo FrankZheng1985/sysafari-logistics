@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Truck, Clock, MapPin, Package, CheckCircle, AlertTriangle, Calendar, ChevronDown } from 'lucide-react'
+import { X, Truck, Clock, MapPin, Package, CheckCircle, AlertTriangle, ChevronDown, Calendar } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
+import DateTimePicker from './DateTimePicker'
 
 const API_BASE = getApiBaseUrl()
 
@@ -49,12 +50,21 @@ export interface CMRDetail {
   exceptionRecords?: ExceptionRecord[]
 }
 
+// 送达地址选项
+interface DeliveryAddressOption {
+  label: string  // 显示名称（如公司名或参考号）
+  address: string  // 完整地址
+  details?: string  // 地址详情
+}
+
 interface CMRModalProps {
   visible: boolean
   onClose: () => void
   billNumber: string
   currentStatus: string // 待派送, 派送中, 订单异常, 已送达
   cmrDetail?: CMRDetail
+  defaultDeliveryAddress?: string // 从提单获取的默认送达地址
+  deliveryAddresses?: DeliveryAddressOption[] // 从 referenceList 获取的多个卸货地址
   onSubmit: (data: {
     status: string
     detail: CMRDetail
@@ -73,6 +83,8 @@ export default function CMRModal({
   billNumber,
   currentStatus,
   cmrDetail,
+  defaultDeliveryAddress,
+  deliveryAddresses = [],
   onSubmit,
 }: CMRModalProps) {
   // 模态框模式
@@ -119,7 +131,8 @@ export default function CMRModal({
       setEstimatedPickupTime(cmrDetail.estimatedPickupTime || '')
       setServiceProvider(cmrDetail.serviceProvider || '')
       setPickupNote(cmrDetail.pickupNote || '')
-      setDeliveryAddress(cmrDetail.deliveryAddress || '')
+      // 优先使用已保存的地址，否则使用提单默认地址
+      setDeliveryAddress(cmrDetail.deliveryAddress || defaultDeliveryAddress || '')
       setEstimatedArrivalTime(cmrDetail.estimatedArrivalTime || '')
       setArrivalNote(cmrDetail.arrivalNote || '')
       setActualArrivalTime(cmrDetail.actualArrivalTime || '')
@@ -127,6 +140,9 @@ export default function CMRModal({
       setUnloadingCompleteTime(cmrDetail.unloadingCompleteTime || '')
       setUnloadingNote(cmrDetail.unloadingNote || '')
       setConfirmNote(cmrDetail.confirmNote || '')
+    } else if (visible && !cmrDetail && defaultDeliveryAddress) {
+      // 如果没有 cmrDetail 但有默认地址，也设置
+      setDeliveryAddress(defaultDeliveryAddress)
     }
     
     // 根据当前状态设置模式和步骤
@@ -700,16 +716,12 @@ export default function CMRModal({
                       <Clock className="w-3 h-3 inline mr-1" />
                       预计提货时间 <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        type="datetime-local"
-                        value={estimatedPickupTime}
-                        onChange={(e) => setEstimatedPickupTime(e.target.value)}
-                        title="预计提货时间"
-                        className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                      />
-                      <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    </div>
+                    <DateTimePicker
+                      value={estimatedPickupTime}
+                      onChange={setEstimatedPickupTime}
+                      placeholder="请选择预计提货时间"
+                      title="预计提货时间"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -802,29 +814,67 @@ export default function CMRModal({
                       <MapPin className="w-3 h-3 inline mr-1" />
                       送达地址 <span className="text-red-500">*</span>
                     </label>
-                    <textarea
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      placeholder="请输入完整送达地址..."
-                      rows={2}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                    />
+                    {/* 如果有多个地址选项，显示下拉选择 */}
+                    {deliveryAddresses.length > 0 ? (
+                      <div className="space-y-2">
+                        <select
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                          title="选择送达地址"
+                          aria-label="选择送达地址"
+                          className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        >
+                          <option value="">请选择送达地址</option>
+                          {deliveryAddresses.map((addr, idx) => (
+                            <option key={idx} value={addr.details || addr.address}>
+                              {addr.label} - {addr.address}
+                            </option>
+                          ))}
+                          {/* 如果当前值不在选项中，也显示出来 */}
+                          {deliveryAddress && !deliveryAddresses.some(a => (a.details || a.address) === deliveryAddress) && (
+                            <option value={deliveryAddress}>{deliveryAddress}</option>
+                          )}
+                        </select>
+                        {/* 显示已选地址的完整详情 */}
+                        {deliveryAddress && (
+                          <div className="p-2 bg-blue-50 rounded text-xs text-blue-700">
+                            <strong>已选地址：</strong>{deliveryAddress}
+                          </div>
+                        )}
+                        {/* 提示可以手动输入 */}
+                        <p className="text-[10px] text-gray-400">
+                          共 {deliveryAddresses.length} 个卸货地址，或在下方手动输入
+                        </p>
+                        <textarea
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                          placeholder="也可手动输入完整送达地址..."
+                          rows={2}
+                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        />
+                      </div>
+                    ) : (
+                      /* 没有地址选项时，只显示手动输入 */
+                      <textarea
+                        value={deliveryAddress}
+                        onChange={(e) => setDeliveryAddress(e.target.value)}
+                        placeholder="请输入完整送达地址..."
+                        rows={2}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                      />
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      <Calendar className="w-3 h-3 inline mr-1" />
+                      <Clock className="w-3 h-3 inline mr-1" />
                       预计到达时间 <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        type="datetime-local"
-                        value={estimatedArrivalTime}
-                        onChange={(e) => setEstimatedArrivalTime(e.target.value)}
-                        title="预计到达时间"
-                        className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                      />
-                      <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    </div>
+                    <DateTimePicker
+                      value={estimatedArrivalTime}
+                      onChange={setEstimatedArrivalTime}
+                      placeholder="请选择预计到达时间"
+                      title="预计到达时间"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>
@@ -847,16 +897,12 @@ export default function CMRModal({
                       <Clock className="w-3 h-3 inline mr-1" />
                       实际送达时间 <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        type="datetime-local"
-                        value={actualArrivalTime}
-                        onChange={(e) => setActualArrivalTime(e.target.value)}
-                        title="实际送达时间"
-                        className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                      />
-                      <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    </div>
+                    <DateTimePicker
+                      value={actualArrivalTime}
+                      onChange={setActualArrivalTime}
+                      placeholder="请选择实际送达时间"
+                      title="实际送达时间"
+                    />
                   </div>
                   {(estimatedArrivalTime || deliveryAddress) && (
                     <div className="p-2 bg-gray-50 rounded">
@@ -896,16 +942,12 @@ export default function CMRModal({
                       <Package className="w-3 h-3 inline mr-1" />
                       卸货完成时间 <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        type="datetime-local"
-                        value={unloadingCompleteTime}
-                        onChange={(e) => setUnloadingCompleteTime(e.target.value)}
-                        title="卸货完成时间"
-                        className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                      />
-                      <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    </div>
+                    <DateTimePicker
+                      value={unloadingCompleteTime}
+                      onChange={setUnloadingCompleteTime}
+                      placeholder="请选择卸货完成时间"
+                      title="卸货完成时间"
+                    />
                   </div>
                   {actualArrivalTime && (
                     <div className="p-2 bg-green-50 rounded">

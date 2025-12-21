@@ -1,44 +1,56 @@
 /**
  * 文档管理模块 - 数据模型
- * 包含：文档管理、文件上传、文档分类、文档模板、版本管理
+ * 支持腾讯云COS存储、订单关联、权限控制
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
-import fs from 'fs'
-import path from 'path'
 
 // ==================== 常量定义 ====================
 
 export const DOCUMENT_TYPE = {
-  BILL_OF_LADING: 'bill_of_lading',     // 提单
-  INVOICE: 'invoice',                     // 发票
-  PACKING_LIST: 'packing_list',          // 装箱单
+  BILL_OF_LADING: 'bill_of_lading',           // 提单
+  INVOICE: 'invoice',                          // 发票
+  PACKING_LIST: 'packing_list',               // 装箱单
   CUSTOMS_DECLARATION: 'customs_declaration', // 报关单
-  CERTIFICATE: 'certificate',             // 证书
-  CONTRACT: 'contract',                   // 合同
-  INSURANCE: 'insurance',                 // 保险单
-  DELIVERY_NOTE: 'delivery_note',         // 送货单
-  INSPECTION_REPORT: 'inspection_report', // 查验报告
-  OTHER: 'other'                          // 其他
+  CONTRACT: 'contract',                        // 合同
+  CERTIFICATE: 'certificate',                  // 证书
+  INSURANCE: 'insurance',                      // 保险单
+  DELIVERY_NOTE: 'delivery_note',             // 送货单/CMR
+  INSPECTION_REPORT: 'inspection_report',     // 查验报告
+  QUOTATION: 'quotation',                      // 报价单
+  PAYMENT_RECEIPT: 'payment_receipt',         // 付款凭证
+  OTHER: 'other'                               // 其他
+}
+
+export const DOCUMENT_TYPE_LABELS = {
+  bill_of_lading: '提单',
+  invoice: '发票',
+  packing_list: '装箱单',
+  customs_declaration: '报关单',
+  contract: '合同',
+  certificate: '证书',
+  insurance: '保险单',
+  delivery_note: '送货单/CMR',
+  inspection_report: '查验报告',
+  quotation: '报价单',
+  payment_receipt: '付款凭证',
+  other: '其他'
 }
 
 export const DOCUMENT_STATUS = {
-  DRAFT: 'draft',           // 草稿
-  PENDING: 'pending',       // 待审核
-  APPROVED: 'approved',     // 已审核
-  REJECTED: 'rejected',     // 已拒绝
-  ARCHIVED: 'archived'      // 已归档
+  ACTIVE: 'active',       // 正常
+  ARCHIVED: 'archived',   // 已归档
+  DELETED: 'deleted'      // 已删除
 }
 
-export const ENTITY_TYPE = {
-  BILL: 'bill',             // 提单
-  CUSTOMER: 'customer',     // 客户
-  INVOICE: 'invoice',       // 发票
-  SHIPMENT: 'shipment'      // 货运
+export const ACCESS_LEVEL = {
+  ORDER_RELATED: 'order_related',  // 订单相关人员可见
+  FINANCE: 'finance',               // 财务可见
+  ADMIN: 'admin'                    // 仅管理员可见
 }
 
-// 上传目录
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads')
+// 财务相关文档类型
+export const FINANCE_DOCUMENT_TYPES = ['invoice', 'contract', 'payment_receipt', 'quotation']
 
 // ==================== 文档管理 ====================
 
@@ -48,39 +60,68 @@ const UPLOAD_DIR = path.join(process.cwd(), 'uploads')
 export async function getDocuments(params = {}) {
   const db = getDatabase()
   const { 
-    type, status, entityType, entityId,
-    uploadedBy, startDate, endDate, search,
-    page = 1, pageSize = 20 
+    billId,
+    billNumber,
+    customerId,
+    documentType,
+    status = 'active',
+    accessLevel,
+    uploadedBy,
+    startDate,
+    endDate,
+    search,
+    page = 1,
+    pageSize = 20,
+    // 权限过滤参数
+    userRole,
+    userId
   } = params
   
   let query = 'SELECT * FROM documents WHERE 1=1'
   const queryParams = []
   
-  if (type) {
-    query += ' AND document_type = ?'
-    queryParams.push(type)
-  }
-  
+  // 状态过滤
   if (status) {
     query += ' AND status = ?'
     queryParams.push(status)
   }
   
-  if (entityType) {
-    query += ' AND entity_type = ?'
-    queryParams.push(entityType)
+  // 订单关联过滤
+  if (billId) {
+    query += ' AND bill_id = ?'
+    queryParams.push(billId)
   }
   
-  if (entityId) {
-    query += ' AND entity_id = ?'
-    queryParams.push(entityId)
+  if (billNumber) {
+    query += ' AND bill_number = ?'
+    queryParams.push(billNumber)
   }
   
+  // 客户过滤
+  if (customerId) {
+    query += ' AND customer_id = ?'
+    queryParams.push(customerId)
+  }
+  
+  // 文档类型过滤
+  if (documentType) {
+    query += ' AND document_type = ?'
+    queryParams.push(documentType)
+  }
+  
+  // 访问级别过滤
+  if (accessLevel) {
+    query += ' AND access_level = ?'
+    queryParams.push(accessLevel)
+  }
+  
+  // 上传人过滤
   if (uploadedBy) {
     query += ' AND uploaded_by = ?'
     queryParams.push(uploadedBy)
   }
   
+  // 日期范围过滤
   if (startDate) {
     query += ' AND upload_time >= ?'
     queryParams.push(startDate)
@@ -91,10 +132,36 @@ export async function getDocuments(params = {}) {
     queryParams.push(endDate)
   }
   
+  // 搜索
   if (search) {
-    query += ` AND (document_name LIKE ? OR original_name LIKE ? OR description LIKE ?)`
+    query += ` AND (
+      document_name LIKE ? OR 
+      original_name LIKE ? OR 
+      bill_number LIKE ? OR
+      description LIKE ?
+    )`
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern)
+  }
+  
+  // 权限过滤
+  if (userRole && userRole !== 'admin') {
+    // 非管理员只能看到：
+    // 1. 自己上传的文档
+    // 2. 公开的文档 (is_public = true)
+    // 3. 财务角色可以看到财务相关文档
+    if (userRole === 'finance') {
+      query += ` AND (
+        is_public = true OR 
+        uploaded_by = ? OR 
+        access_level = 'finance' OR
+        document_type IN (${FINANCE_DOCUMENT_TYPES.map(() => '?').join(',')})
+      )`
+      queryParams.push(userId, ...FINANCE_DOCUMENT_TYPES)
+    } else {
+      query += ' AND (is_public = true OR uploaded_by = ?)'
+      queryParams.push(userId)
+    }
   }
   
   // 获取总数
@@ -109,10 +176,50 @@ export async function getDocuments(params = {}) {
   
   return {
     list: list.map(convertDocumentToCamelCase),
-    total: totalResult.total,
+    total: totalResult?.total || 0,
     page,
     pageSize
   }
+}
+
+/**
+ * 获取订单关联的文档列表
+ */
+export async function getOrderDocuments(billId, params = {}) {
+  return getDocuments({
+    billId,
+    status: 'active',
+    ...params
+  })
+}
+
+/**
+ * 按文档类型分组获取订单文档
+ */
+export async function getOrderDocumentsGrouped(billId) {
+  const db = getDatabase()
+  
+  const documents = await db.prepare(`
+    SELECT * FROM documents 
+    WHERE bill_id = ? AND status = 'active'
+    ORDER BY document_type, upload_time DESC
+  `).all(billId)
+  
+  // 按类型分组
+  const grouped = {}
+  documents.forEach(doc => {
+    const type = doc.document_type || 'other'
+    if (!grouped[type]) {
+      grouped[type] = {
+        type,
+        label: DOCUMENT_TYPE_LABELS[type] || '其他',
+        documents: []
+      }
+    }
+    grouped[type].documents.push(convertDocumentToCamelCase(doc))
+  })
+  
+  return Object.values(grouped)
 }
 
 /**
@@ -120,19 +227,19 @@ export async function getDocuments(params = {}) {
  */
 export async function getDocumentStats(params = {}) {
   const db = getDatabase()
-  const { entityType, entityId } = params
+  const { billId, customerId } = params
   
-  let whereClause = 'WHERE 1=1'
+  let whereClause = "WHERE status = 'active'"
   const queryParams = []
   
-  if (entityType) {
-    whereClause += ' AND entity_type = ?'
-    queryParams.push(entityType)
+  if (billId) {
+    whereClause += ' AND bill_id = ?'
+    queryParams.push(billId)
   }
   
-  if (entityId) {
-    whereClause += ' AND entity_id = ?'
-    queryParams.push(entityId)
+  if (customerId) {
+    whereClause += ' AND customer_id = ?'
+    queryParams.push(customerId)
   }
   
   // 按文档类型统计
@@ -140,13 +247,6 @@ export async function getDocumentStats(params = {}) {
     SELECT document_type, COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size
     FROM documents ${whereClause}
     GROUP BY document_type
-  `).all(...queryParams)
-  
-  // 按状态统计
-  const byStatus = await db.prepare(`
-    SELECT status, COUNT(*) as count
-    FROM documents ${whereClause}
-    GROUP BY status
   `).all(...queryParams)
   
   // 总计
@@ -157,17 +257,14 @@ export async function getDocumentStats(params = {}) {
   
   return {
     total: {
-      count: total.count || 0,
-      totalSize: total.total_size || 0
+      count: total?.count || 0,
+      totalSize: total?.total_size || 0
     },
     byType: byType.map(t => ({
       type: t.document_type,
+      label: DOCUMENT_TYPE_LABELS[t.document_type] || '其他',
       count: t.count,
       totalSize: t.total_size
-    })),
-    byStatus: byStatus.map(s => ({
-      status: s.status,
-      count: s.count
     }))
   }
 }
@@ -182,46 +279,81 @@ export async function getDocumentById(id) {
 }
 
 /**
+ * 根据COS Key获取文档
+ */
+export async function getDocumentByCosKey(cosKey) {
+  const db = getDatabase()
+  const document = await db.prepare('SELECT * FROM documents WHERE cos_key = ?').get(cosKey)
+  return document ? convertDocumentToCamelCase(document) : null
+}
+
+/**
  * 创建文档记录
  */
 export async function createDocument(data) {
   const db = getDatabase()
   const id = generateId()
-  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
+  const documentNumber = `DOC${Date.now()}`
+  const now = new Date().toISOString()
   
   const result = await db.prepare(`
     INSERT INTO documents (
-      id, document_name, original_name, document_type, file_path,
-      file_size, mime_type, entity_type, entity_id, entity_number,
-      description, tags, version, status,
+      id, document_number, document_name, original_name, document_type,
+      bill_id, bill_number, customer_id, customer_name,
+      cos_key, cos_url, cos_bucket, cos_region,
+      file_size, mime_type, file_extension,
+      access_level, is_public, description, tags, remark,
+      version, is_latest, parent_id,
       uploaded_by, uploaded_by_name, upload_time,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      status, created_at, updated_at
+    ) VALUES (
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?
+    )
   `).run(
     id,
-    data.documentName,
-    data.originalName || data.documentName,
+    documentNumber,
+    data.documentName || data.originalName,
+    data.originalName,
     data.documentType || 'other',
-    data.filePath,
+    data.billId || null,
+    data.billNumber || null,
+    data.customerId || null,
+    data.customerName || null,
+    data.cosKey,
+    data.cosUrl,
+    data.cosBucket || null,
+    data.cosRegion || null,
     data.fileSize || 0,
     data.mimeType || 'application/octet-stream',
-    data.entityType || null,
-    data.entityId || null,
-    data.entityNumber || '',
-    data.description || '',
+    data.fileExtension || null,
+    data.accessLevel || 'order_related',
+    data.isPublic !== false,
+    data.description || null,
     data.tags ? JSON.stringify(data.tags) : '[]',
+    data.remark || null,
     data.version || 1,
-    data.status || 'approved',
+    data.isLatest !== false,
+    data.parentId || null,
     data.uploadedBy || null,
-    data.uploadedByName || '',
+    data.uploadedByName || null,
+    now,
+    'active',
+    now,
     now
   )
   
-  return { id }
+  return { id, documentNumber }
 }
 
 /**
- * 更新文档
+ * 更新文档信息
  */
 export async function updateDocument(id, data) {
   const db = getDatabase()
@@ -232,7 +364,15 @@ export async function updateDocument(id, data) {
     documentName: 'document_name',
     documentType: 'document_type',
     description: 'description',
-    status: 'status'
+    remark: 'remark',
+    accessLevel: 'access_level',
+    isPublic: 'is_public',
+    status: 'status',
+    // 订单关联
+    billId: 'bill_id',
+    billNumber: 'bill_number',
+    customerId: 'customer_id',
+    customerName: 'customer_name'
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
@@ -250,7 +390,8 @@ export async function updateDocument(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push("updated_at = NOW()")
+  fields.push("updated_at = ?")
+  values.push(new Date().toISOString())
   values.push(id)
   
   const result = await db.prepare(`UPDATE documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -258,218 +399,64 @@ export async function updateDocument(id, data) {
 }
 
 /**
- * 删除文档
+ * 删除文档（软删除）
  */
 export async function deleteDocument(id) {
   const db = getDatabase()
-  
-  // 获取文档信息以删除文件
-  const doc = getDocumentById(id)
-  
-  // 删除数据库记录
+  const now = new Date().toISOString()
+  const result = await db.prepare(`
+    UPDATE documents SET status = 'deleted', updated_at = ? WHERE id = ?
+  `).run(now, id)
+  return result.changes > 0
+}
+
+/**
+ * 硬删除文档
+ */
+export async function hardDeleteDocument(id) {
+  const db = getDatabase()
   const result = await db.prepare('DELETE FROM documents WHERE id = ?').run(id)
-  
-  // 尝试删除物理文件
-  if (doc && doc.filePath) {
-    try {
-      const fullPath = path.join(UPLOAD_DIR, doc.filePath)
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath)
-      }
-    } catch (error) {
-      console.error('删除文件失败:', error.message)
-    }
-  }
-  
   return result.changes > 0
 }
 
 /**
- * 更新文档状态
+ * 批量删除文档
  */
-export async function updateDocumentStatus(id, status, reviewNote = '') {
+export async function deleteDocuments(ids) {
   const db = getDatabase()
-  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
+  const now = new Date().toISOString()
+  const placeholders = ids.map(() => '?').join(',')
+  const result = await db.prepare(`
+    UPDATE documents SET status = 'deleted', updated_at = ? WHERE id IN (${placeholders})
+  `).run(now, ...ids)
+  return result.changes
+}
+
+/**
+ * 关联文档到订单
+ */
+export async function linkDocumentToOrder(documentId, billId, billNumber) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
   const result = await db.prepare(`
     UPDATE documents 
-    SET status = ?, review_note = ?, review_time = ?, updated_at = NOW()
+    SET bill_id = ?, bill_number = ?, updated_at = ?
     WHERE id = ?
-  `).run(status, reviewNote, now, id)
+  `).run(billId, billNumber, now, documentId)
   return result.changes > 0
 }
 
-// ==================== 实体文档关联 ====================
-
 /**
- * 获取实体关联的文档
+ * 解除文档与订单的关联
  */
-export async function getEntityDocuments(entityType, entityId) {
+export async function unlinkDocumentFromOrder(documentId) {
   const db = getDatabase()
-  const documents = await db.prepare(`
-    SELECT * FROM documents 
-    WHERE entity_type = ? AND entity_id = ?
-    ORDER BY document_type, upload_time DESC
-  `).all(entityType, entityId)
-  
-  return documents.map(convertDocumentToCamelCase)
-}
-
-/**
- * 关联文档到实体
- */
-export async function linkDocumentToEntity(documentId, entityType, entityId, entityNumber = '') {
-  const db = getDatabase()
+  const now = new Date().toISOString()
   const result = await db.prepare(`
     UPDATE documents 
-    SET entity_type = ?, entity_id = ?, entity_number = ?, updated_at = NOW()
+    SET bill_id = NULL, bill_number = NULL, updated_at = ?
     WHERE id = ?
-  `).run(entityType, entityId, entityNumber, documentId)
-  return result.changes > 0
-}
-
-/**
- * 解除文档与实体的关联
- */
-export async function unlinkDocumentFromEntity(documentId) {
-  const db = getDatabase()
-  const result = await db.prepare(`
-    UPDATE documents 
-    SET entity_type = NULL, entity_id = NULL, entity_number = '', updated_at = NOW()
-    WHERE id = ?
-  `).run(documentId)
-  return result.changes > 0
-}
-
-// ==================== 文档模板 ====================
-
-/**
- * 获取文档模板列表
- */
-export async function getTemplates(params = {}) {
-  const db = getDatabase()
-  const { type, status = 'active', search, page = 1, pageSize = 20 } = params
-  
-  let query = 'SELECT * FROM document_templates WHERE 1=1'
-  const queryParams = []
-  
-  if (type) {
-    query += ' AND template_type = ?'
-    queryParams.push(type)
-  }
-  
-  if (status) {
-    query += ' AND status = ?'
-    queryParams.push(status)
-  }
-  
-  if (search) {
-    query += ` AND (template_name LIKE ? OR description LIKE ?)`
-    const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern)
-  }
-  
-  // 获取总数
-  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = await db.prepare(countQuery).get(...queryParams)
-  
-  // 分页
-  query += ' ORDER BY sort_order, template_name LIMIT ? OFFSET ?'
-  queryParams.push(pageSize, (page - 1) * pageSize)
-  
-  const list = await db.prepare(query).all(...queryParams)
-  
-  return {
-    list: list.map(convertTemplateToCamelCase),
-    total: totalResult?.total || 0,
-    page,
-    pageSize
-  }
-}
-
-/**
- * 根据ID获取模板
- */
-export async function getTemplateById(id) {
-  const db = getDatabase()
-  const template = await db.prepare('SELECT * FROM document_templates WHERE id = ?').get(id)
-  return template ? convertTemplateToCamelCase(template) : null
-}
-
-/**
- * 创建文档模板
- */
-export async function createTemplate(data) {
-  const db = getDatabase()
-  const id = generateId()
-  
-  const result = await db.prepare(`
-    INSERT INTO document_templates (
-      id, template_name, template_type, file_path, file_name,
-      description, variables, sort_order, status,
-      created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-  `).run(
-    id,
-    data.templateName,
-    data.templateType || 'other',
-    data.filePath || '',
-    data.fileName || '',
-    data.description || '',
-    data.variables ? JSON.stringify(data.variables) : '[]',
-    data.sortOrder || 0,
-    data.status || 'active',
-    data.createdBy || null
-  )
-  
-  return { id }
-}
-
-/**
- * 更新文档模板
- */
-export async function updateTemplate(id, data) {
-  const db = getDatabase()
-  const fields = []
-  const values = []
-  
-  const fieldMap = {
-    templateName: 'template_name',
-    templateType: 'template_type',
-    filePath: 'file_path',
-    fileName: 'file_name',
-    description: 'description',
-    sortOrder: 'sort_order',
-    status: 'status'
-  }
-  
-  Object.entries(fieldMap).forEach(([jsField, dbField]) => {
-    if (data[jsField] !== undefined) {
-      fields.push(`${dbField} = ?`)
-      values.push(data[jsField])
-    }
-  })
-  
-  // 特殊处理variables
-  if (data.variables !== undefined) {
-    fields.push('variables = ?')
-    values.push(JSON.stringify(data.variables))
-  }
-  
-  if (fields.length === 0) return false
-  
-  fields.push("updated_at = NOW()")
-  values.push(id)
-  
-  const result = await db.prepare(`UPDATE document_templates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-  return result.changes > 0
-}
-
-/**
- * 删除文档模板
- */
-export async function deleteTemplate(id) {
-  const db = getDatabase()
-  const result = await db.prepare('DELETE FROM document_templates WHERE id = ?').run(id)
+  `).run(now, documentId)
   return result.changes > 0
 }
 
@@ -490,12 +477,14 @@ export async function getDocumentVersions(documentId) {
     id: v.id,
     documentId: v.document_id,
     version: v.version,
-    filePath: v.file_path,
+    cosKey: v.cos_key,
+    cosUrl: v.cos_url,
     fileSize: v.file_size,
     changeNote: v.change_note,
     uploadedBy: v.uploaded_by,
     uploadedByName: v.uploaded_by_name,
-    uploadTime: v.upload_time
+    uploadTime: v.upload_time,
+    createdAt: v.created_at
   }))
 }
 
@@ -505,7 +494,7 @@ export async function getDocumentVersions(documentId) {
 export async function createDocumentVersion(data) {
   const db = getDatabase()
   const id = generateId()
-  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
+  const now = new Date().toISOString()
   
   // 获取当前最高版本
   const latest = await db.prepare(`
@@ -514,78 +503,81 @@ export async function createDocumentVersion(data) {
   
   const newVersion = (latest?.max_version || 0) + 1
   
+  // 创建版本记录
   await db.prepare(`
     INSERT INTO document_versions (
-      id, document_id, version, file_path, file_size,
-      change_note, uploaded_by, uploaded_by_name, upload_time
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, document_id, version, cos_key, cos_url, file_size,
+      change_note, uploaded_by, uploaded_by_name, upload_time, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     data.documentId,
     newVersion,
-    data.filePath,
+    data.cosKey,
+    data.cosUrl,
     data.fileSize || 0,
     data.changeNote || '',
     data.uploadedBy || null,
     data.uploadedByName || '',
+    now,
     now
   )
   
-  // 更新主文档版本号和文件路径
+  // 更新主文档
   await db.prepare(`
     UPDATE documents 
-    SET version = ?, file_path = ?, file_size = ?, updated_at = NOW()
+    SET version = ?, cos_key = ?, cos_url = ?, file_size = ?, updated_at = ?
     WHERE id = ?
-  `).run(newVersion, data.filePath, data.fileSize || 0, data.documentId)
+  `).run(newVersion, data.cosKey, data.cosUrl, data.fileSize || 0, now, data.documentId)
   
   return { id, version: newVersion }
 }
 
-// ==================== 文件操作辅助函数 ====================
+// ==================== 权限检查 ====================
 
 /**
- * 确保上传目录存在
+ * 检查用户是否有权访问文档
  */
-export function ensureUploadDir(subDir = '') {
-  const targetDir = subDir ? path.join(UPLOAD_DIR, subDir) : UPLOAD_DIR
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true })
+export async function checkDocumentAccess(documentId, userId, userRole) {
+  const document = await getDocumentById(documentId)
+  
+  if (!document) {
+    return { hasAccess: false, reason: '文档不存在' }
   }
-  return targetDir
-}
-
-/**
- * 生成唯一文件名
- */
-export function generateUniqueFileName(originalName) {
-  const ext = path.extname(originalName)
-  const baseName = path.basename(originalName, ext)
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).substring(2, 8)
-  return `${baseName}_${timestamp}_${random}${ext}`
-}
-
-/**
- * 获取文件路径
- */
-export function getFilePath(relativePath) {
-  return path.join(UPLOAD_DIR, relativePath)
-}
-
-/**
- * 格式化文件大小
- */
-export async function formatFileSize(bytes) {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  
+  // 管理员可以访问所有文档
+  if (userRole === 'admin') {
+    return { hasAccess: true }
+  }
+  
+  // 上传者可以访问自己的文档
+  if (document.uploadedBy === userId) {
+    return { hasAccess: true }
+  }
+  
+  // 公开文档所有人可以访问
+  if (document.isPublic) {
+    return { hasAccess: true }
+  }
+  
+  // 财务角色可以访问财务相关文档
+  if (userRole === 'finance' && FINANCE_DOCUMENT_TYPES.includes(document.documentType)) {
+    return { hasAccess: true }
+  }
+  
+  // 财务角色可以访问财务级别的文档
+  if (userRole === 'finance' && document.accessLevel === 'finance') {
+    return { hasAccess: true }
+  }
+  
+  return { hasAccess: false, reason: '无权访问此文档' }
 }
 
 // ==================== 数据转换函数 ====================
 
 export function convertDocumentToCamelCase(row) {
+  if (!row) return null
+  
   let tags = []
   if (row.tags) {
     try {
@@ -597,95 +589,95 @@ export function convertDocumentToCamelCase(row) {
   
   return {
     id: row.id,
+    documentNumber: row.document_number,
     documentName: row.document_name,
     originalName: row.original_name,
     documentType: row.document_type,
-    filePath: row.file_path,
+    documentTypeLabel: DOCUMENT_TYPE_LABELS[row.document_type] || '其他',
+    // 订单关联
+    billId: row.bill_id,
+    billNumber: row.bill_number,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    // COS存储信息
+    cosKey: row.cos_key,
+    cosUrl: row.cos_url,
+    cosBucket: row.cos_bucket,
+    cosRegion: row.cos_region,
+    // 文件信息
     fileSize: row.file_size,
     fileSizeFormatted: formatFileSize(row.file_size),
     mimeType: row.mime_type,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
-    entityNumber: row.entity_number,
+    fileExtension: row.file_extension,
+    // 权限
+    accessLevel: row.access_level,
+    isPublic: row.is_public === true || row.is_public === 1,
+    // 描述和标签
     description: row.description,
     tags,
+    remark: row.remark,
+    // 版本
     version: row.version,
-    status: row.status,
-    reviewNote: row.review_note,
-    reviewTime: row.review_time,
+    isLatest: row.is_latest === true || row.is_latest === 1,
+    parentId: row.parent_id,
+    // 上传信息
     uploadedBy: row.uploaded_by,
     uploadedByName: row.uploaded_by_name,
     uploadTime: row.upload_time,
-    createTime: row.created_at,
-    updateTime: row.updated_at
+    // 状态
+    status: row.status,
+    // 时间戳
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   }
 }
 
-export function convertTemplateToCamelCase(row) {
-  let variables = []
-  if (row.variables) {
-    try {
-      variables = JSON.parse(row.variables)
-    } catch (e) {
-      variables = []
-    }
-  }
-  
-  return {
-    id: row.id,
-    templateName: row.template_name,
-    templateType: row.template_type,
-    filePath: row.file_path,
-    fileName: row.file_name,
-    description: row.description,
-    variables,
-    sortOrder: row.sort_order,
-    status: row.status,
-    createdBy: row.created_by,
-    createTime: row.created_at,
-    updateTime: row.updated_at
-  }
+/**
+ * 格式化文件大小
+ */
+export function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
+
+// ==================== 导出 ====================
 
 export default {
   // 常量
   DOCUMENT_TYPE,
+  DOCUMENT_TYPE_LABELS,
   DOCUMENT_STATUS,
-  ENTITY_TYPE,
+  ACCESS_LEVEL,
+  FINANCE_DOCUMENT_TYPES,
   
   // 文档管理
   getDocuments,
+  getOrderDocuments,
+  getOrderDocumentsGrouped,
   getDocumentStats,
   getDocumentById,
+  getDocumentByCosKey,
   createDocument,
   updateDocument,
   deleteDocument,
-  updateDocumentStatus,
+  hardDeleteDocument,
+  deleteDocuments,
   
-  // 实体关联
-  getEntityDocuments,
-  linkDocumentToEntity,
-  unlinkDocumentFromEntity,
-  
-  // 文档模板
-  getTemplates,
-  getTemplateById,
-  createTemplate,
-  updateTemplate,
-  deleteTemplate,
+  // 订单关联
+  linkDocumentToOrder,
+  unlinkDocumentFromOrder,
   
   // 版本管理
   getDocumentVersions,
   createDocumentVersion,
   
-  // 文件操作
-  ensureUploadDir,
-  generateUniqueFileName,
-  getFilePath,
-  formatFileSize,
+  // 权限检查
+  checkDocumentAccess,
   
-  // 转换函数
+  // 工具函数
   convertDocumentToCamelCase,
-  convertTemplateToCamelCase
+  formatFileSize
 }
-

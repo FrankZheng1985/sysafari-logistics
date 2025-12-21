@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, Eye, Edit, Trash2, 
   Phone, Mail, MapPin, X, Upload, Loader2,
-  ChevronLeft, ChevronRight, Check, Building2, Globe, User, FileText
+  ChevronLeft, ChevronRight, Check, Building2, Globe, User, FileText,
+  Package, DollarSign
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -59,6 +60,28 @@ interface ContactInfo {
   mobile: string
   email: string
   position: string
+}
+
+// 产品接口
+interface Product {
+  id: string
+  productCode: string
+  productName: string
+  productNameEn: string
+  category: string
+  description: string
+}
+
+// 产品费用项接口
+interface ProductFeeItem {
+  id: number
+  feeName: string
+  feeNameEn: string
+  unit: string
+  standardPrice: number
+  currency: string
+  isRequired: boolean
+  description: string
 }
 
 // 联系人类型选项
@@ -123,6 +146,16 @@ export default function CRMCustomers() {
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [licenseImage, setLicenseImage] = useState<string | null>(null)
+  
+  // 产品和费用项状态
+  const [products, setProducts] = useState<Product[]>([])
+  const [selectedProductId, setSelectedProductId] = useState<string>('')
+  const [productFeeItems, setProductFeeItems] = useState<ProductFeeItem[]>([])
+  const [selectedFeeItemIds, setSelectedFeeItemIds] = useState<number[]>([])
+  const [loadingFeeItems, setLoadingFeeItems] = useState(false)
+  
+  // 提交状态
+  const [submitting, setSubmitting] = useState(false)
 
   const tabs = [
     { path: '/crm', label: '概览' },
@@ -130,7 +163,10 @@ export default function CRMCustomers() {
     { path: '/crm/opportunities', label: '销售机会' },
     { path: '/crm/quotations', label: '报价管理' },
     { path: '/crm/contracts', label: '合同管理' },
-    { path: '/crm/feedbacks', label: '客户反馈' }
+    { path: '/crm/feedbacks', label: '客户反馈' },
+    { path: '/crm/commission/rules', label: '提成规则' },
+    { path: '/crm/commission/records', label: '提成记录' },
+    { path: '/crm/commission/settlements', label: '月度结算' }
   ]
    
   useEffect(() => {
@@ -162,6 +198,50 @@ export default function CRMCustomers() {
       setLoading(false)
     }
   }
+
+  // 加载产品列表
+  const loadProducts = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/products?isActive=1&pageSize=100`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setProducts(data.data.list || [])
+      }
+    } catch (error) {
+      console.error('加载产品列表失败:', error)
+    }
+  }
+
+  // 加载产品费用项
+  const loadProductFeeItems = async (productId: string) => {
+    setLoadingFeeItems(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/products/${productId}`)
+      const data = await response.json()
+      if (data.errCode === 200 && data.data?.feeItems) {
+        setProductFeeItems(data.data.feeItems)
+        // 默认选中必选项
+        const requiredIds = data.data.feeItems
+          .filter((item: ProductFeeItem) => item.isRequired)
+          .map((item: ProductFeeItem) => item.id)
+        setSelectedFeeItemIds(requiredIds)
+      }
+    } catch (error) {
+      console.error('加载产品费用项失败:', error)
+    } finally {
+      setLoadingFeeItems(false)
+    }
+  }
+
+  // 当选择产品时加载费用项
+  useEffect(() => {
+    if (selectedProductId) {
+      loadProductFeeItems(selectedProductId)
+    } else {
+      setProductFeeItems([])
+      setSelectedFeeItemIds([])
+    }
+  }, [selectedProductId])
 
   const handleOpenModal = (customer?: Customer) => {
     if (customer) {
@@ -214,6 +294,12 @@ export default function CRMCustomers() {
     setContacts([])
     setLicenseImage(null)
     setOcrError(null)
+    // 重置产品和费用项状态
+    setSelectedProductId('')
+    setProductFeeItems([])
+    setSelectedFeeItemIds([])
+    // 加载产品列表
+    loadProducts()
     setShowModal(true)
   }
 
@@ -335,41 +421,68 @@ export default function CRMCustomers() {
       return
     }
 
+    // 新建客户时需要验证产品和费用项
+    if (!editingCustomer) {
+      if (!selectedProductId) {
+        alert('请选择产品')
+        return
+      }
+      if (selectedFeeItemIds.length === 0) {
+        alert('请选择至少一项费用')
+        return
+      }
+    }
+
+    setSubmitting(true)
     try {
-      const url = editingCustomer 
-        ? `${API_BASE}/api/customers/${editingCustomer.id}`
-        : `${API_BASE}/api/customers`
-      const method = editingCustomer ? 'PUT' : 'POST'
-
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-
-      const data = await response.json()
-      if (data.errCode === 200) {
-        // 如果有联系人，创建联系人
-        if (contacts.length > 0 && data.data?.id) {
-          for (const contact of contacts) {
-            if (contact.contactName) {
-              await fetch(`${API_BASE}/api/crm/customers/${data.data.id}/contacts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(contact)
-              })
-            }
-          }
+      if (editingCustomer) {
+        // 编辑模式：只更新客户信息
+        const response = await fetch(`${API_BASE}/api/customers/${editingCustomer.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
+        })
+        const data = await response.json()
+        if (data.errCode === 200) {
+          setShowModal(false)
+          loadCustomers()
+        } else {
+          alert(data.msg || '操作失败')
         }
-        
-        setShowModal(false)
-        loadCustomers()
       } else {
-        alert(data.msg || '操作失败')
+        // 新建模式：创建客户 + 自动生成报价
+        const requestData = {
+          ...formData,
+          productId: selectedProductId,
+          selectedFeeItemIds,
+          contacts: contacts.filter(c => c.contactName) // 过滤空联系人
+        }
+
+        const response = await fetch(`${API_BASE}/api/customers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestData)
+        })
+
+        const data = await response.json()
+        if (data.errCode === 200) {
+          // 显示成功信息
+          let successMsg = '客户创建成功！'
+          if (data.data?.quotation) {
+            successMsg += `\n报价单号：${data.data.quotation.quoteNumber}`
+          }
+          alert(successMsg)
+          setShowModal(false)
+          loadCustomers()
+        } else {
+          alert(data.msg || '操作失败')
+        }
       }
     } catch (error) {
       console.error('保存客户失败:', error)
       alert('保存失败')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -545,7 +658,9 @@ export default function CRMCustomers() {
     { num: 1, title: '选择类型', icon: Building2 },
     { num: 2, title: '填写信息', icon: FileText },
     { num: 3, title: '联系人', icon: User },
-    { num: 4, title: '确认', icon: Check }
+    { num: 4, title: '选择产品', icon: Package },
+    { num: 5, title: '费用项', icon: DollarSign },
+    { num: 6, title: '确认', icon: Check }
   ]
 
   // 渲染步骤指示器
@@ -859,6 +974,8 @@ export default function CRMCustomers() {
                   value={contact.contactType}
                   onChange={(e) => handleUpdateContact(index, 'contactType', e.target.value)}
                   className="px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  title="联系人类型"
+                  aria-label="联系人类型"
                 >
                   {CONTACT_TYPES.map(type => (
                     <option key={type.value} value={type.value}>{type.label}</option>
@@ -868,6 +985,8 @@ export default function CRMCustomers() {
                   type="button"
                   onClick={() => handleRemoveContact(index)}
                   className="p-1 text-gray-400 hover:text-red-500"
+                  title="删除联系人"
+                  aria-label="删除联系人"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -911,8 +1030,135 @@ export default function CRMCustomers() {
     </div>
   )
 
-  // 步骤4：确认信息
+  // 步骤4：选择产品
   const renderStep4 = () => (
+    <div className="space-y-4">
+      <div className="text-sm text-gray-600 mb-4">
+        请选择为该客户提供的服务产品
+      </div>
+      
+      {products.length === 0 ? (
+        <div className="text-center py-8 text-gray-400">
+          <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">暂无可用产品</p>
+          <p className="text-xs mt-1">请先在产品管理中添加产品</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {products.map(product => (
+            <button
+              key={product.id}
+              type="button"
+              onClick={() => setSelectedProductId(product.id)}
+              className={`p-4 border-2 rounded-lg text-left transition-all ${
+                selectedProductId === product.id
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className={`text-sm font-medium ${selectedProductId === product.id ? 'text-primary-700' : 'text-gray-900'}`}>
+                {product.productName}
+              </div>
+              {product.productNameEn && (
+                <div className="text-xs text-gray-500 mt-1">{product.productNameEn}</div>
+              )}
+              {product.description && (
+                <div className="text-xs text-gray-400 mt-2 line-clamp-2">{product.description}</div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  // 步骤5：勾选费用项
+  const renderStep5 = () => (
+    <div className="space-y-4">
+      <div className="text-sm text-gray-600 mb-4">
+        请选择需要包含在报价中的费用项（必选项已自动勾选）
+      </div>
+      
+      {loadingFeeItems ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
+          <span className="ml-2 text-sm text-gray-500">加载中...</span>
+        </div>
+      ) : productFeeItems.length === 0 ? (
+        <div className="text-center py-8 text-gray-400">
+          <DollarSign className="w-12 h-12 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">该产品暂无费用项</p>
+          <p className="text-xs mt-1">请先在产品管理中配置费用项</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {productFeeItems.map(item => (
+            <label
+              key={item.id}
+              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${
+                selectedFeeItemIds.includes(item.id)
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedFeeItemIds.includes(item.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedFeeItemIds([...selectedFeeItemIds, item.id])
+                    } else {
+                      setSelectedFeeItemIds(selectedFeeItemIds.filter(id => id !== item.id))
+                    }
+                  }}
+                  disabled={item.isRequired}
+                  className="w-4 h-4 text-primary-600 rounded"
+                />
+                <div>
+                  <div className="text-sm text-gray-900 flex items-center gap-2">
+                    {item.feeName}
+                    {item.isRequired && (
+                      <span className="px-1.5 py-0.5 text-[10px] bg-red-100 text-red-600 rounded">必选</span>
+                    )}
+                  </div>
+                  {item.feeNameEn && (
+                    <div className="text-xs text-gray-500">{item.feeNameEn}</div>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-medium text-gray-900">
+                  {item.currency} {item.standardPrice.toFixed(2)}
+                </div>
+                <div className="text-xs text-gray-500">/{item.unit}</div>
+              </div>
+            </label>
+          ))}
+          
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">已选费用项：{selectedFeeItemIds.length} 项</span>
+              <span className="font-medium text-primary-600">
+                预估总计：EUR {productFeeItems
+                  .filter(item => selectedFeeItemIds.includes(item.id))
+                  .reduce((sum, item) => sum + item.standardPrice, 0)
+                  .toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  // 步骤6：确认信息
+  const renderStep6 = () => {
+    const selectedProduct = products.find(p => p.id === selectedProductId)
+    const selectedFees = productFeeItems.filter(item => selectedFeeItemIds.includes(item.id))
+    const totalAmount = selectedFees.reduce((sum, item) => sum + item.standardPrice, 0)
+    
+    return (
     <div className="space-y-4">
       <div className="bg-gray-50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-gray-700 mb-3">基本信息</h4>
@@ -925,17 +1171,6 @@ export default function CRMCustomers() {
           <div className="text-gray-900">{formData.customerName || '-'}</div>
           <div className="text-gray-500">公司名称</div>
           <div className="text-gray-900">{formData.companyName || '-'}</div>
-          <div className="text-gray-500">税号</div>
-          <div className="text-gray-900">{formData.taxNumber || '-'}</div>
-          <div className="text-gray-500">法定代表人</div>
-          <div className="text-gray-900">{formData.legalPerson || '-'}</div>
-        </div>
-      </div>
-
-      <div className="bg-gray-50 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-3">地址信息</h4>
-        <div className="text-xs text-gray-900">
-          {[formData.countryCode, formData.province, formData.city, formData.address].filter(Boolean).join(' ') || '-'}
         </div>
       </div>
 
@@ -949,18 +1184,37 @@ export default function CRMCustomers() {
                   {CONTACT_TYPES.find(t => t.value === contact.contactType)?.label}
                 </span>
                 <span className="text-gray-900">{contact.contactName}</span>
-                {contact.mobile && <span className="text-gray-500">{contact.mobile}</span>}
+                  {contact.email && <span className="text-gray-500">{contact.email}</span>}
               </div>
             ))}
           </div>
         </div>
       )}
 
+        <div className="bg-primary-50 rounded-lg p-4 border border-primary-200">
+          <h4 className="text-sm font-medium text-primary-700 mb-3">📋 报价信息</h4>
+          <div className="text-xs space-y-2">
+            <div className="flex justify-between">
+              <span className="text-gray-600">选择产品</span>
+              <span className="text-gray-900 font-medium">{selectedProduct?.productName || '-'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">费用项</span>
+              <span className="text-gray-900">{selectedFees.length} 项</span>
+            </div>
+            <div className="flex justify-between border-t border-primary-200 pt-2 mt-2">
+              <span className="text-primary-700 font-medium">预估总金额</span>
+              <span className="text-primary-700 font-bold">EUR {totalAmount.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
       <div className="text-xs text-gray-500 text-center">
         确认以上信息无误后，点击"保存"按钮完成创建
       </div>
     </div>
   )
+  }
 
   return (
     <div className="p-4 space-y-4">
@@ -991,6 +1245,8 @@ export default function CRMCustomers() {
             value={filterLevel}
             onChange={(e) => setFilterLevel(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="客户级别筛选"
+            aria-label="客户级别筛选"
           >
             <option value="">全部级别</option>
             <option value="vip">VIP</option>
@@ -1004,6 +1260,8 @@ export default function CRMCustomers() {
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="客户类型筛选"
+            aria-label="客户类型筛选"
           >
             <option value="">全部类型</option>
             <option value="shipper">发货人</option>
@@ -1060,7 +1318,12 @@ export default function CRMCustomers() {
           <div className="bg-white rounded-lg w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-sm font-medium">{editingCustomer ? '编辑客户' : '新增客户'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button 
+                onClick={() => setShowModal(false)} 
+                className="p-1 hover:bg-gray-100 rounded"
+                title="关闭"
+                aria-label="关闭"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1072,6 +1335,8 @@ export default function CRMCustomers() {
               {currentStep === 2 && renderStep2()}
               {currentStep === 3 && renderStep3()}
               {currentStep === 4 && renderStep4()}
+              {currentStep === 5 && renderStep5()}
+              {currentStep === 6 && renderStep6()}
             </div>
 
             <div className="flex justify-between items-center p-4 border-t bg-gray-50">
@@ -1080,6 +1345,7 @@ export default function CRMCustomers() {
                   <button
                     onClick={() => setCurrentStep(s => s - 1)}
                     className="flex items-center gap-1 px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
+                    disabled={submitting}
                   >
                     <ChevronLeft className="w-4 h-4" />
                     上一步
@@ -1087,28 +1353,50 @@ export default function CRMCustomers() {
                 )}
               </div>
               <div className="flex gap-2">
-              <button
-                onClick={() => setShowModal(false)}
+                <button
+                  onClick={() => setShowModal(false)}
                   className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
-              >
-                取消
-              </button>
-                {currentStep < 4 ? (
+                  disabled={submitting}
+                >
+                  取消
+                </button>
+                {currentStep < 6 ? (
                   <button
-                    onClick={() => setCurrentStep(s => s + 1)}
-                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                    onClick={() => {
+                      // 编辑模式下跳过产品与费用，直接进入确认
+                      if (currentStep === 3 && editingCustomer) {
+                        setCurrentStep(6)
+                      } else {
+                        setCurrentStep(s => Math.min(6, s + 1))
+                      }
+                    }}
+                    disabled={
+                      (currentStep === 4 && !selectedProductId) ||
+                      (currentStep === 5 && selectedFeeItemIds.length === 0)
+                    }
+                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     下一步
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 ) : (
-              <button
-                onClick={handleSubmit}
-                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
-              >
-                    <Check className="w-4 h-4" />
-                    保存
-              </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        处理中...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        保存
+                      </>
+                    )}
+                  </button>
                 )}
               </div>
             </div>

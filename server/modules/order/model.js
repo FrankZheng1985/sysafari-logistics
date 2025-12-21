@@ -30,7 +30,8 @@ export async function getBills(params = {}) {
     pageSize = 20,
     sortField = 'created_at',
     sortOrder = 'DESC',
-    forInvoiceType  // 用于新建发票时过滤已完成财务流程的订单：'sales' | 'purchase'
+    forInvoiceType,  // 用于新建发票时过滤已完成财务流程的订单：'sales' | 'purchase'
+    customerId  // 按客户ID筛选
   } = params
   
   let query = 'SELECT * FROM bills_of_lading WHERE 1=1'
@@ -114,17 +115,25 @@ export async function getBills(params = {}) {
     queryParams.push(deliveryStatus)
   }
   
-  // 搜索
+  // 按客户ID筛选
+  if (customerId) {
+    query += ' AND customer_id = ?'
+    queryParams.push(customerId)
+  }
+  
+  // 搜索（支持提单号、集装箱号、客户名称等）
   if (search) {
     query += ` AND (
       bill_number LIKE ? OR 
       container_number LIKE ? OR 
+      actual_container_no LIKE ? OR
+      customer_name LIKE ? OR
       shipper LIKE ? OR 
       consignee LIKE ? OR
       vessel LIKE ?
     )`
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   // 获取总数
@@ -168,6 +177,39 @@ export async function getBillByNumber(billNumber) {
 }
 
 /**
+ * 检查提单是否重复（根据主单号+集装箱号组合）
+ * @param {string} containerNumber - 主单号/海运提单号
+ * @param {string} actualContainerNo - 实际集装箱号
+ * @param {string} excludeId - 排除的提单ID（用于更新时）
+ * @returns {Object|null} 如果存在重复，返回已存在的提单；否则返回 null
+ */
+export async function checkDuplicateBill(containerNumber, actualContainerNo, excludeId = null) {
+  const db = getDatabase()
+  
+  // 只有当两个字段都有值时才检查重复
+  if (!containerNumber || !actualContainerNo) {
+    return null
+  }
+  
+  let query = `
+    SELECT * FROM bills_of_lading 
+    WHERE container_number = ? 
+    AND actual_container_no = ?
+    AND is_void = 0
+  `
+  const params = [containerNumber, actualContainerNo]
+  
+  // 如果提供了排除ID（更新场景），则排除该记录
+  if (excludeId) {
+    query += ' AND id != ?'
+    params.push(excludeId)
+  }
+  
+  const bill = await db.prepare(query).get(...params)
+  return bill ? convertBillToCamelCase(bill) : null
+}
+
+/**
  * 创建提单
  */
 export async function createBill(data) {
@@ -176,28 +218,39 @@ export async function createBill(data) {
   
   const result = await db.prepare(`
     INSERT INTO bills_of_lading (
-      id, bill_number, container_number, vessel, voyage,
+      id, bill_number, container_number, actual_container_no, vessel, voyage,
       shipper, consignee, notify_party,
       port_of_loading, port_of_discharge, place_of_delivery,
       pieces, weight, volume, description,
       etd, eta, status, ship_status, customs_status,
       inspection, delivery_status, remark, operator,
       customer_id, customer_name, customer_code,
+      ground_handling, seal_number, container_size,
+      reference_list,
+      container_type, bill_type, transport_arrangement, consignee_type,
+      container_return, full_container_transport, last_mile_transport,
+      devanning, t1_declaration,
       created_at, updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
+      ?, ?, ?,
+      ?,
+      ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?,
       NOW(), NOW()
     )
   `).run(
     id,
     data.billNumber,
     data.containerNumber || '',
+    data.actualContainerNo || data.containerNumber || '', // 实际集装箱号
     data.vessel || '',
     data.voyage || '',
     data.shipper || '',
@@ -221,7 +274,24 @@ export async function createBill(data) {
     data.operator || '系统',
     data.customerId || null,
     data.customerName || null,
-    data.customerCode || null
+    data.customerCode || null,
+    // 航程信息
+    data.groundHandling || null,
+    // 集装箱信息
+    data.sealNumber || null,
+    data.containerSize || null,
+    // Reference List (JSON 字符串)
+    data.referenceList || null,
+    // 附加属性字段
+    data.containerType || null,
+    data.billType || null,
+    data.transportArrangement || null,
+    data.consigneeType || null,
+    data.containerReturn || null,
+    data.fullContainerTransport || null,
+    data.lastMileTransport || null,
+    data.devanning || null,
+    data.t1Declaration || null
   )
   
   return { id, changes: result.changes }
@@ -238,6 +308,7 @@ export async function updateBill(id, data) {
   const fieldMap = {
     billNumber: 'bill_number',
     containerNumber: 'container_number',
+    actualContainerNo: 'actual_container_no',
     vessel: 'vessel',
     voyage: 'voyage',
     shipper: 'shipper',
@@ -269,7 +340,24 @@ export async function updateBill(id, data) {
     // 客户关联字段
     customerId: 'customer_id',
     customerName: 'customer_name',
-    customerCode: 'customer_code'
+    customerCode: 'customer_code',
+    // 航程信息
+    groundHandling: 'ground_handling',
+    // 集装箱信息
+    sealNumber: 'seal_number',
+    containerSize: 'container_size',
+    // Reference List
+    referenceList: 'reference_list',
+    // 附加属性字段
+    containerType: 'container_type',
+    billType: 'bill_type',
+    transportArrangement: 'transport_arrangement',
+    consigneeType: 'consignee_type',
+    containerReturn: 'container_return',
+    fullContainerTransport: 'full_container_transport',
+    lastMileTransport: 'last_mile_transport',
+    devanning: 'devanning',
+    t1Declaration: 't1_declaration'
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
@@ -819,7 +907,24 @@ export function convertBillToCamelCase(row) {
     // 创建者信息
     creator: row.creator,
     createTime: row.created_at,
-    updateTime: row.updated_at
+    updateTime: row.updated_at,
+    // 航程信息
+    groundHandling: row.ground_handling,
+    // 集装箱信息
+    sealNumber: row.seal_number,
+    containerSize: row.container_size,
+    // Reference List（JSON 字符串转对象）
+    referenceList: row.reference_list ? JSON.parse(row.reference_list) : [],
+    // 附加属性字段
+    containerType: row.container_type,
+    billType: row.bill_type,
+    transportArrangement: row.transport_arrangement,
+    consigneeType: row.consignee_type,
+    containerReturn: row.container_return,
+    fullContainerTransport: row.full_container_transport,
+    lastMileTransport: row.last_mile_transport,
+    devanning: row.devanning,
+    t1Declaration: row.t1_declaration
   }
 }
 

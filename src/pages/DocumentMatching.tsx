@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   FileCheck, CheckCircle, XCircle, RefreshCw, Search,
-  ChevronDown, AlertTriangle, Edit2, Check, X
+  ChevronDown, AlertTriangle, Edit2, Check, X, TrendingUp, TrendingDown
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
@@ -48,6 +48,24 @@ interface Recommendation {
   vatRate: number
 }
 
+// 价格异常检测结果
+interface PriceAnomalyItem {
+  itemId: number
+  productName: string
+  currentUnitPrice: number
+  currentKgPrice: number
+  hasAnomaly: boolean
+  isNewProduct: boolean
+  priceDeviation?: string
+  historyAvgPrice?: number
+  historyMinPrice?: number
+  historyMaxPrice?: number
+  matchCount?: number
+  hsCode?: string
+  anomalyReasons?: string[]
+  message: string
+}
+
 export default function DocumentMatching() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -67,6 +85,11 @@ export default function DocumentMatching() {
   const [total, setTotal] = useState(0)
   const pageSize = 20
 
+  // 价格异常检测
+  const [priceAnomalies, setPriceAnomalies] = useState<Map<number, PriceAnomalyItem>>(new Map())
+  const [checkingPrice, setCheckingPrice] = useState(false)
+  const [anomalyCount, setAnomalyCount] = useState(0)
+
   useEffect(() => {
     loadBatches()
   }, [])
@@ -83,12 +106,35 @@ export default function DocumentMatching() {
   useEffect(() => {
     if (selectedBatch) {
       loadReviewItems()
+      checkPriceAnomalies()
     }
   }, [selectedBatch, page])
 
+  // 价格异常检测
+  const checkPriceAnomalies = async () => {
+    if (!selectedBatch) return
+    setCheckingPrice(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/imports/${selectedBatch.id}/price-check`)
+      const data = await res.json()
+      if (data.errCode === 200 && data.data?.items) {
+        const anomalyMap = new Map<number, PriceAnomalyItem>()
+        data.data.items.forEach((item: PriceAnomalyItem) => {
+          anomalyMap.set(item.itemId, item)
+        })
+        setPriceAnomalies(anomalyMap)
+        setAnomalyCount(data.data.anomalyCount || 0)
+      }
+    } catch (error) {
+      console.error('价格异常检测失败:', error)
+    } finally {
+      setCheckingPrice(false)
+    }
+  }
+
   const loadBatches = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/documents/imports?pageSize=100`)
+      const res = await fetch(`${API_BASE}/api/cargo/documents/imports?pageSize=100`)
       const data = await res.json()
       if (data.errCode === 200) {
         setBatches(data.data?.list || [])
@@ -111,7 +157,7 @@ export default function DocumentMatching() {
     if (!selectedBatch) return
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/documents/matching/review?importId=${selectedBatch.id}&page=${page}&pageSize=${pageSize}`)
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/review?importId=${selectedBatch.id}&page=${page}&pageSize=${pageSize}`)
       const data = await res.json()
       if (data.errCode === 200) {
         setItems(data.data?.list || [])
@@ -128,7 +174,7 @@ export default function DocumentMatching() {
     if (!selectedBatch) return
     setMatching(true)
     try {
-      const res = await fetch(`${API_BASE}/api/documents/matching/run`, {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ importId: selectedBatch.id })
@@ -156,7 +202,7 @@ export default function DocumentMatching() {
     }
     
     try {
-      const res = await fetch(`${API_BASE}/api/documents/matching/batch`, {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -185,7 +231,7 @@ export default function DocumentMatching() {
     
     // 加载推荐
     try {
-      const res = await fetch(`${API_BASE}/api/documents/matching/recommend`, {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/recommend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -211,7 +257,7 @@ export default function DocumentMatching() {
     }
     
     try {
-      const res = await fetch(`${API_BASE}/api/documents/matching/batch`, {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -357,13 +403,36 @@ export default function DocumentMatching() {
         </div>
       </div>
 
+      {/* 价格异常提示 */}
+      {selectedBatch && anomalyCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-medium text-amber-800">
+              发现 {anomalyCount} 个价格异常商品
+            </h4>
+            <p className="text-xs text-amber-700 mt-1">
+              以下商品的申报价格与历史记录差异超过±5%，请仔细核对后再审核通过
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 审核列表 */}
       {selectedBatch && (
         <div className="bg-white rounded-lg border border-gray-200">
           <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-gray-900">
-              待审核项目 ({total}条)
-            </h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-medium text-gray-900">
+                待审核项目 ({total}条)
+              </h3>
+              {checkingPrice && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  检测价格中...
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {selectedItems.length > 0 && (
                 <>
@@ -426,8 +495,11 @@ export default function DocumentMatching() {
                     </td>
                   </tr>
                 ) : (
-                  items.map(item => (
-                    <tr key={item.id} className="border-b hover:bg-gray-50">
+                  items.map(item => {
+                    const anomaly = priceAnomalies.get(item.id)
+                    const hasAnomaly = anomaly?.hasAnomaly || false
+                    return (
+                    <tr key={item.id} className={`border-b hover:bg-gray-50 ${hasAnomaly ? 'bg-amber-50' : ''}`}>
                       <td className="px-3 py-2">
                         <input
                           type="checkbox"
@@ -440,9 +512,30 @@ export default function DocumentMatching() {
                       <td className="px-3 py-2 text-gray-500">{item.itemNo}</td>
                       <td className="px-3 py-2">
                         <div className="max-w-[200px]">
-                          <div className="font-medium truncate" title={item.productName}>{item.productName}</div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium truncate" title={item.productName}>{item.productName}</span>
+                            {hasAnomaly && (
+                              <span 
+                                className="flex-shrink-0 cursor-help" 
+                                title={anomaly?.message || '价格异常'}
+                              >
+                                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                              </span>
+                            )}
+                          </div>
                           {item.material && (
                             <div className="text-gray-400 text-[10px] truncate">{item.material}</div>
+                          )}
+                          {/* 价格异常详情 */}
+                          {hasAnomaly && anomaly && (
+                            <div className="text-[10px] text-amber-600 mt-0.5">
+                              {anomaly.anomalyReasons?.map((r, i) => (
+                                <span key={i} className="mr-2">{r}</span>
+                              ))}
+                              <span className="text-gray-400 ml-1">
+                                (历史均价: €{anomaly.historyAvgPrice?.toFixed(2)})
+                              </span>
+                            </div>
                           )}
                         </div>
                       </td>
@@ -499,7 +592,7 @@ export default function DocumentMatching() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  )})
                 )}
               </tbody>
             </table>

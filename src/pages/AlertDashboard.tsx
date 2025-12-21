@@ -72,6 +72,8 @@ interface AlertStats {
 const ALERT_TYPES: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   order_overdue: { label: '订单超期', icon: Package, color: 'text-blue-600 bg-blue-100' },
   payment_due: { label: '应收逾期', icon: Wallet, color: 'text-green-600 bg-green-100' },
+  payment_term_due: { label: '账期到期', icon: Calendar, color: 'text-amber-600 bg-amber-100' },
+  customer_overdue: { label: '客户逾期', icon: Users, color: 'text-red-600 bg-red-100' },
   credit_limit: { label: '信用超限', icon: Users, color: 'text-purple-600 bg-purple-100' },
   contract_expire: { label: '合同到期', icon: FileText, color: 'text-orange-600 bg-orange-100' },
   license_expire: { label: '证照到期', icon: Calendar, color: 'text-cyan-600 bg-cyan-100' },

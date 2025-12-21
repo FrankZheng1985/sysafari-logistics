@@ -62,6 +62,9 @@ router.post('/documents/imports/preview', upload.single('file'), controller.prev
 // 删除导入批次
 router.delete('/documents/imports/:id', controller.deleteImport)
 
+// 更新发货方和进口商信息
+router.put('/documents/imports/:id/shipper-importer', controller.updateShipperAndImporter)
+
 // ==================== HS匹配 ====================
 // 执行批量匹配
 router.post('/documents/matching/run', controller.runBatchMatch)
@@ -97,11 +100,43 @@ router.post('/documents/tax-calc/:importId/confirm', controller.markConfirmed)
 // 更新清关类型 (40-普通清关, 42-递延清关)
 router.put('/documents/tax-calc/:importId/clearance-type', controller.updateClearanceType)
 
+// 更新单个商品税费
+router.put('/documents/tax-calc/item/:itemId', controller.updateItemTax)
+
 // ==================== 数据补充 ====================
 // 获取待补充列表
 router.get('/documents/supplement', controller.getSupplementList)
 
 // 批量补充
 router.post('/documents/supplement/batch', controller.batchSupplement)
+
+// ==================== HS匹配记录管理 ====================
+// 获取匹配记录列表
+router.get('/documents/match-records', controller.getMatchRecordsList)
+
+// 搜索匹配记录（用于快速匹配建议）
+router.get('/documents/match-records/search', controller.searchMatchRecords)
+
+// 获取匹配记录详情
+router.get('/documents/match-records/:id', controller.getMatchRecordDetail)
+
+// 更新匹配记录
+router.put('/documents/match-records/:id', controller.updateMatchRecord)
+
+// 验证匹配记录
+router.post('/documents/match-records/:id/verify', controller.verifyMatchRecord)
+
+// 删除匹配记录
+router.delete('/documents/match-records/:id', controller.deleteMatchRecord)
+
+// 保存税费计算结果到匹配记录
+router.post('/documents/tax-calc/:importId/save-records', controller.saveToMatchRecords)
+
+// ==================== 价格异常检测 ====================
+// 检测导入批次的价格异常
+router.get('/documents/imports/:importId/price-check', controller.checkPriceAnomaly)
+
+// 检测单个商品价格异常
+router.post('/documents/price-check', controller.checkSinglePriceAnomaly)
 
 export default router

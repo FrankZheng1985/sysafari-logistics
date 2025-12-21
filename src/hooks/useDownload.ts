@@ -84,7 +84,7 @@ export function useDownload() {
     importId: string | number, 
     importNo: string
   ) => {
-    const url = `${API_BASE}/api/documents/tax-calc/${importId}/pdf/download`
+    const url = `${API_BASE}/api/cargo/documents/tax-calc/${importId}/pdf/download`
     const fileName = `税费确认单_${importNo}.pdf`
     downloadByUrl(url, fileName)
   }, [downloadByUrl])

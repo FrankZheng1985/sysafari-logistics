@@ -349,6 +349,7 @@ export async function deletePayment(req, res) {
 
 /**
  * 上传付款凭证
+ * 自动存储到COS并记录到文档管理系统
  */
 export async function uploadPaymentReceipt(req, res) {
   try {
@@ -365,8 +366,8 @@ export async function uploadPaymentReceipt(req, res) {
       return notFound(res, '付款记录不存在')
     }
 
-    // 动态导入 COS 存储模块和图片压缩模块
-    const cosStorage = await import('./cosStorage.js')
+    // 动态导入文档服务
+    const documentService = await import('../../../services/documentService.js')
     
     let fileBuffer = file.buffer
     let originalFilename = file.originalname
@@ -386,17 +387,26 @@ export async function uploadPaymentReceipt(req, res) {
       }
     }
 
-    // 上传到 COS
-    const receiptUrl = await cosStorage.uploadPaymentReceipt(
-      fileBuffer, 
-      payment.paymentNumber, 
-      originalFilename
-    )
+    // 使用统一文档服务上传（自动存到COS + documents表）
+    const docResult = await documentService.uploadPaymentReceipt({
+      fileBuffer,
+      fileName: originalFilename,
+      paymentNumber: payment.paymentNumber,
+      billId: payment.billId,
+      billNumber: payment.billNumber,
+      customerId: payment.customerId,
+      customerName: payment.customerName,
+      user: req.user
+    })
 
     // 更新付款记录的凭证 URL
-    await model.updatePayment(id, { receiptUrl })
+    await model.updatePayment(id, { receiptUrl: docResult.cosUrl })
 
-    return success(res, { receiptUrl }, '上传成功')
+    return success(res, { 
+      receiptUrl: docResult.cosUrl,
+      documentId: docResult.documentId,
+      documentNumber: docResult.documentNumber
+    }, '上传成功，已同步到文档管理')
   } catch (error) {
     console.error('上传付款凭证失败:', error)
     return serverError(res, error.message || '上传付款凭证失败')
@@ -1124,6 +1134,220 @@ export async function downloadReportFile(req, res) {
   } catch (error) {
     console.error('下载报表失败:', error)
     return serverError(res, '下载报表失败')
+  }
+}
+
+// ==================== 承运商结算 ====================
+
+import * as carrierSettlement from './carrierSettlement.js'
+
+/**
+ * 获取结算单列表
+ */
+export async function getCarrierSettlements(req, res) {
+  try {
+    const { carrierId, reconcileStatus, paymentStatus, startDate, endDate, page, pageSize } = req.query
+    
+    const result = await carrierSettlement.getSettlements({
+      carrierId: carrierId ? parseInt(carrierId) : null,
+      reconcileStatus,
+      paymentStatus,
+      startDate,
+      endDate,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取结算单列表失败:', error)
+    return serverError(res, '获取结算单列表失败')
+  }
+}
+
+/**
+ * 获取结算统计
+ */
+export async function getCarrierSettlementStats(req, res) {
+  try {
+    const { carrierId, year, month } = req.query
+    
+    const stats = await carrierSettlement.getSettlementStats({
+      carrierId: carrierId ? parseInt(carrierId) : null,
+      year: year ? parseInt(year) : null,
+      month: month ? parseInt(month) : null
+    })
+    
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取结算统计失败:', error)
+    return serverError(res, '获取结算统计失败')
+  }
+}
+
+/**
+ * 获取结算单详情
+ */
+export async function getCarrierSettlementById(req, res) {
+  try {
+    const { id } = req.params
+    const settlement = await carrierSettlement.getSettlementById(id)
+    
+    if (!settlement) {
+      return notFound(res, '结算单不存在')
+    }
+    
+    return success(res, settlement)
+  } catch (error) {
+    console.error('获取结算单详情失败:', error)
+    return serverError(res, '获取结算单详情失败')
+  }
+}
+
+/**
+ * 按周期生成结算单
+ */
+export async function generateCarrierSettlement(req, res) {
+  try {
+    const { carrierId, periodStart, periodEnd } = req.body
+    
+    if (!carrierId || !periodStart || !periodEnd) {
+      return badRequest(res, '承运商ID、结算周期开始和结束日期为必填项')
+    }
+    
+    const result = await carrierSettlement.generateSettlementByPeriod(
+      parseInt(carrierId),
+      periodStart,
+      periodEnd
+    )
+    
+    if (!result.success) {
+      return badRequest(res, result.error)
+    }
+    
+    return success(res, result.data, '结算单生成成功')
+  } catch (error) {
+    console.error('生成结算单失败:', error)
+    return serverError(res, '生成结算单失败')
+  }
+}
+
+/**
+ * 导入承运商账单并对账
+ */
+export async function importCarrierBill(req, res) {
+  try {
+    const { carrierId, carrierName, periodStart, periodEnd, billItems, currency } = req.body
+    
+    if (!carrierId || !periodStart || !periodEnd || !billItems || !Array.isArray(billItems)) {
+      return badRequest(res, '承运商ID、结算周期和账单明细为必填项')
+    }
+    
+    const result = await carrierSettlement.importBillAndReconcile({
+      carrierId: parseInt(carrierId),
+      carrierName,
+      periodStart,
+      periodEnd,
+      billItems,
+      currency
+    })
+    
+    if (!result.success) {
+      return badRequest(res, result.error)
+    }
+    
+    return success(res, result.data, '账单导入并对账完成')
+  } catch (error) {
+    console.error('导入账单失败:', error)
+    return serverError(res, '导入账单失败')
+  }
+}
+
+/**
+ * 更新结算单
+ */
+export async function updateCarrierSettlement(req, res) {
+  try {
+    const { id } = req.params
+    const data = req.body
+    
+    const updated = await carrierSettlement.updateSettlement(id, data)
+    
+    if (!updated) {
+      return notFound(res, '结算单不存在或无更新')
+    }
+    
+    return success(res, null, '更新成功')
+  } catch (error) {
+    console.error('更新结算单失败:', error)
+    return serverError(res, '更新结算单失败')
+  }
+}
+
+/**
+ * 确认结算（核对状态更新为confirmed）
+ */
+export async function confirmCarrierSettlement(req, res) {
+  try {
+    const { id } = req.params
+    
+    const updated = await carrierSettlement.updateSettlement(id, {
+      reconcileStatus: 'confirmed'
+    })
+    
+    if (!updated) {
+      return notFound(res, '结算单不存在')
+    }
+    
+    return success(res, null, '结算已确认')
+  } catch (error) {
+    console.error('确认结算失败:', error)
+    return serverError(res, '确认结算失败')
+  }
+}
+
+/**
+ * 标记已付款
+ */
+export async function payCarrierSettlement(req, res) {
+  try {
+    const { id } = req.params
+    const { paidAmount } = req.body
+    
+    const settlement = await carrierSettlement.getSettlementById(id)
+    if (!settlement) {
+      return notFound(res, '结算单不存在')
+    }
+    
+    const updated = await carrierSettlement.updateSettlement(id, {
+      paymentStatus: 'paid',
+      paidAmount: paidAmount || settlement.carrierBillAmount
+    })
+    
+    if (!updated) {
+      return badRequest(res, '更新失败')
+    }
+    
+    return success(res, null, '已标记为已付款')
+  } catch (error) {
+    console.error('标记付款失败:', error)
+    return serverError(res, '标记付款失败')
+  }
+}
+
+/**
+ * 获取结算明细
+ */
+export async function getCarrierSettlementItems(req, res) {
+  try {
+    const { id } = req.params
+    
+    const items = await carrierSettlement.getSettlementItems(id)
+    
+    return success(res, items)
+  } catch (error) {
+    console.error('获取结算明细失败:', error)
+    return serverError(res, '获取结算明细失败')
   }
 }
 

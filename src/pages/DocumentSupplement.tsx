@@ -46,7 +46,7 @@ export default function DocumentSupplement() {
   const loadItems = async () => {
     setLoading(true)
     try {
-      const url = new URL(`${API_BASE}/api/documents/supplement`)
+      const url = new URL(`${API_BASE}/api/cargo/documents/supplement`)
       url.searchParams.append('page', String(page))
       url.searchParams.append('pageSize', String(pageSize))
       if (search) {
@@ -113,7 +113,7 @@ export default function DocumentSupplement() {
 
   const handleSaveItem = async (item: EditingItem) => {
     try {
-      const res = await fetch(`${API_BASE}/api/documents/supplement/batch`, {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -161,7 +161,7 @@ export default function DocumentSupplement() {
 
     setSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/api/documents/supplement/batch`, {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -13,7 +13,7 @@ import {
 } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
-// 权限分组配置
+// 权限分组配置（扩展）
 const permissionGroups = [
   { 
     key: 'order', 
@@ -40,6 +40,12 @@ const permissionGroups = [
     description: '发票、收付款、费用、财务报表等权限'
   },
   { 
+    key: 'document', 
+    label: '单证管理', 
+    icon: '📄',
+    description: '单证创建、编辑、导入导出等权限'
+  },
+  { 
     key: 'product', 
     label: '产品定价', 
     icon: '🏷️',
@@ -53,9 +59,9 @@ const permissionGroups = [
   },
   { 
     key: 'cmr', 
-    label: 'TMS管理', 
+    label: 'TMS运输', 
     icon: '🚚',
-    description: 'CMR派送的查看和操作权限'
+    description: 'TMS运输跟踪、CMR派送的查看和操作权限'
   },
   { 
     key: 'tool', 
@@ -67,9 +73,22 @@ const permissionGroups = [
     key: 'system', 
     label: '系统管理', 
     icon: '⚙️',
-    description: '用户管理、基础数据、系统设置等管理权限'
+    description: '用户管理、基础数据、系统设置、审批管理等权限'
   },
 ]
+
+// 角色层级和颜色映射
+const ROLE_CONFIG: Record<string, { level: number, color: string, textColor: string, borderColor: string }> = {
+  admin: { level: 1, color: 'bg-red-100', textColor: 'text-red-700', borderColor: 'border-red-200' },
+  boss: { level: 2, color: 'bg-purple-100', textColor: 'text-purple-700', borderColor: 'border-purple-200' },
+  manager: { level: 3, color: 'bg-blue-100', textColor: 'text-blue-700', borderColor: 'border-blue-200' },
+  finance_director: { level: 3, color: 'bg-orange-100', textColor: 'text-orange-700', borderColor: 'border-orange-200' },
+  doc_clerk: { level: 4, color: 'bg-cyan-100', textColor: 'text-cyan-700', borderColor: 'border-cyan-200' },
+  doc_officer: { level: 4, color: 'bg-teal-100', textColor: 'text-teal-700', borderColor: 'border-teal-200' },
+  finance_assistant: { level: 4, color: 'bg-yellow-100', textColor: 'text-yellow-700', borderColor: 'border-yellow-200' },
+  operator: { level: 4, color: 'bg-green-100', textColor: 'text-green-700', borderColor: 'border-green-200' },
+  viewer: { level: 5, color: 'bg-gray-100', textColor: 'text-gray-700', borderColor: 'border-gray-200' }
+}
 
 export default function RolePermissions() {
   const navigate = useNavigate()
@@ -194,13 +213,11 @@ export default function RolePermissions() {
   }
 
   const getRoleColor = (roleCode: string) => {
-    switch (roleCode) {
-      case 'admin': return 'bg-red-100 text-red-700 border-red-200'
-      case 'manager': return 'bg-blue-100 text-blue-700 border-blue-200'
-      case 'operator': return 'bg-green-100 text-green-700 border-green-200'
-      case 'viewer': return 'bg-gray-100 text-gray-700 border-gray-200'
-      default: return 'bg-gray-100 text-gray-700 border-gray-200'
+    const config = ROLE_CONFIG[roleCode]
+    if (config) {
+      return `${config.color} ${config.textColor} ${config.borderColor}`
     }
+    return 'bg-gray-100 text-gray-700 border-gray-200'
   }
 
   if (loading) {
@@ -271,11 +288,17 @@ export default function RolePermissions() {
         <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
           <Info className="w-3 h-3 text-blue-500 mt-0.5 flex-shrink-0" />
           <div className="text-xs text-blue-700">
-            <p className="font-medium mb-0.5">角色权限说明</p>
-            <p>• 系统管理员(admin): 拥有所有权限，不可修改</p>
-            <p>• 业务经理(manager): 可查看所有订单，管理团队成员</p>
-            <p>• 操作员(operator): 处理分配的订单，执行日常操作</p>
-            <p>• 查看者(viewer): 只能查看分配的订单，无法操作</p>
+            <p className="font-medium mb-1">角色权限说明（按层级排列）</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+              <p>• <span className="font-medium text-red-600">系统管理员</span>: 最高权限，系统配置</p>
+              <p>• <span className="font-medium text-purple-600">老板</span>: 高级审批，战略决策</p>
+              <p>• <span className="font-medium text-blue-600">业务经理</span>: 业务管理，团队管理</p>
+              <p>• <span className="font-medium text-orange-600">财务主管</span>: 所有财务权限</p>
+              <p>• <span className="font-medium text-cyan-600">跟单员</span>: TMS跟踪、单据跟踪、查验</p>
+              <p>• <span className="font-medium text-teal-600">单证员</span>: 单证管理、报关单据</p>
+              <p>• <span className="font-medium text-yellow-600">财务助理</span>: 发票、应收应付</p>
+              <p>• <span className="font-medium text-gray-600">查看者</span>: 只读权限</p>
+            </div>
           </div>
         </div>
 
@@ -455,11 +478,28 @@ export default function RolePermissions() {
         </div>
 
         {/* 底部统计 */}
-        <div className="mt-3 grid grid-cols-4 gap-2">
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
           {roles.map(role => {
             const permCount = (rolePermissions[role.roleCode] || []).length
             const totalPerms = permissions.length
             const percentage = totalPerms > 0 ? Math.round((permCount / totalPerms) * 100) : 0
+            const config = ROLE_CONFIG[role.roleCode] || { color: 'bg-gray-100', textColor: 'text-gray-700' }
+            
+            // 获取进度条颜色
+            const getProgressColor = (roleCode: string) => {
+              const colorMap: Record<string, string> = {
+                admin: 'bg-red-500',
+                boss: 'bg-purple-500',
+                manager: 'bg-blue-500',
+                finance_director: 'bg-orange-500',
+                doc_clerk: 'bg-cyan-500',
+                doc_officer: 'bg-teal-500',
+                finance_assistant: 'bg-yellow-500',
+                operator: 'bg-green-500',
+                viewer: 'bg-gray-500'
+              }
+              return colorMap[roleCode] || 'bg-gray-500'
+            }
 
             return (
               <div key={role.roleCode} className="bg-white rounded-lg border border-gray-200 p-2">
@@ -470,13 +510,8 @@ export default function RolePermissions() {
                   <span className="text-[10px] text-gray-500">{permCount}/{totalPerms}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-1">
-                  <div 
-                    className={`h-1 rounded-full transition-all ${
-                      role.roleCode === 'admin' ? 'bg-red-500' :
-                      role.roleCode === 'manager' ? 'bg-blue-500' :
-                      role.roleCode === 'operator' ? 'bg-green-500' :
-                      'bg-gray-500'
-                    }`}
+                  <div
+                    className={`h-1 rounded-full transition-all ${getProgressColor(role.roleCode)}`}
                     style={{ width: `${percentage}%` }}
                   />
                 </div>

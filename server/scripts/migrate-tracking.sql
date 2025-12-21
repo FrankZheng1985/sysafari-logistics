@@ -78,30 +78,34 @@ CREATE INDEX IF NOT EXISTS idx_nodes_completed ON tracking_nodes(is_completed);
 
 -- ==================== 插入示例API配置 ====================
 
--- 船公司API配置示例
-INSERT OR IGNORE INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
+-- 船公司API配置示例 (PostgreSQL ON CONFLICT 语法)
+INSERT INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
 VALUES 
     ('MAERSK', '马士基', 'sea', 'rest', 'inactive', '马士基船公司跟踪API'),
     ('COSCO', '中远海运', 'sea', 'rest', 'inactive', '中远海运跟踪API'),
-    ('MSC', '地中海航运', 'sea', 'rest', 'inactive', 'MSC跟踪API');
+    ('MSC', '地中海航运', 'sea', 'rest', 'inactive', 'MSC跟踪API')
+ON CONFLICT (provider_code) DO NOTHING;
 
 -- 航空货运API配置示例
-INSERT OR IGNORE INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
+INSERT INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
 VALUES 
     ('CARGOIQ', 'Cargo iQ', 'air', 'rest', 'inactive', 'IATA Cargo iQ 标准跟踪API'),
-    ('FLIGHTAWARE', 'FlightAware', 'air', 'rest', 'inactive', 'FlightAware货运跟踪');
+    ('FLIGHTAWARE', 'FlightAware', 'air', 'rest', 'inactive', 'FlightAware货运跟踪')
+ON CONFLICT (provider_code) DO NOTHING;
 
 -- 铁路跟踪API配置示例
-INSERT OR IGNORE INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
+INSERT INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
 VALUES 
-    ('CREXPRESS', '中欧班列', 'rail', 'rest', 'inactive', '中欧班列综合服务平台API');
+    ('CREXPRESS', '中欧班列', 'rail', 'rest', 'inactive', '中欧班列综合服务平台API')
+ON CONFLICT (provider_code) DO NOTHING;
 
 -- 卡航跟踪API配置示例
-INSERT OR IGNORE INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
+INSERT INTO tracking_api_configs (provider_code, provider_name, transport_type, api_type, status, description)
 VALUES 
     ('HUOCHEBANG', '货车帮', 'truck', 'rest', 'inactive', '货车帮物流跟踪API'),
     ('MANBANG', '满帮', 'truck', 'rest', 'inactive', '满帮物流跟踪API'),
-    ('MANUAL', '手动录入', 'truck', 'manual', 'active', '手动节点录入');
+    ('MANUAL', '手动录入', 'truck', 'manual', 'active', '手动节点录入')
+ON CONFLICT (provider_code) DO NOTHING;
 
 -- 完成提示
 SELECT '✅ 跟踪模块数据库表创建完成' as message;

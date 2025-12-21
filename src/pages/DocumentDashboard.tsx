@@ -41,7 +41,7 @@ export default function DocumentDashboard() {
   const loadDashboardData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/documents/stats`)
+      const res = await fetch(`${API_BASE}/api/cargo/documents/stats`)
       const data = await res.json()
       if (data.errCode === 200) {
         setStats(data.data)
@@ -254,17 +254,17 @@ export default function DocumentDashboard() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-xs">
               <thead>
-                <tr className="text-xs text-gray-500 border-b">
-                  <th className="text-left py-2 font-medium">批次号</th>
-                  <th className="text-left py-2 font-medium">客户</th>
-                  <th className="text-left py-2 font-medium">柜号</th>
-                  <th className="text-left py-2 font-medium">提单号</th>
-                  <th className="text-center py-2 font-medium">商品数</th>
-                  <th className="text-center py-2 font-medium">已匹配</th>
-                  <th className="text-center py-2 font-medium">状态</th>
-                  <th className="text-left py-2 font-medium">导入时间</th>
+                <tr className="text-gray-500 border-b">
+                  <th className="text-left py-2 px-2 font-medium whitespace-nowrap">批次号</th>
+                  <th className="text-left py-2 px-2 font-medium whitespace-nowrap min-w-[80px]">客户</th>
+                  <th className="text-left py-2 px-2 font-medium whitespace-nowrap">柜号</th>
+                  <th className="text-left py-2 px-2 font-medium whitespace-nowrap min-w-[120px]">提单号</th>
+                  <th className="text-center py-2 px-2 font-medium whitespace-nowrap">商品数</th>
+                  <th className="text-center py-2 px-2 font-medium whitespace-nowrap">已匹配</th>
+                  <th className="text-center py-2 px-2 font-medium whitespace-nowrap">状态</th>
+                  <th className="text-left py-2 px-2 font-medium whitespace-nowrap">导入时间</th>
                 </tr>
               </thead>
               <tbody>
@@ -272,21 +272,21 @@ export default function DocumentDashboard() {
                   stats.recentImports.map((item) => (
                     <tr 
                       key={item.id} 
-                      className="text-xs border-b last:border-0 hover:bg-gray-50 cursor-pointer"
+                      className="border-b last:border-0 hover:bg-gray-50 cursor-pointer"
                       onClick={() => navigate(`/documents/import?id=${item.id}`)}
                     >
-                      <td className="py-2 font-medium text-primary-600">{item.importNo}</td>
-                      <td className="py-2 text-gray-900">{item.customerName || '-'}</td>
-                      <td className="py-2 text-gray-600">{item.containerNo || '-'}</td>
-                      <td className="py-2 text-gray-600">{item.billNumber || '-'}</td>
-                      <td className="py-2 text-center">{item.totalItems}</td>
-                      <td className="py-2 text-center">
+                      <td className="py-2 px-2 font-medium text-primary-600 whitespace-nowrap">{item.importNo}</td>
+                      <td className="py-2 px-2 text-gray-900 max-w-[100px] truncate" title={item.customerName || '-'}>{item.customerName || '-'}</td>
+                      <td className="py-2 px-2 text-gray-600 whitespace-nowrap">{item.containerNo || '-'}</td>
+                      <td className="py-2 px-2 text-gray-600 whitespace-nowrap">{item.billNumber || '-'}</td>
+                      <td className="py-2 px-2 text-center">{item.totalItems}</td>
+                      <td className="py-2 px-2 text-center">
                         <span className={item.matchedItems === item.totalItems ? 'text-green-600' : 'text-amber-600'}>
                           {item.matchedItems}/{item.totalItems}
                         </span>
                       </td>
-                      <td className="py-2 text-center">{getStatusBadge(item.status)}</td>
-                      <td className="py-2 text-gray-500">
+                      <td className="py-2 px-2 text-center">{getStatusBadge(item.status)}</td>
+                      <td className="py-2 px-2 text-gray-500 whitespace-nowrap">
                         {item.createdAt ? new Date(item.createdAt).toLocaleDateString('zh-CN') : '-'}
                       </td>
                     </tr>

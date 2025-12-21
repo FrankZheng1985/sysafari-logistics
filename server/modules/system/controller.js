@@ -1,5 +1,6 @@
 /**
  * 系统管理模块 - 控制器
+ * 包含用户管理、角色权限、审批流程等功能
  */
 
 import crypto from 'crypto'
@@ -7,6 +8,8 @@ import { success, successWithPagination, badRequest, notFound, conflict, unautho
 import { validatePassword } from '../../utils/validator.js'
 import { getDatabase } from '../../config/database.js'
 import * as model from './model.js'
+import * as approvalService from '../../services/approvalService.js'
+import { canManageUser, canGrantPermission, getTeamMembers, getGrantablePermissions, checkRequiresApproval } from '../../middleware/auth.js'
 
 // ==================== 用户管理 ====================
 
@@ -948,6 +951,407 @@ export async function saveSystemSettingsBatch(req, res) {
   } catch (error) {
     console.error('批量保存系统设置失败:', error)
     return serverError(res, '批量保存系统设置失败')
+  }
+}
+
+// ==================== 审批管理 ====================
+
+/**
+ * 获取审批列表
+ */
+export async function getApprovals(req, res) {
+  try {
+    const { status, requestType, search, page, pageSize } = req.query
+    
+    const result = await approvalService.getApprovalRequests({
+      status,
+      requestType,
+      search,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取审批列表失败:', error)
+    return serverError(res, '获取审批列表失败')
+  }
+}
+
+/**
+ * 获取待审批列表（审批人视角）
+ */
+export async function getPendingApprovals(req, res) {
+  try {
+    const { page, pageSize } = req.query
+    
+    const result = await approvalService.getPendingApprovals({
+      approverRole: req.user?.role,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取待审批列表失败:', error)
+    return serverError(res, '获取待审批列表失败')
+  }
+}
+
+/**
+ * 获取我的申请列表
+ */
+export async function getMyApprovals(req, res) {
+  try {
+    const { status, page, pageSize } = req.query
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.getMyApprovalRequests(req.user.id, {
+      status,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取我的申请列表失败:', error)
+    return serverError(res, '获取我的申请列表失败')
+  }
+}
+
+/**
+ * 获取审批详情
+ */
+export async function getApprovalById(req, res) {
+  try {
+    const { id } = req.params
+    
+    const request = await approvalService.getApprovalRequestById(parseInt(id))
+    if (!request) {
+      return notFound(res, '审批请求不存在')
+    }
+    
+    // 获取审批历史
+    const history = await approvalService.getApprovalHistory(parseInt(id))
+    
+    return success(res, { ...request, history })
+  } catch (error) {
+    console.error('获取审批详情失败:', error)
+    return serverError(res, '获取审批详情失败')
+  }
+}
+
+/**
+ * 创建审批请求
+ */
+export async function createApprovalRequest(req, res) {
+  try {
+    const { requestType, requestTitle, requestData, targetUserId, targetUserName, priority } = req.body
+    
+    if (!requestType || !requestTitle) {
+      return badRequest(res, '请求类型和标题为必填项')
+    }
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.createApprovalRequest({
+      requestType,
+      requestTitle,
+      requestData,
+      targetUserId,
+      targetUserName,
+      requesterId: req.user.id,
+      requesterName: req.user.name,
+      requesterRole: req.user.role,
+      requesterDepartment: req.user.department,
+      priority
+    })
+    
+    if (result.success) {
+      return success(res, result.data, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('创建审批请求失败:', error)
+    return serverError(res, '创建审批请求失败')
+  }
+}
+
+/**
+ * 审批通过
+ */
+export async function approveRequest(req, res) {
+  try {
+    const { id } = req.params
+    const { comment } = req.body
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    // 检查审批权限
+    if (!req.user.canApprove && !['admin', 'boss'].includes(req.user.role)) {
+      return forbidden(res, '您没有审批权限')
+    }
+    
+    const result = await approvalService.approveRequest(
+      parseInt(id),
+      {
+        id: req.user.id,
+        name: req.user.name,
+        role: req.user.role
+      },
+      comment
+    )
+    
+    if (result.success) {
+      return success(res, result.executeResult, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('审批通过失败:', error)
+    return serverError(res, '审批通过失败')
+  }
+}
+
+/**
+ * 审批拒绝
+ */
+export async function rejectRequest(req, res) {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    // 检查审批权限
+    if (!req.user.canApprove && !['admin', 'boss'].includes(req.user.role)) {
+      return forbidden(res, '您没有审批权限')
+    }
+    
+    if (!reason) {
+      return badRequest(res, '请填写拒绝原因')
+    }
+    
+    const result = await approvalService.rejectRequest(
+      parseInt(id),
+      {
+        id: req.user.id,
+        name: req.user.name,
+        role: req.user.role
+      },
+      reason
+    )
+    
+    if (result.success) {
+      return success(res, null, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('审批拒绝失败:', error)
+    return serverError(res, '审批拒绝失败')
+  }
+}
+
+/**
+ * 取消审批请求
+ */
+export async function cancelApprovalRequest(req, res) {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.cancelRequest(
+      parseInt(id),
+      {
+        id: req.user.id,
+        name: req.user.name,
+        role: req.user.role
+      },
+      reason
+    )
+    
+    if (result.success) {
+      return success(res, null, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('取消审批请求失败:', error)
+    return serverError(res, '取消审批请求失败')
+  }
+}
+
+/**
+ * 获取待审批数量
+ */
+export async function getPendingApprovalCount(req, res) {
+  try {
+    const count = await approvalService.getPendingCount(req.user?.role)
+    return success(res, { count })
+  } catch (error) {
+    console.error('获取待审批数量失败:', error)
+    return serverError(res, '获取待审批数量失败')
+  }
+}
+
+/**
+ * 获取审批通知
+ */
+export async function getApprovalNotifications(req, res) {
+  try {
+    const { unreadOnly, page, pageSize } = req.query
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.getUserNotifications(req.user.id, {
+      unreadOnly: unreadOnly === 'true',
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取审批通知失败:', error)
+    return serverError(res, '获取审批通知失败')
+  }
+}
+
+/**
+ * 标记通知已读
+ */
+export async function markNotificationRead(req, res) {
+  try {
+    const { id } = req.params
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    await approvalService.markNotificationRead(parseInt(id), req.user.id)
+    return success(res, null, '标记成功')
+  } catch (error) {
+    console.error('标记通知已读失败:', error)
+    return serverError(res, '标记通知已读失败')
+  }
+}
+
+// ==================== 团队管理 ====================
+
+/**
+ * 获取团队成员
+ */
+export async function getTeamMembersList(req, res) {
+  try {
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const members = await getTeamMembers(req.user.id)
+    return success(res, members)
+  } catch (error) {
+    console.error('获取团队成员失败:', error)
+    return serverError(res, '获取团队成员失败')
+  }
+}
+
+/**
+ * 获取可授予的权限列表
+ */
+export async function getGrantablePermissionsList(req, res) {
+  try {
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const permissions = await getGrantablePermissions(req.user.id)
+    return success(res, permissions)
+  } catch (error) {
+    console.error('获取可授予权限列表失败:', error)
+    return serverError(res, '获取可授予权限列表失败')
+  }
+}
+
+/**
+ * 检查操作是否需要审批
+ */
+export async function checkApprovalRequired(req, res) {
+  try {
+    const { operationType, context } = req.body
+    
+    if (!operationType) {
+      return badRequest(res, '操作类型为必填项')
+    }
+    
+    const required = await checkRequiresApproval(operationType, context || {})
+    return success(res, { required })
+  } catch (error) {
+    console.error('检查审批需求失败:', error)
+    return serverError(res, '检查审批需求失败')
+  }
+}
+
+/**
+ * 获取上级用户列表（用于选择直属上级）
+ */
+export async function getSupervisorCandidates(req, res) {
+  try {
+    const db = getDatabase()
+    
+    // 获取具有团队管理权限的用户
+    const supervisors = await db.prepare(`
+      SELECT u.id, u.name, u.username, u.role, u.department, r.role_name, r.role_level
+      FROM users u
+      LEFT JOIN roles r ON u.role = r.role_code
+      WHERE u.status = 'active' 
+        AND (r.can_manage_team = TRUE OR u.role IN ('admin', 'boss', 'manager', 'finance_director'))
+      ORDER BY r.role_level, u.name
+    `).all()
+    
+    return success(res, supervisors.map(s => ({
+      id: s.id,
+      name: s.name,
+      username: s.username,
+      role: s.role,
+      roleName: s.role_name,
+      department: s.department,
+      roleLevel: s.role_level
+    })))
+  } catch (error) {
+    console.error('获取上级用户列表失败:', error)
+    return serverError(res, '获取上级用户列表失败')
   }
 }
 

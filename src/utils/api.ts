@@ -79,7 +79,18 @@ async function request<T>(
   })
 
   if (!response.ok) {
-    throw new Error(`API请求失败: ${response.statusText}`)
+    // 尝试读取响应体中的错误信息
+    try {
+      const errorData = await response.json()
+      const errorMsg = errorData.msg || errorData.message || response.statusText
+      throw new Error(errorMsg)
+    } catch (parseError) {
+      // 如果无法解析响应体，使用 statusText
+      if (parseError instanceof Error && parseError.message !== response.statusText) {
+        throw parseError
+      }
+      throw new Error(`API请求失败: ${response.statusText}`)
+    }
   }
 
   return response.json()
@@ -94,7 +105,7 @@ export interface User {
   email: string
   phone?: string
   avatar?: string
-  role: 'admin' | 'manager' | 'operator' | 'viewer'
+  role: string  // 扩展角色类型支持更多角色
   roleName?: string
   status: 'active' | 'inactive'
   lastLoginTime?: string
@@ -103,6 +114,10 @@ export interface User {
   createTime?: string
   updateTime?: string
   permissions?: string[]
+  // 新增字段
+  supervisorId?: number
+  department?: string
+  position?: string
 }
 
 export interface CreateUserRequest {
@@ -110,9 +125,13 @@ export interface CreateUserRequest {
   name: string
   email?: string
   phone?: string
-  role: 'admin' | 'manager' | 'operator' | 'viewer'
+  role: string  // 扩展角色类型
   status?: 'active' | 'inactive'
   password: string
+  // 新增字段
+  supervisorId?: number
+  department?: string
+  position?: string
 }
 
 export interface UpdateUserRequest {
@@ -120,8 +139,12 @@ export interface UpdateUserRequest {
   name?: string
   email?: string
   phone?: string
-  role?: 'admin' | 'manager' | 'operator' | 'viewer'
+  role?: string  // 扩展角色类型
   status?: 'active' | 'inactive'
+  // 新增字段
+  supervisorId?: number
+  department?: string
+  position?: string
 }
 
 export interface LoginRequest {
@@ -142,6 +165,11 @@ export interface Role {
   description: string
   isSystem: boolean
   status: string
+  colorCode?: string
+  // 新增字段
+  roleLevel?: number
+  canManageTeam?: boolean
+  canApprove?: boolean
 }
 
 export interface Permission {
@@ -150,6 +178,7 @@ export interface Permission {
   module: string
   description?: string
   category?: string
+  isSensitive?: boolean
 }
 
 export interface ApiResponse<T = any> {
@@ -476,6 +505,8 @@ export interface BillOfLading {
   containerNumber?: string
   actualContainerNo?: string  // 实际集装箱号
   vessel?: string
+  voyage?: string  // 航次
+  etd?: string  // 装船日期 (Date Laden on Board)
   eta?: string
   ata?: string
   pieces: number
@@ -519,7 +550,6 @@ export interface BillOfLading {
   // 船舶相关字段
   shippingCompany?: string
   vesselName?: string
-  voyage?: string
   destinationPort?: string
   // CMR相关字段
   cmrNotes?: string
@@ -537,6 +567,26 @@ export interface BillOfLading {
   cmrExceptionStatus?: string
   cmrExceptionResolution?: string
   cmrExceptionResolvedTime?: string
+  // 附加属性字段
+  containerType?: string  // 箱型: 'cfs' | 'fcl'
+  billType?: string  // 提单类型: 'master' | 'house'
+  transportArrangement?: string  // 运输安排: 'entrust' | 'self'
+  consigneeType?: string  // 收货人类型: 'asl' | 'not-asl'
+  containerReturn?: string  // 异地还柜: 'off-site' | 'local'
+  fullContainerTransport?: string  // 全程整柜运输: 'must-full' | 'can-split'
+  lastMileTransport?: string  // 末端运输方式
+  devanning?: string  // 拆柜: 'required' | 'not-required'
+  t1Declaration?: string  // T1报关: 'yes' | 'no'
+  // Reference List（包含多个卸货地址）
+  referenceList?: Array<{
+    referenceNumber: string
+    pieces: string
+    grossWeight: string
+    shipper: string
+    shipperDetails: string
+    consigneeAddress: string
+    consigneeAddressDetails: string
+  }>
 }
 
 export interface GetBillsParams {
@@ -4260,6 +4310,39 @@ export async function getCustomerOrderStats(customerId: string): Promise<ApiResp
   }
 }
 
+/**
+ * 客户税号类型
+ */
+export interface CustomerTaxNumber {
+  id: string
+  customerId: string
+  taxType: 'vat' | 'eori' | 'other'
+  taxNumber: string
+  countryCode?: string
+  companyName?: string
+  address?: string
+  isVerified?: boolean
+  verifiedAt?: string
+  createTime?: string
+  updateTime?: string
+}
+
+/**
+ * 获取客户税号列表
+ */
+export async function getCustomerTaxNumbers(customerId: string): Promise<ApiResponse<CustomerTaxNumber[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取客户税号列表失败:', error)
+    throw error
+  }
+}
+
 // ==================== 客户地址 API 接口 ====================
 
 export interface CustomerAddress {
@@ -4388,22 +4471,6 @@ export interface TaxValidationResult {
   companyAddress?: string
   verifiedAt?: string
   error?: string
-}
-
-/**
- * 获取客户税号列表
- */
-export async function getCustomerTaxNumbers(customerId: string): Promise<ApiResponse<CustomerTaxNumber[]>> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-numbers`)
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-    return await response.json()
-  } catch (error) {
-    console.error('获取客户税号列表失败:', error)
-    throw error
-  }
 }
 
 /**

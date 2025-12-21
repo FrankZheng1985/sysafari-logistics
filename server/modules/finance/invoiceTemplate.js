@@ -135,6 +135,8 @@ export function generateInvoiceHTML(data) {
   const {
     invoiceNumber,
     invoiceDate,
+    dueDate,
+    paymentDays,
     customer,
     containerNumbers,
     items,
@@ -147,6 +149,7 @@ export function generateInvoiceHTML(data) {
   const logoBase64 = getLogoBase64()
   const stampBase64 = getStampBase64()
   const formattedDate = formatInvoiceDate(invoiceDate)
+  const formattedDueDate = formatInvoiceDate(dueDate)
   
   // 格式化汇率显示
   const exchangeRateText = currency !== 'CNY' && exchangeRate !== 1 
@@ -375,6 +378,8 @@ export function generateInvoiceHTML(data) {
       <div class="invoice-title">INVOICE</div>
       <div class="invoice-detail">Invoice No: <span>${invoiceNumber}</span></div>
       <div class="invoice-detail">Invoice Date: ${formattedDate}</div>
+      <div class="invoice-detail">Payment Terms: ${paymentDays ? `${paymentDays} Days` : 'Due on Receipt'}</div>
+      ${formattedDueDate ? `<div class="invoice-detail">Due Date: ${formattedDueDate}</div>` : ''}
       ${exchangeRateText ? `<div class="invoice-detail">${exchangeRateText}</div>` : ''}
     </div>
   </div>

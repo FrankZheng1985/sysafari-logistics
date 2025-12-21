@@ -9,6 +9,7 @@ import VoidApplyModal from '../components/VoidApplyModal'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
 import { getBillsList, voidBill, restoreBill, publishDraft, type BillOfLading, type BillStats, getApiBaseUrl } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
+import { copyToClipboard } from '../components/Toast'
 
 const API_BASE = getApiBaseUrl()
 
@@ -31,57 +32,6 @@ const formatDateTime = (dateStr: string | undefined | null) => {
   } catch {
     return dateStr
   }
-}
-
-// 复制到剪贴板的辅助函数
-const copyToClipboard = async (text: string, e: React.MouseEvent) => {
-  e.stopPropagation()
-  if (!text || text === '-') return
-  try {
-    await navigator.clipboard.writeText(text)
-    // 显示简单的复制成功提示
-    const target = e.currentTarget as HTMLElement
-    const originalTitle = target.title
-    target.title = '已复制!'
-    setTimeout(() => {
-      target.title = originalTitle
-    }, 1000)
-  } catch (err) {
-    console.error('复制失败:', err)
-  }
-}
-
-// 带复制按钮的文本组件
-const CopyableText = ({ 
-  text, 
-  className = '', 
-  onClick 
-}: { 
-  text: string | undefined | null
-  className?: string
-  onClick?: (e: React.MouseEvent) => void
-}) => {
-  const displayText = text || '-'
-  if (displayText === '-') {
-    return <span className="text-gray-400">-</span>
-  }
-  return (
-    <div className="flex items-center gap-1">
-      <span 
-        className={className}
-        onClick={onClick}
-      >
-        {displayText}
-      </span>
-      <button
-        title="复制"
-        className="text-gray-400 hover:text-gray-600"
-        onClick={(e) => copyToClipboard(displayText, e)}
-      >
-        <Copy className="w-3 h-3" />
-      </button>
-    </div>
-  )
 }
 
 export default function OrderBills() {
@@ -575,6 +525,18 @@ export default function OrderBills() {
       ),
     },
     {
+      key: 'etd',
+      label: 'ETD',
+      sorter: (a, b) => {
+        const dateA = a.etd ? new Date(a.etd).getTime() : 0
+        const dateB = b.etd ? new Date(b.etd).getTime() : 0
+        return dateA - dateB
+      },
+      render: (item: BillOfLading) => (
+        <span className={textPrimary}>{item.etd || '-'}</span>
+      ),
+    },
+    {
       key: 'eta',
       label: 'ETA/ATA',
       sorter: (a, b) => {
@@ -637,45 +599,6 @@ export default function OrderBills() {
       render: (item: BillOfLading) => (
         <span className={textSecondary}>{item.customsStats || '-'}</span>
       ),
-    },
-    {
-      key: 'additionalAttributes',
-      label: '附加属性',
-      render: (item: BillOfLading) => {
-        const attrs = []
-        if (item.containerType) {
-          attrs.push(item.containerType === 'cfs' ? '拼箱' : item.containerType === 'fcl' ? '整箱' : item.containerType)
-        }
-        if (item.billType) {
-          attrs.push(item.billType === 'master' ? '船东单' : item.billType === 'house' ? '货代单' : item.billType)
-        }
-        if (item.transportArrangement) {
-          attrs.push(item.transportArrangement === 'entrust' ? '委托运输' : item.transportArrangement === 'self' ? '自行运输' : item.transportArrangement)
-        }
-        if (item.devanning) {
-          attrs.push(item.devanning === 'required' ? '需拆柜' : item.devanning === 'not-required' ? '不拆柜' : item.devanning)
-        }
-        if (item.t1Declaration === 'yes') {
-          attrs.push('T1报关')
-        }
-        
-        if (attrs.length === 0) {
-          return <span className={textMuted}>-</span>
-        }
-        
-        return (
-          <div className="flex flex-wrap gap-1">
-            {attrs.map((attr, idx) => (
-              <span 
-                key={idx}
-                className="inline-flex px-1.5 py-0.5 text-xs font-medium bg-blue-50 text-blue-600 rounded"
-              >
-                {attr}
-              </span>
-            ))}
-          </div>
-        )
-      },
     },
     {
       key: 'creator',

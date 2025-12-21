@@ -186,6 +186,7 @@ export async function getTaxDetails(importId) {
     itemNo: row.item_no,
     productName: row.product_name,
     productNameEn: row.product_name_en,
+    productImage: row.product_image || null,
     matchedHsCode: row.matched_hs_code,
     quantity: parseFloat(row.quantity) || 0,
     unitName: row.unit_name,
@@ -240,6 +241,7 @@ export async function getTaxDetails(importId) {
     batch: {
       id: batch.id,
       importNo: batch.import_no,
+      customerId: batch.customer_id,
       customerName: batch.customer_name,
       containerNo: batch.container_no,
       billNumber: batch.bill_number,
@@ -253,7 +255,20 @@ export async function getTaxDetails(importId) {
       customerConfirmedAt: batch.customer_confirmed_at,
       confirmPdfPath: batch.confirm_pdf_path,
       status: batch.status,
-      clearanceType: clearanceType
+      clearanceType: clearanceType,
+      // 发货方信息
+      shipperName: batch.shipper_name,
+      shipperAddress: batch.shipper_address,
+      shipperContact: batch.shipper_contact,
+      // 进口商信息
+      importerCustomerId: batch.importer_customer_id,
+      importerName: batch.importer_name,
+      importerTaxId: batch.importer_tax_id,
+      importerTaxNumber: batch.importer_tax_number,
+      importerTaxType: batch.importer_tax_type,
+      importerCountry: batch.importer_country,
+      importerCompanyName: batch.importer_company_name,
+      importerAddress: batch.importer_address
     },
     items,
     summary: {
@@ -280,7 +295,7 @@ export async function getTaxDetails(importId) {
 export async function markCustomerConfirmed(importId, confirmedBy) {
   const db = getDatabase()
   const now = new Date().toISOString()
-  
+
   await db.prepare(`
     UPDATE cargo_imports SET
       customer_confirmed = 1,
@@ -290,7 +305,27 @@ export async function markCustomerConfirmed(importId, confirmedBy) {
       updated_at = ?
     WHERE id = ?
   `).run(now, confirmedBy, now, importId)
-  
+
+  // 确认后自动保存到匹配记录表
+  try {
+    const hsMatchRecords = await import('./hsMatchRecords.js')
+    const taxDetails = await getTaxDetails(importId)
+    if (taxDetails && taxDetails.items) {
+      await hsMatchRecords.batchSaveFromTaxCalc(
+        importId,
+        taxDetails.items.map(item => ({
+          ...item,
+          importNo: taxDetails.importNo,
+          customerName: taxDetails.customerName
+        }))
+      )
+      console.log(`✅ 已保存 ${taxDetails.items.length} 条匹配记录到 hs_match_records`)
+    }
+  } catch (error) {
+    // 保存匹配记录失败不影响主流程
+    console.error('保存匹配记录失败:', error.message)
+  }
+
   return true
 }
 
@@ -309,6 +344,152 @@ export async function updateConfirmPdfPath(importId, pdfPath) {
   `).run(pdfPath, now, importId)
   
   return true
+}
+
+/**
+ * 更新单个商品的税费信息
+ * @param {number} itemId - 商品ID
+ * @param {Object} updates - 更新的字段
+ */
+export async function updateCargoItemTax(itemId, updates) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  // 获取当前商品信息
+  const item = await db.prepare('SELECT * FROM cargo_items WHERE id = ?').get(itemId)
+  if (!item) {
+    throw new Error('商品不存在')
+  }
+  
+  // 如果修改了HS编码，尝试从税率库获取新的税率
+  let newTariffData = null
+  const matchedHsCode = updates.matchedHsCode !== undefined ? updates.matchedHsCode : item.matched_hs_code
+  
+  if (updates.matchedHsCode && updates.matchedHsCode !== item.matched_hs_code) {
+    // HS编码发生变化，尝试从税率库获取税率
+    const tariff = await db.prepare(`
+      SELECT duty_rate, vat_rate, anti_dumping_rate, countervailing_rate, goods_description_cn
+      FROM tariff_rates 
+      WHERE hs_code = ?
+    `).get(updates.matchedHsCode)
+    
+    if (tariff) {
+      newTariffData = {
+        dutyRate: parseFloat(tariff.duty_rate) || 0,
+        vatRate: parseFloat(tariff.vat_rate) || 19,
+        antiDumpingRate: parseFloat(tariff.anti_dumping_rate) || 0,
+        countervailingRate: parseFloat(tariff.countervailing_rate) || 0
+      }
+    }
+  }
+  
+  // 合并更新字段（如果有新税率数据且用户没有手动指定，则使用新税率）
+  const totalValue = updates.totalValue !== undefined ? parseFloat(updates.totalValue) : parseFloat(item.total_value) || 0
+  const dutyRate = updates.dutyRate !== undefined ? parseFloat(updates.dutyRate) : 
+                   (newTariffData ? newTariffData.dutyRate : parseFloat(item.duty_rate) || 0)
+  const vatRate = updates.vatRate !== undefined ? parseFloat(updates.vatRate) : 
+                  (newTariffData ? newTariffData.vatRate : parseFloat(item.vat_rate) || 19)
+  const antiDumpingRate = updates.antiDumpingRate !== undefined ? parseFloat(updates.antiDumpingRate) : 
+                          (newTariffData ? newTariffData.antiDumpingRate : parseFloat(item.anti_dumping_rate) || 0)
+  const countervailingRate = updates.countervailingRate !== undefined ? parseFloat(updates.countervailingRate) : 
+                             (newTariffData ? newTariffData.countervailingRate : parseFloat(item.countervailing_rate) || 0)
+  
+  // 重新计算税费
+  const taxResult = calculateItemTax({
+    totalValue,
+    dutyRate,
+    vatRate,
+    antiDumpingRate,
+    countervailingRate
+  })
+  
+  // 获取商品品名（如果有更新）
+  const productName = updates.productName !== undefined ? updates.productName : item.product_name
+
+  // 更新商品信息
+  await db.prepare(`
+    UPDATE cargo_items SET
+      product_name = ?,
+      matched_hs_code = ?,
+      total_value = ?,
+      duty_rate = ?,
+      vat_rate = ?,
+      anti_dumping_rate = ?,
+      countervailing_rate = ?,
+      duty_amount = ?,
+      vat_amount = ?,
+      other_tax_amount = ?,
+      total_tax = ?,
+      match_status = 'approved',
+      updated_at = ?
+    WHERE id = ?
+  `).run(
+    productName,
+    matchedHsCode,
+    totalValue,
+    dutyRate,
+    vatRate,
+    antiDumpingRate,
+    countervailingRate,
+    taxResult.dutyAmount,
+    taxResult.vatAmount,
+    taxResult.otherTaxAmount,
+    taxResult.totalTax,
+    now,
+    itemId
+  )
+  
+  // 更新导入批次的汇总
+  await updateImportSummary(item.import_id)
+  
+  return {
+    id: itemId,
+    matchedHsCode,
+    totalValue,
+    dutyRate,
+    vatRate,
+    antiDumpingRate,
+    countervailingRate,
+    ...taxResult,
+    tariffUpdated: !!newTariffData
+  }
+}
+
+/**
+ * 更新导入批次的税费汇总
+ */
+async function updateImportSummary(importId) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  // 重新计算汇总
+  const summary = await db.prepare(`
+    SELECT 
+      COALESCE(SUM(total_value), 0) as total_value,
+      COALESCE(SUM(duty_amount), 0) as total_duty,
+      COALESCE(SUM(vat_amount), 0) as total_vat,
+      COALESCE(SUM(other_tax_amount), 0) as total_other_tax
+    FROM cargo_items 
+    WHERE import_id = ? AND match_status IN ('matched', 'auto_approved', 'approved')
+  `).get(importId)
+  
+  // 更新导入批次
+  await db.prepare(`
+    UPDATE cargo_imports SET
+      total_value = ?,
+      total_duty = ?,
+      total_vat = ?,
+      total_other_tax = ?,
+      updated_at = ?
+    WHERE id = ?
+  `).run(
+    summary.total_value,
+    summary.total_duty,
+    summary.total_vat,
+    summary.total_other_tax,
+    now,
+    importId
+  )
 }
 
 /**
@@ -367,5 +548,6 @@ export default {
   getTaxDetails,
   markCustomerConfirmed,
   updateConfirmPdfPath,
+  updateCargoItemTax,
   getDocumentStats
 }

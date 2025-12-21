@@ -3,9 +3,32 @@
  */
 
 import express from 'express'
+import multer from 'multer'
 import * as controller from './controller.js'
 
 const router = express.Router()
+
+// 配置合同文件上传
+const contractUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 20 * 1024 * 1024 // 20MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('不支持的文件类型，请上传 PDF、Word 或图片文件'))
+    }
+  }
+})
 
 // ==================== 客户管理路由 ====================
 
@@ -74,6 +97,14 @@ router.get('/customers/:customerId/order-stats', controller.getCustomerOrderStat
 
 // 获取客户订单列表
 router.get('/customers/:customerId/orders', controller.getCustomerOrders)
+
+// ==================== 客户报价单PDF路由 ====================
+
+// 获取客户最新报价单PDF
+router.get('/customers/:customerId/quotation-pdf', controller.getCustomerQuotationPdf)
+
+// 获取客户报价单历史列表
+router.get('/customers/:customerId/quotation-history', controller.getCustomerQuotationHistory)
 
 // ==================== 客户地址路由 ====================
 
@@ -174,6 +205,29 @@ router.put('/contracts/:id', controller.updateContract)
 // 删除合同
 router.delete('/contracts/:id', controller.deleteContract)
 
+// ==================== 合同签署管理路由 ====================
+
+// 为销售机会生成合同
+router.post('/contracts/generate', controller.generateContract)
+
+// 上传已签署合同（支持文件上传）
+router.post('/contracts/:id/upload-signed', contractUpload.single('file'), controller.uploadSignedContract)
+
+// 更新合同签署状态
+router.put('/contracts/:id/sign-status', controller.updateContractSignStatus)
+
+// 获取合同签署历史
+router.get('/contracts/:id/sign-history', controller.getContractSignHistory)
+
+// 获取客户待签署合同
+router.get('/customers/:customerId/pending-contracts', controller.getPendingSignContracts)
+
+// 检查销售机会是否可以成交
+router.get('/opportunities/:opportunityId/can-close', controller.checkOpportunityCanClose)
+
+// 销售机会成交（带合同校验）
+router.put('/opportunities/:id/close', controller.closeOpportunity)
+
 // ==================== 客户反馈/投诉路由 ====================
 
 // 获取反馈统计
@@ -240,6 +294,11 @@ router.put('/shared-tax-numbers/:id', controller.updateSharedTaxNumber)
 
 // 删除共享税号
 router.delete('/shared-tax-numbers/:id', controller.deleteSharedTaxNumber)
+
+// ==================== 最后里程费率集成路由 ====================
+
+// 获取最后里程费率（用于报价单）
+router.get('/last-mile-rate', controller.getLastMileRateForQuotation)
 
 export default router
 

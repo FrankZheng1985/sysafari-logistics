@@ -1,17 +1,18 @@
 {
   "name": "sysafari-logistics-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
-  "description": "Sysafari Logistics Management System - Backend Server",
-  "main": "index.js",
+  "description": "Sysafari Logistics Management System - Backend Server (模块化架构)",
+  "main": "app.js",
   "scripts": {
-    "dev": "node --watch index.js",
-    "start": "node index.js",
+    "dev": "node --watch app.js",
+    "start": "node app.js",
     "init-production-db": "node scripts/init-production-db.js",
     "sync-to-demo": "node scripts/sync-to-demo.js",
     "add-production-users": "node scripts/add-production-users.js"
   },
   "dependencies": {
+    "ali-oss": "^6.23.0",
     "cors": "^2.8.5",
     "cos-nodejs-sdk-v5": "^2.15.4",
     "csv-parse": "^6.1.0",
@@ -23,11 +24,14 @@
     "jwks-rsa": "^3.2.0",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
+    "nodemailer": "^7.0.11",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.17.2",
     "pg": "^8.16.3",
     "puppeteer": "^24.33.0",
+    "socket.io": "^4.7.4",
     "tencentcloud-sdk-nodejs-ocr": "^4.1.155",
+    "uuid": "^9.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

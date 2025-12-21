@@ -1457,11 +1457,40 @@ export default {
   
   // 日志
   addTMSLog,
-  getTMSLogs,
+  getTMSLogs
+}
+
+// ==================== 最后里程集成 ====================
+
+/**
+ * 获取最后里程承运商列表（用于TMS派送选择）
+ */
+export async function getLastMileCarriers(params = {}) {
+  const db = getDatabase()
+  const { type, status = 'active' } = params
   
-  // 转换函数
-  convertCMRToCamelCase,
-  convertConditionToCamelCase,
-  convertAssessmentResultToCamelCase
+  let query = 'SELECT * FROM last_mile_carriers WHERE status = ?'
+  const queryParams = [status]
+  
+  if (type) {
+    query += ' AND carrier_type = ?'
+    queryParams.push(type)
+  }
+  
+  query += ' ORDER BY carrier_code'
+  
+  const carriers = await db.prepare(query).all(...queryParams)
+  
+  return carriers.map(row => ({
+    id: row.id,
+    carrierCode: row.carrier_code,
+    carrierName: row.carrier_name,
+    carrierNameEn: row.carrier_name_en,
+    carrierType: row.carrier_type,
+    countryCode: row.country_code,
+    contactPerson: row.contact_person,
+    contactPhone: row.contact_phone,
+    apiEnabled: row.api_enabled === 1
+  }))
 }
 

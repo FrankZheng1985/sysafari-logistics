@@ -1,6 +1,36 @@
 import { useState, useEffect, createContext, useContext, useCallback, ReactNode } from 'react'
 import { CheckCircle, XCircle, AlertTriangle, Info, X, Download } from 'lucide-react'
 
+// 全局复制提示函数（供不在 React 组件中使用）
+let globalShowCopyToast: ((text: string) => void) | null = null
+
+function setGlobalShowCopyToast(fn: ((text: string) => void) | null) {
+  globalShowCopyToast = fn
+}
+
+/**
+ * 通用复制到剪贴板函数
+ * 可在整个系统中使用，会自动显示复制成功提示
+ */
+export async function copyToClipboard(text: string, e?: React.MouseEvent): Promise<boolean> {
+  if (e) {
+    e.stopPropagation()
+  }
+  if (!text || text === '-') return false
+  
+  try {
+    await navigator.clipboard.writeText(text)
+    // 显示全局提示
+    if (globalShowCopyToast) {
+      globalShowCopyToast(text)
+    }
+    return true
+  } catch (err) {
+    console.error('复制失败:', err)
+    return false
+  }
+}
+
 // Toast 类型
 export type ToastType = 'success' | 'error' | 'warning' | 'info' | 'download'
 
@@ -14,6 +44,7 @@ interface Toast {
 interface ToastContextType {
   showToast: (type: ToastType, message: string, duration?: number) => void
   showDownloadSuccess: (fileName?: string) => void
+  showCopySuccess: (text: string) => void
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined)
@@ -118,8 +149,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     showToast('download', message, 3000)
   }, [showToast])
 
+  const showCopySuccess = useCallback((text: string) => {
+    const displayText = text.length > 25 ? text.substring(0, 25) + '...' : text
+    showToast('success', `已复制: ${displayText}`, 1500)
+  }, [showToast])
+
+  // 设置全局复制提示函数
+  useEffect(() => {
+    setGlobalShowCopyToast(showCopySuccess)
+    return () => setGlobalShowCopyToast(null)
+  }, [showCopySuccess])
+
   return (
-    <ToastContext.Provider value={{ showToast, showDownloadSuccess }}>
+    <ToastContext.Provider value={{ showToast, showDownloadSuccess, showCopySuccess }}>
       {children}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>

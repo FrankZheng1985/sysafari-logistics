@@ -205,6 +205,126 @@ export async function checkContractExpire(days = 30) {
 }
 
 /**
+ * 检查账期即将到期预警
+ * 发票即将在指定天数内到期
+ */
+export async function checkPaymentTermDue(days = 7) {
+  const db = getDatabase()
+  
+  try {
+    // 查找即将到期的发票（未到期但即将到期）
+    const dueSoonInvoices = await db.prepare(`
+      SELECT 
+        i.id, 
+        i.invoice_number, 
+        i.customer_id,
+        i.customer_name, 
+        i.total_amount,
+        i.paid_amount,
+        i.due_date,
+        c.payment_terms
+      FROM invoices i
+      LEFT JOIN customers c ON i.customer_id = c.id
+      WHERE i.status = 'pending'
+        AND i.invoice_type = 'sales'
+        AND i.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '${days} days'
+        AND i.id NOT IN (
+          SELECT related_id FROM alert_logs 
+          WHERE alert_type = 'payment_term_due' 
+            AND status IN ('active', 'handled')
+            AND related_type = 'invoice'
+        )
+    `).all()
+    
+    const alerts = []
+    for (const invoice of dueSoonInvoices) {
+      const daysLeft = Math.ceil((new Date(invoice.due_date) - new Date()) / (1000 * 60 * 60 * 24))
+      const outstanding = invoice.total_amount - (invoice.paid_amount || 0)
+      
+      const alert = {
+        ruleId: 'rule-payment-term-due',
+        ruleName: '账期即将到期预警',
+        alertType: 'payment_term_due',
+        alertLevel: daysLeft <= 3 ? 'warning' : 'info',
+        title: `发票 ${invoice.invoice_number} 账期即将到期`,
+        content: `发票 ${invoice.invoice_number} (客户: ${invoice.customer_name || '-'}) 待收金额 ${outstanding.toFixed(2)} EUR，将于 ${invoice.due_date} 到期，还有 ${daysLeft} 天。${invoice.payment_terms ? '账期: ' + invoice.payment_terms : ''}`,
+        relatedType: 'invoice',
+        relatedId: invoice.id
+      }
+      
+      await messageModel.createAlertLog(alert)
+      alerts.push(alert)
+    }
+    
+    return { success: true, count: alerts.length, alerts }
+  } catch (error) {
+    console.error('检查账期即将到期失败:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 检查客户多笔逾期预警
+ * 客户有多笔发票逾期未付
+ */
+export async function checkCustomerOverdueCount(minCount = 2) {
+  const db = getDatabase()
+  
+  try {
+    // 查找有多笔逾期的客户
+    const overdueCustomers = await db.prepare(`
+      SELECT 
+        c.id,
+        c.company_name,
+        c.payment_terms,
+        c.credit_limit,
+        COUNT(i.id) as overdue_count,
+        SUM(i.total_amount - COALESCE(i.paid_amount, 0)) as total_overdue
+      FROM customers c
+      INNER JOIN invoices i ON i.customer_id = c.id
+      WHERE i.status = 'pending'
+        AND i.invoice_type = 'sales'
+        AND i.due_date < CURRENT_DATE
+      GROUP BY c.id, c.company_name, c.payment_terms, c.credit_limit
+      HAVING COUNT(i.id) >= ${minCount}
+    `).all()
+    
+    const alerts = []
+    for (const customer of overdueCustomers) {
+      // 检查是否已有活跃预警
+      const existingAlert = await db.prepare(`
+        SELECT id FROM alert_logs 
+        WHERE alert_type = 'customer_overdue' 
+          AND status = 'active'
+          AND related_type = 'customer'
+          AND related_id = $1
+      `).get(customer.id)
+      
+      if (!existingAlert) {
+        const alert = {
+          ruleId: 'rule-customer-overdue',
+          ruleName: '客户多笔逾期预警',
+          alertType: 'customer_overdue',
+          alertLevel: 'danger',
+          title: `客户 ${customer.company_name} 有 ${customer.overdue_count} 笔逾期`,
+          content: `客户 ${customer.company_name} 有 ${customer.overdue_count} 笔发票逾期未付，逾期总金额 ${customer.total_overdue?.toFixed(2) || 0} EUR。${customer.payment_terms ? '客户账期: ' + customer.payment_terms : ''}`,
+          relatedType: 'customer',
+          relatedId: customer.id
+        }
+        
+        await messageModel.createAlertLog(alert)
+        alerts.push(alert)
+      }
+    }
+    
+    return { success: true, count: alerts.length, alerts }
+  } catch (error) {
+    console.error('检查客户多笔逾期失败:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * 检查供应商合同到期预警
  */
 export async function checkSupplierContractExpire(days = 30) {
@@ -259,6 +379,8 @@ export async function runAllChecks() {
   const results = {
     orderOverdue: await checkOrderOverdue(30),
     paymentDue: await checkPaymentDue(),
+    paymentTermDue: await checkPaymentTermDue(7),  // 账期即将到期（7天内）
+    customerOverdue: await checkCustomerOverdueCount(2),  // 客户多笔逾期（>=2笔）
     creditLimit: await checkCreditLimit(),
     contractExpire: await checkContractExpire(30),
     supplierContractExpire: await checkSupplierContractExpire(30)
@@ -273,6 +395,8 @@ export async function runAllChecks() {
 export default {
   checkOrderOverdue,
   checkPaymentDue,
+  checkPaymentTermDue,
+  checkCustomerOverdueCount,
   checkCreditLimit,
   checkContractExpire,
   checkSupplierContractExpire,

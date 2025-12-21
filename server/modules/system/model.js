@@ -105,8 +105,8 @@ export async function createUser(data) {
   const result = await db.prepare(`
     INSERT INTO users (
       username, password_hash, name, email, phone,
-      avatar, role, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      avatar, role, status, supervisor_id, department, position, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     data.username,
     passwordHash,
@@ -115,7 +115,10 @@ export async function createUser(data) {
     data.phone || '',
     data.avatar || '',
     data.role || 'operator',
-    data.status || 'active'
+    data.status || 'active',
+    data.supervisorId || null,
+    data.department || '',
+    data.position || ''
   )
   
   return { id: result.lastInsertRowid }
@@ -152,6 +155,19 @@ export async function updateUser(id, data) {
   if (data.status !== undefined) {
     fields.push('status = ?')
     values.push(data.status)
+  }
+  // 新增字段支持
+  if (data.supervisorId !== undefined) {
+    fields.push('supervisor_id = ?')
+    values.push(data.supervisorId || null)
+  }
+  if (data.department !== undefined) {
+    fields.push('department = ?')
+    values.push(data.department)
+  }
+  if (data.position !== undefined) {
+    fields.push('position = ?')
+    values.push(data.position)
   }
   
   if (fields.length === 0) return false
@@ -681,7 +697,11 @@ export function convertUserToCamelCase(row) {
     loginCount: row.login_count,
     createTime: row.created_at,
     updateTime: row.updated_at,
-    userType: row.user_type || 'normal'  // 用户类型：test=演示用户, normal=正式用户
+    userType: row.user_type || 'normal',  // 用户类型：test=演示用户, normal=正式用户
+    // 新增字段
+    supervisorId: row.supervisor_id,
+    department: row.department || '',
+    position: row.position || ''
   }
 }
 
@@ -694,7 +714,11 @@ export function convertRoleToCamelCase(row) {
     colorCode: row.color_code,
     status: row.status,
     createTime: row.created_at,
-    updateTime: row.updated_at
+    updateTime: row.updated_at,
+    // 新增字段
+    roleLevel: row.role_level || 4,
+    canManageTeam: row.can_manage_team || false,
+    canApprove: row.can_approve || false
   }
 }
 

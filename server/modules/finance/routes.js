@@ -173,5 +173,34 @@ router.post('/finance/reports/:type/generate', controller.generateFinancialRepor
 // 获取单个财务报表详情（参数化路由，放在最后）
 router.get('/finance/reports/:id', controller.getFinancialReportById)
 
+// ==================== 承运商结算路由 ====================
+
+// 获取结算单列表
+router.get('/carrier-settlements', controller.getCarrierSettlements)
+
+// 获取结算统计
+router.get('/carrier-settlements/stats', controller.getCarrierSettlementStats)
+
+// 获取结算单详情
+router.get('/carrier-settlements/:id', controller.getCarrierSettlementById)
+
+// 创建结算单（按周期自动生成）
+router.post('/carrier-settlements/generate', controller.generateCarrierSettlement)
+
+// 导入承运商账单并对账
+router.post('/carrier-settlements/import-bill', controller.importCarrierBill)
+
+// 更新结算单
+router.put('/carrier-settlements/:id', controller.updateCarrierSettlement)
+
+// 确认结算（更新核对状态）
+router.post('/carrier-settlements/:id/confirm', controller.confirmCarrierSettlement)
+
+// 标记已付款
+router.post('/carrier-settlements/:id/pay', controller.payCarrierSettlement)
+
+// 获取结算明细
+router.get('/carrier-settlements/:id/items', controller.getCarrierSettlementItems)
+
 export default router
 

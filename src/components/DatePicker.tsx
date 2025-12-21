@@ -189,20 +189,22 @@ export default function DatePicker({
   const weekDays = ['一', '二', '三', '四', '五', '六', '日']
 
   return (
-    <div ref={containerRef} className="relative" style={{ display: 'inline-block' }}>
+    <div ref={containerRef} className={`relative w-full ${className}`}>
       {/* 触发按钮 - 只有点击这个按钮才会打开日期选择器 */}
       <button
         ref={triggerRef}
         type="button"
         id={id}
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1 px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 ${className}`}
-        style={{ minWidth: '110px' }}
+        className="w-full h-8 flex items-center justify-between gap-2 px-2 border border-gray-200 rounded-md text-xs bg-white text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
       >
-        <Calendar className="w-3 h-3 text-gray-400 flex-shrink-0" />
-        <span className="flex-1 text-left truncate">
-          {formatDisplayDate(selectedDate) || placeholder}
+        <span className="flex items-center gap-2">
+          <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span className="text-left">
+            {formatDisplayDate(selectedDate) || placeholder}
+          </span>
         </span>
+        <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
       </button>
 
       {/* 日期选择器弹窗 */}

@@ -416,22 +416,22 @@ export default function SystemDashboard() {
           {/* TMS状态 */}
           <div className="mt-6 pt-4 border-t border-gray-100">
             <div className="text-xs text-gray-500 mb-3">TMS派送状态</div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 text-center p-2 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-4 gap-2">
+              <div className="text-center p-2 bg-gray-50 rounded-lg">
                 <div className="text-lg font-bold text-gray-900">{stats?.tms.pending || 0}</div>
-                <div className="text-xs text-gray-500">待派送</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">待派送</div>
               </div>
-              <div className="flex-1 text-center p-2 bg-blue-50 rounded-lg">
+              <div className="text-center p-2 bg-blue-50 rounded-lg">
                 <div className="text-lg font-bold text-blue-600">{stats?.tms.delivering || 0}</div>
-                <div className="text-xs text-gray-500">派送中</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">派送中</div>
               </div>
-              <div className="flex-1 text-center p-2 bg-green-50 rounded-lg">
+              <div className="text-center p-2 bg-green-50 rounded-lg">
                 <div className="text-lg font-bold text-green-600">{stats?.tms.delivered || 0}</div>
-                <div className="text-xs text-gray-500">已送达</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">已送达</div>
               </div>
-              <div className="flex-1 text-center p-2 bg-red-50 rounded-lg">
+              <div className="text-center p-2 bg-red-50 rounded-lg">
                 <div className="text-lg font-bold text-red-600">{stats?.tms.exception || 0}</div>
-                <div className="text-xs text-gray-500">异常</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">异常</div>
               </div>
             </div>
           </div>

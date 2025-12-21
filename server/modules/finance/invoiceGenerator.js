@@ -431,14 +431,32 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
   
   const excelBuffer = await generateExcel(excelData)
   
-  // 5. 上传到COS
+  // 5. 上传到COS并记录到文档管理
   let pdfUrl = null
   let excelUrl = null
+  let pdfDocumentId = null
   
   const cosConfig = cosStorage.checkCosConfig()
   if (cosConfig.configured) {
     try {
-      pdfUrl = await cosStorage.uploadInvoicePDF(pdfBuffer, invoiceNumber)
+      // 使用统一文档服务上传发票PDF
+      const documentService = await import('../../../services/documentService.js')
+      
+      const docResult = await documentService.uploadInvoice({
+        fileBuffer: pdfBuffer,
+        fileName: `${invoiceNumber}.pdf`,
+        invoiceNumber,
+        billId: invoiceData.fees[0]?.bill_id,
+        billNumber: invoiceData.fees[0]?.bill_number,
+        customerId: invoiceData.customer.id,
+        customerName: invoiceData.customer.name
+      })
+      
+      pdfUrl = docResult.cosUrl
+      pdfDocumentId = docResult.documentId
+      console.log('✅ 发票PDF已同步到文档管理:', pdfDocumentId)
+      
+      // Excel对账单继续使用原COS存储（不需要进文档管理）
       excelUrl = await cosStorage.uploadStatementExcel(excelBuffer, invoiceNumber)
     } catch (error) {
       console.error('上传到COS失败:', error)
@@ -505,6 +523,7 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
     currency: invoiceData.currency,
     pdfUrl,
     excelUrl,
+    pdfDocumentId, // 文档管理系统中的ID
     status: 'issued'
   }
 }
@@ -623,10 +642,21 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }
   }
 
+  // 计算账期天数（如果有到期日期）
+  let paymentDays = null
+  if (invoice.due_date && invoice.invoice_date) {
+    const invoiceDateObj = new Date(invoice.invoice_date)
+    const dueDateObj = new Date(invoice.due_date)
+    paymentDays = Math.ceil((dueDateObj.getTime() - invoiceDateObj.getTime()) / (1000 * 60 * 60 * 24))
+    if (paymentDays <= 0) paymentDays = null
+  }
+
   // 生成PDF
   const pdfData = {
     invoiceNumber: invoice.invoice_number,
     invoiceDate: invoice.invoice_date,
+    dueDate: invoice.due_date || null,
+    paymentDays: paymentDays,
     customer: {
       name: invoice.customer_name,
       address: invoice.customer_address || ''
@@ -855,10 +885,21 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       }
     }
 
+    // 计算账期天数（如果有到期日期）
+    let paymentDays = null
+    if (invoice.due_date && invoice.invoice_date) {
+      const invoiceDateObj = new Date(invoice.invoice_date)
+      const dueDateObj = new Date(invoice.due_date)
+      paymentDays = Math.ceil((dueDateObj.getTime() - invoiceDateObj.getTime()) / (1000 * 60 * 60 * 24))
+      if (paymentDays <= 0) paymentDays = null
+    }
+
     // 准备PDF数据
     const pdfData = {
       invoiceNumber: invoice.invoice_number,
       invoiceDate: invoice.invoice_date,
+      dueDate: invoice.due_date || null,
+      paymentDays: paymentDays,
       customer: {
         name: invoice.customer_name || '',
         address: invoice.customer_address || ''

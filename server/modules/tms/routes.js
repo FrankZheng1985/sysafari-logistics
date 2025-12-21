@@ -113,5 +113,10 @@ router.get('/assessment/provider-rank', controller.getProviderRanking)
 // 获取考核报表
 router.get('/assessment/report', controller.getAssessmentReport)
 
+// ==================== 最后里程集成路由 ====================
+
+// 获取最后里程承运商列表
+router.get('/last-mile-carriers', controller.getLastMileCarriers)
+
 export default router
 

@@ -4,6 +4,9 @@
 
 import { success, successWithPagination, badRequest, notFound, conflict, serverError } from '../../utils/response.js'
 import * as model from './model.js'
+import ossService from '../../utils/ossService.js'
+import emailService from '../../utils/emailService.js'
+import { generateQuotationHtml, generatePdfFromHtml } from '../quotation/pdfGenerator.js'
 
 // ==================== 客户管理 ====================
 
@@ -76,28 +79,146 @@ export async function getCustomerById(req, res) {
 
 /**
  * 创建客户
+ * 支持自动生成报价单、上传COS、发送邮件
  */
 export async function createCustomer(req, res) {
   try {
-    const { customerName } = req.body
+    const { 
+      customerName, 
+      productId, 
+      selectedFeeItemIds, 
+      selectedContactEmails,
+      contacts  // 联系人列表
+    } = req.body
     
     // 客户名称为必填项，客户编码由系统自动生成
     if (!customerName) {
       return badRequest(res, '客户名称为必填项')
     }
     
+    // 产品和费用项为必填（强制生成报价）
+    if (!productId) {
+      return badRequest(res, '请选择产品')
+    }
+    
+    if (!selectedFeeItemIds || selectedFeeItemIds.length === 0) {
+      return badRequest(res, '请选择至少一项费用')
+    }
+    
     // 如果提供了customerCode，检查是否已存在
     if (req.body.customerCode) {
       const existing = await model.getCustomerByCode(req.body.customerCode)
-    if (existing) {
-      return conflict(res, '客户代码已存在')
+      if (existing) {
+        return conflict(res, '客户代码已存在')
       }
     }
     
+    // 1. 创建客户
     const result = await model.createCustomer(req.body)
-    const newCustomer = await model.getCustomerById(result.id)
+    const customerId = result.id
     
-    return success(res, newCustomer, '创建成功')
+    // 2. 创建联系人（如果有）
+    if (contacts && contacts.length > 0) {
+      for (const contact of contacts) {
+        if (contact.contactName) {
+          await model.createContact({ ...contact, customerId })
+        }
+      }
+    }
+    
+    // 3. 自动生成报价单
+    let quotation = null
+    let pdfUrl = null
+    let emailResults = null
+    
+    try {
+      quotation = await model.createQuotationForCustomer({
+        customerId,
+        customerName,
+        productId,
+        selectedFeeItemIds,
+        user: req.user
+      })
+      
+      console.log(`✅ 报价单已生成: ${quotation.quoteNumber}`)
+      
+      // 4. 生成PDF并上传到OSS
+      try {
+        // 获取完整的报价单数据用于生成PDF
+        const fullQuotation = await model.getQuotationById(quotation.id)
+        const html = generateQuotationHtml(fullQuotation)
+        let pdfData = await generatePdfFromHtml(html)
+        
+        // 将 Uint8Array 转换为 Buffer（puppeteer返回的是Uint8Array）
+        const pdfBuffer = pdfData ? Buffer.from(pdfData) : null
+        
+        // 检查OSS配置
+        const ossCheck = ossService.checkOssConfig()
+        if (ossCheck.configured && pdfBuffer && pdfBuffer.length > 0) {
+          const uploadResult = await ossService.uploadQuotationPdf({
+            customerId,
+            quoteNumber: quotation.quoteNumber,
+            pdfBuffer
+          })
+          pdfUrl = uploadResult.url
+          console.log(`✅ PDF已上传到OSS: ${pdfUrl}`)
+        } else if (!ossCheck.configured) {
+          console.warn('⚠️ OSS未配置，跳过PDF上传')
+        } else {
+          console.warn('⚠️ PDF生成失败，跳过上传')
+        }
+        
+        // 5. 发送邮件给选中的联系人
+        if (selectedContactEmails && selectedContactEmails.length > 0) {
+          const emailCheck = emailService.checkEmailConfig()
+          if (emailCheck.configured) {
+            emailResults = await emailService.sendQuotationEmailBatch(
+              selectedContactEmails,
+              {
+                customerName,
+                quoteNumber: quotation.quoteNumber,
+                validUntil: quotation.validUntil,
+                pdfUrl,
+                pdfBuffer
+              }
+            )
+            console.log(`✅ 邮件发送完成: 成功${emailResults.success.length}封, 失败${emailResults.failed.length}封`)
+          } else {
+            console.warn('⚠️ 邮件服务未配置，跳过邮件发送')
+          }
+        }
+      } catch (pdfError) {
+        console.error('PDF生成或邮件发送失败:', pdfError)
+        // 不影响客户创建，继续返回成功
+      }
+    } catch (quotationError) {
+      console.error('报价单生成失败:', quotationError)
+      // 不影响客户创建，继续返回成功
+    }
+    
+    // 获取完整的客户信息
+    const newCustomer = await model.getCustomerById(customerId)
+    
+    // 构建返回消息
+    let message = '客户创建成功'
+    if (quotation) {
+      message += `，报价单 ${quotation.quoteNumber} 已生成`
+      if (emailResults && emailResults.success.length > 0) {
+        message += `，已发送邮件至 ${emailResults.success.length} 位联系人`
+      }
+    }
+    
+    return success(res, {
+      customer: newCustomer,
+      quotation: quotation ? {
+        id: quotation.id,
+        quoteNumber: quotation.quoteNumber,
+        validUntil: quotation.validUntil,
+        totalAmount: quotation.totalAmount,
+        pdfUrl
+      } : null,
+      emailResults
+    }, message)
   } catch (error) {
     console.error('创建客户失败:', error)
     return serverError(res, '创建客户失败')
@@ -454,17 +575,71 @@ export async function deleteFollowUp(req, res) {
 export async function getCustomerOrderStats(req, res) {
   try {
     const { customerId } = req.params
-    
+
     const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
-    
+
     const stats = await model.getCustomerOrderStats(customerId)
     return success(res, stats)
   } catch (error) {
     console.error('获取客户订单统计失败:', error)
     return serverError(res, '获取客户订单统计失败')
+  }
+}
+
+/**
+ * 获取客户最新报价单PDF
+ */
+export async function getCustomerQuotationPdf(req, res) {
+  try {
+    const { customerId } = req.params
+
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+
+    const ossCheck = ossService.checkOssConfig()
+    if (!ossCheck.configured) {
+      return badRequest(res, 'OSS存储服务未配置')
+    }
+
+    const latest = await ossService.getLatestQuotationPdf(customerId)
+    if (!latest) {
+      return notFound(res, '该客户暂无报价单')
+    }
+
+    return success(res, latest)
+  } catch (error) {
+    console.error('获取客户报价单PDF失败:', error)
+    return serverError(res, '获取客户报价单PDF失败')
+  }
+}
+
+/**
+ * 获取客户报价单历史列表
+ */
+export async function getCustomerQuotationHistory(req, res) {
+  try {
+    const { customerId } = req.params
+
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+
+    const ossCheck = ossService.checkOssConfig()
+    if (!ossCheck.configured) {
+      return badRequest(res, 'OSS存储服务未配置')
+    }
+
+    const history = await ossService.getQuotationHistory(customerId)
+    return success(res, history)
+  } catch (error) {
+    console.error('获取客户报价单历史失败:', error)
+    return serverError(res, '获取客户报价单历史失败')
   }
 }
 
@@ -1085,9 +1260,12 @@ export async function generateQuotationPdf(req, res) {
     const html = generateQuotationHtml(quotation, company)
     
     // 尝试生成PDF
-    const pdfBuffer = await generatePdfFromHtml(html)
+    const pdfData = await generatePdfFromHtml(html)
     
-    if (pdfBuffer) {
+    if (pdfData) {
+      // 将 Uint8Array 转换为 Buffer（puppeteer返回的是Uint8Array）
+      const pdfBuffer = Buffer.from(pdfData)
+      
       // 返回PDF
       res.setHeader('Content-Type', 'application/pdf')
       res.setHeader('Content-Disposition', `attachment; filename="Quotation_${quotation.quoteNumber}.pdf"`)
@@ -1221,11 +1399,242 @@ export async function deleteContract(req, res) {
       return badRequest(res, '生效中的合同不能删除')
     }
     
+    // 已签署的合同不能删除
+    if (existing.signStatus === 'signed') {
+      return badRequest(res, '已签署的合同不能删除')
+    }
+    
     model.deleteContract(id)
     return success(res, null, '删除成功')
   } catch (error) {
     console.error('删除合同失败:', error)
     return serverError(res, '删除合同失败')
+  }
+}
+
+// ==================== 合同签署管理 ====================
+
+/**
+ * 为销售机会生成合同
+ */
+export async function generateContract(req, res) {
+  try {
+    const { opportunityId } = req.body
+    
+    if (!opportunityId) {
+      return badRequest(res, '销售机会ID为必填项')
+    }
+    
+    // 检查是否已有合同
+    const existingContract = await model.getContractByOpportunityId(opportunityId)
+    if (existingContract) {
+      return badRequest(res, '该销售机会已有关联合同', { contract: existingContract })
+    }
+    
+    // 获取销售机会信息
+    const opportunity = await model.getOpportunityById(opportunityId)
+    if (!opportunity) {
+      return notFound(res, '销售机会不存在')
+    }
+    
+    // 生成合同
+    const result = await model.generateContractForOpportunity({
+      opportunityId,
+      opportunityName: opportunity.opportunityName,
+      customerId: opportunity.customerId,
+      customerName: opportunity.customerName,
+      expectedValue: opportunity.expectedValue
+    }, req.user)
+    
+    // 更新销售机会的合同关联
+    await model.updateOpportunityContract(opportunityId, result.id, result.contractNumber)
+    
+    // 获取完整的合同信息
+    const contract = await model.getContractById(result.id)
+    
+    return success(res, contract, '合同生成成功，请完成签署后再进行成交操作')
+  } catch (error) {
+    console.error('生成合同失败:', error)
+    return serverError(res, '生成合同失败')
+  }
+}
+
+/**
+ * 上传已签署合同
+ * 支持两种方式：1. 直接上传文件  2. 提供文件路径（兼容旧接口）
+ * 自动存储到COS并记录到文档管理系统
+ */
+export async function uploadSignedContract(req, res) {
+  try {
+    const { id } = req.params
+    const file = req.file
+    const { filePath, fileName } = req.body
+    
+    const contract = await model.getContractById(id)
+    if (!contract) {
+      return notFound(res, '合同不存在')
+    }
+    
+    // 只有待签署状态的合同可以上传
+    if (contract.signStatus === 'signed') {
+      return badRequest(res, '合同已签署，无需重复上传')
+    }
+
+    let finalFilePath = filePath
+    let finalFileName = fileName
+    let documentId = null
+
+    // 如果有文件上传，使用统一文档服务
+    if (file) {
+      const documentService = await import('../../../services/documentService.js')
+      
+      const docResult = await documentService.uploadContract({
+        fileBuffer: file.buffer,
+        fileName: file.originalname,
+        contractNumber: contract.contractNumber,
+        customerId: contract.customerId,
+        customerName: contract.customerName,
+        contractType: 'signed',
+        user: req.user
+      })
+
+      finalFilePath = docResult.cosUrl
+      finalFileName = file.originalname
+      documentId = docResult.documentId
+    } else if (!filePath || !fileName) {
+      return badRequest(res, '请选择要上传的合同文件')
+    }
+    
+    await model.uploadSignedContract(id, { 
+      filePath: finalFilePath, 
+      fileName: finalFileName 
+    }, req.user)
+    
+    const updatedContract = await model.getContractById(id)
+    return success(res, {
+      ...updatedContract,
+      documentId
+    }, '合同签署成功，已同步到文档管理')
+  } catch (error) {
+    console.error('上传签署合同失败:', error)
+    return serverError(res, '上传签署合同失败')
+  }
+}
+
+/**
+ * 更新合同签署状态
+ */
+export async function updateContractSignStatus(req, res) {
+  try {
+    const { id } = req.params
+    const { signStatus, remark } = req.body
+    
+    if (!signStatus) {
+      return badRequest(res, '签署状态为必填项')
+    }
+    
+    const validStatuses = ['unsigned', 'pending_sign', 'signed', 'rejected']
+    if (!validStatuses.includes(signStatus)) {
+      return badRequest(res, '无效的签署状态')
+    }
+    
+    const contract = await model.getContractById(id)
+    if (!contract) {
+      return notFound(res, '合同不存在')
+    }
+    
+    await model.updateContractSignStatus(id, signStatus, req.user, remark)
+    
+    const updatedContract = await model.getContractById(id)
+    return success(res, updatedContract, '状态更新成功')
+  } catch (error) {
+    console.error('更新签署状态失败:', error)
+    return serverError(res, '更新签署状态失败')
+  }
+}
+
+/**
+ * 获取合同签署历史
+ */
+export async function getContractSignHistory(req, res) {
+  try {
+    const { id } = req.params
+    
+    const contract = await model.getContractById(id)
+    if (!contract) {
+      return notFound(res, '合同不存在')
+    }
+    
+    const history = await model.getContractSignHistory(id)
+    return success(res, history)
+  } catch (error) {
+    console.error('获取签署历史失败:', error)
+    return serverError(res, '获取签署历史失败')
+  }
+}
+
+/**
+ * 检查销售机会是否可以成交
+ */
+export async function checkOpportunityCanClose(req, res) {
+  try {
+    const { opportunityId } = req.params
+    
+    const result = await model.canOpportunityClose(opportunityId)
+    return success(res, result)
+  } catch (error) {
+    console.error('检查成交条件失败:', error)
+    return serverError(res, '检查成交条件失败')
+  }
+}
+
+/**
+ * 销售机会成交（增加合同签署校验）
+ */
+export async function closeOpportunity(req, res) {
+  try {
+    const { id } = req.params
+    const { stage, lostReason } = req.body
+    
+    // 如果是成交（closed_won），需要检查合同签署状态
+    if (stage === 'closed_won') {
+      const checkResult = await model.canOpportunityClose(id)
+      
+      if (!checkResult.canClose) {
+        return badRequest(res, checkResult.reason, {
+          needGenerateContract: checkResult.needGenerateContract,
+          needSign: checkResult.needSign,
+          contract: checkResult.contract
+        })
+      }
+    }
+    
+    // 更新销售机会阶段
+    const updated = await model.updateOpportunity(id, { stage, lostReason })
+    if (!updated) {
+      return badRequest(res, '更新失败')
+    }
+    
+    const opportunity = await model.getOpportunityById(id)
+    return success(res, opportunity, stage === 'closed_won' ? '恭喜成交！' : '已更新')
+  } catch (error) {
+    console.error('成交操作失败:', error)
+    return serverError(res, '成交操作失败')
+  }
+}
+
+/**
+ * 获取客户的待签署合同列表
+ */
+export async function getPendingSignContracts(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const contracts = await model.getPendingSignContracts(customerId)
+    return success(res, contracts)
+  } catch (error) {
+    console.error('获取待签署合同失败:', error)
+    return serverError(res, '获取待签署合同失败')
   }
 }
 
@@ -1625,6 +2034,36 @@ export async function checkOcrStatus(req, res) {
   } catch (error) {
     console.error('检查OCR状态失败:', error)
     return serverError(res, '检查OCR状态失败')
+  }
+}
+
+// ==================== 最后里程费率集成 ====================
+
+/**
+ * 获取最后里程费率用于报价单
+ */
+export async function getLastMileRateForQuotation(req, res) {
+  try {
+    const { carrierId, zoneCode, weight } = req.query
+    
+    if (!carrierId || !zoneCode || !weight) {
+      return badRequest(res, '承运商ID、Zone和重量为必填项')
+    }
+    
+    const rate = await model.getLastMileRateForQuotation({
+      carrierId: parseInt(carrierId),
+      zoneCode,
+      weight: parseFloat(weight)
+    })
+    
+    if (!rate) {
+      return notFound(res, '未找到匹配的费率')
+    }
+    
+    return success(res, rate)
+  } catch (error) {
+    console.error('获取最后里程费率失败:', error)
+    return serverError(res, '获取最后里程费率失败')
   }
 }
 

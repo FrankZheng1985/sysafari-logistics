@@ -1,10 +1,9 @@
-import { User, Plus, Edit2, Trash2, Key, Loader2, Search, X } from 'lucide-react'
-import { useState, useEffect, useMemo } from 'react'
+import { User, Plus, Edit2, Trash2, Key, Loader2, Search, X, Users, Building } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { isDemoEnvironment } from '../components/Layout'
-// UI components available if needed: PageContainer, ContentCard, LoadingSpinner
 import { 
   getUserList, 
   createUser, 
@@ -18,23 +17,40 @@ import {
 } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
+// API 基础地址
+const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
+
+// 上级用户类型
+interface Supervisor {
+  id: number
+  name: string
+  username: string
+  role: string
+  roleName: string
+  department: string
+}
+
 interface UserModalProps {
   visible: boolean
   onClose: () => void
   onSuccess: () => void
   user: UserType | null
   roles: Role[]
+  supervisors: Supervisor[]
 }
 
-function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps) {
+function UserModal({ visible, onClose, onSuccess, user, roles, supervisors }: UserModalProps) {
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     name: '',
     email: '',
     phone: '',
-    role: 'operator' as 'admin' | 'manager' | 'operator' | 'viewer',
+    role: 'doc_clerk' as string,
     status: 'active' as 'active' | 'inactive',
+    supervisorId: '' as string,
+    department: '',
+    position: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
@@ -50,6 +66,9 @@ function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps)
           phone: user.phone || '',
           role: user.role,
           status: user.status,
+          supervisorId: user.supervisorId?.toString() || '',
+          department: user.department || '',
+          position: user.position || '',
         })
       } else {
         setFormData({
@@ -58,8 +77,11 @@ function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps)
           name: '',
           email: '',
           phone: '',
-          role: 'operator',
-    status: 'active',
+          role: 'doc_clerk',
+          status: 'active',
+          supervisorId: '',
+          department: '',
+          position: '',
         })
       }
       setErrors({})
@@ -80,8 +102,22 @@ function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps)
   const validate = () => {
     const newErrors: Record<string, string> = {}
     if (!formData.username.trim()) newErrors.username = '用户名为必填项'
-    if (!user && !formData.password.trim()) newErrors.password = '密码为必填项'
-    if (!user && formData.password.length < 6) newErrors.password = '密码长度不能少于6位'
+    if (!user && !formData.password.trim()) {
+      newErrors.password = '密码为必填项'
+    } else if (!user && formData.password.length < 8) {
+      newErrors.password = '密码长度不能少于8位'
+    } else if (!user) {
+      // 验证密码复杂度
+      const password = formData.password
+      const hasUppercase = /[A-Z]/.test(password)
+      const hasLowercase = /[a-z]/.test(password)
+      const hasNumber = /\d/.test(password)
+      const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password)
+      
+      if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+        newErrors.password = '密码需包含大小写字母、数字和特殊字符'
+      }
+    }
     if (!formData.name.trim()) newErrors.name = '姓名为必填项'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -101,6 +137,9 @@ function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps)
           phone: formData.phone,
           role: formData.role,
           status: formData.status,
+          supervisorId: formData.supervisorId ? parseInt(formData.supervisorId) : undefined,
+          department: formData.department,
+          position: formData.position,
         })
         if (response.errCode === 200) {
           onSuccess()
@@ -118,6 +157,9 @@ function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps)
           phone: formData.phone,
           role: formData.role,
           status: formData.status,
+          supervisorId: formData.supervisorId ? parseInt(formData.supervisorId) : undefined,
+          department: formData.department,
+          position: formData.position,
         })
         if (response.errCode === 200) {
           onSuccess()
@@ -184,8 +226,11 @@ function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps)
                 className={`w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 ${
                   errors.password ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-primary-500'
                 }`}
-                placeholder="请输入密码（至少6位）"
+                placeholder="请输入密码"
               />
+              <p className="mt-1 text-[10px] text-gray-400">
+                密码要求：至少8位，包含大小写字母、数字和特殊字符
+              </p>
               {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password}</p>}
             </div>
           )}
@@ -255,6 +300,57 @@ function UserModal({ visible, onClose, onSuccess, user, roles }: UserModalProps)
             </select>
           </div>
 
+          {/* 直属上级 */}
+          <div>
+            <label htmlFor="supervisorId" className="block text-xs font-medium text-gray-700 mb-1">
+              直属上级
+            </label>
+            <select
+              id="supervisorId"
+              value={formData.supervisorId}
+              onChange={(e) => handleInputChange('supervisorId', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">无</option>
+              {supervisors.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.roleName}{s.department ? ` - ${s.department}` : ''})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-gray-400">选择该用户的直属上级，用于团队管理</p>
+          </div>
+
+          {/* 部门和职位 */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
+                部门
+              </label>
+              <input
+                id="department"
+                type="text"
+                value={formData.department}
+                onChange={(e) => handleInputChange('department', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="如：业务部"
+              />
+            </div>
+            <div>
+              <label htmlFor="position" className="block text-xs font-medium text-gray-700 mb-1">
+                职位
+              </label>
+              <input
+                id="position"
+                type="text"
+                value={formData.position}
+                onChange={(e) => handleInputChange('position', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="如：跟单员"
+              />
+            </div>
+          </div>
+
           {/* 状态 */}
           <div>
             <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">
@@ -299,6 +395,7 @@ export default function UserManage() {
   const { hasPermission, user: currentUser } = useAuth()
   const [users, setUsers] = useState<UserType[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([])
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
   const [filterRole, setFilterRole] = useState('')
@@ -346,9 +443,23 @@ export default function UserManage() {
     }
   }
 
+  // 加载上级用户列表
+  const loadSupervisors = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/supervisors`)
+      const data = await response.json()
+      if (data.errCode === 200 && data.data) {
+        setSupervisors(data.data)
+      }
+    } catch (error) {
+      console.error('加载上级用户列表失败:', error)
+    }
+  }, [])
+
   useEffect(() => {
     loadUsers()
     loadRoles()
+    loadSupervisors()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.pageSize])
 
@@ -418,9 +529,32 @@ export default function UserManage() {
     loadUsers()
   }
 
+  // 角色颜色映射
+  const getRoleColor = (role: string) => {
+    const colorMap: Record<string, string> = {
+      admin: 'bg-red-100 text-red-700',
+      boss: 'bg-purple-100 text-purple-700',
+      manager: 'bg-blue-100 text-blue-700',
+      finance_director: 'bg-orange-100 text-orange-700',
+      doc_clerk: 'bg-cyan-100 text-cyan-700',
+      doc_officer: 'bg-teal-100 text-teal-700',
+      finance_assistant: 'bg-yellow-100 text-yellow-700',
+      operator: 'bg-green-100 text-green-700',
+      viewer: 'bg-gray-100 text-gray-700'
+    }
+    return colorMap[role] || 'bg-gray-100 text-gray-700'
+  }
+
+  // 查找用户名称
+  const getSupervisorName = (supervisorId: number | undefined) => {
+    if (!supervisorId) return '-'
+    const supervisor = supervisors.find(s => s.id === supervisorId)
+    return supervisor ? supervisor.name : '-'
+  }
+
   const columns = [
-    { 
-      key: 'id', 
+    {
+      key: 'id',
       label: '用户ID',
       render: (item: UserType) => (
         <span className="font-mono text-xs text-gray-600">{item.id}</span>
@@ -428,19 +562,30 @@ export default function UserManage() {
     },
     { key: 'username', label: '用户名' },
     { key: 'name', label: '姓名' },
-    { key: 'email', label: '邮箱' },
-    { key: 'phone', label: '手机号' },
-    { 
-      key: 'roleName', 
+    {
+      key: 'department',
+      label: '部门',
+      render: (item: UserType) => (
+        <span className="text-xs text-gray-600">
+          {item.department || '-'}
+        </span>
+      )
+    },
+    {
+      key: 'roleName',
       label: '角色',
       render: (item: UserType) => (
-        <span className={`px-2 py-0.5 rounded text-xs ${
-          item.role === 'admin' ? 'bg-red-100 text-red-700' :
-          item.role === 'manager' ? 'bg-blue-100 text-blue-700' :
-          item.role === 'operator' ? 'bg-green-100 text-green-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
+        <span className={`px-2 py-0.5 rounded text-xs ${getRoleColor(item.role)}`}>
           {item.roleName || item.role}
+        </span>
+      )
+    },
+    {
+      key: 'supervisorId',
+      label: '上级',
+      render: (item: UserType) => (
+        <span className="text-xs text-gray-600">
+          {getSupervisorName(item.supervisorId)}
         </span>
       )
     },
@@ -618,26 +763,39 @@ export default function UserManage() {
         )}
 
         {/* 分页 */}
-        {!loading && pagination.total > pagination.pageSize && (
+        {!loading && (
           <div className="mt-3 flex items-center justify-between">
-            <div className="text-xs text-gray-500">
-              共 {pagination.total} 条，第 {pagination.page} / {Math.ceil(pagination.total / pagination.pageSize)} 页
+            <div className="text-sm text-gray-700">
+              共 <span className="font-medium">{pagination.total}</span> 条记录
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                 disabled={pagination.page <= 1}
-                className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 上一页
               </button>
+              <span className="text-sm text-gray-700">
+                第 {pagination.page} / {Math.ceil(pagination.total / pagination.pageSize) || 1} 页
+              </span>
               <button
                 onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                 disabled={pagination.page >= Math.ceil(pagination.total / pagination.pageSize)}
-                className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 下一页
               </button>
+              <select
+                value={pagination.pageSize}
+                onChange={(e) => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), page: 1 }))}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              >
+                <option value={10}>10 条/页</option>
+                <option value={20}>20 条/页</option>
+                <option value={50}>50 条/页</option>
+                <option value={100}>100 条/页</option>
+              </select>
             </div>
           </div>
         )}
@@ -650,6 +808,7 @@ export default function UserManage() {
         onSuccess={handleModalSuccess}
         user={editingUser}
         roles={roles}
+        supervisors={supervisors}
       />
     </div>
   )

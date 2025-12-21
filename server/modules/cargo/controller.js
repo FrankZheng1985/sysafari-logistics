@@ -8,6 +8,7 @@ import * as matcher from './matcher.js'
 import * as taxCalc from './taxCalc.js'
 import * as recommender from './recommender.js'
 import * as taxConfirmPdf from './taxConfirmPdf.js'
+import * as hsMatchRecords from './hsMatchRecords.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -100,10 +101,21 @@ export async function createImport(req, res) {
     }
 
     const file = req.file
-    const fileContent = fs.readFileSync(file.path, 'utf-8')
+    const fileType = importer.getFileType(file.originalname)
     
-    // 解析文件
-    const previewResult = await importer.parseAndPreview(fileContent, 'csv')
+    let previewResult
+    
+    if (fileType === 'csv') {
+      // CSV 文件：读取内容后解析
+      const fileContent = fs.readFileSync(file.path, 'utf-8')
+      previewResult = await importer.parseAndPreview(fileContent, 'csv')
+    } else if (fileType === 'excel') {
+      // Excel 文件：直接传文件路径解析
+      previewResult = await importer.parseAndPreview(file.path, 'excel', true)
+    } else {
+      fs.unlinkSync(file.path)
+      return badRequest(res, '不支持的文件格式，请上传 CSV 或 Excel (.xlsx, .xls) 文件')
+    }
     
     // 如果没有有效数据
     if (previewResult.validCount === 0) {
@@ -111,13 +123,18 @@ export async function createImport(req, res) {
       return badRequest(res, '没有有效数据可导入')
     }
 
-    // 创建导入批次
-    const containerNo = previewResult.items[0]?.containerNo || ''
-    const billNumber = previewResult.items[0]?.billNumber || ''
-    
+    // 从请求中获取提单信息（前端传入）
+    const billId = req.body.billId || null
+    const billNumber = req.body.billNumber || previewResult.items[0]?.billNumber || ''
+    const containerNo = req.body.containerNo || previewResult.items[0]?.containerNo || ''
+    const customerName = req.body.customerName || previewResult.items.find(i => i.customerName)?.customerName || ''
+
     const batchResult = await importer.createImportBatch({
+      orderId: billId, // 关联的提单ID
+      orderNo: billNumber, // 关联的提单号
       containerNo,
       billNumber,
+      customerName,
       totalItems: previewResult.validCount,
       fileName: file.originalname,
       filePath: file.path,
@@ -159,10 +176,21 @@ export async function previewImport(req, res) {
     }
 
     const file = req.file
-    const fileContent = fs.readFileSync(file.path, 'utf-8')
+    const fileType = importer.getFileType(file.originalname)
     
-    // 解析文件
-    const previewResult = await importer.parseAndPreview(fileContent, 'csv')
+    let previewResult
+    
+    if (fileType === 'csv') {
+      // CSV 文件：读取内容后解析
+      const fileContent = fs.readFileSync(file.path, 'utf-8')
+      previewResult = await importer.parseAndPreview(fileContent, 'csv')
+    } else if (fileType === 'excel') {
+      // Excel 文件：直接传文件路径解析
+      previewResult = await importer.parseAndPreview(file.path, 'excel', true)
+    } else {
+      fs.unlinkSync(file.path)
+      return badRequest(res, '不支持的文件格式，请上传 CSV 或 Excel (.xlsx, .xls) 文件')
+    }
     
     // 删除临时文件
     fs.unlinkSync(file.path)
@@ -191,6 +219,22 @@ export async function deleteImport(req, res) {
   } catch (error) {
     console.error('删除失败:', error)
     return serverError(res, '删除失败')
+  }
+}
+
+/**
+ * 更新导入批次的发货方和进口商信息
+ */
+export async function updateShipperAndImporter(req, res) {
+  try {
+    const { id } = req.params
+    const data = req.body
+    
+    await importer.updateShipperAndImporter(parseInt(id), data)
+    return success(res, null, '发货方和进口商信息更新成功')
+  } catch (error) {
+    console.error('更新发货方和进口商信息失败:', error)
+    return serverError(res, '更新失败: ' + error.message)
   }
 }
 
@@ -351,16 +395,49 @@ export async function getTaxDetails(req, res) {
 export async function generateTaxPdf(req, res) {
   try {
     const { importId } = req.params
-    
+
+    // 生成PDF文件
     const result = await taxConfirmPdf.generateTaxConfirmPdf(parseInt(importId))
-    
+
+    // 获取批次信息用于关联订单
+    const batchData = await importer.getImportById(parseInt(importId))
+
+    // 上传到COS并存入文档管理
+    let documentId = null
+    let cosUrl = null
+    try {
+      const documentService = await import('../../../services/documentService.js')
+      
+      // 读取生成的PDF文件
+      const pdfBuffer = fs.readFileSync(result.fullPath)
+      
+      const docResult = await documentService.uploadCustomsDocument({
+        fileBuffer: pdfBuffer,
+        fileName: result.fileName,
+        importId: batchData.importNo,
+        billId: batchData.billId,
+        billNumber: batchData.billNumber,
+        customerId: batchData.customerId,
+        customerName: batchData.customerName,
+        user: req.user
+      })
+
+      documentId = docResult.documentId
+      cosUrl = docResult.cosUrl
+      console.log('✅ 税费确认单已同步到文档管理:', documentId)
+    } catch (docError) {
+      console.warn('⚠️ 上传到文档管理失败，但本地PDF已生成:', docError.message)
+    }
+
     // 更新PDF路径
-    await taxCalc.updateConfirmPdfPath(parseInt(importId), result.filePath)
-    
+    await taxCalc.updateConfirmPdfPath(parseInt(importId), cosUrl || result.filePath)
+
     return success(res, {
       filePath: result.filePath,
-      fileName: result.fileName
-    }, 'PDF生成成功')
+      fileName: result.fileName,
+      cosUrl,
+      documentId
+    }, 'PDF生成成功，已同步到文档管理')
   } catch (error) {
     console.error('生成PDF失败:', error)
     return serverError(res, '生成PDF失败: ' + error.message)
@@ -435,6 +512,35 @@ export async function updateClearanceType(req, res) {
   } catch (error) {
     console.error('更新清关类型失败:', error)
     return serverError(res, '更新清关类型失败')
+  }
+}
+
+/**
+ * 更新单个商品的税费信息
+ */
+export async function updateItemTax(req, res) {
+  try {
+    const { itemId } = req.params
+    const { productName, matchedHsCode, totalValue, dutyRate, vatRate, antiDumpingRate, countervailingRate } = req.body
+
+    const result = await taxCalc.updateCargoItemTax(parseInt(itemId), {
+      productName,
+      matchedHsCode,
+      totalValue,
+      dutyRate,
+      vatRate,
+      antiDumpingRate,
+      countervailingRate
+    })
+    
+    const message = result.tariffUpdated 
+      ? '税费信息已更新，税率已根据新HS编码自动调整' 
+      : '税费信息已更新'
+    
+    return success(res, result, message)
+  } catch (error) {
+    console.error('更新商品税费失败:', error)
+    return serverError(res, error.message || '更新商品税费失败')
   }
 }
 
@@ -569,6 +675,194 @@ export async function batchSupplement(req, res) {
   }
 }
 
+// ==================== HS匹配记录管理 ====================
+
+/**
+ * 获取匹配记录列表
+ */
+export async function getMatchRecordsList(req, res) {
+  try {
+    const { page = 1, pageSize = 20, keyword, hsCode, status } = req.query
+    const result = await hsMatchRecords.getMatchRecordsList({
+      page: parseInt(page),
+      pageSize: parseInt(pageSize),
+      keyword,
+      hsCode,
+      status
+    })
+    return successWithPagination(res, result.list, result.total, parseInt(page), parseInt(pageSize))
+  } catch (error) {
+    console.error('获取匹配记录列表失败:', error)
+    return serverError(res, '获取匹配记录列表失败')
+  }
+}
+
+/**
+ * 搜索匹配记录（用于快速匹配建议）
+ */
+export async function searchMatchRecords(req, res) {
+  try {
+    const { keyword, limit } = req.query
+    if (!keyword) {
+      return badRequest(res, '请提供搜索关键词')
+    }
+    const results = await hsMatchRecords.searchMatchRecords(keyword, parseInt(limit) || 20)
+    return success(res, results)
+  } catch (error) {
+    console.error('搜索匹配记录失败:', error)
+    return serverError(res, '搜索匹配记录失败')
+  }
+}
+
+/**
+ * 获取匹配记录详情
+ */
+export async function getMatchRecordDetail(req, res) {
+  try {
+    const { id } = req.params
+    const detail = await hsMatchRecords.getMatchRecordDetail(parseInt(id))
+    if (!detail) {
+      return notFound(res, '匹配记录不存在')
+    }
+    return success(res, detail)
+  } catch (error) {
+    console.error('获取匹配记录详情失败:', error)
+    return serverError(res, '获取匹配记录详情失败')
+  }
+}
+
+/**
+ * 更新匹配记录
+ */
+export async function updateMatchRecord(req, res) {
+  try {
+    const { id } = req.params
+    await hsMatchRecords.updateMatchRecord(parseInt(id), req.body)
+    return success(res, null, '更新成功')
+  } catch (error) {
+    console.error('更新匹配记录失败:', error)
+    return serverError(res, '更新匹配记录失败')
+  }
+}
+
+/**
+ * 验证匹配记录
+ */
+export async function verifyMatchRecord(req, res) {
+  try {
+    const { id } = req.params
+    const verifiedBy = req.user?.username || 'system'
+    await hsMatchRecords.verifyMatchRecord(parseInt(id), verifiedBy)
+    return success(res, null, '已标记为已核实')
+  } catch (error) {
+    console.error('验证匹配记录失败:', error)
+    return serverError(res, '验证匹配记录失败')
+  }
+}
+
+/**
+ * 删除匹配记录
+ */
+export async function deleteMatchRecord(req, res) {
+  try {
+    const { id } = req.params
+    await hsMatchRecords.deleteMatchRecord(parseInt(id))
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除匹配记录失败:', error)
+    return serverError(res, '删除匹配记录失败')
+  }
+}
+
+/**
+ * 保存税费计算结果到匹配记录
+ */
+export async function saveToMatchRecords(req, res) {
+  try {
+    const { importId } = req.params
+    
+    // 获取税费详情中的所有商品
+    const taxDetails = await taxCalc.getTaxDetails(parseInt(importId))
+    if (!taxDetails || !taxDetails.items) {
+      return badRequest(res, '未找到税费数据')
+    }
+
+    // 批量保存到匹配记录
+    const results = await hsMatchRecords.batchSaveFromTaxCalc(
+      parseInt(importId),
+      taxDetails.items.map(item => ({
+        ...item,
+        importNo: taxDetails.importNo,
+        customerName: taxDetails.customerName
+      }))
+    )
+
+    const successCount = results.filter(r => r.success).length
+    return success(res, results, `已保存 ${successCount} 条匹配记录`)
+  } catch (error) {
+    console.error('保存匹配记录失败:', error)
+    return serverError(res, '保存匹配记录失败')
+  }
+}
+
+/**
+ * 检测价格异常（与历史记录对比）
+ */
+export async function checkPriceAnomaly(req, res) {
+  try {
+    const { importId } = req.params
+
+    // 获取导入批次的商品
+    const items = await importer.getImportItems(parseInt(importId))
+    if (!items || items.length === 0) {
+      return badRequest(res, '未找到商品数据')
+    }
+
+    // 批量检测价格异常
+    const results = await hsMatchRecords.batchCheckPriceAnomaly(items)
+    
+    // 统计异常数量
+    const anomalyCount = results.filter(r => r.hasAnomaly).length
+    const newProductCount = results.filter(r => r.isNewProduct).length
+    
+    return success(res, {
+      total: results.length,
+      anomalyCount,
+      newProductCount,
+      normalCount: results.length - anomalyCount - newProductCount,
+      items: results
+    }, anomalyCount > 0 ? `发现 ${anomalyCount} 个价格异常商品需要审核` : '价格检测正常')
+  } catch (error) {
+    console.error('价格异常检测失败:', error)
+    return serverError(res, '价格异常检测失败')
+  }
+}
+
+/**
+ * 检测单个商品价格异常
+ */
+export async function checkSinglePriceAnomaly(req, res) {
+  try {
+    const { productName, material, unitPrice, kgPrice } = req.body
+    
+    if (!productName) {
+      return badRequest(res, '请提供商品名称')
+    }
+
+    const result = await hsMatchRecords.checkPriceAnomaly(
+      productName,
+      material || '',
+      parseFloat(unitPrice) || 0,
+      parseFloat(kgPrice) || 0
+    )
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('价格异常检测失败:', error)
+    return serverError(res, '价格异常检测失败')
+  }
+}
+
 export default {
   // 导入管理
   getStats,
@@ -593,8 +887,22 @@ export default {
   downloadTaxPdf,
   markConfirmed,
   updateClearanceType,
-  
+  updateItemTax,
+
   // 数据补充
   getSupplementList,
-  batchSupplement
+  batchSupplement,
+
+  // HS匹配记录
+  getMatchRecordsList,
+  searchMatchRecords,
+  getMatchRecordDetail,
+  updateMatchRecord,
+  verifyMatchRecord,
+  deleteMatchRecord,
+  saveToMatchRecords,
+  
+  // 价格异常检测
+  checkPriceAnomaly,
+  checkSinglePriceAnomaly
 }
