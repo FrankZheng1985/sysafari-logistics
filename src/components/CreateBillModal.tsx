@@ -665,10 +665,11 @@ export default function CreateBillModal({
         const data = response.data
         console.log('PDF解析结果:', data)
         
-        // 自动填充表单字段
+        // 自动填充表单字段 - 使用后端映射后的字段名
+        // 提单号 (后端映射为 masterBillNumber)
         if (data.masterBillNumber) {
-          const billNumber = data.masterBillNumber.toUpperCase()
-          // 海运：尝试匹配格式：4个字母+数字（如 EMCU1608836）
+          const billNumber = String(data.masterBillNumber).toUpperCase()
+          // 海运：尝试匹配格式：4个字母+数字（如 COSU6435174570）
           if (selectedTransport === 'sea') {
             const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
             if (match) {
@@ -679,55 +680,87 @@ export default function CreateBillModal({
           handleInputChange('masterBillNumber', billNumber)
         }
         
+        // 船公司
         if (data.shippingCompany) {
           handleInputChange('shippingCompany', data.shippingCompany)
         }
         
+        // 起运港 (后端映射为 origin)
         if (data.origin) {
           handleInputChange('origin', data.origin)
         }
         
+        // 目的港 (后端映射为 destination)
         if (data.destination) {
           handleInputChange('destination', data.destination)
         }
         
+        // 件数
         if (data.pieces) {
-          handleInputChange('pieces', data.pieces)
+          handleInputChange('pieces', String(data.pieces))
         }
         
+        // 毛重 (后端映射为 weight)
         if (data.weight) {
-          handleInputChange('grossWeight', data.weight)
+          handleInputChange('grossWeight', String(data.weight))
         }
         
+        // 体积
         if (data.volume) {
-          handleInputChange('volume', data.volume)
+          handleInputChange('volume', String(data.volume))
         }
         
+        // 船名航次
         if (data.vessel) {
           handleInputChange('flightNumber', data.vessel)
         }
         
+        // ETD预计离开时间 (后端映射为 estimatedDeparture)
         if (data.estimatedDeparture) {
           handleInputChange('estimatedDeparture', data.estimatedDeparture)
         }
         
-        // 如果提取到集装箱代码，尝试获取船公司信息
-        if (data.containerNumber && selectedTransport === 'sea') {
-          const containerCode = data.containerNumber.substring(0, 4).toUpperCase()
-          if (containerCode) {
-            try {
-              const companyResponse = await getShippingCompanyByContainerCode(containerCode)
-              if (companyResponse.errCode === 200 && companyResponse.data) {
-                handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+        // ETA预计到港时间 (后端映射为 estimatedArrival)
+        if (data.estimatedArrival) {
+          handleInputChange('estimatedArrival', data.estimatedArrival)
+        }
+        
+        // 集装箱号
+        if (data.containerNumber) {
+          handleInputChange('containerNumber', String(data.containerNumber).toUpperCase())
+          // 尝试获取船公司信息
+          if (selectedTransport === 'sea') {
+            const containerCode = String(data.containerNumber).substring(0, 4).toUpperCase()
+            if (containerCode) {
+              try {
+                const companyResponse = await getShippingCompanyByContainerCode(containerCode)
+                if (companyResponse.errCode === 200 && companyResponse.data) {
+                  handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+                }
+              } catch (err) {
+                console.error('获取船公司信息失败:', err)
               }
-            } catch (err) {
-              console.error('获取船公司信息失败:', err)
             }
           }
         }
         
+        // 封签号
+        if (data.sealNumber) {
+          handleInputChange('sealNumber', String(data.sealNumber).toUpperCase())
+        }
+        
+        // 柜型
+        if (data.containerSize) {
+          handleInputChange('containerSize', String(data.containerSize).toUpperCase())
+        }
+        
+        // 发货人
+        if (data.shipper) {
+          handleInputChange('shipper', data.shipper)
+        }
+        
         // 检查是否提取到有效数据
-        const hasData = data.masterBillNumber || data.origin || data.destination || data.pieces || data.weight
+        const hasData = data.masterBillNumber || data.origin || data.destination || data.pieces || data.weight || data.containerNumber
         if (hasData) {
           // 异步获取追踪补充信息（码头、船名航次等）
           // 不阻塞主流程
@@ -767,7 +800,10 @@ export default function CreateBillModal({
     
     // 集装箱号 - 优先使用集装箱代码匹配船公司
     if (data.containerNumber) {
-      const containerCode = String(data.containerNumber).substring(0, 4).toUpperCase()
+      const containerNumber = String(data.containerNumber).toUpperCase()
+      handleInputChange('containerNumber', containerNumber) // 填充集装箱号字段
+      
+      const containerCode = containerNumber.substring(0, 4)
       if (containerCode && selectedTransport === 'sea') {
         handleInputChange('containerCodePrefix', containerCode)
         // 异步获取船公司信息 - 集装箱代码匹配优先级最高
@@ -832,6 +868,26 @@ export default function CreateBillModal({
     // ETA
     if (data.eta) {
       handleInputChange('estimatedArrival', data.eta)
+    }
+    
+    // ETD (预计离开时间 / 装船日期)
+    if (data.etd) {
+      handleInputChange('estimatedDeparture', data.etd)
+    }
+    
+    // 封签号
+    if (data.sealNumber) {
+      handleInputChange('sealNumber', String(data.sealNumber).toUpperCase())
+    }
+    
+    // 柜型（集装箱型号）
+    if (data.containerSize) {
+      handleInputChange('containerSize', String(data.containerSize).toUpperCase())
+    }
+    
+    // 发货人
+    if (data.shipper) {
+      handleInputChange('shipper', data.shipper)
     }
   }
   
@@ -952,8 +1008,9 @@ export default function CreateBillModal({
         const data = response.data
         let containerCodeFromBill = ''
         
+        // 提单号 (后端映射为 masterBillNumber)
         if (data.masterBillNumber) {
-          const billNumber = data.masterBillNumber.toUpperCase()
+          const billNumber = String(data.masterBillNumber).toUpperCase()
           const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
           if (match) {
             containerCodeFromBill = match[1]
@@ -990,13 +1047,19 @@ export default function CreateBillModal({
           setShippingCompanySource('file')
         }
         
+        // 使用后端映射后的字段名
         if (data.origin) handleInputChange('origin', data.origin)
         if (data.destination) handleInputChange('destination', data.destination)
-        if (data.pieces) handleInputChange('pieces', data.pieces)
-        if (data.weight) handleInputChange('grossWeight', data.weight)
-        if (data.volume) handleInputChange('volume', data.volume)
+        if (data.pieces) handleInputChange('pieces', String(data.pieces))
+        if (data.weight) handleInputChange('grossWeight', String(data.weight))
+        if (data.volume) handleInputChange('volume', String(data.volume))
         if (data.vessel) handleInputChange('flightNumber', data.vessel)
         if (data.estimatedDeparture) handleInputChange('estimatedDeparture', data.estimatedDeparture)
+        if (data.estimatedArrival) handleInputChange('estimatedArrival', data.estimatedArrival)
+        if (data.containerNumber) handleInputChange('containerNumber', String(data.containerNumber).toUpperCase())
+        if (data.sealNumber) handleInputChange('sealNumber', String(data.sealNumber).toUpperCase())
+        if (data.containerSize) handleInputChange('containerSize', String(data.containerSize).toUpperCase())
+        if (data.shipper) handleInputChange('shipper', data.shipper)
         
         alert('提单信息已自动提取并填充到表单中')
       }
@@ -1018,7 +1081,7 @@ export default function CreateBillModal({
   const handleDownloadTemplate = () => {
     // 创建提单信息模板 CSV
     const templateHeaders = [
-      '主单号', '起运港', '目的港', '船公司', '船名/航次', 
+      '提单号', '起运港', '目的港', '船公司', '船名/航次', 
       '件数', '毛重(KG)', '体积(CBM)', '货物描述', '发货人', '收货人'
     ]
     const sampleRow = [
@@ -1139,7 +1202,7 @@ export default function CreateBillModal({
     
     // 基本信息必填字段验证
     if (!formData.masterBillNumber) {
-      newErrors.masterBillNumber = '主单号为必填项'
+      newErrors.masterBillNumber = '提单号为必填项'
     }
     if (!formData.origin) {
       newErrors.origin = '起运港为必填项'
@@ -1234,8 +1297,9 @@ export default function CreateBillModal({
       }
       
       const billData = {
-        // billNumber 不传，由后端自动生成
-        containerNumber: formData.containerNumber || formData.masterBillNumber, // 集装箱号
+        // billNumber 从提单上传获取或手动填入，不自动生成
+        billNumber: formData.masterBillNumber || '', // 提单号（从提单OCR识别或手动填入）
+        containerNumber: formData.containerNumber || '', // 集装箱号
         transportMethod: transportMethodMap[selectedTransport || ''],
         vessel: vesselName,
         voyage: voyageNo, // 新增航次字段
@@ -1348,9 +1412,9 @@ export default function CreateBillModal({
 
   // 保存草稿（不验证必填字段）
   const handleSaveDraft = async () => {
-    // 草稿只需要有主单号即可
+    // 草稿只需要有提单号即可
     if (!formData.masterBillNumber) {
-      alert('请至少填写主单号')
+      alert('请至少填写提单号')
       return
     }
     
@@ -1380,8 +1444,9 @@ export default function CreateBillModal({
       }
       
       const draftData = {
-        // billNumber 不传，由后端自动生成
-        containerNumber: formData.containerNumber || formData.masterBillNumber || '', // 集装箱号
+        // billNumber 从提单上传获取或手动填入，不自动生成
+        billNumber: formData.masterBillNumber || '', // 提单号（从提单OCR识别或手动填入）
+        containerNumber: formData.containerNumber || '', // 集装箱号
         transportMethod: transportMethodMap[selectedTransport || ''] || '',
         vessel: draftVesselName,
         voyage: draftVoyageNo, // 新增航次字段
@@ -1995,10 +2060,10 @@ export default function CreateBillModal({
                       <p className="mt-1 text-[10px] text-gray-400">选择后可在CRM中查看该客户的所有订单</p>
                     </div>
 
-                    {/* 主单号 */}
+                    {/* 提单号 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                        主单号 <span className="text-red-500">*</span>
+                        提单号 <span className="text-red-500">*</span>
                         <HelpCircle className="w-3 h-3 text-gray-400" />
                       </label>
                       {selectedTransport === 'sea' ? (

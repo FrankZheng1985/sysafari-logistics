@@ -3,9 +3,35 @@
  */
 
 import express from 'express'
+import multer from 'multer'
 import * as controller from './controller.js'
 
 const router = express.Router()
+
+// 配置文件上传（内存存储）
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 最大10MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/bmp',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
+    ]
+    
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('不支持的文件类型'), false)
+    }
+  }
+})
 
 // ==================== 提单统计 ====================
 
@@ -20,6 +46,11 @@ router.get('/bills/stats', controller.getBillStats)
 // 获取查验管理列表
 router.get('/inspection/list', controller.getInspectionList)
 router.get('/inspections', controller.getInspectionList)
+
+// ==================== 提单文件解析 ====================
+
+// 解析提单文件（OCR识别）
+router.post('/bills/parse-file', upload.single('file'), controller.parseBillFile)
 
 // ==================== 提单CRUD ====================
 

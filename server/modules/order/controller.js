@@ -2,14 +2,254 @@
  * 订单管理模块 - 控制器
  */
 
+import path from 'path'
+import xlsx from 'xlsx'
 import { getDatabase } from '../../config/database.js'
 import { success, successWithPagination, badRequest, notFound, conflict, serverError } from '../../utils/response.js'
 import * as model from './model.js'
 import * as financeModel from '../finance/model.js'
+import { recognizeTransportDocument, checkOcrConfig } from '../ocr/tencentOcrService.js'
+import { parseTransportDocument, detectTransportType } from '../ocr/documentParser.js'
+
+// ==================== 提单文件解析 ====================
+
+/**
+ * 解析提单文件
+ * 使用 OCR 模块进行文件解析，并将结果映射为前端期望的字段格式
+ */
+export async function parseBillFile(req, res) {
+  try {
+    const { transportType } = req.body
+    const file = req.file
+    
+    if (!file) {
+      return res.status(400).json({
+        errCode: 400,
+        msg: '请上传文件'
+      })
+    }
+    
+    const fileExt = path.extname(file.originalname).toLowerCase()
+    const mimeType = file.mimetype
+    
+    let parsedData = null
+    let ocrText = ''
+    
+    // 根据文件类型处理
+    if (fileExt === '.xlsx' || fileExt === '.xls') {
+      // Excel文件处理
+      parsedData = await parseExcelBillFile(file.buffer, transportType)
+    } else if (fileExt === '.pdf' || mimeType === 'application/pdf') {
+      // PDF文件处理
+      const ocrResult = await recognizeTransportDocument(file.buffer, 'pdf')
+      
+      if (!ocrResult.success) {
+        return res.status(500).json({
+          errCode: 500,
+          msg: ocrResult.error || 'OCR识别失败'
+        })
+      }
+      
+      ocrText = ocrResult.data.fullText || ''
+      
+      // 如果没有指定运输方式，自动检测
+      const finalTransportType = transportType || detectTransportType(ocrText)
+      parsedData = parseTransportDocument(ocrText, finalTransportType)
+      
+    } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp'].includes(fileExt)) {
+      // 图片文件处理
+      const ocrResult = await recognizeTransportDocument(file.buffer, 'image')
+      
+      if (!ocrResult.success) {
+        return res.status(500).json({
+          errCode: 500,
+          msg: ocrResult.error || 'OCR识别失败'
+        })
+      }
+      
+      ocrText = ocrResult.data.fullText || ''
+      
+      // 如果没有指定运输方式，自动检测
+      const finalTransportType = transportType || detectTransportType(ocrText)
+      parsedData = parseTransportDocument(ocrText, finalTransportType)
+      
+    } else {
+      return res.status(400).json({
+        errCode: 400,
+        msg: '不支持的文件格式，请上传 PDF、图片(JPG/PNG) 或 Excel 文件'
+      })
+    }
+    
+    // 调试日志 - 查看 OCR 解析结果
+    console.log('=== OCR 解析结果 ===')
+    console.log('原始解析数据:', JSON.stringify(parsedData, null, 2))
+    
+    // 映射字段为前端期望的格式
+    const mappedData = mapOcrDataToFrontend(parsedData)
+    
+    console.log('映射后数据:', JSON.stringify(mappedData, null, 2))
+    console.log('===================')
+    
+    // 返回解析结果
+    res.json({
+      errCode: 200,
+      msg: 'success',
+      data: {
+        ...mappedData,
+        _ocrText: ocrText,
+        _fileName: file.originalname,
+        _fileType: fileExt
+      }
+    })
+    
+  } catch (error) {
+    console.error('解析提单文件失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: error.message || '解析失败'
+    })
+  }
+}
+
+/**
+ * 将 OCR 解析结果映射为前端期望的字段格式
+ */
+function mapOcrDataToFrontend(ocrData) {
+  if (!ocrData) return {}
+  
+  return {
+    // 主单号/提单号映射
+    masterBillNumber: ocrData.billNumber || null,
+    // 起运港映射
+    origin: ocrData.portOfLoading || null,
+    // 目的港映射
+    destination: ocrData.portOfDischarge || null,
+    // 毛重映射
+    weight: ocrData.grossWeight ? String(ocrData.grossWeight) : null,
+    // 件数映射
+    pieces: ocrData.pieces ? String(ocrData.pieces) : null,
+    // 体积映射
+    volume: ocrData.volume ? String(ocrData.volume) : null,
+    // 船名航次映射
+    vessel: ocrData.vessel || ocrData.flightNumber || ocrData.trainNumber || null,
+    // 集装箱号
+    containerNumber: ocrData.containerNumber || null,
+    // 船公司/航空公司
+    shippingCompany: ocrData.shippingCompany || ocrData.airline || ocrData.carrier || null,
+    // 运输方式
+    transportType: ocrData.transportType || 'sea',
+    // ETD预计离开时间（装船日期）
+    estimatedDeparture: ocrData.etd || null,
+    // ETA预计到港时间
+    estimatedArrival: ocrData.eta || null,
+    // 发货人
+    shipper: ocrData.shipper || null,
+    // 收货人
+    consignee: ocrData.consignee || null,
+    // 新增字段
+    sealNumber: ocrData.sealNumber || null,      // 封签号
+    containerSize: ocrData.containerSize || null, // 柜型
+  }
+}
+
+/**
+ * 解析Excel格式的提单文件
+ */
+async function parseExcelBillFile(buffer, transportType) {
+  try {
+    const workbook = xlsx.read(buffer, { type: 'buffer' })
+    const sheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[sheetName]
+    const jsonData = xlsx.utils.sheet_to_json(worksheet)
+    
+    if (!jsonData || jsonData.length === 0) {
+      return {
+        transportType: transportType || 'sea',
+        error: 'Excel文件为空'
+      }
+    }
+    
+    // 取第一行数据
+    const firstRow = jsonData[0]
+    
+    // 字段映射表
+    const fieldMappings = {
+      // 中文字段名
+      '主单号': 'billNumber',
+      '提单号': 'billNumber',
+      '运单号': 'billNumber',
+      '集装箱号': 'containerNumber',
+      '箱号': 'containerNumber',
+      '船名航次': 'vessel',
+      '航班号': 'flightNumber',
+      '列车号': 'trainNumber',
+      '车牌号': 'vehicleNumber',
+      '起运港': 'portOfLoading',
+      '装货港': 'portOfLoading',
+      '发货地': 'portOfLoading',
+      '目的港': 'portOfDischarge',
+      '卸货港': 'portOfDischarge',
+      '收货地': 'portOfDischarge',
+      '件数': 'pieces',
+      '毛重': 'grossWeight',
+      '毛重(KG)': 'grossWeight',
+      '体积': 'volume',
+      '体积(CBM)': 'volume',
+      '发货人': 'shipper',
+      '收货人': 'consignee',
+      '船公司': 'shippingCompany',
+      '航空公司': 'airline',
+      '承运人': 'carrier',
+      'ETA': 'eta',
+      '预计到港': 'eta',
+      // 英文字段名
+      'Bill Number': 'billNumber',
+      'B/L No': 'billNumber',
+      'AWB': 'billNumber',
+      'Container No': 'containerNumber',
+      'Vessel': 'vessel',
+      'Flight': 'flightNumber',
+      'POL': 'portOfLoading',
+      'POD': 'portOfDischarge',
+      'Pieces': 'pieces',
+      'Gross Weight': 'grossWeight',
+      'Volume': 'volume',
+      'Shipper': 'shipper',
+      'Consignee': 'consignee',
+    }
+    
+    // 映射字段
+    const result = {
+      transportType: transportType || 'sea'
+    }
+    
+    for (const [excelField, modelField] of Object.entries(fieldMappings)) {
+      if (firstRow[excelField] !== undefined && firstRow[excelField] !== null) {
+        result[modelField] = firstRow[excelField]
+      }
+    }
+    
+    // 清理数值字段
+    if (result.pieces) result.pieces = parseInt(result.pieces, 10) || null
+    if (result.grossWeight) result.grossWeight = parseFloat(result.grossWeight) || null
+    if (result.volume) result.volume = parseFloat(result.volume) || null
+    
+    return result
+    
+  } catch (error) {
+    console.error('解析Excel文件失败:', error)
+    return {
+      transportType: transportType || 'sea',
+      error: 'Excel解析失败: ' + error.message
+    }
+  }
+}
 
 /**
  * 生成下一个提单序号
  * 格式: BP + 年份后两位 + 5位序号, 如 BP2500001
+ * 
+ * 自动同步：如果序列号表的值小于数据库中最大的订单序号，自动同步
  */
 async function generateNextBillNumber() {
   const db = getDatabase()
@@ -18,27 +258,39 @@ async function generateNextBillNumber() {
   const now = new Date()
   const year = String(now.getFullYear()).slice(-2)
   
-  // 原子性地获取并更新序列号（使用异步事务）
-  const transactionFn = db.transaction(async function() {
-    // 获取当前序列号
-    const row = await this.prepare(
-      "SELECT current_seq FROM order_sequences WHERE business_type = 'bill'"
-    ).get()
-    
-    const nextSeq = (row?.current_seq || 0) + 1
-    
-    // 更新序列号
-    await this.prepare(
-      "UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'bill'"
-    ).run(nextSeq)
-    
-    return nextSeq
-  })
+  // 先检查是否需要同步序列号
+  const maxSeqResult = await db.prepare(
+    "SELECT MAX(order_seq) as max_seq FROM bills_of_lading"
+  ).get()
+  const maxSeqInDb = maxSeqResult?.max_seq || 0
   
-  const result = await transactionFn()
+  const currentSeqResult = await db.prepare(
+    "SELECT current_seq FROM order_sequences WHERE business_type = 'BILL'"
+  ).get()
+  const currentSeq = currentSeqResult?.current_seq || 0
+  
+  // 如果数据库中的最大序号大于序列号表，需要同步
+  if (maxSeqInDb > currentSeq) {
+    await db.prepare(
+      "UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'BILL'"
+    ).run(maxSeqInDb)
+    console.log(`🔄 序列号已同步: ${currentSeq} -> ${maxSeqInDb}`)
+  }
+  
+  // 获取并递增序列号
+  const row = await db.prepare(
+    "SELECT current_seq FROM order_sequences WHERE business_type = 'BILL'"
+  ).get()
+  
+  const nextSeq = (row?.current_seq || 0) + 1
+  
+  // 更新序列号
+  await db.prepare(
+    "UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'BILL'"
+  ).run(nextSeq)
   
   // 格式化序列号: BP + 年份后两位 + 5位序号（补零）
-  const seqStr = String(result).padStart(5, '0')
+  const seqStr = String(nextSeq).padStart(5, '0')
   return `BP${year}${seqStr}`
 }
 
@@ -104,15 +356,16 @@ export async function getBillById(req, res) {
 
 /**
  * 创建提单
+ * 注意：billNumber（提单号）只能从提单上传OCR识别或手动填入，不自动生成
+ * orderNumber（订单号）由系统自动生成，格式：BP2500001
  */
 export async function createBill(req, res) {
   try {
-    // 自动生成提单序号（如果没有提供）
-    let billNumber = req.body.billNumber
-    if (!billNumber) {
-      billNumber = await generateNextBillNumber()
-    } else {
-      // 如果提供了提单号，检查是否已存在
+    // 提单号从前端传入（从提单上传获取或手动填入），不自动生成
+    let billNumber = req.body.billNumber || ''
+    
+    // 如果提供了提单号，检查是否已存在
+    if (billNumber) {
       const existing = await model.getBillByNumber(billNumber)
       if (existing) {
         return conflict(res, '提单号已存在')
@@ -131,7 +384,7 @@ export async function createBill(req, res) {
 
     const result = await model.createBill({
       ...req.body,
-      billNumber, // 使用自动生成或用户提供的提单号
+      billNumber, // 提单号：从提单上传获取或手动填入
       operator: req.user?.name || '系统'
     })
     

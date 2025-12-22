@@ -3011,6 +3011,10 @@ export interface ParsedTransportData {
   airline?: string | null
   shippingCompany?: string | null
   eta?: string | null
+  // 新增字段 - 基于COSCO等提单格式
+  etd?: string | null           // 预计离开时间 (Date Laden on Board)
+  sealNumber?: string | null    // 封签号
+  containerSize?: string | null // 柜型 (20GP/40GP/40HQ等)
   _ocrText?: string
   _fileName?: string
   _fileType?: string

@@ -5,42 +5,46 @@
  */
 
 // 海运提单(B/L)字段正则表达式
+// 基于COSCO等主流船公司提单格式优化
 const SEA_BL_PATTERNS = {
-  // 提单号
+  // 提单号 - 支持 COSU/OOCL/MSC 等格式
+  // COSCO格式: COSU6435174570 (4字母+10数字)
   billNumber: [
+    /Bill\s*of\s*Lading\s*No\.?[:\s]*([A-Z]{4}\d{10})/i,
+    /B\/L\s*No\.?[:\s]*([A-Z]{4}\d{10})/i,
+    /([A-Z]{4}\d{10})/,  // 独立匹配 COSU6435174570 格式
     /B\/L\s*(?:NO|Number|#)?[:\s]*([A-Z0-9]{10,})/i,
-    /Bill\s*of\s*Lading\s*(?:No|Number)?[:\s]*([A-Z0-9]{10,})/i,
     /提单号[:\s]*([A-Z0-9]{10,})/,
-    /(?:MAWB|HAWB|B\/L)[:\s#]*([A-Z0-9]{10,})/i,
   ],
-  // 集装箱号
+  // 集装箱号 - 4字母+7数字 (如 OOCU9301500)
+  // 必须是11位字符，后面不能再跟数字（避免匹配提单号）
   containerNumber: [
-    /Container\s*(?:No|Number)?[:\s]*([A-Z]{4}\d{7})/i,
-    /集装箱号[:\s]*([A-Z]{4}\d{7})/,
-    /CNTR\s*(?:No)?[:\s]*([A-Z]{4}\d{7})/i,
-    /([A-Z]{4}\d{7})/,
+    /([A-Z]{4}\d{7})(?!\d)/,  // 独立匹配，确保后面不是数字
   ],
-  // 船名航次
+  // 船名航次 - COSCO格式: "Ocean Vessel Voy. No.: EVER ACME 1375-011W"
   vessel: [
-    /Vessel[:\s]*([A-Z0-9\s]+?)(?:V\.|Voyage|VOY)[:\s]*([A-Z0-9]+)/i,
-    /船名航次[:\s]*(.+?)(?:\s|$)/,
-    /(?:Vessel|SHIP)[:\s]*(.+?)(?:\n|$)/i,
+    /Ocean\s*Vessel\s*Voy\.?\s*No\.?[:\s]*(.+?)(?:\n|$)/i,
+    /Vessel[\/\s]*Voyage[:\s]*(.+?)(?:\n|$)/i,
   ],
-  // 起运港
+  // 起运港 - Place of Receipt 或 Port of Loading
   portOfLoading: [
-    /Port\s*of\s*Loading[:\s]*([A-Z\s]+)/i,
-    /POL[:\s]*([A-Z\s]+)/i,
-    /起运港[:\s]*(.+?)(?:\s|$)/,
-    /装货港[:\s]*(.+?)(?:\s|$)/,
+    /Place\s*of\s*Receipt[:\s]*([A-Z][A-Za-z\s,]+?)(?=\s*(?:\n|\d\.|Port|$))/i,
+    /Port\s*of\s*Loading[:\s]*([A-Z][A-Za-z\s]+?)(?=\s*(?:\n|\d\.|$))/i,
+    /POL[:\s]*([A-Z][A-Za-z\s]+)/i,
+    /起运港[:\s]*(.+?)(?:\s{2,}|\n|$)/,
+    /装货港[:\s]*(.+?)(?:\s{2,}|\n|$)/,
   ],
-  // 目的港
+  // 目的港 - Port of Discharge 或 Place of Delivery
   portOfDischarge: [
-    /Port\s*of\s*Discharge[:\s]*([A-Z\s]+)/i,
-    /POD[:\s]*([A-Z\s]+)/i,
-    /卸货港[:\s]*(.+?)(?:\s|$)/,
-    /目的港[:\s]*(.+?)(?:\s|$)/,
+    /Port\s*of\s*Discharge[:\s]*([A-Z][A-Za-z\s]+?)(?=\s*(?:\n|Type|Place|\d\.|$))/i,
+    /Place\s*of\s*Delivery[:\s]*([A-Z][A-Za-z\s,]+?)(?=\s*(?:\n|\d\.|$))/i,
+    /POD[:\s]*([A-Z][A-Za-z\s]+)/i,
+    // 常见欧洲港口直接匹配
+    /\b(ROTTERDAM|HAMBURG|ANTWERP|AMSTERDAM|FELIXSTOWE|BREMERHAVEN)\b/i,
+    /卸货港[:\s]*(.+?)(?:\s{2,}|\n|$)/,
+    /目的港[:\s]*(.+?)(?:\s{2,}|\n|$)/,
   ],
-  // 件数
+  // 件数 - COSCO格式: "68 CARTONS"
   pieces: [
     /(?:Packages?|PKG|PKGS|件数)[:\s]*(\d+)/i,
     /(\d+)\s*(?:packages?|pkgs?|件)/i,
@@ -50,27 +54,26 @@ const SEA_BL_PATTERNS = {
     /(?:数量|总件数)[:\s：]*(\d+)/,
     /(\d+)\s*(?:CTNS?|Cartons?|箱)/i,
   ],
-  // 毛重
+  // 毛重 - COSCO格式: "Gross Weight: 13740.000KGS"
   grossWeight: [
-    /Gross\s*Weight[:\s]*([0-9.,]+)\s*(?:KG|KGS)?/i,
+    /Gross\s*Weight[:\s]*([0-9.,]+)\s*KGS?/i,
+    /([0-9.,]+)\s*KGS/i,
     /毛重[:\s]*([0-9.,]+)/,
-    /G\.?W\.?[:\s]*([0-9.,]+)/i,
-    /([0-9.,]+)\s*KGS?/i,
   ],
-  // 体积
+  // 体积 - COSCO格式: "Measurement: 68.0000CBM"
   volume: [
-    /(?:Volume|CBM|体积)[:\s]*([0-9.,]+)/i,
-    /Measurement[:\s]*([0-9.,]+)/i,
+    /Measurement[:\s]*([0-9.,]+)\s*CBM/i,
     /([0-9.,]+)\s*CBM/i,
+    /体积[:\s]*([0-9.,]+)/,
   ],
-  // 发货人
+  // 发货人 - COSCO格式: "1. Shipper: COMPANY NAME"
   shipper: [
-    /Shipper[:\s]*(.+?)(?:\n|Consignee)/is,
+    /(?:1\.\s*)?Shipper[:\s]*(.+?)(?=2\.\s*Consignee|Consignee|$)/is,
     /发货人[:\s]*(.+?)(?:\n|收货人)/s,
   ],
   // 收货人
   consignee: [
-    /Consignee[:\s]*(.+?)(?:\n|Notify)/is,
+    /(?:2\.\s*)?Consignee[:\s]*(.+?)(?=3\.\s*Notify|Notify|$)/is,
     /收货人[:\s]*(.+?)(?:\n|通知)/s,
   ],
   // ETA预计到港时间
@@ -78,6 +81,27 @@ const SEA_BL_PATTERNS = {
     /ETA[:\s]*(\d{4}[-/]\d{2}[-/]\d{2})/i,
     /预计到港[:\s]*(\d{4}[-/]\d{2}[-/]\d{2})/,
     /Arrival[:\s]*(\d{4}[-/]\d{2}[-/]\d{2})/i,
+  ],
+  // 封签号 - COSCO格式: /SYA4621205/ 格式
+  sealNumber: [
+    // 在 "/" 之间的封签号格式 (如 /SYA4621205/)
+    /\/([A-Z]{2,3}\d{6,8})[\s\/]/i,
+    // Seal No: 格式
+    /Seal\s*(?:No\.?)?[:\s]*([A-Z0-9]+)/i,
+    /封号[:\s]*([A-Z0-9]+)/,
+  ],
+  // 柜型 - 40HQ/20GP 等格式
+  containerSize: [
+    /\/(20GP|40GP|40HC|40HQ|45HC)\//i,
+    /(\d{2}(?:GP|HC|HQ|OT|RF))/i,
+    /柜型[:\s]*(\d{2}(?:GP|HC|HQ|OT|RF))/,
+  ],
+  // ETD - Date Laden on Board 格式
+  etd: [
+    /Date\s*Laden\s*on\s*Board[:\s]*(\d{1,2}\s*\w{3}\s*\d{4})/i,
+    /On\s*Board[:\s]*(\d{1,2}[-\/]\w{3}[-\/]\d{4})/i,
+    /ETD[:\s]*(\d{4}[-\/]\d{2}[-\/]\d{2})/i,
+    /预计离港[:\s]*(\d{4}[-\/]\d{2}[-\/]\d{2})/,
   ],
 }
 
@@ -241,33 +265,171 @@ function extractField(text, patterns) {
   return null
 }
 
+// 港口名称黑名单 - 这些不是有效的港口名称
+const INVALID_PORT_NAMES = [
+  'type of movement', 'movement', 'type', 'place of delivery', 'place of receipt',
+  'port of loading', 'port of discharge', 'shipper', 'consignee', 'notify party',
+  'description', 'goods', 'container', 'marks', 'numbers', 'gross weight',
+  'measurement', 'freight', 'prepaid', 'collect', 'bill of lading', 'original',
+  'copy', 'negotiable', 'terms', 'conditions', 'carrier', 'agent', 'master',
+  'date', 'signature', 'seal', 'stamp', 'page', 'total', 'number', 'quantity'
+]
+
+// 船名黑名单 - 这些不是有效的船名
+const INVALID_VESSEL_NAMES = [
+  'service contract', 'contract no', 'booking', 'reference', 'b/l no',
+  'bill of lading', 'shipper', 'consignee', 'notify', 'port of',
+  'place of', 'description', 'freight', 'measurement', 'gross weight',
+  'number', 'date', 'carrier', 'agent', 'master', 'signature'
+]
+
+/**
+ * 验证港口名称是否有效
+ * @param {string} portName - 港口名称
+ * @returns {boolean} 是否有效
+ */
+function isValidPortName(portName) {
+  if (!portName) return false
+  const lowerName = portName.toLowerCase().trim()
+  // 检查是否在黑名单中
+  if (INVALID_PORT_NAMES.some(invalid => lowerName === invalid || lowerName.includes(invalid))) {
+    return false
+  }
+  // 检查是否太短（少于2个字符）
+  if (lowerName.length < 2) return false
+  // 检查是否只有数字
+  if (/^\d+$/.test(lowerName)) return false
+  return true
+}
+
+/**
+ * 验证船名是否有效
+ * @param {string} vesselName - 船名
+ * @returns {boolean} 是否有效
+ */
+function isValidVesselName(vesselName) {
+  if (!vesselName) return false
+  const lowerName = vesselName.toLowerCase().trim()
+  // 检查是否在黑名单中
+  if (INVALID_VESSEL_NAMES.some(invalid => lowerName.includes(invalid))) {
+    return false
+  }
+  // 检查是否太短（少于3个字符）
+  if (lowerName.length < 3) return false
+  // 船名应该至少包含一个字母
+  if (!/[a-z]/i.test(lowerName)) return false
+  return true
+}
+
 /**
  * 解析海运提单
  * @param {string} ocrText - OCR识别的文本
  * @returns {Object} 解析结果
  */
 export function parseSeaBillOfLading(ocrText) {
+  console.log('=== 海运提单解析开始 ===')
+  console.log('OCR文本长度:', ocrText?.length || 0)
+  
+  // 先尝试从COSCO格式的Marks区域提取容器信息
+  // 格式: OOCU9301500/SYA4621205/40HQ/13740.000/68.0000
+  const coscoMarksMatch = ocrText.match(/([A-Z]{4}\d{7})\/([A-Z]{2,3}\d{6,10})\/(\d{2}(?:GP|HC|HQ|OT|RF))/i)
+  let coscoContainer = null, coscoSeal = null, coscoSize = null
+  if (coscoMarksMatch) {
+    coscoContainer = coscoMarksMatch[1]
+    coscoSeal = coscoMarksMatch[2]
+    coscoSize = coscoMarksMatch[3]
+    console.log('COSCO Marks格式解析成功:', { container: coscoContainer, seal: coscoSeal, size: coscoSize })
+  }
+  
+  // 提取各字段
+  let portOfLoading = extractField(ocrText, SEA_BL_PATTERNS.portOfLoading)
+  let portOfDischarge = extractField(ocrText, SEA_BL_PATTERNS.portOfDischarge)
+  let vessel = extractField(ocrText, SEA_BL_PATTERNS.vessel)
+  let containerNumber = coscoContainer || extractField(ocrText, SEA_BL_PATTERNS.containerNumber)
+  let sealNumber = coscoSeal || extractField(ocrText, SEA_BL_PATTERNS.sealNumber)
+  let containerSize = coscoSize || extractField(ocrText, SEA_BL_PATTERNS.containerSize)
+  
+  // 验证并清理无效值
+  if (!isValidPortName(portOfLoading)) {
+    console.log('起运港无效，已清空:', portOfLoading)
+    portOfLoading = null
+  }
+  if (!isValidPortName(portOfDischarge)) {
+    console.log('目的港无效，已清空:', portOfDischarge)
+    portOfDischarge = null
+  }
+  if (!isValidVesselName(vessel)) {
+    console.log('船名无效，已清空:', vessel)
+    vessel = null
+  }
+  
   const result = {
     transportType: 'sea',
     billNumber: extractField(ocrText, SEA_BL_PATTERNS.billNumber),
-    containerNumber: extractField(ocrText, SEA_BL_PATTERNS.containerNumber),
-    vessel: extractField(ocrText, SEA_BL_PATTERNS.vessel),
-    portOfLoading: extractField(ocrText, SEA_BL_PATTERNS.portOfLoading),
-    portOfDischarge: extractField(ocrText, SEA_BL_PATTERNS.portOfDischarge),
+    containerNumber,
+    vessel,
+    portOfLoading,
+    portOfDischarge,
     pieces: extractField(ocrText, SEA_BL_PATTERNS.pieces),
     grossWeight: extractField(ocrText, SEA_BL_PATTERNS.grossWeight),
     volume: extractField(ocrText, SEA_BL_PATTERNS.volume),
     shipper: extractField(ocrText, SEA_BL_PATTERNS.shipper),
     consignee: extractField(ocrText, SEA_BL_PATTERNS.consignee),
     eta: extractField(ocrText, SEA_BL_PATTERNS.eta),
+    sealNumber,
+    containerSize,
+    etd: extractField(ocrText, SEA_BL_PATTERNS.etd),
   }
   
   // 清理数值字段
-  if (result.pieces) result.pieces = parseInt(result.pieces.replace(/,/g, ''), 10) || null
-  if (result.grossWeight) result.grossWeight = parseFloat(result.grossWeight.replace(/,/g, '')) || null
-  if (result.volume) result.volume = parseFloat(result.volume.replace(/,/g, '')) || null
+  if (result.pieces) result.pieces = parseInt(String(result.pieces).replace(/,/g, ''), 10) || null
+  if (result.grossWeight) result.grossWeight = parseFloat(String(result.grossWeight).replace(/,/g, '')) || null
+  if (result.volume) result.volume = parseFloat(String(result.volume).replace(/,/g, '')) || null
+  
+  // 清理文本字段 - 去除多余空白和换行
+  if (result.shipper) result.shipper = result.shipper.replace(/\s+/g, ' ').trim()
+  if (result.consignee) result.consignee = result.consignee.replace(/\s+/g, ' ').trim()
+  if (result.portOfLoading) result.portOfLoading = result.portOfLoading.replace(/\s+/g, ' ').trim()
+  if (result.portOfDischarge) result.portOfDischarge = result.portOfDischarge.replace(/\s+/g, ' ').trim()
+  if (result.vessel) result.vessel = result.vessel.replace(/\s+/g, ' ').trim()
+  
+  // ETD日期格式标准化 (27 NOV 2025 -> 2025-11-27)
+  if (result.etd) {
+    result.etd = normalizeDate(result.etd)
+  }
+  
+  console.log('=== 海运提单解析完成 ===')
+  console.log('解析结果:', JSON.stringify(result, null, 2))
   
   return result
+}
+
+/**
+ * 标准化日期格式
+ * @param {string} dateStr - 日期字符串 (如 "27 NOV 2025" 或 "27-NOV-2025")
+ * @returns {string} 标准化日期 (YYYY-MM-DD)
+ */
+function normalizeDate(dateStr) {
+  const months = {
+    JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
+    JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12'
+  }
+  
+  // 匹配 "27 NOV 2025" 或 "27-NOV-2025" 格式
+  const match = dateStr.match(/(\d{1,2})[-\s]?(\w{3})[-\s]?(\d{4})/)
+  if (match) {
+    const day = match[1].padStart(2, '0')
+    const month = months[match[2].toUpperCase()] || match[2]
+    const year = match[3]
+    return `${year}-${month}-${day}`
+  }
+  
+  // 如果已经是 YYYY-MM-DD 格式，直接返回
+  if (/\d{4}[-/]\d{2}[-/]\d{2}/.test(dateStr)) {
+    return dateStr.replace(/\//g, '-')
+  }
+  
+  return dateStr
 }
 
 /**
