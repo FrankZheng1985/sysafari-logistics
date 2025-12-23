@@ -235,24 +235,24 @@ export async function createBill(data) {
       port_of_loading, port_of_discharge, place_of_delivery,
       pieces, weight, volume, description,
       etd, eta, status, ship_status, customs_status,
-      inspection, delivery_status, remark, operator,
+      inspection, delivery_status, remark, operator, creator,
       customer_id, customer_name, customer_code,
       container_type, bill_type, transport_arrangement, consignee_type,
       container_return, full_container_transport, last_mile_transport,
       devanning, t1_declaration, is_void,
-      created_at, updated_at
+      create_time, created_at, updated_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, 0,
-      NOW(), NOW()
+      NOW(), NOW(), NOW()
     )
   `).run(
     id,
@@ -281,6 +281,7 @@ export async function createBill(data) {
     data.deliveryStatus || '待派送',
     data.remark || '',
     data.operator || '系统',
+    data.creator || data.operator || '系统',  // 创建者：优先使用creator，否则用operator
     data.customerId || null,
     data.customerName || null,
     data.customerCode || null,
@@ -915,7 +916,7 @@ export function convertBillToCamelCase(row) {
     companyName: row.customer_name,  // 前端兼容别名
     // 创建者信息
     creator: row.creator,
-    createTime: row.created_at,
+    createTime: row.create_time || row.created_at,  // 优先使用 create_time
     updateTime: row.updated_at,
     // 附加属性字段
     containerType: row.container_type,

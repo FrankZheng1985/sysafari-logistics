@@ -388,8 +388,9 @@ export default function DataTable<T extends Record<string, any>>({
           
           {/* 月份选择 */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 w-8">月</span>
+            <label htmlFor={`date-filter-month-${column.key}`} className="text-xs text-gray-500 w-8">月</label>
             <select
+              id={`date-filter-month-${column.key}`}
               value={currentMonth}
               onChange={(e) => handleDateFilterChange('month', e.target.value)}
               className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -404,8 +405,9 @@ export default function DataTable<T extends Record<string, any>>({
           
           {/* 日期选择 */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 w-8">日</span>
+            <label htmlFor={`date-filter-day-${column.key}`} className="text-xs text-gray-500 w-8">日</label>
             <select
+              id={`date-filter-day-${column.key}`}
               value={currentDay}
               onChange={(e) => handleDateFilterChange('day', e.target.value)}
               className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -496,8 +498,8 @@ export default function DataTable<T extends Record<string, any>>({
                           : activeFilters.filter((v) => v !== filter.value)
                         handleFilter(column.key, newFilters)
                       }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
-                      style={{ width: '16px', height: '16px', minWidth: '16px', minHeight: '16px' }}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer filter-checkbox"
+                      title={`筛选: ${filter.text}`}
                     />
                   </span>
                   <span className="text-sm text-gray-700 break-words">{filter.text}</span>
@@ -554,6 +556,7 @@ export default function DataTable<T extends Record<string, any>>({
                       }
                       onChange={handleSelectAll}
                       className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} text-primary-600 border-gray-300 rounded focus:ring-primary-500`}
+                      title="全选/取消全选"
                     />
                   ) : (
                     <span className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} block`} />

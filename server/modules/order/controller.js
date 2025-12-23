@@ -385,7 +385,8 @@ export async function createBill(req, res) {
     const result = await model.createBill({
       ...req.body,
       billNumber, // 提单号：从提单上传获取或手动填入
-      operator: req.user?.name || '系统'
+      operator: req.user?.name || '系统',
+      creator: req.user?.name || '系统'  // 创建者：当前登录用户
     })
     
     // 记录操作日志
