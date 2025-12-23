@@ -127,7 +127,7 @@ export default function LastMileRateImport() {
   const fetchImportLogs = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/quotation-center/import-logs?pageSize=10`)
+      const res = await fetch(`${API_BASE}/api/quotation-center/import-logs?pageSize=20`)
       const data = await res.json()
       if (data.errCode === 200) {
         setImportLogs(data.data.list)

@@ -25,6 +25,7 @@ import {
   Loader2
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { formatDate } from '../utils/dateFormat'
 
 // 报表类型
 type ReportType = 'balance_sheet' | 'income_statement' | 'cash_flow' | 'business_analysis'
@@ -64,11 +65,6 @@ function formatPercent(value: number | string | null | undefined): string {
   return num.toFixed(2) + '%'
 }
 
-// 格式化日期
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString('zh-CN')
-}
 
 // 获取默认日期范围（本月）
 function getDefaultDateRange(): { startDate: string; endDate: string } {

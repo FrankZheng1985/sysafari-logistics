@@ -111,7 +111,7 @@ export default function ApprovalCenter() {
   const [showRejectModal, setShowRejectModal] = useState(false)
 
   // 检查用户是否有审批权限
-  const canApprove = user?.role === 'admin' || user?.role === 'boss' || user?.canApprove
+  const canApprove = user?.role === 'admin' || user?.role === 'boss' || (user as any)?.canApprove
 
   // 加载数据
   const loadRequests = useCallback(async () => {
@@ -280,7 +280,8 @@ export default function ApprovalCenter() {
     {
       key: 'requestNo',
       label: '审批单号',
-      render: (_value, record: ApprovalRequest) => (
+      sorter: true,
+      render: (_value: unknown, record: ApprovalRequest) => (
         <span className="font-mono text-xs text-primary-600 cursor-pointer hover:underline" 
               onClick={() => handleViewDetail(record)}>
           {record.requestNo}
@@ -290,7 +291,8 @@ export default function ApprovalCenter() {
     {
       key: 'requestType',
       label: '类型',
-      render: (_value, record: ApprovalRequest) => {
+      sorter: true,
+      render: (_value: unknown, record: ApprovalRequest) => {
         const typeInfo = REQUEST_TYPE_MAP[record.requestType] || REQUEST_TYPE_MAP.other
         return (
           <span className={`px-2 py-0.5 rounded text-xs ${typeInfo.color}`}>
@@ -302,7 +304,8 @@ export default function ApprovalCenter() {
     {
       key: 'requestTitle',
       label: '标题',
-      render: (_value, record: ApprovalRequest) => (
+      sorter: true,
+      render: (_value: unknown, record: ApprovalRequest) => (
         <div className="max-w-[200px] truncate" title={record.requestTitle}>
           {record.requestTitle}
         </div>
@@ -311,7 +314,8 @@ export default function ApprovalCenter() {
     {
       key: 'requesterName',
       label: '申请人',
-      render: (_value, record: ApprovalRequest) => (
+      sorter: true,
+      render: (_value: unknown, record: ApprovalRequest) => (
         <div className="text-xs">
           <div>{record.requesterName}</div>
           <div className="text-gray-400">{record.requesterDepartment || '-'}</div>
@@ -321,7 +325,11 @@ export default function ApprovalCenter() {
     {
       key: 'priority',
       label: '优先级',
-      render: (_value, record: ApprovalRequest) => {
+      sorter: (a: ApprovalRequest, b: ApprovalRequest) => {
+        const priorityOrder = { urgent: 4, high: 3, normal: 2, low: 1 }
+        return (priorityOrder[a.priority] || 0) - (priorityOrder[b.priority] || 0)
+      },
+      render: (_value: unknown, record: ApprovalRequest) => {
         const priorityInfo = PRIORITY_MAP[record.priority] || PRIORITY_MAP.normal
         return (
           <span className={`text-xs ${priorityInfo.color}`}>
@@ -333,7 +341,8 @@ export default function ApprovalCenter() {
     {
       key: 'status',
       label: '状态',
-      render: (_value, record: ApprovalRequest) => {
+      sorter: true,
+      render: (_value: unknown, record: ApprovalRequest) => {
         const statusInfo = STATUS_MAP[record.status] || STATUS_MAP.pending
         const StatusIcon = statusInfo.icon
         return (
@@ -347,7 +356,10 @@ export default function ApprovalCenter() {
     {
       key: 'createdAt',
       label: '申请时间',
-      render: (_value, record: ApprovalRequest) => (
+      sorter: (a: ApprovalRequest, b: ApprovalRequest) => {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      },
+      render: (_value: unknown, record: ApprovalRequest) => (
         <span className="text-xs text-gray-600">
           {new Date(record.createdAt).toLocaleString('zh-CN')}
         </span>
@@ -356,7 +368,7 @@ export default function ApprovalCenter() {
     {
       key: 'actions',
       label: '操作',
-      render: (_value, record: ApprovalRequest) => (
+      render: (_value: unknown, record: ApprovalRequest) => (
         <div className="flex items-center gap-1">
           <button
             onClick={() => handleViewDetail(record)}
@@ -389,7 +401,7 @@ export default function ApprovalCenter() {
               </button>
             </>
           )}
-          {record.status === 'pending' && record.requesterId === user?.id && (
+          {record.status === 'pending' && String(record.requesterId) === String(user?.id) && (
             <button
               onClick={() => handleCancel(record)}
               className="p-1 text-gray-600 hover:bg-gray-50 rounded"
@@ -552,7 +564,6 @@ export default function ApprovalCenter() {
                   onChange={(e) => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), page: 1 }))}
                   className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                 >
-                  <option value={10}>10 条/页</option>
                   <option value={20}>20 条/页</option>
                   <option value={50}>50 条/页</option>
                   <option value={100}>100 条/页</option>

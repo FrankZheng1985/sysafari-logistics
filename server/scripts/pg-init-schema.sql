@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     inspection_confirmed_time TEXT,
     cmr_detail TEXT,
     cmr_estimated_pickup_time TEXT,
+    cmr_pickup_time TEXT,
     cmr_service_provider TEXT,
     cmr_delivery_address TEXT,
     cmr_estimated_arrival_time TEXT,
@@ -99,7 +100,12 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     full_container_transport TEXT,
     last_mile_transport TEXT,
     devanning TEXT,
-    t1_declaration TEXT
+    t1_declaration TEXT,
+    -- 订单导入扩展字段
+    service_type TEXT,
+    cargo_value NUMERIC,
+    documents_sent_date TEXT,
+    cmr_sent_date TEXT
 );
 
 -- ==================== 操作日志表 ====================

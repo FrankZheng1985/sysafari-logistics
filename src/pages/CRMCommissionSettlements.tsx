@@ -9,6 +9,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -131,7 +132,7 @@ export default function CRMCommissionSettlements() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   const [summary, setSummary] = useState<SettlementSummary>({
     totalReward: 0, totalPenalty: 0, netAmount: 0,
     pendingCount: 0, approvedCount: 0, paidCount: 0
@@ -184,7 +185,7 @@ export default function CRMCommissionSettlements() {
 
   useEffect(() => {
     loadData()
-  }, [page, filterSalesperson, filterMonth, filterStatus])
+  }, [page, pageSize, filterSalesperson, filterMonth, filterStatus])
 
   useEffect(() => {
     loadUsers()
@@ -459,16 +460,6 @@ export default function CRMCommissionSettlements() {
     return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(value)
   }
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
 
   const getStatusInfo = (status: string) => {
     const statusMap: Record<string, { label: string; color: string; bg: string; icon: typeof Clock }> = {
@@ -570,7 +561,7 @@ export default function CRMCommissionSettlements() {
       render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button 
-            onClick={() => loadSettlementDetail(item)}
+            onClick={() => loadSettlementDetail(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
             title="查看详情"
           >
@@ -578,7 +569,7 @@ export default function CRMCommissionSettlements() {
           </button>
           
           <button 
-            onClick={() => handleExport(item)}
+            onClick={() => handleExport(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
             title="导出"
           >
@@ -587,7 +578,7 @@ export default function CRMCommissionSettlements() {
           
           {record.status === 'draft' && (
             <button
-              onClick={() => handleSubmit(item)}
+              onClick={() => handleSubmit(record)}
               className="px-2 py-1 text-[10px] bg-primary-50 text-primary-600 rounded hover:bg-primary-100"
             >
               提交审批
@@ -597,14 +588,14 @@ export default function CRMCommissionSettlements() {
           {record.status === 'pending' && (
             <>
               <button
-                onClick={() => handleApprove(item)}
+                onClick={() => handleApprove(record)}
                 className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
               >
                 通过
               </button>
               <button
                 onClick={() => {
-                  setSelectedSettlement(item)
+                  setSelectedSettlement(record)
                   setShowRejectModal(true)
                 }}
                 className="px-2 py-1 text-[10px] bg-red-50 text-red-600 rounded hover:bg-red-100"
@@ -616,7 +607,7 @@ export default function CRMCommissionSettlements() {
           
           {record.status === 'approved' && (
             <button
-              onClick={() => handleMarkPaid(item)}
+              onClick={() => handleMarkPaid(record)}
               className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
             >
               标记发放
@@ -734,19 +725,19 @@ export default function CRMCommissionSettlements() {
           { status: 'paid', label: '已发放', icon: Banknote, color: 'blue' }
         ].map(item => (
           <div 
-            key={record.status}
-            className={`bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:border-${record.color}-300 transition-colors ${
-              filterStatus === record.status ? `border-${record.color}-500 bg-${record.color}-50` : ''
+            key={item.status}
+            className={`bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:border-${item.color}-300 transition-colors ${
+              filterStatus === item.status ? `border-${item.color}-500 bg-${item.color}-50` : ''
             }`}
             onClick={() => {
-              setFilterStatus(filterStatus === record.status ? '' : record.status)
+              setFilterStatus(filterStatus === item.status ? '' : item.status)
               setPage(1)
             }}
           >
             <div className="flex items-center gap-2">
-              <record.icon className={`w-4 h-4 text-${record.color}-600`} />
-              <span className="text-xs text-gray-600">{record.label}</span>
-              <span className="ml-auto text-sm font-bold text-gray-900">{statusCounts[record.status] || 0}</span>
+              <item.icon className={`w-4 h-4 text-${item.color}-600`} />
+              <span className="text-xs text-gray-600">{item.label}</span>
+              <span className="ml-auto text-sm font-bold text-gray-900">{statusCounts[item.status] || 0}</span>
             </div>
           </div>
         ))}
@@ -854,6 +845,19 @@ export default function CRMCommissionSettlements() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}
@@ -1059,7 +1063,7 @@ export default function CRMCommissionSettlements() {
                     </div>
                     <div>
                       <span className="text-gray-500">审批时间：</span>
-                      <span>{formatDate(selectedSettlement.reviewTime)}</span>
+                      <span>{formatDateTime(selectedSettlement.reviewTime)}</span>
                     </div>
                     <div>
                       <span className="text-gray-500">审批意见：</span>

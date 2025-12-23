@@ -73,7 +73,7 @@ export default function CRMQuotations() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   const [searchValue, setSearchValue] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
@@ -98,7 +98,7 @@ export default function CRMQuotations() {
   useEffect(() => {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, filterStatus])
+  }, [page, pageSize, searchValue, filterStatus])
 
   const loadData = async () => {
     setLoading(true)
@@ -395,6 +395,7 @@ export default function CRMQuotations() {
       key: 'quoteNumber',
       label: '报价单号',
       width: 140,
+      sorter: true,
       render: (_value, record) => (
         <span className="text-primary-600 font-medium text-xs">{record.quoteNumber}</span>
       )
@@ -403,6 +404,8 @@ export default function CRMQuotations() {
       key: 'customerName',
       label: '客户',
       width: 140,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <span className="text-xs text-gray-900">{record.customerName || '-'}</span>
       )
@@ -411,6 +414,7 @@ export default function CRMQuotations() {
       key: 'subject',
       label: '主题',
       width: 180,
+      sorter: true,
       render: (_value, record) => (
         <span className="text-xs text-gray-700 line-clamp-1">{record.subject || '-'}</span>
       )
@@ -419,6 +423,7 @@ export default function CRMQuotations() {
       key: 'totalAmount',
       label: '金额',
       width: 120,
+      sorter: (a, b) => a.totalAmount - b.totalAmount,
       render: (_value, record) => (
         <span className="text-xs font-medium text-gray-900">
           {formatCurrency(record.totalAmount, record.currency)}
@@ -429,6 +434,11 @@ export default function CRMQuotations() {
       key: 'quoteDate',
       label: '报价日期',
       width: 100,
+      sorter: (a, b) => {
+        const dateA = a.quoteDate ? new Date(a.quoteDate).getTime() : 0
+        const dateB = b.quoteDate ? new Date(b.quoteDate).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => (
         <span className="text-xs text-gray-500">{record.quoteDate || '-'}</span>
       )
@@ -437,6 +447,11 @@ export default function CRMQuotations() {
       key: 'validUntil',
       label: '有效期至',
       width: 100,
+      sorter: (a, b) => {
+        const dateA = a.validUntil ? new Date(a.validUntil).getTime() : 0
+        const dateB = b.validUntil ? new Date(b.validUntil).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => (
         <span className="text-xs text-gray-500">{record.validUntil || '-'}</span>
       )
@@ -445,6 +460,15 @@ export default function CRMQuotations() {
       key: 'status',
       label: '状态',
       width: 90,
+      sorter: true,
+      filters: [
+        { text: '草稿', value: 'draft' },
+        { text: '已发送', value: 'sent' },
+        { text: '已接受', value: 'accepted' },
+        { text: '已拒绝', value: 'rejected' },
+        { text: '已过期', value: 'expired' },
+      ],
+      onFilter: (value, record) => record.status === value,
       render: (_value, record) => {
         const info = getStatusInfo(record.status)
         const Icon = info.icon
@@ -556,6 +580,7 @@ export default function CRMQuotations() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选报价状态"
           >
             <option value="">全部状态</option>
             <option value="draft">草稿</option>
@@ -604,6 +629,19 @@ export default function CRMQuotations() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}
@@ -614,7 +652,7 @@ export default function CRMQuotations() {
           <div className="bg-white rounded-lg w-[720px] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
               <h3 className="text-sm font-medium">{editingItem ? '编辑报价单' : '新建报价单'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -635,6 +673,7 @@ export default function CRMQuotations() {
                       })
                     }}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择客户"
                   >
                     <option value="">请选择客户</option>
                     {customers.map(c => (
@@ -677,6 +716,7 @@ export default function CRMQuotations() {
                     value={formData.currency}
                     onChange={(e) => setFormData({...formData, currency: e.target.value})}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择币种"
                   >
                     <option value="CNY">人民币 (CNY)</option>
                     <option value="USD">美元 (USD)</option>
@@ -822,7 +862,7 @@ export default function CRMQuotations() {
                 <Package className="w-4 h-4 text-green-600" />
                 从产品库导入费用项
               </h3>
-              <button onClick={() => { setShowProductModal(false); setSelectedProducts([]) }} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => { setShowProductModal(false); setSelectedProducts([]) }} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                 <X className="w-4 h-4" />
               </button>
             </div>

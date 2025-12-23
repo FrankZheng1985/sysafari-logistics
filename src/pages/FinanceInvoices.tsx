@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Search, Plus, FileText, Edit2, Trash2, Eye,
   CheckCircle, Clock, AlertTriangle, XCircle,
-  Download, FileSpreadsheet, RefreshCw
+  Download, FileSpreadsheet
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -63,7 +63,7 @@ export default function FinanceInvoices() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   const [searchValue, setSearchValue] = useState('')
   const [filterType, setFilterType] = useState(searchParams.get('type') || '')
@@ -98,7 +98,7 @@ export default function FinanceInvoices() {
     fetchInvoices()
     fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, filterType, filterStatus, searchValue])
+  }, [page, pageSize, filterType, filterStatus, searchValue])
 
   const fetchInvoices = async () => {
     try {
@@ -181,6 +181,7 @@ export default function FinanceInvoices() {
       key: 'invoiceNumber',
       label: '发票号',
       width: 150,
+      sorter: true,
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900">{record.invoiceNumber}</div>
@@ -192,6 +193,12 @@ export default function FinanceInvoices() {
       key: 'invoiceType',
       label: '类型',
       width: 100,
+      sorter: true,
+      filters: [
+        { text: '销售发票', value: 'sales' },
+        { text: '采购发票', value: 'purchase' },
+      ],
+      onFilter: (value, record) => record.invoiceType === value,
       render: (_value, record) => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
           record.invoiceType === 'sales' 
@@ -206,6 +213,8 @@ export default function FinanceInvoices() {
       key: 'customerName',
       label: '客户/供应商',
       width: 150,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <div>
           <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
@@ -220,6 +229,7 @@ export default function FinanceInvoices() {
       label: '金额',
       width: 120,
       align: 'right',
+      sorter: (a, b) => a.totalAmount - b.totalAmount,
       render: (_value, record) => (
         <div className="text-right">
           <div className="font-medium text-gray-900">{formatCurrency(record.totalAmount, record.currency)}</div>
@@ -234,6 +244,7 @@ export default function FinanceInvoices() {
       label: '已付金额',
       width: 120,
       align: 'right',
+      sorter: (a, b) => a.paidAmount - b.paidAmount,
       render: (_value, record) => (
         <div className="text-right">
           <div className={`font-medium ${record.paidAmount >= record.totalAmount ? 'text-green-600' : 'text-gray-900'}`}>
@@ -251,6 +262,16 @@ export default function FinanceInvoices() {
       key: 'status',
       label: '状态',
       width: 100,
+      sorter: true,
+      filters: [
+        { text: '草稿', value: 'draft' },
+        { text: '待付款', value: 'pending' },
+        { text: '部分付款', value: 'partial' },
+        { text: '已付款', value: 'paid' },
+        { text: '已逾期', value: 'overdue' },
+        { text: '已取消', value: 'cancelled' },
+      ],
+      onFilter: (value, record) => record.status === value,
       render: (_value, record) => {
         const config = getStatusConfig(record.status)
         const Icon = config.icon
@@ -266,6 +287,11 @@ export default function FinanceInvoices() {
       key: 'dueDate',
       label: '到期日',
       width: 100,
+      sorter: (a, b) => {
+        const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0
+        const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => {
         if (!record.dueDate) return <span className="text-gray-400">-</span>
         const isOverdue = new Date(record.dueDate) < new Date() && record.status !== 'paid'
@@ -309,7 +335,7 @@ export default function FinanceInvoices() {
           )}
           <button
             onClick={() => {
-              setEditingInvoice(item)
+              setEditingInvoice(record)
               setModalVisible(true)
             }}
             className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
@@ -411,6 +437,7 @@ export default function FinanceInvoices() {
               setSearchParams(e.target.value ? { type: e.target.value } : {})
             }}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选发票类型"
           >
             <option value="">全部类型</option>
             <option value="sales">销售发票</option>
@@ -422,6 +449,7 @@ export default function FinanceInvoices() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选发票状态"
           >
             <option value="">全部状态</option>
             <option value="draft">草稿</option>
@@ -452,7 +480,7 @@ export default function FinanceInvoices() {
       </div>
 
       {/* 分页 */}
-      {total > pageSize && (
+      {total > 0 && (
         <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500">
             共 {total} 条记录
@@ -466,7 +494,7 @@ export default function FinanceInvoices() {
               上一页
             </button>
             <span className="text-xs text-gray-600">
-              第 {page} / {Math.ceil(total / pageSize)} 页
+              第 {page} / {Math.ceil(total / pageSize) || 1} 页
             </span>
             <button
               onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
@@ -475,6 +503,19 @@ export default function FinanceInvoices() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

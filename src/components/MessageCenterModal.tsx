@@ -324,8 +324,10 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
                 {/* 会话列表 */}
                 <div className={`${activeConversation ? 'w-72 border-r border-gray-200' : 'w-full'} h-full`}>
                   <ConversationList
-                    onSelect={(conv) => setActiveConversation(conv)}
-                    selectedId={activeConversation?.id}
+                    onSelectConversation={(conv) => setActiveConversation(conv)}
+                    activeConversationId={activeConversation?.id}
+                    onNewChat={() => setShowNewChatModal(true)}
+                    unreadTotal={0}
                   />
                 </div>
                 {/* 聊天窗口 */}
@@ -482,9 +484,10 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
       {/* 新建聊天弹窗 */}
       {showNewChatModal && (
         <NewChatModal
+          isOpen={showNewChatModal}
           onClose={() => setShowNewChatModal(false)}
-          onCreated={(conv) => {
-            setActiveConversation(conv)
+          onChatCreated={(conversationId: string) => {
+            // 处理新聊天创建
             setShowNewChatModal(false)
           }}
         />

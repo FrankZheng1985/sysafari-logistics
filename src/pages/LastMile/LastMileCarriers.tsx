@@ -274,6 +274,7 @@ export default function LastMileCarriers() {
       key: 'carrierCode',
       title: '承运商编码',
       width: 120,
+      sorter: true,
       render: (_, record) => (
         <span className="font-mono font-medium text-blue-600">{record.carrierCode}</span>
       )
@@ -282,6 +283,8 @@ export default function LastMileCarriers() {
       key: 'carrierName',
       title: '承运商名称',
       width: 180,
+      sorter: true,
+      filterable: true,
       render: (_, record) => (
         <div>
           <div className="font-medium">{record.carrierName}</div>
@@ -295,6 +298,13 @@ export default function LastMileCarriers() {
       key: 'carrierType',
       title: '类型',
       width: 100,
+      sorter: true,
+      filters: [
+        { text: '快递', value: 'express' },
+        { text: '物流', value: 'logistics' },
+        { text: '卡车', value: 'truck' },
+      ],
+      onFilter: (value, record) => record.carrierType === value,
       render: (_, record) => {
         const type = CARRIER_TYPES.find(t => t.value === record.carrierType)
         const Icon = type?.icon || Package
@@ -310,6 +320,8 @@ export default function LastMileCarriers() {
       key: 'countryCode',
       title: '服务国家',
       width: 100,
+      sorter: true,
+      filterable: true,
       render: (_, record) => {
         const country = COUNTRIES.find(c => c.value === record.countryCode)
         return (
@@ -323,6 +335,7 @@ export default function LastMileCarriers() {
     {
       key: 'contact',
       title: '联系人',
+      sorter: true,
       width: 150,
       render: (_, record) => (
         <div className="text-sm">
@@ -473,9 +486,9 @@ export default function LastMileCarriers() {
 
       {/* 数据表格 */}
       <div className="bg-white rounded-lg shadow">
-        <DataTable
+        <DataTable<Carrier>
           columns={columns}
-          dataSource={carriers}
+          data={carriers}
           loading={loading}
           rowKey="id"
           pagination={{
@@ -484,7 +497,7 @@ export default function LastMileCarriers() {
             total,
             onChange: (p, ps) => {
               setPage(p)
-              setPageSize(ps)
+              if (ps !== undefined) setPageSize(ps)
             }
           }}
         />

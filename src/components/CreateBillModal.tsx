@@ -462,7 +462,7 @@ export default function CreateBillModal({
         fullContainerTransport: (editData.fullContainerTransport || '') as 'must-full' | 'can-split' | '',
         lastMileTransport: editData.lastMileTransport || 'truck',
         devanning: (editData.devanning || '') as 'required' | 'not-required' | '',
-        isT1Customs: editData.t1Declaration === 'yes' ? 'yes' : 'no',
+        isT1Customs: (editData.t1Declaration === 'yes' ? 'yes' : 'no') as 'yes' | 'no',
         transportation: (editData.transportArrangement || '') as 'entrust' | 'self' | '',
         // 系统导入/人工录入字段
         customsReleaseTime: editData.customsReleaseTime || '',
@@ -473,7 +473,7 @@ export default function CreateBillModal({
       // 在编辑模式下，自动根据提单号或柜号识别船公司
       // 增强逻辑：不依赖 transportType 字段名，直接检查单号前缀
       const autoIdentifyCompany = async () => {
-        const billNo = (editData.billNumber || editData.masterBillNumber || '').toUpperCase()
+        const billNo = (editData.billNumber || '').toUpperCase()
         const cntrNo = (editData.containerNumber || '').toUpperCase()
         
         console.log('编辑模式尝试识别船公司:', { billNo, cntrNo })

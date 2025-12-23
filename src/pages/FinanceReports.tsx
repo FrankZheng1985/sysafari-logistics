@@ -164,11 +164,18 @@ export default function FinanceReports() {
   const getCategoryName = (category: string) => {
     const names: Record<string, string> = {
       freight: '运费',
+      transport: '运输费',
       customs: '关税',
+      duty: '进口税',
+      tax: '增值税',
       warehouse: '仓储费',
+      storage: '仓储费',
       insurance: '保险费',
       handling: '操作费',
       documentation: '文件费',
+      port: '港口费',
+      service: '服务费',
+      package: '包装费',
       other: '其他'
     }
     return names[category] || category

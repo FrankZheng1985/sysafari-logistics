@@ -604,7 +604,7 @@ export async function deletePayment(id) {
 // ==================== 费用管理 ====================
 
 /**
- * 获取费用列表
+ * 获取费用列表（按订单分组分页）
  */
 export async function getFees(params = {}) {
   const db = getDatabase()
@@ -614,72 +614,115 @@ export async function getFees(params = {}) {
     page = 1, pageSize = 20 
   } = params
   
-  // 关联 bills_of_lading 表获取订单号和客户信息
-  // 如果费用本身没有客户信息，则从关联的提单中获取
-  let query = `
-    SELECT f.*, 
-           b.order_number,
-           COALESCE(NULLIF(f.customer_id, ''), b.customer_id) as resolved_customer_id,
-           COALESCE(NULLIF(f.customer_name, ''), b.customer_name) as resolved_customer_name
-    FROM fees f 
-    LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
-    WHERE 1=1`
+  // 构建基础 WHERE 条件
+  let whereClause = 'WHERE 1=1'
   const queryParams = []
   
   if (feeType) {
-    query += ' AND f.fee_type = ?'
+    whereClause += ' AND f.fee_type = ?'
     queryParams.push(feeType)
   }
   
   if (category) {
-    query += ' AND f.category = ?'
+    whereClause += ' AND f.category = ?'
     queryParams.push(category)
   }
   
   if (billId) {
-    query += ' AND f.bill_id = ?'
+    whereClause += ' AND f.bill_id = ?'
     queryParams.push(billId)
   }
   
   if (customerId) {
-    query += ' AND f.customer_id = ?'
+    whereClause += ' AND f.customer_id = ?'
     queryParams.push(customerId)
   }
   
   if (supplierId) {
-    query += ' AND f.supplier_id = ?'
+    whereClause += ' AND f.supplier_id = ?'
     queryParams.push(supplierId)
   }
   
   if (startDate) {
-    query += ' AND f.fee_date >= ?'
+    whereClause += ' AND f.fee_date >= ?'
     queryParams.push(startDate)
   }
   
   if (endDate) {
-    query += ' AND f.fee_date <= ?'
+    whereClause += ' AND f.fee_date <= ?'
     queryParams.push(endDate)
   }
   
   if (search) {
-    query += ` AND (f.fee_name LIKE ? OR f.description LIKE ?)`
+    // 搜索支持：费用名称、描述、订单号、提单号、集装箱号
+    whereClause += ` AND (
+      f.fee_name LIKE ? 
+      OR f.description LIKE ?
+      OR b.order_number LIKE ?
+      OR COALESCE(f.bill_number, '') LIKE ?
+      OR b.bill_number LIKE ?
+      OR b.container_number LIKE ?
+    )`
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
-  // 获取总数
-  const countQuery = query.replace(/SELECT f\.\*.*?FROM fees f/s, 'SELECT COUNT(*) as total FROM fees f')
-  const totalResult = await db.prepare(countQuery).get(...queryParams)
+  // 步骤1: 获取不重复的订单分组数量（用于分页）
+  // 使用 COALESCE(b.order_number, f.bill_number, f.id) 作为分组键
+  const countGroupQuery = `
+    SELECT COUNT(DISTINCT COALESCE(b.order_number, f.bill_number, f.id)) as total
+    FROM fees f 
+    LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
+    ${whereClause}
+  `
+  const totalResult = await db.prepare(countGroupQuery).get(...queryParams)
+  const totalGroups = totalResult?.total || 0
   
-  // 分页
-  query += ' ORDER BY f.fee_date DESC, f.created_at DESC LIMIT ? OFFSET ?'
-  queryParams.push(pageSize, (page - 1) * pageSize)
+  // 步骤2: 获取当前页的订单分组键列表
+  const groupKeysQuery = `
+    SELECT DISTINCT COALESCE(b.order_number, f.bill_number, f.id) as group_key,
+           MAX(f.fee_date) as latest_fee_date,
+           MAX(f.created_at) as latest_created_at
+    FROM fees f 
+    LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
+    ${whereClause}
+    GROUP BY COALESCE(b.order_number, f.bill_number, f.id)
+    ORDER BY latest_fee_date DESC, latest_created_at DESC
+    LIMIT ? OFFSET ?
+  `
+  const groupKeysParams = [...queryParams, pageSize, (page - 1) * pageSize]
+  const groupKeysResult = await db.prepare(groupKeysQuery).all(...groupKeysParams)
+  const groupKeys = groupKeysResult.map(r => r.group_key)
   
-  const list = await db.prepare(query).all(...queryParams)
+  if (groupKeys.length === 0) {
+    return {
+      list: [],
+      total: totalGroups,
+      page,
+      pageSize
+    }
+  }
+  
+  // 步骤3: 获取这些分组键对应的所有费用记录
+  const placeholders = groupKeys.map(() => '?').join(',')
+  const feesQuery = `
+    SELECT f.*, 
+           b.order_number AS bill_order_number,
+           b.container_number AS bill_container_number,
+           COALESCE(NULLIF(f.bill_number, ''), b.bill_number) as resolved_bill_number,
+           COALESCE(NULLIF(f.customer_id, ''), b.customer_id) as resolved_customer_id,
+           COALESCE(NULLIF(f.customer_name, ''), b.customer_name) as resolved_customer_name,
+           COALESCE(b.order_number, f.bill_number, f.id) as group_key
+    FROM fees f 
+    LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
+    WHERE COALESCE(b.order_number, f.bill_number, f.id) IN (${placeholders})
+    ORDER BY f.fee_date DESC, f.created_at DESC
+  `
+  const list = await db.prepare(feesQuery).all(...groupKeys)
   
   return {
     list: list.map(convertFeeToCamelCase),
-    total: totalResult.total,
+    total: totalGroups,  // 返回订单组总数，而不是费用记录总数
     page,
     pageSize
   }
@@ -690,7 +733,7 @@ export async function getFees(params = {}) {
  */
 export async function getFeeStats(params = {}) {
   const db = getDatabase()
-  const { billId, startDate, endDate } = params
+  const { billId, startDate, endDate, feeType } = params
   
   let whereClause = 'WHERE 1=1'
   const queryParams = []
@@ -710,6 +753,12 @@ export async function getFeeStats(params = {}) {
     queryParams.push(endDate)
   }
   
+  // 如果指定了费用类型，只统计该类型
+  if (feeType) {
+    whereClause += ' AND fee_type = ?'
+    queryParams.push(feeType)
+  }
+  
   const stats = await db.prepare(`
     SELECT 
       category,
@@ -720,8 +769,23 @@ export async function getFeeStats(params = {}) {
     GROUP BY category
   `).all(...queryParams)
   
+  // 按费用类型统计总额（应收/应付）
+  const receivableResult = await db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count
+    FROM fees 
+    ${whereClause.replace('WHERE 1=1', 'WHERE 1=1')} AND (fee_type = 'receivable' OR fee_type IS NULL)
+  `).get(...queryParams)
+  
+  const payableResult = await db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count
+    FROM fees 
+    ${whereClause.replace('WHERE 1=1', 'WHERE 1=1')} AND fee_type = 'payable'
+  `).get(...queryParams)
+  
   // 确保数值类型正确（PostgreSQL返回字符串）
   const totalAmount = stats.reduce((sum, s) => sum + Number(s.total || 0), 0)
+  const receivableAmount = Number(receivableResult?.total || 0)
+  const payableAmount = Number(payableResult?.total || 0)
   
   return {
     byCategory: stats.map(s => ({
@@ -729,7 +793,16 @@ export async function getFeeStats(params = {}) {
       count: Number(s.count || 0),
       total: Number(s.total || 0)
     })),
-    totalAmount
+    totalAmount,
+    // 应收/应付分别统计
+    receivable: {
+      amount: receivableAmount,
+      count: Number(receivableResult?.count || 0)
+    },
+    payable: {
+      amount: payableAmount,
+      count: Number(payableResult?.count || 0)
+    }
   }
 }
 
@@ -959,29 +1032,41 @@ export async function getOrderFeeReport(params = {}) {
     queryParams.push(endDate, endDate)
   }
   
-  // 获取订单维度的费用汇总（关联 bills_of_lading 获取订单号）
+  // 获取订单维度的费用汇总（关联 bills_of_lading 获取订单号、提单号、集装箱号）
+  // 费用分类映射：freight/transport=运费, customs/duty/tax=关税, warehouse/storage=仓储, handling/service=操作费
+  // 每个分类分别统计应收(receivable)和应付(payable)
   const stats = await db.prepare(`
     SELECT 
       f.bill_id,
-      f.bill_number,
+      COALESCE(NULLIF(f.bill_number, ''), b.bill_number) as bill_number,
       b.order_number,
-      f.customer_id,
-      f.customer_name,
+      b.container_number,
+      COALESCE(NULLIF(f.customer_id, ''), b.customer_id) as customer_id,
+      COALESCE(NULLIF(f.customer_name, ''), b.customer_name) as customer_name,
       COUNT(*) as fee_count,
       COALESCE(SUM(f.amount), 0) as total_amount,
-      COALESCE(SUM(CASE WHEN f.category = 'freight' THEN f.amount ELSE 0 END), 0) as freight_amount,
-      COALESCE(SUM(CASE WHEN f.category = 'customs' THEN f.amount ELSE 0 END), 0) as customs_amount,
-      COALESCE(SUM(CASE WHEN f.category = 'warehouse' THEN f.amount ELSE 0 END), 0) as warehouse_amount,
-      COALESCE(SUM(CASE WHEN f.category = 'insurance' THEN f.amount ELSE 0 END), 0) as insurance_amount,
-      COALESCE(SUM(CASE WHEN f.category = 'handling' THEN f.amount ELSE 0 END), 0) as handling_amount,
-      COALESCE(SUM(CASE WHEN f.category = 'documentation' THEN f.amount ELSE 0 END), 0) as documentation_amount,
-      COALESCE(SUM(CASE WHEN f.category = 'other' THEN f.amount ELSE 0 END), 0) as other_amount,
+      -- 运费（应收/应付）
+      COALESCE(SUM(CASE WHEN f.category IN ('freight', 'transport') AND (f.fee_type = 'receivable' OR f.fee_type IS NULL) THEN f.amount ELSE 0 END), 0) as freight_receivable,
+      COALESCE(SUM(CASE WHEN f.category IN ('freight', 'transport') AND f.fee_type = 'payable' THEN f.amount ELSE 0 END), 0) as freight_payable,
+      -- 关税（应收/应付）
+      COALESCE(SUM(CASE WHEN f.category IN ('customs', 'duty', 'tax') AND (f.fee_type = 'receivable' OR f.fee_type IS NULL) THEN f.amount ELSE 0 END), 0) as customs_receivable,
+      COALESCE(SUM(CASE WHEN f.category IN ('customs', 'duty', 'tax') AND f.fee_type = 'payable' THEN f.amount ELSE 0 END), 0) as customs_payable,
+      -- 仓储（应收/应付）
+      COALESCE(SUM(CASE WHEN f.category IN ('warehouse', 'storage') AND (f.fee_type = 'receivable' OR f.fee_type IS NULL) THEN f.amount ELSE 0 END), 0) as warehouse_receivable,
+      COALESCE(SUM(CASE WHEN f.category IN ('warehouse', 'storage') AND f.fee_type = 'payable' THEN f.amount ELSE 0 END), 0) as warehouse_payable,
+      -- 操作费（应收/应付）
+      COALESCE(SUM(CASE WHEN f.category IN ('handling', 'service') AND (f.fee_type = 'receivable' OR f.fee_type IS NULL) THEN f.amount ELSE 0 END), 0) as handling_receivable,
+      COALESCE(SUM(CASE WHEN f.category IN ('handling', 'service') AND f.fee_type = 'payable' THEN f.amount ELSE 0 END), 0) as handling_payable,
+      -- 其他（应收/应付）
+      COALESCE(SUM(CASE WHEN f.category NOT IN ('freight', 'transport', 'customs', 'duty', 'tax', 'warehouse', 'storage', 'handling', 'service') AND (f.fee_type = 'receivable' OR f.fee_type IS NULL) THEN f.amount ELSE 0 END), 0) as other_receivable,
+      COALESCE(SUM(CASE WHEN f.category NOT IN ('freight', 'transport', 'customs', 'duty', 'tax', 'warehouse', 'storage', 'handling', 'service') AND f.fee_type = 'payable' THEN f.amount ELSE 0 END), 0) as other_payable,
       MIN(f.fee_date) as first_fee_date,
       MAX(f.fee_date) as last_fee_date
     FROM fees f
     LEFT JOIN bills_of_lading b ON f.bill_id = b.id
     WHERE f.bill_id IS NOT NULL ${dateFilter}
-    GROUP BY f.bill_id, f.bill_number, b.order_number, f.customer_id, f.customer_name
+    GROUP BY f.bill_id, COALESCE(NULLIF(f.bill_number, ''), b.bill_number), b.order_number, b.container_number,
+             COALESCE(NULLIF(f.customer_id, ''), b.customer_id), COALESCE(NULLIF(f.customer_name, ''), b.customer_name)
     ORDER BY total_amount DESC
   `).all(...queryParams)
   
@@ -1005,17 +1090,22 @@ export async function getOrderFeeReport(params = {}) {
       billId: row.bill_id,
       billNumber: row.bill_number,
       orderNumber: row.order_number,  // 订单号
+      containerNumber: row.container_number,  // 集装箱号
       customerId: row.customer_id,
       customerName: row.customer_name,
       feeCount: row.fee_count,
       totalAmount: row.total_amount,
-      freightAmount: row.freight_amount,
-      customsAmount: row.customs_amount,
-      warehouseAmount: row.warehouse_amount,
-      insuranceAmount: row.insurance_amount,
-      handlingAmount: row.handling_amount,
-      documentationAmount: row.documentation_amount,
-      otherAmount: row.other_amount,
+      // 各分类费用（应收/应付分开）
+      freightReceivable: row.freight_receivable,
+      freightPayable: row.freight_payable,
+      customsReceivable: row.customs_receivable,
+      customsPayable: row.customs_payable,
+      warehouseReceivable: row.warehouse_receivable,
+      warehousePayable: row.warehouse_payable,
+      handlingReceivable: row.handling_receivable,
+      handlingPayable: row.handling_payable,
+      otherReceivable: row.other_receivable,
+      otherPayable: row.other_payable,
       firstFeeDate: row.first_fee_date,
       lastFeeDate: row.last_fee_date
     })),
@@ -1213,8 +1303,10 @@ export function convertFeeToCamelCase(row) {
   return {
     id: row.id,
     billId: row.bill_id,
-    billNumber: row.bill_number,
-    orderNumber: row.order_number,  // 订单号（来自关联的 bills_of_lading）
+    // 优先使用解析后的提单号（费用本身的 > 关联提单的）
+    billNumber: row.resolved_bill_number || row.bill_number,
+    orderNumber: row.bill_order_number,  // 订单号（来自关联的 bills_of_lading）
+    containerNumber: row.bill_container_number,  // 集装箱号（来自关联的 bills_of_lading）
     // 优先使用解析后的客户信息（费用本身的 > 关联提单的）
     customerId: row.resolved_customer_id || row.customer_id,
     customerName: row.resolved_customer_name || row.customer_name,

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -170,10 +171,6 @@ export default function InvoiceDetail() {
     }).format(amount)
   }
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('zh-CN')
-  }
 
   const getStatusConfig = (status: string) => {
     const configs: Record<string, { label: string; color: string; icon: React.ReactNode }> = {

@@ -62,7 +62,7 @@ export default function CRMContracts() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   const [searchValue, setSearchValue] = useState('')
   const [filterStatus, setFilterStatus] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
@@ -94,7 +94,7 @@ export default function CRMContracts() {
   useEffect(() => {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, filterStatus])
+  }, [page, pageSize, searchValue, filterStatus])
 
   const loadData = async () => {
     setLoading(true)
@@ -129,20 +129,20 @@ export default function CRMContracts() {
   }
 
   const handleOpenModal = (item?: Contract) => {
-    if (record) {
-      setEditingItem(record)
+    if (item) {
+      setEditingItem(item)
       setFormData({
-        contractName: record.contractName,
-        customerId: record.customerId || '',
-        customerName: record.customerName || '',
-        contractType: record.contractType || 'service',
-        contractAmount: record.contractAmount,
-        currency: record.currency || 'EUR',
-        startDate: record.startDate || '',
-        endDate: record.endDate || '',
-        signDate: record.signDate || '',
-        terms: record.terms || '',
-        notes: record.notes || ''
+        contractName: item.contractName,
+        customerId: item.customerId || '',
+        customerName: item.customerName || '',
+        contractType: item.contractType || 'service',
+        contractAmount: item.contractAmount,
+        currency: item.currency || 'EUR',
+        startDate: item.startDate || '',
+        endDate: item.endDate || '',
+        signDate: item.signDate || '',
+        terms: item.terms || '',
+        notes: item.notes || ''
       })
     } else {
       setEditingItem(null)
@@ -198,6 +198,7 @@ export default function CRMContracts() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleUpdateStatus = async (id: string, status: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/contracts/${id}`, {
@@ -215,10 +216,10 @@ export default function CRMContracts() {
   }
 
   const handleDelete = async (item: Contract) => {
-    if (!confirm(`确定要删除合同"${record.contractName}"吗？`)) return
+    if (!confirm(`确定要删除合同"${item.contractName}"吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE}/api/contracts/${record.id}`, {
+      const response = await fetch(`${API_BASE}/api/contracts/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -348,6 +349,7 @@ export default function CRMContracts() {
       key: 'contractNumber',
       label: '合同编号',
       width: 140,
+      sorter: true,
       render: (_value, record) => (
         <div>
         <span className="text-primary-600 font-medium text-xs">{record.contractNumber}</span>
@@ -361,6 +363,8 @@ export default function CRMContracts() {
       key: 'contractName',
       label: '合同名称',
       width: 180,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900 text-xs line-clamp-1">{record.contractName}</div>
@@ -372,6 +376,15 @@ export default function CRMContracts() {
       key: 'contractType',
       label: '类型',
       width: 90,
+      sorter: true,
+      filters: [
+        { text: '服务合同', value: 'service' },
+        { text: '销售合同', value: 'sales' },
+        { text: '采购合同', value: 'purchase' },
+        { text: '合作协议', value: 'cooperation' },
+        { text: '其他', value: 'other' },
+      ],
+      onFilter: (value, record) => record.contractType === value,
       render: (_value, record) => (
         <span className="text-xs text-gray-600">{getTypeLabel(record.contractType)}</span>
       )
@@ -380,6 +393,7 @@ export default function CRMContracts() {
       key: 'contractAmount',
       label: '合同金额',
       width: 120,
+      sorter: (a, b) => a.contractAmount - b.contractAmount,
       render: (_value, record) => (
         <span className="text-xs font-medium text-gray-900">
           {formatCurrency(record.contractAmount, record.currency)}
@@ -390,6 +404,14 @@ export default function CRMContracts() {
       key: 'signStatus',
       label: '签署状态',
       width: 100,
+      sorter: true,
+      filters: [
+        { text: '未签署', value: 'unsigned' },
+        { text: '待签署', value: 'pending_sign' },
+        { text: '已签署', value: 'signed' },
+        { text: '已拒签', value: 'rejected' },
+      ],
+      onFilter: (value, record) => record.signStatus === value,
       render: (_value, record) => {
         const info = getSignStatusInfo(record.signStatus)
         const Icon = info.icon
@@ -405,6 +427,11 @@ export default function CRMContracts() {
       key: 'signInfo',
       label: '签署信息',
       width: 140,
+      sorter: (a, b) => {
+        const dateA = a.signedAt ? new Date(a.signedAt).getTime() : 0
+        const dateB = b.signedAt ? new Date(b.signedAt).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => (
         <div className="text-xs">
           {record.signStatus === 'signed' ? (
@@ -424,6 +451,15 @@ export default function CRMContracts() {
       key: 'status',
       label: '合同状态',
       width: 90,
+      sorter: true,
+      filters: [
+        { text: '草稿', value: 'draft' },
+        { text: '待签署', value: 'pending' },
+        { text: '生效中', value: 'active' },
+        { text: '已过期', value: 'expired' },
+        { text: '已终止', value: 'terminated' },
+      ],
+      onFilter: (value, record) => record.status === value,
       render: (_value, record) => {
         const info = getStatusInfo(record.status)
         const Icon = info.icon
@@ -536,6 +572,7 @@ export default function CRMContracts() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选合同状态"
           >
             <option value="">全部状态</option>
             <option value="draft">草稿</option>
@@ -582,6 +619,19 @@ export default function CRMContracts() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}
@@ -592,7 +642,7 @@ export default function CRMContracts() {
           <div className="bg-white rounded-lg w-[600px] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
               <h3 className="text-sm font-medium">{editingItem ? '编辑合同' : '新建合同'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -623,6 +673,7 @@ export default function CRMContracts() {
                       })
                     }}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择客户"
                   >
                     <option value="">请选择客户</option>
                     {customers.map(c => (
@@ -636,6 +687,7 @@ export default function CRMContracts() {
                     value={formData.contractType}
                     onChange={(e) => setFormData({...formData, contractType: e.target.value})}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择合同类型"
                   >
                     <option value="service">服务合同</option>
                     <option value="sales">销售合同</option>
@@ -656,6 +708,7 @@ export default function CRMContracts() {
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                     min="0"
                     step="0.01"
+                    placeholder="请输入金额"
                   />
                 </div>
                 <div>
@@ -664,6 +717,7 @@ export default function CRMContracts() {
                     value={formData.currency}
                     onChange={(e) => setFormData({...formData, currency: e.target.value})}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择币种"
                   >
                     <option value="CNY">人民币 (CNY)</option>
                     <option value="USD">美元 (USD)</option>
@@ -746,7 +800,7 @@ export default function CRMContracts() {
           <div className="bg-white rounded-lg w-[480px]">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-sm font-medium">上传已签署合同</h3>
-              <button onClick={() => setShowUploadModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowUploadModal(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -820,7 +874,7 @@ export default function CRMContracts() {
           <div className="bg-white rounded-lg w-[600px] max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
               <h3 className="text-sm font-medium">签署历史 - {uploadingContract.contractNumber}</h3>
-              <button onClick={() => setShowHistoryModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowHistoryModal(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                 <X className="w-4 h-4" />
               </button>
             </div>

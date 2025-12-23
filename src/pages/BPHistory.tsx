@@ -75,6 +75,33 @@ export default function BPHistory() {
 
   const columns: Column<CompletedBillOfLading>[] = [
     {
+      key: 'orderNumber',
+      label: '订单号',
+      sorter: true,
+      render: (_value, record: CompletedBillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span
+            className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/bookings/bill/${record.id}`)
+            }}
+          >
+            {record.orderNumber || '-'}
+          </span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'billNumber',
       label: '提单号',
       sorter: true,
@@ -82,7 +109,7 @@ export default function BPHistory() {
       render: (_value, record: CompletedBillOfLading) => (
         <div className="flex items-center gap-1">
           <span
-            className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
+            className="text-gray-700 hover:underline cursor-pointer text-xs"
             onClick={(e) => {
               e.stopPropagation()
               navigate(`/bookings/bill/${record.id}`)
@@ -349,7 +376,7 @@ export default function BPHistory() {
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

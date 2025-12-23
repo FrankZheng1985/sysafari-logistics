@@ -556,16 +556,18 @@ export default function UserManage() {
     {
       key: 'id',
       label: '用户ID',
-      render: (_value, record: UserType) => (
+      sorter: true,
+      render: (_value: unknown, record: UserType) => (
         <span className="font-mono text-xs text-gray-600">{record.id}</span>
       )
     },
-    { key: 'username', label: '用户名' },
-    { key: 'name', label: '姓名' },
+    { key: 'username', label: '用户名', sorter: true },
+    { key: 'name', label: '姓名', sorter: true },
     {
       key: 'department',
       label: '部门',
-      render: (_value, record: UserType) => (
+      sorter: true,
+      render: (_value: unknown, record: UserType) => (
         <span className="text-xs text-gray-600">
           {record.department || '-'}
         </span>
@@ -574,7 +576,8 @@ export default function UserManage() {
     {
       key: 'roleName',
       label: '角色',
-      render: (_value, record: UserType) => (
+      sorter: true,
+      render: (_value: unknown, record: UserType) => (
         <span className={`px-2 py-0.5 rounded text-xs ${getRoleColor(record.role)}`}>
           {record.roleName || record.role}
         </span>
@@ -583,7 +586,8 @@ export default function UserManage() {
     {
       key: 'supervisorId',
       label: '上级',
-      render: (_value, record: UserType) => (
+      sorter: true,
+      render: (_value: unknown, record: UserType) => (
         <span className="text-xs text-gray-600">
           {getSupervisorName(record.supervisorId)}
         </span>
@@ -592,7 +596,8 @@ export default function UserManage() {
     {
       key: 'status',
       label: '状态',
-      render: (_value, record: UserType) => (
+      sorter: true,
+      render: (_value: unknown, record: UserType) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
@@ -615,12 +620,17 @@ export default function UserManage() {
     { 
       key: 'lastLoginTime', 
       label: '最后登录',
-      render: (_value, record: UserType) => record.lastLoginTime ? new Date(record.lastLoginTime).toLocaleString('zh-CN') : '-'
+      sorter: (a: UserType, b: UserType) => {
+        const dateA = a.lastLoginTime ? new Date(a.lastLoginTime).getTime() : 0
+        const dateB = b.lastLoginTime ? new Date(b.lastLoginTime).getTime() : 0
+        return dateA - dateB
+      },
+      render: (_value: unknown, record: UserType) => record.lastLoginTime ? new Date(record.lastLoginTime).toLocaleString('zh-CN') : '-'
     },
     {
       key: 'actions',
       label: '操作',
-      render: (_value, record: UserType) => (
+      render: (_value: unknown, record: UserType) => (
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
@@ -791,7 +801,6 @@ export default function UserManage() {
                 onChange={(e) => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), page: 1 }))}
                 className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
               >
-                <option value={10}>10 条/页</option>
                 <option value={20}>20 条/页</option>
                 <option value={50}>50 条/页</option>
                 <option value={100}>100 条/页</option>

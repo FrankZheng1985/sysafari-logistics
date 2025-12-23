@@ -71,10 +71,11 @@ export default function LastMile() {
   })
 
   const columns: Column<LastMileOrder>[] = [
-    { key: 'id', label: '序号' },
+    { key: 'id', label: '序号', sorter: true },
     {
       key: 'orderNumber',
       label: '订单号',
+      sorter: true,
       render: (_value, record: LastMileOrder) => (
         <div className="flex items-center gap-1">
           <span className="text-primary-600 font-medium">{record.orderNumber}</span>
@@ -93,6 +94,7 @@ export default function LastMile() {
     {
       key: 'billNumber',
       label: '提单号',
+      sorter: true,
       render: (_value, record: LastMileOrder) => (
         <div className="flex items-center gap-1">
           <span className="text-primary-600 hover:underline cursor-pointer">
@@ -110,10 +112,11 @@ export default function LastMile() {
         </div>
       ),
     },
-    { key: 'recipient', label: '收件人' },
+    { key: 'recipient', label: '收件人', sorter: true },
     {
       key: 'address',
       label: '地址',
+      sorter: true,
       render: (_value, record: LastMileOrder) => (
         <div className="flex items-start gap-2">
           <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
@@ -121,10 +124,11 @@ export default function LastMile() {
         </div>
       ),
     },
-    { key: 'phone', label: '电话' },
+    { key: 'phone', label: '电话', sorter: true },
     {
       key: 'status',
       label: '状态',
+      sorter: true,
       render: (_value, record: LastMileOrder) => {
         const statusColors: Record<string, string> = {
           '待派送': 'bg-yellow-100 text-yellow-800',
@@ -146,19 +150,37 @@ export default function LastMile() {
     {
       key: 'deliveryCompany',
       label: '派送公司',
+      sorter: true,
       render: (_value, record: LastMileOrder) => record.deliveryCompany || '-',
     },
     {
       key: 'trackingNumber',
       label: '跟踪号',
+      sorter: true,
       render: (_value, record: LastMileOrder) => (
         <span className="text-xs font-mono">
           {record.trackingNumber || '-'}
         </span>
       ),
     },
-    { key: 'deliveryDate', label: '送达时间' },
-    { key: 'createTime', label: '创建时间' },
+    { 
+      key: 'deliveryDate', 
+      label: '送达时间',
+      sorter: (a: LastMileOrder, b: LastMileOrder) => {
+        const dateA = a.deliveryDate ? new Date(a.deliveryDate).getTime() : 0
+        const dateB = b.deliveryDate ? new Date(b.deliveryDate).getTime() : 0
+        return dateA - dateB
+      }
+    },
+    { 
+      key: 'createTime', 
+      label: '创建时间',
+      sorter: (a: LastMileOrder, b: LastMileOrder) => {
+        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
+        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        return dateA - dateB
+      }
+    },
     {
       key: 'actions',
       label: '操作',
@@ -252,7 +274,7 @@ export default function LastMile() {
           visibleColumns={visibleColumns}
           compact={true}
           pagination={{
-            pageSize: 10,
+            pageSize: 20,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条记录`,
           }}

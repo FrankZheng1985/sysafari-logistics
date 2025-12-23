@@ -1327,6 +1327,196 @@ export async function checkApprovalRequired(req, res) {
 }
 
 /**
+ * 获取最近活动（用于仪表盘）
+ * 从多个业务表中聚合最近的活动记录
+ */
+export async function getRecentActivities(req, res) {
+  try {
+    const { limit = 5 } = req.query
+    const db = getDatabase()
+    const activities = []
+    
+    // 1. 从订单表获取最近创建/更新的订单
+    try {
+      const recentBills = await db.prepare(`
+        SELECT 
+          id,
+          bill_number,
+          customer_name,
+          status,
+          created_at,
+          updated_at
+        FROM bills_of_lading
+        WHERE is_void = 0 OR is_void IS NULL
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 3
+      `).all()
+      
+      for (const bill of recentBills) {
+        const statusText = {
+          'pending': '待处理',
+          '待处理': '待处理',
+          'inspecting': '查验中',
+          '查验中': '查验中',
+          'delivering': '派送中',
+          '派送中': '派送中',
+          'delivered': '已完成',
+          '已送达': '已完成',
+          'draft': '草稿',
+          '草稿': '草稿'
+        }[bill.status] || '更新'
+        
+        activities.push({
+          id: `bill-${bill.id}`,
+          type: 'order',
+          action: `订单${statusText}`,
+          description: `${bill.bill_number || '未知单号'} - ${bill.customer_name || '未知客户'}`,
+          time: formatTimeAgo(new Date(bill.updated_at || bill.created_at)),
+          user: '系统',
+          timestamp: new Date(bill.updated_at || bill.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取订单活动失败:', err.message)
+    }
+    
+    // 2. 从订单表获取 CMR 状态的运输记录（派送中/已送达的订单）
+    try {
+      const recentCmr = await db.prepare(`
+        SELECT 
+          id,
+          bill_number,
+          customer_name,
+          cmr_status,
+          cmr_updated_at,
+          created_at
+        FROM bills_of_lading
+        WHERE cmr_status IS NOT NULL 
+          AND cmr_status != ''
+          AND (is_void = 0 OR is_void IS NULL)
+        ORDER BY COALESCE(cmr_updated_at, created_at) DESC
+        LIMIT 3
+      `).all()
+      
+      for (const cmr of recentCmr) {
+        const statusText = {
+          'pending': '待派送',
+          'delivering': '派送中',
+          'delivered': '已送达',
+          'exception': '异常',
+          'undelivered': '待派送'
+        }[cmr.cmr_status] || cmr.cmr_status
+        
+        activities.push({
+          id: `cmr-${cmr.id}`,
+          type: 'tms',
+          action: `运输${statusText}`,
+          description: `${cmr.bill_number || '未知单号'} - ${cmr.customer_name || '未知客户'}`,
+          time: formatTimeAgo(new Date(cmr.cmr_updated_at || cmr.created_at)),
+          user: '系统',
+          timestamp: new Date(cmr.cmr_updated_at || cmr.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取CMR活动失败:', err.message)
+    }
+    
+    // 3. 从客户表获取最近的客户记录
+    try {
+      const recentCustomers = await db.prepare(`
+        SELECT 
+          id,
+          customer_name,
+          company_name,
+          created_at,
+          updated_at
+        FROM customers
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 2
+      `).all()
+      
+      for (const customer of recentCustomers) {
+        activities.push({
+          id: `customer-${customer.id}`,
+          type: 'crm',
+          action: '客户更新',
+          description: customer.company_name || customer.customer_name || '未知客户',
+          time: formatTimeAgo(new Date(customer.updated_at || customer.created_at)),
+          user: '系统',
+          timestamp: new Date(customer.updated_at || customer.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取客户活动失败:', err.message)
+    }
+    
+    // 4. 从费用表获取最近的费用记录
+    try {
+      const recentFees = await db.prepare(`
+        SELECT 
+          f.id,
+          f.fee_name,
+          f.amount,
+          f.currency,
+          f.created_at,
+          b.bill_number
+        FROM fees f
+        LEFT JOIN bills_of_lading b ON f.bill_id = b.id
+        ORDER BY f.created_at DESC
+        LIMIT 2
+      `).all()
+      
+      for (const fee of recentFees) {
+        activities.push({
+          id: `fee-${fee.id}`,
+          type: 'finance',
+          action: '费用记录',
+          description: `${fee.fee_name}: ${fee.amount} ${fee.currency || 'EUR'}${fee.bill_number ? ` (${fee.bill_number})` : ''}`,
+          time: formatTimeAgo(new Date(fee.created_at)),
+          user: '系统',
+          timestamp: new Date(fee.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取费用活动失败:', err.message)
+    }
+    
+    // 按时间排序并限制返回数量
+    activities.sort((a, b) => b.timestamp - a.timestamp)
+    const result = activities.slice(0, parseInt(limit)).map(({ timestamp, ...rest }) => rest)
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取最近活动失败:', error)
+    return success(res, [])
+  }
+}
+
+/**
+ * 格式化时间为相对时间
+ */
+function formatTimeAgo(date) {
+  const now = new Date()
+  const diffMs = now - date
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+  
+  if (diffSec < 60) {
+    return '刚刚'
+  } else if (diffMin < 60) {
+    return `${diffMin}分钟前`
+  } else if (diffHour < 24) {
+    return `${diffHour}小时前`
+  } else if (diffDay < 7) {
+    return `${diffDay}天前`
+  } else {
+    return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+  }
+}
+
+/**
  * 获取上级用户列表（用于选择直属上级）
  */
 export async function getSupervisorCandidates(req, res) {

@@ -834,7 +834,7 @@ export default function CreateInvoice() {
         unitPrice: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
         currency: fee.currency || 'EUR',
         amount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
-        taxRate: typeof fee.taxRate === 'string' ? parseFloat(fee.taxRate) || 0 : fee.taxRate || 0,
+        taxRate: typeof (fee as any).taxRate === 'string' ? parseFloat((fee as any).taxRate) || 0 : (fee as any).taxRate || 0,
         taxAmount: 0,
         discountPercent: 0,
         discountAmount: 0,
@@ -1145,15 +1145,15 @@ export default function CreateInvoice() {
                               <span className="text-xs text-gray-300">...</span>
                             )}
                           </div>
-                          {customer.customerType && (
+                          {(customer as any).customerType && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                              {customer.customerType}
+                              {(customer as any).customerType}
                             </span>
                           )}
                         </div>
                         {customer.contactPerson && (
                           <div className="mt-1 text-xs text-gray-500">
-                            联系人: {customer.contactPerson} {customer.phone && `| ${customer.phone}`}
+                            联系人: {customer.contactPerson} {(customer as any).phone && `| ${(customer as any).phone}`}
                           </div>
                         )}
                       </div>

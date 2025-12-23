@@ -31,22 +31,32 @@ export default function OrderPackages() {
   const pageKey = '/bookings/packages'
   
   const columns: Column<PackageItem>[] = [
-    { key: 'id', label: '序号' },
+    { key: 'id', label: '序号', sorter: true },
     {
       key: 'packageNumber',
       label: '包裹号',
+      sorter: true,
       render: (_value, record: PackageItem) => (
         <div className="flex items-center gap-2">
           <span className="text-primary-600">{record.packageNumber}</span>
         </div>
       ),
     },
-    { key: 'quantity', label: '数量' },
-    { key: 'creator', label: '创建者' },
-    { key: 'createTime', label: '创建时间' },
+    { key: 'quantity', label: '数量', sorter: true },
+    { key: 'creator', label: '创建者', sorter: true },
+    { 
+      key: 'createTime', 
+      label: '创建时间',
+      sorter: (a: PackageItem, b: PackageItem) => {
+        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
+        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        return dateA - dateB
+      }
+    },
     {
       key: 'status',
       label: '状态',
+      sorter: true,
       render: (_value, record: PackageItem) => (
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-green-500 rounded-full"></span>

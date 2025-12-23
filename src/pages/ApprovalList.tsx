@@ -4,6 +4,7 @@ import { ClipboardCheck, Check, X, Eye, RefreshCw, Clock, CheckCircle, XCircle, 
 import PageHeader from '../components/PageHeader'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -18,6 +19,7 @@ interface VoidApplication {
   id: string
   billId: string
   billNumber: string
+  orderNumber?: string  // 订单号
   containerNumber: string
   reason: string
   status: string
@@ -237,16 +239,6 @@ export default function ApprovalList() {
     return STATUS_CONFIG[status] || { label: status, color: 'text-gray-600', bgColor: 'bg-gray-50', icon: Clock }
   }
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
 
   const parseFees = (feesJson: string | null) => {
     if (!feesJson) return []
@@ -338,8 +330,16 @@ export default function ApprovalList() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
+                        {app.orderNumber && (
+                          <span
+                            className="font-semibold text-primary-600 hover:underline cursor-pointer"
+                            onClick={() => navigate(`/bookings/bill/${app.billId}`)}
+                          >
+                            {app.orderNumber}
+                          </span>
+                        )}
                         <span
-                          className="font-semibold text-primary-600 hover:underline cursor-pointer"
+                          className={`${app.orderNumber ? 'text-gray-600' : 'font-semibold text-primary-600'} hover:underline cursor-pointer`}
                           onClick={() => navigate(`/bookings/bill/${app.billId}`)}
                         >
                           {app.billNumber}
@@ -356,12 +356,12 @@ export default function ApprovalList() {
                       
                       <div className="flex items-center gap-4 text-xs text-gray-400">
                         <span>申请人: {app.applicantName}</span>
-                        <span>申请时间: {formatDate(app.createdAt)}</span>
+                        <span>申请时间: {formatDateTime(app.createdAt)}</span>
                         {app.supervisorApprovedAt && (
-                          <span>上级审批: {app.supervisorName} ({formatDate(app.supervisorApprovedAt)})</span>
+                          <span>上级审批: {app.supervisorName} ({formatDateTime(app.supervisorApprovedAt)})</span>
                         )}
                         {app.financeApprovedAt && (
-                          <span>财务审批: {app.financeName} ({formatDate(app.financeApprovedAt)})</span>
+                          <span>财务审批: {app.financeName} ({formatDateTime(app.financeApprovedAt)})</span>
                         )}
                       </div>
                     </div>
@@ -510,6 +510,12 @@ export default function ApprovalList() {
               </button>
             </div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-130px)] space-y-4">
+              {selectedApp.orderNumber && (
+                <div>
+                  <label className="text-sm text-gray-500">订单号</label>
+                  <p className="font-medium text-primary-600">{selectedApp.orderNumber}</p>
+                </div>
+              )}
               <div>
                 <label className="text-sm text-gray-500">提单号</label>
                 <p className="font-medium">{selectedApp.billNumber}</p>
@@ -528,13 +534,13 @@ export default function ApprovalList() {
               </div>
               <div>
                 <label className="text-sm text-gray-500">申请时间</label>
-                <p className="font-medium">{formatDate(selectedApp.createdAt)}</p>
+                <p className="font-medium">{formatDateTime(selectedApp.createdAt)}</p>
               </div>
               
               {selectedApp.supervisorApprovedAt && (
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <label className="text-sm text-gray-500">上级审批</label>
-                  <p className="font-medium">{selectedApp.supervisorName} - {formatDate(selectedApp.supervisorApprovedAt)}</p>
+                  <p className="font-medium">{selectedApp.supervisorName} - {formatDateTime(selectedApp.supervisorApprovedAt)}</p>
                   {selectedApp.supervisorComment && (
                     <p className="text-sm text-gray-600 mt-1">备注: {selectedApp.supervisorComment}</p>
                   )}
@@ -544,7 +550,7 @@ export default function ApprovalList() {
               {selectedApp.financeApprovedAt && (
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <label className="text-sm text-gray-500">财务审批</label>
-                  <p className="font-medium">{selectedApp.financeName} - {formatDate(selectedApp.financeApprovedAt)}</p>
+                  <p className="font-medium">{selectedApp.financeName} - {formatDateTime(selectedApp.financeApprovedAt)}</p>
                   {selectedApp.financeComment && (
                     <p className="text-sm text-gray-600 mt-1">备注: {selectedApp.financeComment}</p>
                   )}
@@ -585,7 +591,7 @@ export default function ApprovalList() {
             </div>
             <div className="p-6">
               <p className="text-sm text-gray-600 mb-4">
-                确定通过提单 <span className="font-semibold">{selectedApp.billNumber}</span> 的作废申请吗？
+                确定通过{selectedApp.orderNumber ? `订单 ${selectedApp.orderNumber}` : `提单 ${selectedApp.billNumber}`} 的作废申请吗？
               </p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">审批备注（可选）</label>
@@ -629,7 +635,7 @@ export default function ApprovalList() {
             </div>
             <div className="p-6">
               <p className="text-sm text-gray-600 mb-4">
-                确定拒绝提单 <span className="font-semibold">{selectedApp.billNumber}</span> 的作废申请吗？
+                确定拒绝{selectedApp.orderNumber ? `订单 ${selectedApp.orderNumber}` : `提单 ${selectedApp.billNumber}`} 的作废申请吗？
               </p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">拒绝原因 <span className="text-red-500">*</span></label>

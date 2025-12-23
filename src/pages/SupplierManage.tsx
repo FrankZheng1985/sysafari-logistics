@@ -96,6 +96,9 @@ interface SupplierStats {
 // ==================== 常量定义 ====================
 
 const SUPPLIER_TYPES = [
+  { value: 'overseas_trucking', label: '海外卡车运输' },
+  { value: 'customs_agent', label: '清关代理' },
+  { value: 'import_agent', label: '进口代理商' },
   { value: 'manufacturer', label: '生产厂家' },
   { value: 'trader', label: '贸易商' },
   { value: 'agent', label: '代理商' },
@@ -210,10 +213,22 @@ export default function SupplierManage() {
   // 选中行
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
-  const tabs = [
+  // 根据视图类型显示不同的 tabs
+  const tmsTabs = [
+    { label: 'TMS概览', path: '/tms' },
+    { label: 'TMS管理', path: '/cmr-manage' },
+    { label: '运输供应商', path: '/supplier-manage?type=transport' },
+    { label: '运费管理', path: '/tms/pricing' },
+    { label: '条件管理', path: '/tms/conditions' },
+  ]
+
+  const supplierTabs = [
     { label: '供应商概览', path: '/suppliers' },
     { label: '供应商列表', path: '/suppliers/list' },
   ]
+
+  const tabs = isTransportView ? tmsTabs : supplierTabs
+  const pageActiveTab = isTransportView ? '/supplier-manage?type=transport' : '/suppliers/list'
 
   // ==================== 数据获取 ====================
 
@@ -511,7 +526,8 @@ export default function SupplierManage() {
       key: 'supplierCode',
       label: '供应商编码',
       width: '110px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
           {record.supplierCode}
         </span>
@@ -520,7 +536,8 @@ export default function SupplierManage() {
     {
       key: 'supplierName',
       label: '供应商名称',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
             <Building2 className="w-4 h-4 text-primary-600" />
@@ -538,7 +555,8 @@ export default function SupplierManage() {
       key: 'supplierType',
       label: '类型',
       width: '90px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <span className="text-xs text-gray-600">
           {getTypeLabel(record.supplierType)}
         </span>
@@ -548,6 +566,7 @@ export default function SupplierManage() {
       key: 'level',
       label: '级别',
       width: '80px',
+      sorter: true,
       render: (_value, record) => {
         const config = getLevelConfig(record.level)
         return (
@@ -562,7 +581,8 @@ export default function SupplierManage() {
       key: 'contactPerson',
       label: '联系人',
       width: '100px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="flex items-center gap-1 text-gray-600 text-xs">
           <User className="w-3 h-3" />
           {record.contactPerson || '-'}
@@ -573,7 +593,8 @@ export default function SupplierManage() {
       key: 'contactPhone',
       label: '联系电话',
       width: '120px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="flex items-center gap-1 text-gray-600 text-xs">
           <Phone className="w-3 h-3" />
           {record.contactPhone || record.contactMobile || '-'}
@@ -583,6 +604,7 @@ export default function SupplierManage() {
     {
       key: 'address',
       label: '地址',
+      sorter: true,
       render: (_value, record) => {
         const fullAddress = [record.country, record.province, record.city, record.address]
           .filter(Boolean)
@@ -598,6 +620,7 @@ export default function SupplierManage() {
       key: 'status',
       label: '状态',
       width: '80px',
+      sorter: true,
       render: (_value, record) => {
         const config = getStatusConfig(record.status)
         return (
@@ -648,10 +671,10 @@ export default function SupplierManage() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title="供应商管理"
+        title={isTransportView ? "TMS运输管理" : "供应商管理"}
         icon={<Building2 className="w-6 h-6 text-primary-600" />}
         tabs={tabs}
-        activeTab="/suppliers/list"
+        activeTab={pageActiveTab}
         onTabChange={(path) => navigate(path)}
       />
 

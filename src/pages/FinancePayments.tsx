@@ -43,7 +43,7 @@ export default function FinancePayments() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   const [searchValue, setSearchValue] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -71,7 +71,7 @@ export default function FinancePayments() {
     fetchPayments()
     fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, filterType, filterMethod, searchValue])
+  }, [page, pageSize, filterType, filterMethod, searchValue])
 
   const fetchPayments = async () => {
     try {
@@ -194,6 +194,7 @@ export default function FinancePayments() {
       key: 'paymentNumber',
       label: '付款单号',
       width: 150,
+      sorter: true,
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900">{record.paymentNumber}</div>
@@ -205,6 +206,12 @@ export default function FinancePayments() {
       key: 'paymentType',
       label: '类型',
       width: 100,
+      sorter: true,
+      filters: [
+        { text: '收款', value: 'income' },
+        { text: '付款', value: 'expense' },
+      ],
+      onFilter: (value, record) => record.paymentType === value,
       render: (_value, record) => (
         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
           record.paymentType === 'income' 
@@ -223,6 +230,8 @@ export default function FinancePayments() {
       key: 'customerName',
       label: '客户/供应商',
       width: 150,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <div>
           <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
@@ -237,6 +246,7 @@ export default function FinancePayments() {
       label: '金额',
       width: 120,
       align: 'right',
+      sorter: (a, b) => a.amount - b.amount,
       render: (_value, record) => (
         <div className={`text-right font-medium ${
           record.paymentType === 'income' ? 'text-green-600' : 'text-red-600'
@@ -424,7 +434,7 @@ export default function FinancePayments() {
       </div>
 
       {/* 分页 */}
-      {total > pageSize && (
+      {total > 0 && (
         <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500">
             共 {total} 条记录
@@ -438,7 +448,7 @@ export default function FinancePayments() {
               上一页
             </button>
             <span className="text-xs text-gray-600">
-              第 {page} / {Math.ceil(total / pageSize)} 页
+              第 {page} / {Math.ceil(total / pageSize) || 1} 页
             </span>
             <button
               onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
@@ -447,6 +457,19 @@ export default function FinancePayments() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

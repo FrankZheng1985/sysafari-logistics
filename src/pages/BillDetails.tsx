@@ -4,6 +4,7 @@ import { useTabs } from '../contexts/TabsContext'
 import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { copyToClipboard } from '../components/Toast'
+import { formatDate, formatDateTime } from '../utils/dateFormat'
 import DatePicker from '../components/DatePicker'
 // DataTable available if needed
 import Timeline, { TimelineItem } from '../components/Timeline'
@@ -34,6 +35,27 @@ const mockDeclarations: Declaration[] = [
     releaseTime: '2025-11-22 15:30',
   },
 ]
+
+// 费用分类配置 - 支持所有数据库中的分类
+const getFeeCategoryConfig = (category: string) => {
+  const configs: Record<string, { label: string; bgClass: string; textClass: string }> = {
+    freight: { label: '运费', bgClass: 'bg-blue-50', textClass: 'text-blue-600' },
+    transport: { label: '运输', bgClass: 'bg-blue-50', textClass: 'text-blue-600' },
+    customs: { label: '关税', bgClass: 'bg-red-50', textClass: 'text-red-600' },
+    duty: { label: '进口税', bgClass: 'bg-rose-50', textClass: 'text-rose-600' },
+    tax: { label: '增值税', bgClass: 'bg-pink-50', textClass: 'text-pink-600' },
+    warehouse: { label: '仓储', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    storage: { label: '仓储', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    insurance: { label: '保险', bgClass: 'bg-green-50', textClass: 'text-green-600' },
+    handling: { label: '操作', bgClass: 'bg-purple-50', textClass: 'text-purple-600' },
+    documentation: { label: '文件', bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' },
+    port: { label: '港口', bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' },
+    service: { label: '服务', bgClass: 'bg-teal-50', textClass: 'text-teal-600' },
+    package: { label: '包装', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    other: { label: '其他', bgClass: 'bg-gray-50', textClass: 'text-gray-600' },
+  }
+  return configs[category] || { label: category || '其他', bgClass: 'bg-gray-50', textClass: 'text-gray-600' }
+}
 
 // 提取为独立组件，避免在渲染循环中重新创建
 interface ModuleWrapperProps {
@@ -578,7 +600,7 @@ export default function BillDetails() {
     {
       key: 'actions',
       label: '操作',
-      render: (_value, record: Declaration) => (
+      render: (_value: unknown, record: Declaration) => (
         <button
           onClick={() => handleDownload(record.declarationNumber)}
           className="flex items-center gap-1 px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
@@ -751,30 +773,26 @@ export default function BillDetails() {
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ETD:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.etd || '-'}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.etd)}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ETA:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.eta || '-'}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.eta)}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ATA:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.ata || '-'}</span>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500">实际到港:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.actualArrivalDate || '-'}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.ata)}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">清关完成:</span>
                   <span className={`ml-2 font-medium text-xs ${billDetail.customsReleaseTime ? 'text-green-600' : 'text-gray-400'}`}>
-                    {billDetail.customsReleaseTime || '-'}
+                    {formatDateTime(billDetail.customsReleaseTime)}
                   </span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">卸货日期:</span>
                   <span className={`ml-2 font-medium text-xs ${billDetail.cmrUnloadingCompleteTime ? 'text-green-600' : 'text-gray-400'}`}>
-                    {billDetail.cmrUnloadingCompleteTime || '-'}
+                    {formatDateTime(billDetail.cmrUnloadingCompleteTime)}
                   </span>
                 </div>
                 <div>
@@ -799,7 +817,29 @@ export default function BillDetails() {
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">创建时间:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.createTime || '-'}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.createTime)}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">派送地址:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.cmrDeliveryAddress || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">服务产品:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.serviceType || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">货柜金额:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.cargoValue ? `€${Number(billDetail.cargoValue).toLocaleString()}` : '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">资料发送日期:</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.documentsSentDate)}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">CMR发送日期:</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.cmrSentDate)}</span>
                 </div>
                 {/* 附加属性字段已移至独立的"附加属性"区块显示 */}
               </div>
@@ -1275,21 +1315,8 @@ export default function BillDetails() {
                           </div>
                           <div className="flex items-center justify-between mt-1">
                             <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
-                                fee.category === 'freight' ? 'bg-blue-50 text-blue-600' :
-                                fee.category === 'customs' ? 'bg-red-50 text-red-600' :
-                                fee.category === 'warehouse' ? 'bg-amber-50 text-amber-600' :
-                                fee.category === 'insurance' ? 'bg-green-50 text-green-600' :
-                                fee.category === 'handling' ? 'bg-purple-50 text-purple-600' :
-                                fee.category === 'documentation' ? 'bg-cyan-50 text-cyan-600' :
-                                'bg-gray-50 text-gray-600'
-                              }`}>
-                                {fee.category === 'freight' ? '运费' :
-                                 fee.category === 'customs' ? '关税' :
-                                 fee.category === 'warehouse' ? '仓储' :
-                                 fee.category === 'insurance' ? '保险' :
-                                 fee.category === 'handling' ? '操作' :
-                                 fee.category === 'documentation' ? '文件' : '其他'}
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${getFeeCategoryConfig(fee.category).bgClass} ${getFeeCategoryConfig(fee.category).textClass}`}>
+                                {getFeeCategoryConfig(fee.category).label}
                               </span>
                               {fee.customerName && (
                                 <span className="text-xs text-gray-500">{fee.customerName}</span>
@@ -1345,21 +1372,8 @@ export default function BillDetails() {
                           </div>
                           <div className="flex items-center justify-between mt-1">
                             <div className="flex items-center gap-2">
-                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
-                                fee.category === 'freight' ? 'bg-blue-50 text-blue-600' :
-                                fee.category === 'customs' ? 'bg-red-50 text-red-600' :
-                                fee.category === 'warehouse' ? 'bg-amber-50 text-amber-600' :
-                                fee.category === 'insurance' ? 'bg-green-50 text-green-600' :
-                                fee.category === 'handling' ? 'bg-purple-50 text-purple-600' :
-                                fee.category === 'documentation' ? 'bg-cyan-50 text-cyan-600' :
-                                'bg-gray-50 text-gray-600'
-                              }`}>
-                                {fee.category === 'freight' ? '运费' :
-                                 fee.category === 'customs' ? '关税' :
-                                 fee.category === 'warehouse' ? '仓储' :
-                                 fee.category === 'insurance' ? '保险' :
-                                 fee.category === 'handling' ? '操作' :
-                                 fee.category === 'documentation' ? '文件' : '其他'}
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${getFeeCategoryConfig(fee.category).bgClass} ${getFeeCategoryConfig(fee.category).textClass}`}>
+                                {getFeeCategoryConfig(fee.category).label}
                               </span>
                               {fee.supplierName && (
                                 <span className="text-xs text-gray-500">{fee.supplierName}</span>
@@ -2150,21 +2164,8 @@ export default function BillDetails() {
                           </div>
                           <div className="flex items-center justify-between mt-1 ml-6">
                             <div className="flex items-center gap-1">
-                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
-                                fee.category === 'freight' ? 'bg-blue-50 text-blue-600' :
-                                fee.category === 'customs' ? 'bg-red-50 text-red-600' :
-                                fee.category === 'warehouse' ? 'bg-amber-50 text-amber-600' :
-                                fee.category === 'insurance' ? 'bg-green-50 text-green-600' :
-                                fee.category === 'handling' ? 'bg-purple-50 text-purple-600' :
-                                fee.category === 'documentation' ? 'bg-cyan-50 text-cyan-600' :
-                                'bg-gray-50 text-gray-600'
-                              }`}>
-                                {fee.category === 'freight' ? '运费' :
-                                 fee.category === 'customs' ? '关税' :
-                                 fee.category === 'warehouse' ? '仓储' :
-                                 fee.category === 'insurance' ? '保险' :
-                                 fee.category === 'handling' ? '操作' :
-                                 fee.category === 'documentation' ? '文件' : '其他'}
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${getFeeCategoryConfig(fee.category).bgClass} ${getFeeCategoryConfig(fee.category).textClass}`}>
+                                {getFeeCategoryConfig(fee.category).label}
                               </span>
                               {fee.supplierName && fee.feeType === 'payable' && (
                                 <span className="text-[10px] text-gray-400 truncate max-w-[80px]" title={fee.supplierName}>

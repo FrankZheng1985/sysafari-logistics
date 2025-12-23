@@ -324,6 +324,7 @@ export default function LastMileShipments() {
       key: 'shipmentNo',
       label: '运单号',
       width: 140,
+      sorter: true,
       render: (record: Shipment) => (
         <div>
           <span className="font-mono font-medium text-blue-600">{record.shipmentNo}</span>
@@ -337,6 +338,8 @@ export default function LastMileShipments() {
       key: 'carrier',
       label: '承运商',
       width: 100,
+      sorter: true,
+      filterable: true,
       render: (record: Shipment) => (
         <span className="px-2 py-0.5 bg-gray-100 rounded text-sm">{record.carrierCode}</span>
       )
@@ -345,6 +348,8 @@ export default function LastMileShipments() {
       key: 'receiver',
       label: '收件人',
       width: 180,
+      sorter: true,
+      filterable: true,
       render: (record: Shipment) => (
         <div className="text-sm">
           <div className="font-medium">{record.receiverName}</div>
@@ -359,6 +364,7 @@ export default function LastMileShipments() {
       label: '重量/件数',
       width: 100,
       align: 'right',
+      sorter: (a, b) => (a.chargeableWeight || a.weight) - (b.chargeableWeight || b.weight),
       render: (record: Shipment) => (
         <div className="text-sm">
           <div>{record.chargeableWeight || record.weight} kg</div>
@@ -371,6 +377,8 @@ export default function LastMileShipments() {
       label: 'Zone',
       width: 70,
       align: 'center',
+      sorter: true,
+      filterable: true,
       render: (record: Shipment) => (
         record.zoneCode ? (
           <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs font-mono">
@@ -384,6 +392,7 @@ export default function LastMileShipments() {
       label: '费用',
       width: 120,
       align: 'right',
+      sorter: (a, b) => (a.salesAmount || 0) - (b.salesAmount || 0),
       render: (record: Shipment) => (
         <div className="text-sm">
           {record.salesAmount ? (
@@ -404,6 +413,15 @@ export default function LastMileShipments() {
       label: '状态',
       width: 100,
       align: 'center',
+      sorter: true,
+      filters: [
+        { text: '待处理', value: 'pending' },
+        { text: '已创建', value: 'created' },
+        { text: '运输中', value: 'in_transit' },
+        { text: '已送达', value: 'delivered' },
+        { text: '异常', value: 'exception' },
+      ],
+      onFilter: (value, record) => record.status === value,
       render: (record: Shipment) => {
         const config = STATUS_CONFIG[record.status] || STATUS_CONFIG.pending
         const Icon = config.icon
@@ -419,6 +437,11 @@ export default function LastMileShipments() {
       key: 'createdAt',
       label: '创建时间',
       width: 140,
+      sorter: (a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return dateA - dateB
+      },
       render: (record: Shipment) => (
         <span className="text-sm text-gray-600">
           {record.createdAt ? new Date(record.createdAt).toLocaleString('zh-CN', {
@@ -580,9 +603,9 @@ export default function LastMileShipments() {
 
       {/* 数据表格 */}
       <div className="bg-white rounded-lg shadow">
-        <DataTable
+        <DataTable<Shipment>
           columns={columns}
-          dataSource={shipments}
+          data={shipments}
           loading={loading}
           rowKey="id"
           pagination={{
@@ -591,7 +614,7 @@ export default function LastMileShipments() {
             total,
             onChange: (p, ps) => {
               setPage(p)
-              setPageSize(ps)
+              if (ps !== undefined) setPageSize(ps)
             }
           }}
         />

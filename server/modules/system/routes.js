@@ -11,6 +11,11 @@ import { authenticate, authorize, requireRole, requireTeamManager, requireApprov
 
 const router = express.Router()
 
+// ==================== 最近活动路由 ====================
+
+// 获取最近活动（用于仪表盘）
+router.get('/recent-activities', controller.getRecentActivities)
+
 // ==================== 认证相关路由 ====================
 
 // 用户登录（传统方式，保留兼容）

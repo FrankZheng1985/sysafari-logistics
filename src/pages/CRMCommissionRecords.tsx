@@ -94,7 +94,7 @@ export default function CRMCommissionRecords() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   // 筛选条件
   const [searchValue, setSearchValue] = useState('')
@@ -133,7 +133,7 @@ export default function CRMCommissionRecords() {
 
   useEffect(() => {
     loadData()
-  }, [page, filterSalesperson, filterMonth, filterStatus, filterSourceType])
+  }, [page, pageSize, filterSalesperson, filterMonth, filterStatus, filterSourceType])
 
   useEffect(() => {
     loadUsers()
@@ -375,7 +375,7 @@ export default function CRMCommissionRecords() {
         <div className="flex items-center gap-1">
           {record.status === 'pending' && (
             <button 
-              onClick={() => handleCancelRecord(item)}
+              onClick={() => handleCancelRecord(record)}
               className="px-2 py-1 text-[10px] text-red-600 hover:bg-red-50 rounded"
             >
               取消
@@ -556,6 +556,19 @@ export default function CRMCommissionRecords() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

@@ -23,7 +23,7 @@ export function useColumnSettings<T>(
     
     const configs = getColumnConfigs(
       pageKey,
-      columns.map((col) => ({ key: col.key, label: col.label }))
+      columns.map((col) => ({ key: col.key, label: col.label || col.key }))
     )
     setColumnConfigs(configs)
   }, [pageKey, columnKeys, columns, columnConfigs.length])

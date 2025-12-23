@@ -116,7 +116,6 @@ export interface BillOfLading {
   deliveryStatus?: string
   transportMethod?: string
   companyName?: string
-  orderSeq?: number
   isVoid?: boolean
   voidReason?: string
   voidTime?: string

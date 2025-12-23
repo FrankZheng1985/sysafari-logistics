@@ -69,10 +69,10 @@ export default function LabelSearch() {
     setTimeout(() => {
       // 简单的搜索逻辑：根据查询匹配订单号、标签号或提单号
       const filtered = mockSearchResults.filter(item =>
-        record.labelNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.billNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.recipient.toLowerCase().includes(searchQuery.toLowerCase())
+        item.labelNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.billNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.recipient.toLowerCase().includes(searchQuery.toLowerCase())
       )
       setSearchResults(filtered)
       setIsSearching(false)
@@ -295,7 +295,7 @@ export default function LabelSearch() {
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

@@ -124,7 +124,7 @@ export default function CRMPenaltyRecords() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   // 是否试用期
   const inTrialPeriod = getTrialStatus()
@@ -180,7 +180,7 @@ export default function CRMPenaltyRecords() {
 
   useEffect(() => {
     loadData()
-  }, [page, filterType, filterStatus, filterMonth])
+  }, [page, pageSize, filterType, filterStatus, filterMonth])
 
   useEffect(() => {
     loadPenaltyRules()
@@ -581,7 +581,7 @@ export default function CRMPenaltyRecords() {
               
               {record.status === 'pending' && (
                 <button
-                  onClick={() => handleUpdateStatus(item, 'communicated')}
+                  onClick={() => handleUpdateStatus(record, 'communicated')}
                   className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
                 >
                   已沟通
@@ -590,7 +590,7 @@ export default function CRMPenaltyRecords() {
               
               {record.status === 'communicated' && (
                 <button
-                  onClick={() => handleUpdateStatus(item, 'confirmed')}
+                  onClick={() => handleUpdateStatus(record, 'confirmed')}
                   className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
                 >
                   确认
@@ -728,6 +728,19 @@ export default function CRMPenaltyRecords() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

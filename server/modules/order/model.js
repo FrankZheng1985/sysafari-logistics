@@ -121,9 +121,10 @@ export async function getBills(params = {}) {
     queryParams.push(customerId)
   }
   
-  // 搜索（支持提单号、集装箱号、客户名称等）
+  // 搜索（支持订单号、提单号、集装箱号、客户名称等）
   if (search) {
     query += ` AND (
+      order_number LIKE ? OR
       bill_number LIKE ? OR 
       container_number LIKE ? OR 
       customer_name LIKE ? OR
@@ -132,7 +133,7 @@ export async function getBills(params = {}) {
       vessel LIKE ?
     )`
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   // 获取总数
@@ -849,10 +850,18 @@ export async function getInspectionList(type = 'pending', params = {}) {
 export function convertBillToCamelCase(row) {
   if (!row) return null
   
+  // 根据 order_seq 生成订单号（如果 order_number 为空）
+  let orderNumber = row.order_number
+  if (!orderNumber && row.order_seq) {
+    const createDate = row.created_at ? new Date(row.created_at) : new Date()
+    const year = createDate.getFullYear().toString().slice(-2)
+    orderNumber = `BP${year}${String(row.order_seq).padStart(5, '0')}`
+  }
+  
   return {
     id: row.id,
     orderSeq: row.order_seq,
-    orderNumber: row.order_number,
+    orderNumber,
     billId: row.bill_id,
     billNumber: row.bill_number,
     containerNumber: row.container_number,
@@ -892,6 +901,7 @@ export function convertBillToCamelCase(row) {
     inspectionConfirmedTime: row.inspection_confirmed_time,
     deliveryStatus: row.delivery_status,
     cmrEstimatedPickupTime: row.cmr_estimated_pickup_time,
+    cmrPickupTime: row.cmr_pickup_time,
     cmrServiceProvider: row.cmr_service_provider,
     cmrDeliveryAddress: row.cmr_delivery_address,
     cmrEstimatedArrivalTime: row.cmr_estimated_arrival_time,
@@ -927,7 +937,12 @@ export function convertBillToCamelCase(row) {
     fullContainerTransport: row.full_container_transport,
     lastMileTransport: row.last_mile_transport,
     devanning: row.devanning,
-    t1Declaration: row.t1_declaration
+    t1Declaration: row.t1_declaration,
+    // 订单导入扩展字段
+    serviceType: row.service_type,
+    cargoValue: row.cargo_value,
+    documentsSentDate: row.documents_sent_date,
+    cmrSentDate: row.cmr_sent_date
   }
 }
 
@@ -1019,7 +1034,7 @@ export async function getVoidApplications(params = {}) {
   const { status, userId } = params
   
   let query = `
-    SELECT va.*, b.bill_number, b.container_number 
+    SELECT va.*, b.bill_number, b.container_number, b.order_seq, b.created_at as bill_created_at
     FROM void_applications va
     LEFT JOIN bills_of_lading b ON va.bill_id = b.id
     WHERE 1=1
@@ -1044,26 +1059,37 @@ export async function getVoidApplications(params = {}) {
   
   const applications = await db.prepare(query).all(...queryParams)
   
-  return applications.map(app => ({
-    id: app.id,
-    billId: app.bill_id,
-    billNumber: app.bill_number,
-    containerNumber: app.container_number,
-    reason: app.reason,
-    status: app.status,
-    applicantId: app.applicant_id,
-    applicantName: app.applicant_name,
-    supervisorId: app.supervisor_id,
-    supervisorName: app.supervisor_name,
-    supervisorApprovedAt: app.supervisor_approved_at,
-    supervisorComment: app.supervisor_comment,
-    financeId: app.finance_id,
-    financeName: app.finance_name,
-    financeApprovedAt: app.finance_approved_at,
-    financeComment: app.finance_comment,
-    feesJson: app.fees_json,
-    createdAt: app.created_at
-  }))
+  return applications.map(app => {
+    // 根据 order_seq 生成订单号
+    let orderNumber = null
+    if (app.order_seq) {
+      const createDate = app.bill_created_at ? new Date(app.bill_created_at) : new Date()
+      const year = createDate.getFullYear().toString().slice(-2)
+      orderNumber = `BP${year}${String(app.order_seq).padStart(5, '0')}`
+    }
+    
+    return {
+      id: app.id,
+      billId: app.bill_id,
+      billNumber: app.bill_number,
+      orderNumber,
+      containerNumber: app.container_number,
+      reason: app.reason,
+      status: app.status,
+      applicantId: app.applicant_id,
+      applicantName: app.applicant_name,
+      supervisorId: app.supervisor_id,
+      supervisorName: app.supervisor_name,
+      supervisorApprovedAt: app.supervisor_approved_at,
+      supervisorComment: app.supervisor_comment,
+      financeId: app.finance_id,
+      financeName: app.finance_name,
+      financeApprovedAt: app.finance_approved_at,
+      financeComment: app.finance_comment,
+      feesJson: app.fees_json,
+      createdAt: app.created_at
+    }
+  })
 }
 
 /**
@@ -1072,7 +1098,7 @@ export async function getVoidApplications(params = {}) {
 export async function getVoidApplicationById(id) {
   const db = getDatabase()
   const app = await db.prepare(`
-    SELECT va.*, b.bill_number, b.container_number 
+    SELECT va.*, b.bill_number, b.container_number, b.order_seq, b.created_at as bill_created_at
     FROM void_applications va
     LEFT JOIN bills_of_lading b ON va.bill_id = b.id
     WHERE va.id = ?
@@ -1080,10 +1106,19 @@ export async function getVoidApplicationById(id) {
   
   if (!app) return null
   
+  // 根据 order_seq 生成订单号
+  let orderNumber = null
+  if (app.order_seq) {
+    const createDate = app.bill_created_at ? new Date(app.bill_created_at) : new Date()
+    const year = createDate.getFullYear().toString().slice(-2)
+    orderNumber = `BP${year}${String(app.order_seq).padStart(5, '0')}`
+  }
+  
   return {
     id: app.id,
     billId: app.bill_id,
     billNumber: app.bill_number,
+    orderNumber,
     containerNumber: app.container_number,
     reason: app.reason,
     status: app.status,

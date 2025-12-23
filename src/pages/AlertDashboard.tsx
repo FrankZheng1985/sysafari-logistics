@@ -101,7 +101,7 @@ export default function AlertDashboard() {
   const [stats, setStats] = useState<AlertStats | null>(null)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   const [loading, setLoading] = useState(false)
   const [activeStatus, setActiveStatus] = useState('active')
   const [activeType, setActiveType] = useState('all')
@@ -262,7 +262,7 @@ export default function AlertDashboard() {
   useEffect(() => {
     fetchAlerts()
     fetchStats()
-  }, [page, activeStatus, activeType, activeLevel])
+  }, [page, pageSize, activeStatus, activeType, activeLevel])
 
   useEffect(() => {
     if (showRulesModal) {
@@ -523,6 +523,19 @@ export default function AlertDashboard() {
               >
                 下一页
               </button>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value))
+                  setPage(1)
+                }}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                title="每页显示条数"
+              >
+                <option value={20}>20 条/页</option>
+                <option value={50}>50 条/页</option>
+                <option value={100}>100 条/页</option>
+              </select>
             </div>
           </div>
         )}

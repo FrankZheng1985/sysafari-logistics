@@ -432,6 +432,7 @@ export default function LastMileRates() {
       key: 'rateCardCode',
       title: '费率卡编码',
       width: 160,
+      sorter: true,
       render: (_, record) => (
         <span className="font-mono text-blue-600">{record.rateCardCode}</span>
       )
@@ -440,6 +441,8 @@ export default function LastMileRates() {
       key: 'rateCardName',
       title: '费率卡名称',
       width: 200,
+      sorter: true,
+      filterable: true,
       render: (_, record) => (
         <div>
           <div className="font-medium">{record.rateCardName}</div>
@@ -453,6 +456,8 @@ export default function LastMileRates() {
       key: 'carrier',
       title: '承运商',
       width: 120,
+      sorter: true,
+      filterable: true,
       render: (_, record) => (
         <div>
           <div className="font-medium">{record.carrierCode}</div>
@@ -464,6 +469,13 @@ export default function LastMileRates() {
       key: 'serviceType',
       title: '服务类型',
       width: 100,
+      sorter: true,
+      filters: [
+        { text: '标准服务', value: 'standard' },
+        { text: '快速服务', value: 'express' },
+        { text: '经济服务', value: 'economy' },
+      ],
+      onFilter: (value, record) => record.serviceType === value,
       render: (_, record) => {
         const type = SERVICE_TYPES.find(t => t.value === record.serviceType)
         return <span>{type?.label || record.serviceType}</span>
@@ -473,6 +485,11 @@ export default function LastMileRates() {
       key: 'validity',
       title: '有效期',
       width: 180,
+      sorter: (a, b) => {
+        const dateA = a.validFrom ? new Date(a.validFrom).getTime() : 0
+        const dateB = b.validFrom ? new Date(b.validFrom).getTime() : 0
+        return dateA - dateB
+      },
       render: (_, record) => (
         <div className="text-sm">
           <div>{record.validFrom}</div>
@@ -485,6 +502,7 @@ export default function LastMileRates() {
       title: '币种',
       width: 80,
       align: 'center',
+      sorter: true,
       render: (_, record) => (
         <span className="px-2 py-0.5 bg-gray-100 rounded text-sm">{record.currency}</span>
       )
@@ -493,6 +511,12 @@ export default function LastMileRates() {
       key: 'status',
       title: '状态',
       width: 80,
+      sorter: true,
+      filters: [
+        { text: '启用', value: 'active' },
+        { text: '停用', value: 'inactive' },
+      ],
+      onFilter: (value, record) => record.status === value,
       align: 'center',
       render: (_, record) => {
         const status = RATE_STATUS.find(s => s.value === record.status)
@@ -606,9 +630,9 @@ export default function LastMileRates() {
 
       {/* 数据表格 */}
       <div className="bg-white rounded-lg shadow">
-        <DataTable
+        <DataTable<RateCard>
           columns={columns}
-          dataSource={rateCards}
+          data={rateCards}
           loading={loading}
           rowKey="id"
           pagination={{
@@ -617,7 +641,7 @@ export default function LastMileRates() {
             total,
             onChange: (p, ps) => {
               setPage(p)
-              setPageSize(ps)
+              if (ps !== undefined) setPageSize(ps)
             }
           }}
         />

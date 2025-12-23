@@ -26,25 +26,27 @@ interface ImportRecord {
 interface PreviewItem {
   rowNo: number
   containerNo: string
-  productCode: string
-  palletCount: number
-  referenceNo: string
+  billNumber?: string
+  productCode?: string
+  palletCount?: number
+  referenceNo?: string
   productName: string
-  productNameEn: string
-  hsCode: string
-  cartonCount: number
+  productNameEn?: string
+  hsCode?: string
+  cartonCount?: number
   quantity: number
   unit: string
   unitPrice: number
   totalValue: number
   grossWeight: number
-  netWeight: number
-  material: string
-  materialEn: string
-  productImage: string
-  loadingPosition: string
-  dutyRate: number
-  estimatedDuty: number
+  netWeight?: number
+  originCountry?: string
+  material?: string
+  materialEn?: string
+  productImage?: string
+  loadingPosition?: string
+  dutyRate?: number
+  estimatedDuty?: number
   error?: string
 }
 
@@ -761,7 +763,7 @@ export default function DocumentImport() {
                   <select
                     value={selectedTaxNumber?.id || ''}
                     onChange={(e) => {
-                      const tax = customerTaxNumbers.find(t => t.id === e.target.value)
+                      const tax = customerTaxNumbers.find(t => String(t.id) === e.target.value)
                       setSelectedTaxNumber(tax || null)
                     }}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"

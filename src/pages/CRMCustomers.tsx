@@ -107,7 +107,7 @@ export default function CRMCustomers() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   const [searchValue, setSearchValue] = useState('')
   const [filterLevel, setFilterLevel] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
@@ -172,7 +172,7 @@ export default function CRMCustomers() {
   useEffect(() => {
     loadCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, filterLevel, filterType])
+  }, [page, pageSize, searchValue, filterLevel, filterType])
 
   const loadCustomers = async () => {
     setLoading(true)
@@ -551,6 +551,7 @@ export default function CRMCustomers() {
       key: 'customerCode',
       label: '客户编号',
       width: 120,
+      sorter: true,
       render: (_value, item) => (
         <span className="text-primary-600 font-medium text-xs">{item?.customerCode || '-'}</span>
       )
@@ -559,6 +560,8 @@ export default function CRMCustomers() {
       key: 'customerName',
       label: '客户名称',
       width: 160,
+      sorter: true,
+      filterable: true,
       render: (_value, item) => (
         <div>
           <div className="font-medium text-gray-900 text-xs">{item?.customerName || '-'}</div>
@@ -572,18 +575,34 @@ export default function CRMCustomers() {
       key: 'customerLevel',
       label: '级别',
       width: 80,
+      sorter: true,
+      filters: [
+        { text: 'VIP', value: 'vip' },
+        { text: '重要', value: 'important' },
+        { text: '普通', value: 'normal' },
+        { text: '潜在', value: 'potential' },
+      ],
+      onFilter: (value, record) => record.customerLevel === value,
       render: (_value, item) => getLevelBadge(item?.customerLevel || 'normal')
     },
     {
       key: 'customerType',
       label: '类型',
       width: 80,
+      sorter: true,
+      filters: [
+        { text: '发货人', value: 'shipper' },
+        { text: '收货人', value: 'consignee' },
+        { text: '货代公司', value: 'forwarder' },
+      ],
+      onFilter: (value, record) => record.customerType === value,
       render: (_value, item) => getTypeBadge(item?.customerType || 'shipper')
     },
     {
       key: 'contactPerson',
       label: '联系方式',
       width: 180,
+      sorter: true,
       render: (_value, item) => (
         <div className="text-xs">
           <div className="flex items-center gap-1 text-gray-700">
@@ -615,12 +634,31 @@ export default function CRMCustomers() {
       key: 'status',
       label: '状态',
       width: 80,
+      sorter: true,
+      filters: [
+        { text: '活跃', value: 'active' },
+        { text: '停用', value: 'inactive' },
+      ],
+      onFilter: (value, record) => record.status === value,
       render: (_value, item) => (
         <span className={`px-2 py-0.5 rounded text-[10px] ${
           item?.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
         }`}>
           {item?.status === 'active' ? '活跃' : '停用'}
         </span>
+      )
+    },
+    {
+      key: 'createTime',
+      label: '创建时间',
+      width: 120,
+      sorter: (a, b) => {
+        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
+        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        return dateA - dateB
+      },
+      render: (_value, item) => (
+        <span className="text-xs text-gray-500">{item?.createTime?.split(' ')[0] || '-'}</span>
       )
     },
     {
@@ -1310,6 +1348,19 @@ export default function CRMCustomers() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

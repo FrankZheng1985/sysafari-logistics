@@ -531,7 +531,6 @@ export interface BillOfLading {
   customerName?: string  // 客户名称（与companyName同义）
   customerId?: string    // 客户ID
   customerCode?: string  // 客户编码
-  orderSeq?: number
   isVoid?: boolean
   voidReason?: string
   voidTime?: string
@@ -593,6 +592,11 @@ export interface BillOfLading {
     consigneeAddress: string
     consigneeAddressDetails: string
   }>
+}
+
+// 用于 API 提交的输入类型（referenceList 可以是字符串或数组）
+export type BillOfLadingInput = Omit<Partial<BillOfLading>, 'referenceList'> & {
+  referenceList?: string | BillOfLading['referenceList']
 }
 
 export interface GetBillsParams {
@@ -840,7 +844,7 @@ export async function getBillOperationLogs(id: string): Promise<ApiResponse<Oper
  * 
  * 接口地址: POST /api/bills
  */
-export async function createBill(data: Partial<BillOfLading>): Promise<ApiResponse<BillOfLading>> {
+export async function createBill(data: BillOfLadingInput): Promise<ApiResponse<BillOfLading>> {
   // 测试模式：阻止写操作
   if (checkTestMode()) {
     showTestModeWarning('创建提单')
@@ -875,7 +879,7 @@ export async function createBill(data: Partial<BillOfLading>): Promise<ApiRespon
  * 
  * 接口地址: PUT /api/bills/:id
  */
-export async function updateBill(id: string, data: Partial<BillOfLading>): Promise<ApiResponse<BillOfLading>> {
+export async function updateBill(id: string, data: BillOfLadingInput): Promise<ApiResponse<BillOfLading>> {
   // 测试模式：阻止写操作
   if (checkTestMode()) {
     showTestModeWarning('更新提单')
@@ -2979,6 +2983,10 @@ export interface ParsedBillData {
   weight?: string
   volume?: string
   estimatedDeparture?: string
+  estimatedArrival?: string
+  sealNumber?: string
+  containerSize?: string
+  shipper?: string
 }
 
 /**

@@ -1546,7 +1546,7 @@ export default function DocumentTaxCalc() {
                       <select
                         value={selectedTaxNumber?.id || ''}
                         onChange={(e) => {
-                          const tax = customerTaxNumbers.find(t => t.id === e.target.value)
+                          const tax = customerTaxNumbers.find(t => String(t.id) === e.target.value)
                           setSelectedTaxNumber(tax || null)
                         }}
                         className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500"

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -269,17 +270,12 @@ export default function CustomsContracts() {
     window.open(`${API_BASE}/api/contract-template/contracts/${id}/pdf`, '_blank')
   }
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('zh-CN')
-  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="清关合同管理"
-        description="管理清关服务合同，支持创建、审批和PDF导出"
-        actions={
+        actionButtons={
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"

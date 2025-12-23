@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { 
-  Plus, Search, Eye, FileText, Check, X, RefreshCw, 
-  Download, Upload, AlertCircle, DollarSign, Truck,
-  Calendar, ChevronDown, Filter, CheckCircle, Clock
+  Plus, Eye, FileText, Check, X, RefreshCw, 
+  AlertCircle, DollarSign, Truck,
+  Filter, Clock
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import { getApiBaseUrl } from '../../utils/api'
@@ -94,7 +94,7 @@ export default function CarrierSettlement() {
   const [loading, setLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   // 统计数据
   const [stats, setStats] = useState<SettlementStats | null>(null)
@@ -110,6 +110,7 @@ export default function CarrierSettlement() {
   // 弹窗状态
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showImportModal, setShowImportModal] = useState(false)
   const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null)
   const [settlementItems, setSettlementItems] = useState<SettlementItem[]>([])
@@ -183,7 +184,7 @@ export default function CarrierSettlement() {
 
   useEffect(() => {
     fetchSettlements()
-  }, [page, filterCarrierId, filterReconcileStatus, filterPaymentStatus])
+  }, [page, pageSize, filterCarrierId, filterReconcileStatus, filterPaymentStatus])
 
   // 创建结算单
   const handleCreate = async () => {
@@ -287,11 +288,11 @@ export default function CarrierSettlement() {
     <div className="space-y-6">
       <PageHeader
         title="承运商结算"
-        description="管理最后里程承运商的账单核对与结算"
-        actions={
+        actionButtons={
           <button
             onClick={() => setShowCreateModal(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            title="创建结算单"
           >
             <Plus className="w-4 h-4" />
             创建结算单
@@ -364,6 +365,7 @@ export default function CarrierSettlement() {
             value={filterCarrierId}
             onChange={(e) => setFilterCarrierId(Number(e.target.value))}
             className="px-3 py-2 border rounded-lg text-sm"
+            title="筛选承运商"
           >
             <option value={0}>全部承运商</option>
             {carriers.map(c => (
@@ -375,6 +377,7 @@ export default function CarrierSettlement() {
             value={filterReconcileStatus}
             onChange={(e) => setFilterReconcileStatus(e.target.value)}
             className="px-3 py-2 border rounded-lg text-sm"
+            title="筛选核对状态"
           >
             <option value="">全部核对状态</option>
             <option value="pending">待核对</option>
@@ -386,6 +389,7 @@ export default function CarrierSettlement() {
             value={filterPaymentStatus}
             onChange={(e) => setFilterPaymentStatus(e.target.value)}
             className="px-3 py-2 border rounded-lg text-sm"
+            title="筛选付款状态"
           >
             <option value="">全部付款状态</option>
             <option value="unpaid">未付款</option>
@@ -537,6 +541,19 @@ export default function CarrierSettlement() {
               >
                 下一页
               </button>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value))
+                  setPage(1)
+                }}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                title="每页显示条数"
+              >
+                <option value={20}>20 条/页</option>
+                <option value={50}>50 条/页</option>
+                <option value={100}>100 条/页</option>
+              </select>
             </div>
           </div>
         )}
@@ -548,7 +565,7 @@ export default function CarrierSettlement() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="font-medium text-gray-900">创建结算单</h3>
-              <button onClick={() => setShowCreateModal(false)}>
+              <button onClick={() => setShowCreateModal(false)} title="关闭">
                 <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
               </button>
             </div>
@@ -561,6 +578,7 @@ export default function CarrierSettlement() {
                   value={createForm.carrierId}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, carrierId: Number(e.target.value) }))}
                   className="w-full px-3 py-2 border rounded-lg"
+                  title="选择承运商"
                 >
                   <option value={0}>请选择承运商</option>
                   {carriers.map(c => (
@@ -577,6 +595,7 @@ export default function CarrierSettlement() {
                   value={createForm.periodStart}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, periodStart: e.target.value }))}
                   className="w-full px-3 py-2 border rounded-lg"
+                  title="选择结算周期开始日期"
                 />
               </div>
               <div>
@@ -588,6 +607,7 @@ export default function CarrierSettlement() {
                   value={createForm.periodEnd}
                   onChange={(e) => setCreateForm(prev => ({ ...prev, periodEnd: e.target.value }))}
                   className="w-full px-3 py-2 border rounded-lg"
+                  title="选择结算周期结束日期"
                 />
               </div>
             </div>
@@ -620,7 +640,7 @@ export default function CarrierSettlement() {
                 <h3 className="font-medium text-gray-900">结算单详情</h3>
                 <p className="text-sm text-gray-500">{selectedSettlement.settlementNo}</p>
               </div>
-              <button onClick={() => setShowDetailModal(false)}>
+              <button onClick={() => setShowDetailModal(false)} title="关闭">
                 <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
               </button>
             </div>

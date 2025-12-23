@@ -16,17 +16,22 @@ interface OrderFeeReport {
   billId: string
   billNumber: string
   orderNumber?: string      // 订单号
+  containerNumber?: string  // 集装箱号
   customerId: string
   customerName: string
   feeCount: number
   totalAmount: number
-  freightAmount: number
-  customsAmount: number
-  warehouseAmount: number
-  insuranceAmount: number
-  handlingAmount: number
-  documentationAmount: number
-  otherAmount: number
+  // 各分类费用（应收/应付分开）
+  freightReceivable: number
+  freightPayable: number
+  customsReceivable: number
+  customsPayable: number
+  warehouseReceivable: number
+  warehousePayable: number
+  handlingReceivable: number
+  handlingPayable: number
+  otherReceivable: number
+  otherPayable: number
   firstFeeDate: string
   lastFeeDate: string
 }
@@ -199,59 +204,80 @@ export default function FinanceOrderReport() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left py-3 px-3 font-medium text-gray-600">订单号</th>
-                <th className="text-left py-3 px-3 font-medium text-gray-600">提单号</th>
-                <th className="text-left py-3 px-3 font-medium text-gray-600">客户</th>
-                <th className="text-right py-3 px-3 font-medium text-gray-600">费用笔数</th>
-                <th className="text-right py-3 px-3 font-medium text-blue-600">运费</th>
-                <th className="text-right py-3 px-3 font-medium text-red-600">关税</th>
-                <th className="text-right py-3 px-3 font-medium text-orange-600">仓储</th>
-                <th className="text-right py-3 px-3 font-medium text-purple-600">操作费</th>
-                <th className="text-right py-3 px-3 font-medium text-gray-600">其他</th>
-                <th className="text-right py-3 px-3 font-medium text-green-600">合计</th>
-                <th className="text-center py-3 px-3 font-medium text-gray-600">操作</th>
+                <th className="text-left py-2 px-2 font-medium text-gray-600 text-xs" rowSpan={2}>订单号</th>
+                <th className="text-left py-2 px-2 font-medium text-gray-600 text-xs" rowSpan={2}>提单号</th>
+                <th className="text-left py-2 px-2 font-medium text-gray-600 text-xs" rowSpan={2}>集装箱号</th>
+                <th className="text-left py-2 px-2 font-medium text-gray-600 text-xs" rowSpan={2}>客户</th>
+                <th className="text-right py-2 px-2 font-medium text-gray-600 text-xs" rowSpan={2}>笔数</th>
+                <th className="text-center py-1 px-1 font-medium text-blue-600 text-xs border-b border-gray-200" colSpan={2}>运费</th>
+                <th className="text-center py-1 px-1 font-medium text-red-600 text-xs border-b border-gray-200" colSpan={2}>关税</th>
+                <th className="text-center py-1 px-1 font-medium text-amber-600 text-xs border-b border-gray-200" colSpan={2}>仓储</th>
+                <th className="text-center py-1 px-1 font-medium text-purple-600 text-xs border-b border-gray-200" colSpan={2}>操作费</th>
+                <th className="text-center py-1 px-1 font-medium text-gray-500 text-xs border-b border-gray-200" colSpan={2}>其他</th>
+                <th className="text-center py-2 px-2 font-medium text-gray-600 text-xs" rowSpan={2}>操作</th>
+              </tr>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-right py-1 px-1 font-medium text-green-600 text-xs">收</th>
+                <th className="text-right py-1 px-1 font-medium text-orange-600 text-xs">付</th>
+                <th className="text-right py-1 px-1 font-medium text-green-600 text-xs">收</th>
+                <th className="text-right py-1 px-1 font-medium text-orange-600 text-xs">付</th>
+                <th className="text-right py-1 px-1 font-medium text-green-600 text-xs">收</th>
+                <th className="text-right py-1 px-1 font-medium text-orange-600 text-xs">付</th>
+                <th className="text-right py-1 px-1 font-medium text-green-600 text-xs">收</th>
+                <th className="text-right py-1 px-1 font-medium text-orange-600 text-xs">付</th>
+                <th className="text-right py-1 px-1 font-medium text-green-600 text-xs">收</th>
+                <th className="text-right py-1 px-1 font-medium text-orange-600 text-xs">付</th>
               </tr>
             </thead>
             <tbody>
               {orderReportData?.list && orderReportData.list.length > 0 ? (
                 orderReportData.list.map((item) => {
-                  const freightAmt = Number(item.freightAmount || 0)
-                  const customsAmt = Number(item.customsAmount || 0)
-                  const warehouseAmt = Number(item.warehouseAmount || 0)
-                  const handlingAmt = Number(item.handlingAmount || 0)
-                  const insuranceAmt = Number(item.insuranceAmount || 0)
-                  const documentationAmt = Number(item.documentationAmount || 0)
-                  const otherAmt = Number(item.otherAmount || 0)
-                  const totalAmt = Number(item.totalAmount || 0)
-                  const miscAmt = insuranceAmt + documentationAmt + otherAmt
+                  const freightRec = Number(item.freightReceivable || 0)
+                  const freightPay = Number(item.freightPayable || 0)
+                  const customsRec = Number(item.customsReceivable || 0)
+                  const customsPay = Number(item.customsPayable || 0)
+                  const warehouseRec = Number(item.warehouseReceivable || 0)
+                  const warehousePay = Number(item.warehousePayable || 0)
+                  const handlingRec = Number(item.handlingReceivable || 0)
+                  const handlingPay = Number(item.handlingPayable || 0)
+                  const otherRec = Number(item.otherReceivable || 0)
+                  const otherPay = Number(item.otherPayable || 0)
                   
                   return (
                     <tr key={item.billId + item.customerId} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-3">
+                      <td className="py-2 px-2">
                         <div className="flex items-center gap-1">
-                          <span className="font-medium text-primary-600">
-                            {item.orderNumber || '-'}
-                          </span>
-                          {item.orderNumber && (
-                            <button
-                              onClick={(e) => copyToClipboard(item.orderNumber || '', e)}
-                              className="text-gray-400 hover:text-gray-600"
-                              title="复制订单号"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
+                          {item.orderNumber ? (
+                            <>
+                              <span 
+                                className="font-medium text-primary-600 hover:text-primary-700 hover:underline cursor-pointer text-xs"
+                                onClick={() => navigate(`/finance/bill-details/${item.billId}`)}
+                                title="点击查看提单详情"
+                              >
+                                {item.orderNumber}
+                              </span>
+                              <button
+                                onClick={(e) => copyToClipboard(item.orderNumber || '', e)}
+                                className="text-gray-400 hover:text-gray-600"
+                                title="复制订单号"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
                         </div>
                       </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center gap-1">
-                          <span 
-                            className="text-gray-900 hover:underline cursor-pointer"
-                            onClick={() => navigate(`/finance/bill-details/${item.billId}`)}
-                          >
-                            {item.billNumber}
-                          </span>
-                          {item.billNumber && (
+                      <td className="py-2 px-2">
+                        {item.billNumber ? (
+                          <div className="flex items-center gap-1">
+                            <span 
+                              className="text-gray-700 hover:underline cursor-pointer text-xs"
+                              onClick={() => navigate(`/finance/bill-details/${item.billId}`)}
+                            >
+                              {item.billNumber}
+                            </span>
                             <button
                               onClick={(e) => copyToClipboard(item.billNumber, e)}
                               className="text-gray-400 hover:text-gray-600"
@@ -259,35 +285,70 @@ export default function FinanceOrderReport() {
                             >
                               <Copy className="w-3 h-3" />
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
-                      <td className="py-3 px-3 text-gray-600">{item.customerName || '-'}</td>
-                      <td className="py-3 px-3 text-right text-gray-900">{item.feeCount}</td>
-                      <td className="py-3 px-3 text-right text-blue-600">
-                        {freightAmt > 0 ? formatCurrency(freightAmt) : '-'}
+                      <td className="py-2 px-2">
+                        {item.containerNumber ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-gray-700 text-xs">{item.containerNumber}</span>
+                            <button
+                              onClick={(e) => copyToClipboard(item.containerNumber || '', e)}
+                              className="text-gray-400 hover:text-gray-600"
+                              title="复制集装箱号"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
-                      <td className="py-3 px-3 text-right text-red-600">
-                        {customsAmt > 0 ? formatCurrency(customsAmt) : '-'}
+                      <td className="py-2 px-2 text-gray-600 text-xs">{item.customerName || '-'}</td>
+                      <td className="py-2 px-2 text-right text-gray-900 text-xs">{item.feeCount}</td>
+                      {/* 运费 */}
+                      <td className="py-2 px-1 text-right text-green-600 text-xs">
+                        {freightRec > 0 ? formatCurrency(freightRec) : '-'}
                       </td>
-                      <td className="py-3 px-3 text-right text-orange-600">
-                        {warehouseAmt > 0 ? formatCurrency(warehouseAmt) : '-'}
+                      <td className="py-2 px-1 text-right text-orange-600 text-xs">
+                        {freightPay > 0 ? formatCurrency(freightPay) : '-'}
                       </td>
-                      <td className="py-3 px-3 text-right text-purple-600">
-                        {handlingAmt > 0 ? formatCurrency(handlingAmt) : '-'}
+                      {/* 关税 */}
+                      <td className="py-2 px-1 text-right text-green-600 text-xs">
+                        {customsRec > 0 ? formatCurrency(customsRec) : '-'}
                       </td>
-                      <td className="py-3 px-3 text-right text-gray-600">
-                        {miscAmt > 0 ? formatCurrency(miscAmt) : '-'}
+                      <td className="py-2 px-1 text-right text-orange-600 text-xs">
+                        {customsPay > 0 ? formatCurrency(customsPay) : '-'}
                       </td>
-                      <td className="py-3 px-3 text-right font-bold text-green-600">
-                        {formatCurrency(totalAmt)}
+                      {/* 仓储 */}
+                      <td className="py-2 px-1 text-right text-green-600 text-xs">
+                        {warehouseRec > 0 ? formatCurrency(warehouseRec) : '-'}
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2 px-1 text-right text-orange-600 text-xs">
+                        {warehousePay > 0 ? formatCurrency(warehousePay) : '-'}
+                      </td>
+                      {/* 操作费 */}
+                      <td className="py-2 px-1 text-right text-green-600 text-xs">
+                        {handlingRec > 0 ? formatCurrency(handlingRec) : '-'}
+                      </td>
+                      <td className="py-2 px-1 text-right text-orange-600 text-xs">
+                        {handlingPay > 0 ? formatCurrency(handlingPay) : '-'}
+                      </td>
+                      {/* 其他 */}
+                      <td className="py-2 px-1 text-right text-green-600 text-xs">
+                        {otherRec > 0 ? formatCurrency(otherRec) : '-'}
+                      </td>
+                      <td className="py-2 px-1 text-right text-orange-600 text-xs">
+                        {otherPay > 0 ? formatCurrency(otherPay) : '-'}
+                      </td>
+                      <td className="py-2 px-2 text-center">
                         <button
                           onClick={() => navigate(`/finance/fees?billId=${item.billId}`)}
                           className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
                         >
-                          查看明细
+                          明细
                         </button>
                       </td>
                     </tr>
@@ -295,7 +356,7 @@ export default function FinanceOrderReport() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-gray-400">
+                  <td colSpan={16} className="py-12 text-center text-gray-400">
                     {loading ? (
                       <div className="flex items-center justify-center gap-2">
                         <RefreshCw className="w-4 h-4 animate-spin" />
@@ -310,29 +371,48 @@ export default function FinanceOrderReport() {
             </tbody>
             {orderReportData?.list && orderReportData.list.length > 0 && (
               <tfoot>
-                <tr className="bg-gray-50 font-medium">
-                  <td className="py-3 px-3 text-gray-900">合计</td>
-                  <td className="py-3 px-3 text-gray-600">{orderReportData.total} 个订单</td>
-                  <td className="py-3 px-3 text-right text-gray-900">{orderReportData.summary.feeCount}</td>
-                  <td className="py-3 px-3 text-right text-blue-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.freightAmount || 0), 0))}
+                <tr className="bg-gray-50 font-medium border-t-2 border-gray-300 text-xs">
+                  <td className="py-2 px-2 text-left text-gray-900">合计</td>
+                  <td className="py-2 px-2 text-left text-gray-600">{orderReportData.total} 个订单</td>
+                  <td className="py-2 px-2 text-left text-gray-600">-</td>
+                  <td className="py-2 px-2 text-left text-gray-600">-</td>
+                  <td className="py-2 px-2 text-right text-gray-900">{orderReportData.summary.feeCount}</td>
+                  {/* 运费 */}
+                  <td className="py-2 px-1 text-right text-green-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.freightReceivable || 0), 0))}
                   </td>
-                  <td className="py-3 px-3 text-right text-red-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.customsAmount || 0), 0))}
+                  <td className="py-2 px-1 text-right text-orange-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.freightPayable || 0), 0))}
                   </td>
-                  <td className="py-3 px-3 text-right text-orange-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.warehouseAmount || 0), 0))}
+                  {/* 关税 */}
+                  <td className="py-2 px-1 text-right text-green-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.customsReceivable || 0), 0))}
                   </td>
-                  <td className="py-3 px-3 text-right text-purple-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.handlingAmount || 0), 0))}
+                  <td className="py-2 px-1 text-right text-orange-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.customsPayable || 0), 0))}
                   </td>
-                  <td className="py-3 px-3 text-right text-gray-600">
-                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.insuranceAmount || 0) + Number(i.documentationAmount || 0) + Number(i.otherAmount || 0), 0))}
+                  {/* 仓储 */}
+                  <td className="py-2 px-1 text-right text-green-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.warehouseReceivable || 0), 0))}
                   </td>
-                  <td className="py-3 px-3 text-right font-bold text-green-600">
-                    {formatCurrency(Number(orderReportData.summary.totalAmount || 0))}
+                  <td className="py-2 px-1 text-right text-orange-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.warehousePayable || 0), 0))}
                   </td>
-                  <td></td>
+                  {/* 操作费 */}
+                  <td className="py-2 px-1 text-right text-green-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.handlingReceivable || 0), 0))}
+                  </td>
+                  <td className="py-2 px-1 text-right text-orange-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.handlingPayable || 0), 0))}
+                  </td>
+                  {/* 其他 */}
+                  <td className="py-2 px-1 text-right text-green-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.otherReceivable || 0), 0))}
+                  </td>
+                  <td className="py-2 px-1 text-right text-orange-600">
+                    {formatCurrency(orderReportData.list.reduce((sum, i) => sum + Number(i.otherPayable || 0), 0))}
+                  </td>
+                  <td className="py-2 px-2"></td>
                 </tr>
               </tfoot>
             )}

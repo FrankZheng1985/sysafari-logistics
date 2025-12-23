@@ -106,7 +106,7 @@ export async function createSupplier(req, res) {
     }
     
     // 检查编码是否已存在
-    if (model.checkSupplierCodeExists(supplierCode)) {
+    if (await model.checkSupplierCodeExists(supplierCode)) {
       return badRequest(res, '供应商编码已存在')
     }
     
@@ -144,7 +144,7 @@ export async function updateSupplier(req, res) {
     
     // 如果修改了编码，检查是否重复
     if (req.body.supplierCode && req.body.supplierCode !== existing.supplierCode) {
-      if (model.checkSupplierCodeExists(req.body.supplierCode, id)) {
+      if (await model.checkSupplierCodeExists(req.body.supplierCode, id)) {
         return badRequest(res, '供应商编码已存在')
       }
     }

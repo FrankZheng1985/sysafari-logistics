@@ -75,7 +75,7 @@ export default function ClearanceDocuments() {
   const [stats, setStats] = useState<ClearanceStats | null>(null)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   // 筛选条件
   const [searchValue, setSearchValue] = useState('')
@@ -106,7 +106,7 @@ export default function ClearanceDocuments() {
   useEffect(() => {
     loadDocuments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, filterType, filterStatus, activeTab])
+  }, [page, pageSize, searchValue, filterType, filterStatus, activeTab])
 
   const loadDocumentTypes = async () => {
     try {
@@ -494,6 +494,8 @@ export default function ClearanceDocuments() {
               page,
               pageSize,
               onChange: setPage,
+              showSizeChanger: true,
+              showTotal: (total) => `共 ${total} 条记录`,
             }}
             compact
           />

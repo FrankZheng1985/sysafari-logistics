@@ -41,7 +41,7 @@ export default function LabelCreateBatch() {
 
   const handleItemChange = (id: string, field: string, value: string) => {
     setItems((prev) =>
-      prev.map((record) => (record.id === id ? { ...item, [field]: value } : item))
+      prev.map((record) => (record.id === id ? { ...record, [field]: value } : record))
     )
     // 清除该字段的错误
     if (errors[id]?.[field]) {

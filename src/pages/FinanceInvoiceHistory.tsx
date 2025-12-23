@@ -7,6 +7,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -48,7 +49,7 @@ export default function FinanceInvoiceHistory() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   const [searchValue, setSearchValue] = useState('')
   const [filterType, setFilterType] = useState('')
@@ -69,7 +70,7 @@ export default function FinanceInvoiceHistory() {
     fetchInvoices()
     fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, filterType, filterStatus, searchValue])
+  }, [page, pageSize, filterType, filterStatus, searchValue])
 
   const fetchInvoices = async () => {
     try {
@@ -133,26 +134,13 @@ export default function FinanceInvoiceHistory() {
     return configs[status] || { label: status, color: 'text-gray-600', bg: 'bg-gray-100', icon: FileText }
   }
 
-  const formatDateTime = (dateStr: string | undefined) => {
-    if (!dateStr) return '-'
-    try {
-      return new Date(dateStr).toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    } catch {
-      return dateStr
-    }
-  }
 
   const columns: Column<Invoice>[] = useMemo(() => [
     {
       key: 'invoiceNumber',
       label: '发票号',
       width: 150,
+      sorter: true,
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900">{record.invoiceNumber}</div>
@@ -164,6 +152,7 @@ export default function FinanceInvoiceHistory() {
       key: 'invoiceType',
       label: '类型',
       width: 100,
+      sorter: true,
       render: (_value, record) => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
           record.invoiceType === 'sales' 
@@ -178,6 +167,7 @@ export default function FinanceInvoiceHistory() {
       key: 'customerName',
       label: '客户/供应商',
       width: 150,
+      sorter: true,
       render: (_value, record) => (
         <div>
           <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
@@ -192,6 +182,7 @@ export default function FinanceInvoiceHistory() {
       label: '金额',
       width: 120,
       align: 'right',
+      sorter: (a, b) => a.totalAmount - b.totalAmount,
       render: (_value, record) => (
         <div className="text-right">
           <div className="font-medium text-gray-900">{formatCurrency(record.totalAmount, record.currency)}</div>
@@ -206,6 +197,7 @@ export default function FinanceInvoiceHistory() {
       label: '已付金额',
       width: 120,
       align: 'right',
+      sorter: (a, b) => a.paidAmount - b.paidAmount,
       render: (_value, record) => (
         <div className="text-right">
           <div className="font-medium text-green-600">
@@ -218,6 +210,7 @@ export default function FinanceInvoiceHistory() {
       key: 'status',
       label: '状态',
       width: 100,
+      sorter: true,
       render: (_value, record) => {
         const config = getStatusConfig(record.status)
         const Icon = config.icon
@@ -233,6 +226,11 @@ export default function FinanceInvoiceHistory() {
       key: 'updateTime',
       label: '完成时间',
       width: 140,
+      sorter: (a, b) => {
+        const dateA = (a.updateTime || a.createTime) ? new Date(a.updateTime || a.createTime).getTime() : 0
+        const dateB = (b.updateTime || b.createTime) ? new Date(b.updateTime || b.createTime).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => (
         <span className="text-xs text-gray-500">
           {formatDateTime(record.updateTime || record.createTime)}
@@ -330,6 +328,7 @@ export default function FinanceInvoiceHistory() {
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选发票类型"
           >
             <option value="">全部类型</option>
             <option value="sales">销售发票</option>
@@ -341,6 +340,7 @@ export default function FinanceInvoiceHistory() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选发票状态"
           >
             <option value="">全部状态</option>
             <option value="paid">已付款</option>
@@ -360,7 +360,7 @@ export default function FinanceInvoiceHistory() {
       </div>
 
       {/* 分页 */}
-      {total > pageSize && (
+      {total > 0 && (
         <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500">
             共 {total} 条记录
@@ -374,7 +374,7 @@ export default function FinanceInvoiceHistory() {
               上一页
             </button>
             <span className="text-xs text-gray-600">
-              第 {page} / {Math.ceil(total / pageSize)} 页
+              第 {page} / {Math.ceil(total / pageSize) || 1} 页
             </span>
             <button
               onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
@@ -383,6 +383,19 @@ export default function FinanceInvoiceHistory() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

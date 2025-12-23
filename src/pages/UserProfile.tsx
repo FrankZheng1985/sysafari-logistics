@@ -36,7 +36,7 @@ export default function UserProfile() {
     {
       key: 'active',
       label: '激活',
-      render: (_value, record: Account) => (
+      render: (_value: unknown, record: Account) => (
         <div className={`w-12 h-6 rounded-full ${record.active ? 'bg-green-500' : 'bg-gray-300'}`}></div>
       ),
     },

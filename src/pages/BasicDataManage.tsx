@@ -710,8 +710,8 @@ export default function BasicDataManage() {
       label: '国家',
       sorter: (a, b) => (a.country || '').localeCompare(b.country || ''),
       filters: countries.map(item => ({ 
-        text: record.country, 
-        value: record.country 
+        text: item.country, 
+        value: item.country 
       })),
       onFilter: (value, record) => record.country === value,
     },
@@ -830,8 +830,8 @@ export default function BasicDataManage() {
       label: '国家',
       sorter: (a, b) => (a.country || '').localeCompare(b.country || ''),
       filters: destinationCountries.map(item => ({ 
-        text: record.country, 
-        value: record.country 
+        text: item.country, 
+        value: item.country 
       })),
       onFilter: (value, record) => record.country === value,
     },
@@ -916,8 +916,8 @@ export default function BasicDataManage() {
       label: '国家',
       sorter: (a, b) => (a.country || '').localeCompare(b.country || ''),
       filters: airPortCountries.map(item => ({ 
-        text: record.country, 
-        value: record.country 
+        text: item.country, 
+        value: item.country 
       })),
       onFilter: (value, record) => record.country === value,
     },
@@ -1352,16 +1352,16 @@ export default function BasicDataManage() {
 
   const handleToggleVatRateStatus = async (item: VatRate) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
-      const response = await updateVatRate(record.id, {
-        countryCode: record.countryCode,
-        countryName: record.countryName,
-        standardRate: record.standardRate,
-        reducedRate: record.reducedRate,
-        superReducedRate: record.superReducedRate,
-        parkingRate: record.parkingRate,
-        description: record.description,
-        effectiveDate: record.effectiveDate,
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const response = await updateVatRate(item.id, {
+        countryCode: item.countryCode,
+        countryName: item.countryName,
+        standardRate: item.standardRate,
+        reducedRate: item.reducedRate,
+        superReducedRate: item.superReducedRate,
+        parkingRate: item.parkingRate,
+        description: item.description,
+        effectiveDate: item.effectiveDate,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1415,13 +1415,13 @@ export default function BasicDataManage() {
 
   const handleToggleTransportMethodStatus = async (item: TransportMethod) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
-      const response = await updateTransportMethod(record.id, {
-        name: record.name,
-        code: record.code,
-        description: record.description,
-        icon: record.icon,
-        sortOrder: record.sortOrder,
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const response = await updateTransportMethod(item.id, {
+        name: item.name,
+        code: item.code,
+        description: item.description,
+        icon: item.icon,
+        sortOrder: item.sortOrder,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1475,12 +1475,12 @@ export default function BasicDataManage() {
 
   const handleToggleFeeCategoryStatus = async (item: ServiceFeeCategory) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
-      const response = await updateServiceFeeCategory(record.id, {
-        name: record.name,
-        code: record.code,
-        description: record.description,
-        sortOrder: record.sortOrder,
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const response = await updateServiceFeeCategory(item.id, {
+        name: item.name,
+        code: item.code,
+        description: item.description,
+        sortOrder: item.sortOrder,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1531,12 +1531,12 @@ export default function BasicDataManage() {
   // 切换基础数据状态
   const handleToggleBasicDataStatus = async (item: BasicDataItem) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
-      const response = await updateBasicData(record.id, {
-        name: record.name,
-        code: record.code,
-        category: record.category,
-        description: record.description,
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const response = await updateBasicData(item.id, {
+        name: item.name,
+        code: item.code,
+        category: item.category,
+        description: item.description,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1687,7 +1687,7 @@ export default function BasicDataManage() {
   // 切换起运地状态
   const handleTogglePortStatus = async (item: PortOfLoadingItem | AirPortItem) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
       
       // 如果选择的是空运港，更新空运港状态
       if (portTransportType === 'air') {
@@ -1815,15 +1815,15 @@ export default function BasicDataManage() {
   // 切换空运港状态
   const handleToggleAirPortStatus = async (item: AirPortItem) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
-      const response = await updateAirPort(record.id, {
-        portCode: record.portCode,
-        portNameCn: record.portNameCn,
-        portNameEn: record.portNameEn,
-        country: record.country,
-        countryCode: record.countryCode,
-        city: record.city,
-        description: record.description,
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const response = await updateAirPort(item.id, {
+        portCode: item.portCode,
+        portNameCn: item.portNameCn,
+        portNameEn: item.portNameEn,
+        country: item.country,
+        countryCode: item.countryCode,
+        city: item.city,
+        description: item.description,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1840,15 +1840,15 @@ export default function BasicDataManage() {
   // 切换目的地状态
   const handleToggleDestinationPortStatus = async (item: DestinationPortItem) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
-      const response = await updateDestinationPort(record.id, {
-        portCode: record.portCode,
-        portNameCn: record.portNameCn,
-        portNameEn: record.portNameEn,
-        country: record.country,
-        countryCode: record.countryCode,
-        city: record.city,
-        description: record.description,
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const response = await updateDestinationPort(item.id, {
+        portCode: item.portCode,
+        portNameCn: item.portNameCn,
+        portNameEn: item.portNameEn,
+        country: item.country,
+        countryCode: item.countryCode,
+        city: item.city,
+        description: item.description,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -1904,19 +1904,19 @@ export default function BasicDataManage() {
   // 切换国家状态
   const handleToggleCountryStatus = async (item: CountryItem) => {
     try {
-      const newStatus = record.status === 'active' ? 'inactive' : 'active'
-      const response = await updateCountry(record.id, {
-        countryCode: record.countryCode,
-        countryNameCn: record.countryNameCn,
-        countryNameEn: record.countryNameEn,
-        continent: record.continent,
-        region: record.region,
-        capital: record.capital,
-        currencyCode: record.currencyCode,
-        currencyName: record.currencyName,
-        phoneCode: record.phoneCode,
-        timezone: record.timezone,
-        description: record.description,
+      const newStatus = item.status === 'active' ? 'inactive' : 'active'
+      const response = await updateCountry(item.id, {
+        countryCode: item.countryCode,
+        countryNameCn: item.countryNameCn,
+        countryNameEn: item.countryNameEn,
+        continent: item.continent,
+        region: item.region,
+        capital: item.capital,
+        currencyCode: item.currencyCode,
+        currencyName: item.currencyName,
+        phoneCode: item.phoneCode,
+        timezone: item.timezone,
+        description: item.description,
         status: newStatus,
       })
       if (response.errCode === 200) {
@@ -2110,7 +2110,7 @@ export default function BasicDataManage() {
               searchableColumns={['companyName', 'companyCode', 'country', 'website']}
               compact={true}
               pagination={{
-                pageSize: 10,
+                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条记录`,
               }}
@@ -2143,7 +2143,7 @@ export default function BasicDataManage() {
               searchableColumns={['containerCode', 'companyName', 'companyCode', 'description']}
               compact={true}
               pagination={{
-                pageSize: 10,
+                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条记录`,
               }}
@@ -2320,7 +2320,7 @@ export default function BasicDataManage() {
                 searchableColumns={['portCode', 'portNameCn', 'portNameEn', 'country', 'city', 'description']}
                 compact={true}
                 pagination={{
-                  pageSize: 10,
+                  pageSize: 20,
                   showSizeChanger: true,
                   showTotal: (total) => `共 ${total} 条记录`,
                 }}
@@ -2354,7 +2354,7 @@ export default function BasicDataManage() {
               searchableColumns={['portCode', 'portNameCn', 'portNameEn', 'country', 'city']}
               compact={true}
               pagination={{
-                pageSize: 10,
+                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条记录`,
               }}
@@ -2543,7 +2543,7 @@ export default function BasicDataManage() {
                 searchableColumns={['portCode', 'portNameCn', 'portNameEn', 'country', 'city', 'description']}
                 compact={true}
                 pagination={{
-                  pageSize: 10,
+                  pageSize: 20,
                   showSizeChanger: true,
                   showTotal: (total) => `共 ${total} 条记录`,
                 }}
@@ -2577,7 +2577,7 @@ export default function BasicDataManage() {
               searchableColumns={['countryCode', 'countryNameCn', 'countryNameEn', 'capital', 'currencyCode', 'phoneCode', 'description']}
               compact={true}
               pagination={{
-                pageSize: 10,
+                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条记录`,
               }}
@@ -2599,7 +2599,7 @@ export default function BasicDataManage() {
               searchableColumns={['name', 'code', 'description']}
               compact={true}
               pagination={{
-                pageSize: 10,
+                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条记录`,
               }}
@@ -2621,7 +2621,7 @@ export default function BasicDataManage() {
               searchableColumns={['name', 'code', 'description']}
               compact={true}
               pagination={{
-                pageSize: 10,
+                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条记录`,
               }}
@@ -2643,7 +2643,7 @@ export default function BasicDataManage() {
               searchableColumns={['countryCode', 'countryName', 'description']}
               compact={true}
               pagination={{
-                pageSize: 10,
+                pageSize: 20,
                 showSizeChanger: true,
                 showTotal: (total) => `共 ${total} 条记录`,
               }}

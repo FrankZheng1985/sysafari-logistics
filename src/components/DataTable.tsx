@@ -72,7 +72,7 @@ export default function DataTable<T extends Record<string, any>>({
   const [sortOrder, setSortOrder] = useState<SortOrder>(null)
   const [filterStates, setFilterStates] = useState<Record<string, string[]>>(initialFilters || {})
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(pagination?.pageSize || 10)
+  const [pageSize, setPageSize] = useState(pagination?.pageSize || 20)
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>(
     rowSelection?.selectedRowKeys || []
   )
@@ -151,9 +151,10 @@ export default function DataTable<T extends Record<string, any>>({
               column.onFilter!(value, record)
             )
           }
-          const cellValue = String(record[columnKey] || '')
-          return filterStates[columnKey].some((value) =>
-            cellValue.toLowerCase().includes(value.toLowerCase())
+          // 对数据值进行标准化处理（trim），与筛选选项生成逻辑保持一致
+          const cellValue = String(record[columnKey] || '').trim()
+          return filterStates[columnKey].some((filterValue) =>
+            cellValue === filterValue // 精确匹配（已标准化的值）
           )
         })
       }
@@ -170,15 +171,28 @@ export default function DataTable<T extends Record<string, any>>({
     if (!column || !column.sorter) return filteredData
 
     const sorted = [...filteredData].sort((a, b) => {
+      let result: number
       if (typeof column.sorter === 'function') {
-        return column.sorter(a, b)
+        result = column.sorter(a, b)
+      } else {
+        // Default string/number comparison
+        const aVal = a[sortColumn]
+        const bVal = b[sortColumn]
+        
+        // 空值处理：空值、null、undefined、'-' 始终排在最后
+        const aEmpty = aVal === null || aVal === undefined || aVal === '' || aVal === '-'
+        const bEmpty = bVal === null || bVal === undefined || bVal === '' || bVal === '-'
+        
+        if (aEmpty && bEmpty) return 0
+        if (aEmpty) return 1  // a 为空，排后面
+        if (bEmpty) return -1 // b 为空，排后面
+        
+        if (aVal < bVal) result = -1
+        else if (aVal > bVal) result = 1
+        else result = 0
       }
-      // Default string/number comparison
-      const aVal = a[sortColumn]
-      const bVal = b[sortColumn]
-      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
-      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
-      return 0
+      // 根据排序方向调整结果
+      return sortOrder === 'desc' ? -result : result
     })
 
     return sorted
@@ -372,8 +386,9 @@ export default function DataTable<T extends Record<string, any>>({
         <div className="p-3 space-y-2">
           {/* 年份选择 */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 w-8">年</span>
+            <label htmlFor={`date-filter-year-${column.key}`} className="text-xs text-gray-500 w-8">年</label>
             <select
+              id={`date-filter-year-${column.key}`}
               value={currentYear}
               onChange={(e) => handleDateFilterChange('year', e.target.value)}
               className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -439,17 +454,42 @@ export default function DataTable<T extends Record<string, any>>({
     let filterOptions = column.filters || []
     
     if (filterOptions.length === 0 && column.filterable) {
-      // 从完整数据中动态生成筛选选项（不限制数量）
-      const uniqueValues = new Set<string>()
+      // 从完整数据中动态生成筛选选项（去重 + 计数）
+      // 使用 Map 存储：key 为标准化后的值（用于去重），value 为 { displayText, count, originalValue }
+      const valueCounts = new Map<string, { displayText: string; count: number; originalValue: string }>()
+      
       data.forEach(record => {
-        const value = record[column.key]
-        if (value !== null && value !== undefined && value !== '') {
-          uniqueValues.add(String(value))
+        const rawValue = record[column.key]
+        if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
+          // 标准化处理：去除前后空格
+          const trimmedValue = String(rawValue).trim()
+          if (trimmedValue === '') return
+          
+          // 使用小写作为去重 key（可选，如需区分大小写可去掉 toLowerCase）
+          const normalizedKey = trimmedValue
+          
+          if (valueCounts.has(normalizedKey)) {
+            // 已存在，增加计数
+            const existing = valueCounts.get(normalizedKey)!
+            existing.count++
+          } else {
+            // 新值，初始化
+            valueCounts.set(normalizedKey, {
+              displayText: trimmedValue,
+              count: 1,
+              originalValue: trimmedValue
+            })
+          }
         }
       })
-      filterOptions = Array.from(uniqueValues)
-        .sort()
-        .map(value => ({ text: value, value }))
+      
+      // 转换为筛选选项数组，按数量降序排列
+      filterOptions = Array.from(valueCounts.values())
+        .sort((a, b) => b.count - a.count) // 按数量降序
+        .map(item => ({ 
+          text: `${item.displayText}（${item.count}）`, 
+          value: item.originalValue 
+        }))
     }
 
     return (
@@ -487,21 +527,19 @@ export default function DataTable<T extends Record<string, any>>({
                   key={filter.value}
                   className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded"
                 >
-                  <span className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(e) => {
-                        e.stopPropagation()
-                        const newFilters = e.target.checked
-                          ? [...activeFilters, filter.value]
-                          : activeFilters.filter((v) => v !== filter.value)
-                        handleFilter(column.key, newFilters)
-                      }}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer filter-checkbox"
-                      title={`筛选: ${filter.text}`}
-                    />
-                  </span>
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      e.stopPropagation()
+                      const newFilters = e.target.checked
+                        ? [...activeFilters, filter.value]
+                        : activeFilters.filter((v) => v !== filter.value)
+                      handleFilter(column.key, newFilters)
+                    }}
+                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer filter-checkbox flex-shrink-0"
+                    title={`筛选: ${filter.text}`}
+                  />
                   <span className="text-sm text-gray-700 break-words">{filter.text}</span>
                 </label>
               )
@@ -650,6 +688,7 @@ export default function DataTable<T extends Record<string, any>>({
                         checked={isSelected}
                         onChange={() => handleSelectRow(key, item)}
                         className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} text-primary-600 border-gray-300 rounded focus:ring-primary-500`}
+                        title="选择此行"
                       />
                     </td>
                   )}
@@ -706,21 +745,21 @@ export default function DataTable<T extends Record<string, any>>({
             >
               下一页
             </button>
-            {pagination.showSizeChanger && (
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
-                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-              >
-                <option value={10}>10 条/页</option>
-                <option value={20}>20 条/页</option>
-                <option value={50}>50 条/页</option>
-                <option value={100}>100 条/页</option>
-              </select>
-            )}
+                {pagination.showSizeChanger && (
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value))
+                      setCurrentPage(1)
+                    }}
+                    className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                    title="每页显示条数"
+                  >
+                    <option value={20}>20 条/页</option>
+                    <option value={50}>50 条/页</option>
+                    <option value={100}>100 条/页</option>
+                  </select>
+                )}
           </div>
         </div>
       )}

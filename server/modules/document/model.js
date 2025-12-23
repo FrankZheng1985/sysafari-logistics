@@ -77,68 +77,72 @@ export async function getDocuments(params = {}) {
     userId
   } = params
   
-  let query = 'SELECT * FROM documents WHERE 1=1'
+  // 使用 LEFT JOIN 获取订单的 order_seq 以生成订单号
+  let query = `SELECT d.*, b.order_seq, b.created_at as bill_created_at 
+    FROM documents d 
+    LEFT JOIN bills b ON d.bill_id = b.id 
+    WHERE 1=1`
   const queryParams = []
   
   // 状态过滤
   if (status) {
-    query += ' AND status = ?'
+    query += ' AND d.status = ?'
     queryParams.push(status)
   }
   
   // 订单关联过滤
   if (billId) {
-    query += ' AND bill_id = ?'
+    query += ' AND d.bill_id = ?'
     queryParams.push(billId)
   }
   
   if (billNumber) {
-    query += ' AND bill_number = ?'
+    query += ' AND d.bill_number = ?'
     queryParams.push(billNumber)
   }
   
   // 客户过滤
   if (customerId) {
-    query += ' AND customer_id = ?'
+    query += ' AND d.customer_id = ?'
     queryParams.push(customerId)
   }
   
   // 文档类型过滤
   if (documentType) {
-    query += ' AND document_type = ?'
+    query += ' AND d.document_type = ?'
     queryParams.push(documentType)
   }
   
   // 访问级别过滤
   if (accessLevel) {
-    query += ' AND access_level = ?'
+    query += ' AND d.access_level = ?'
     queryParams.push(accessLevel)
   }
   
   // 上传人过滤
   if (uploadedBy) {
-    query += ' AND uploaded_by = ?'
+    query += ' AND d.uploaded_by = ?'
     queryParams.push(uploadedBy)
   }
   
   // 日期范围过滤
   if (startDate) {
-    query += ' AND upload_time >= ?'
+    query += ' AND d.upload_time >= ?'
     queryParams.push(startDate)
   }
   
   if (endDate) {
-    query += ' AND upload_time <= ?'
+    query += ' AND d.upload_time <= ?'
     queryParams.push(endDate)
   }
   
   // 搜索
   if (search) {
     query += ` AND (
-      document_name LIKE ? OR 
-      original_name LIKE ? OR 
-      bill_number LIKE ? OR
-      description LIKE ?
+      d.document_name LIKE ? OR 
+      d.original_name LIKE ? OR 
+      d.bill_number LIKE ? OR
+      d.description LIKE ?
     )`
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern)
@@ -152,24 +156,24 @@ export async function getDocuments(params = {}) {
     // 3. 财务角色可以看到财务相关文档
     if (userRole === 'finance') {
       query += ` AND (
-        is_public = true OR 
-        uploaded_by = ? OR 
-        access_level = 'finance' OR
-        document_type IN (${FINANCE_DOCUMENT_TYPES.map(() => '?').join(',')})
+        d.is_public = true OR 
+        d.uploaded_by = ? OR 
+        d.access_level = 'finance' OR
+        d.document_type IN (${FINANCE_DOCUMENT_TYPES.map(() => '?').join(',')})
       )`
       queryParams.push(userId, ...FINANCE_DOCUMENT_TYPES)
     } else {
-      query += ' AND (is_public = true OR uploaded_by = ?)'
+      query += ' AND (d.is_public = true OR d.uploaded_by = ?)'
       queryParams.push(userId)
     }
   }
   
   // 获取总数
-  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const countQuery = query.replace(/SELECT d\.\*, b\.order_seq, b\.created_at as bill_created_at/, 'SELECT COUNT(*) as total')
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
-  query += ' ORDER BY upload_time DESC LIMIT ? OFFSET ?'
+  query += ' ORDER BY d.upload_time DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
@@ -587,6 +591,14 @@ export function convertDocumentToCamelCase(row) {
     }
   }
   
+  // 根据 order_seq 生成订单号
+  let orderNumber = null
+  if (row.order_seq) {
+    const createDate = row.bill_created_at ? new Date(row.bill_created_at) : new Date()
+    const year = createDate.getFullYear().toString().slice(-2)
+    orderNumber = `BP${year}${String(row.order_seq).padStart(5, '0')}`
+  }
+  
   return {
     id: row.id,
     documentNumber: row.document_number,
@@ -597,6 +609,7 @@ export function convertDocumentToCamelCase(row) {
     // 订单关联
     billId: row.bill_id,
     billNumber: row.bill_number,
+    orderNumber,  // 订单号
     customerId: row.customer_id,
     customerName: row.customer_name,
     // COS存储信息

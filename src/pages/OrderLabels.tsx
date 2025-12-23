@@ -181,9 +181,9 @@ export default function OrderLabels() {
 
   const statusCounts = {
     all: mockData.length,
-    success: mockData.filter(item => record.status === '成功').length,
-    generating: mockData.filter(item => record.status === '生成中').length,
-    failed: mockData.filter(item => record.status === '失败').length,
+    success: mockData.filter(item => item.status === '成功').length,
+    generating: mockData.filter(item => item.status === '生成中').length,
+    failed: mockData.filter(item => item.status === '失败').length,
   }
 
   return (
@@ -241,7 +241,7 @@ export default function OrderLabels() {
           visibleColumns={visibleColumns}
           compact={true}
           pagination={{
-            pageSize: 10,
+            pageSize: 20,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条记录`,
           }}

@@ -68,7 +68,7 @@ export default function HSMatchRecords() {
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(20)
   const [keyword, setKeyword] = useState('')
   const [hsCodeFilter, setHsCodeFilter] = useState('')
   
@@ -493,7 +493,6 @@ export default function HSMatchRecords() {
               }}
               className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
             >
-              <option value={10}>10 条/页</option>
               <option value={20}>20 条/页</option>
               <option value={50}>50 条/页</option>
               <option value={100}>100 条/页</option>

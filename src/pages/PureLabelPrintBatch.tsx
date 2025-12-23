@@ -64,7 +64,7 @@ export default function PureLabelPrintBatch() {
       setSelectedIds(new Set())
       setSelectAll(false)
     } else {
-      setSelectedIds(new Set(mockData.map(item => record.id)))
+      setSelectedIds(new Set(mockData.map(item => item.id)))
       setSelectAll(true)
     }
   }
@@ -275,7 +275,7 @@ export default function PureLabelPrintBatch() {
                 data={mockData}
                 rowKey="id"
                 pagination={{
-                  pageSize: 10,
+                  pageSize: 20,
                   showSizeChanger: true,
                   showTotal: (total) => `共 ${total} 条记录`,
                 }}

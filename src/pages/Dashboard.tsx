@@ -34,6 +34,20 @@ export default function Dashboard() {
       ),
     },
     {
+      key: 'orderNumber',
+      label: '订单号',
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span 
+            className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
+            onClick={() => navigate(`/bookings/bill/${record.id}`)}
+          >
+            {record.orderNumber || '-'}
+          </span>
+        </div>
+      ),
+    },
+    {
       key: 'billNumber',
       label: '提单号',
       render: (_value, record: BillOfLading) => (
@@ -228,7 +242,7 @@ export default function Dashboard() {
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

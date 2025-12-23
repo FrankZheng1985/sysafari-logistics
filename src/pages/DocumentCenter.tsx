@@ -8,6 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DocumentUpload from '../components/DocumentUpload'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -61,21 +62,6 @@ const formatFileSize = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 格式化日期
-const formatDate = (dateStr: string | null | undefined) => {
-  if (!dateStr) return '-'
-  try {
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return dateStr
-  }
-}
 
 interface Document {
   id: string
@@ -86,6 +72,7 @@ interface Document {
   documentTypeLabel: string
   billId: string | null
   billNumber: string | null
+  orderNumber: string | null  // 订单号
   customerId: string | null
   customerName: string | null
   cosKey: string
@@ -448,7 +435,8 @@ export default function DocumentCenter() {
                 </th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500">文档</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500">类型</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">关联订单</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-500">订单号</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-500">提单号</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500">大小</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500">上传者</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500">上传时间</th>
@@ -458,14 +446,14 @@ export default function DocumentCenter() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-gray-400">
+                  <td colSpan={9} className="px-3 py-8 text-center text-gray-400">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                     加载中...
                   </td>
                 </tr>
               ) : documents.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-gray-400">
+                  <td colSpan={9} className="px-3 py-8 text-center text-gray-400">
                     <FolderOpen className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     暂无文档
                   </td>
@@ -505,10 +493,22 @@ export default function DocumentCenter() {
                       {getDocTypeBadge(doc.documentType, doc.documentTypeLabel)}
                     </td>
                     <td className="px-3 py-2">
+                      {doc.orderNumber ? (
+                        <button
+                          onClick={() => navigate(`/bookings/bill/${doc.billId}`)}
+                          className="text-primary-600 hover:underline text-xs font-medium"
+                        >
+                          {doc.orderNumber}
+                        </button>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
                       {doc.billNumber ? (
                         <button
-                          onClick={() => navigate(`/bookings/detail/${doc.billId}`)}
-                          className="text-primary-600 hover:underline"
+                          onClick={() => navigate(`/bookings/bill/${doc.billId}`)}
+                          className="text-gray-600 hover:underline text-xs"
                         >
                           {doc.billNumber}
                         </button>
@@ -523,7 +523,7 @@ export default function DocumentCenter() {
                       {doc.uploadedByName || '-'}
                     </td>
                     <td className="px-3 py-2 text-gray-500">
-                      {formatDate(doc.uploadTime)}
+                      {formatDateTime(doc.uploadTime)}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-center gap-1">

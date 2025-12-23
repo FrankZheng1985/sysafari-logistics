@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { FileText, Plus, RefreshCw, Archive, Trash2, CheckCircle, RotateCcw, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
@@ -10,6 +10,7 @@ import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../compo
 import { getBillsList, voidBill, restoreBill, publishDraft, type BillOfLading, type BillStats, getApiBaseUrl } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
 import { copyToClipboard } from '../components/Toast'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -18,26 +19,11 @@ const textPrimary = "text-gray-900"
 const textSecondary = "text-gray-500"
 const textMuted = "text-gray-400"
 
-// 格式化日期时间
-const formatDateTime = (dateStr: string | undefined | null) => {
-  if (!dateStr) return '-'
-  try {
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return dateStr
-  }
-}
-
 export default function OrderBills() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchValue, setSearchValue] = useState('')
+  const [debouncedSearchValue, setDebouncedSearchValue] = useState('')
   const [createBillModalVisible, setCreateBillModalVisible] = useState(false)
   const [bills, setBills] = useState<BillOfLading[]>([])
   const [loading, setLoading] = useState(false)
@@ -95,6 +81,14 @@ export default function OrderBills() {
   const isDraftTab = activeTabPath === '/bookings/bill/draft'
   const isVoidTab = activeTabPath === '/bookings/bill/void'
   
+  // 防抖搜索：300ms 延迟
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchValue(searchValue)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchValue])
+  
   // 从 API 获取数据
   useEffect(() => {
     const loadBills = async () => {
@@ -106,8 +100,8 @@ export default function OrderBills() {
           page: 1,
           pageSize: 1000,
         }
-        if (searchValue && searchValue.trim()) {
-          params.search = searchValue.trim()
+        if (debouncedSearchValue && debouncedSearchValue.trim()) {
+          params.search = debouncedSearchValue.trim()
         }
         const response = await getBillsList(params)
         
@@ -148,7 +142,7 @@ export default function OrderBills() {
     }
     
     loadBills()
-  }, [isDraftTab, isVoidTab, searchValue, refreshKey])
+  }, [isDraftTab, isVoidTab, debouncedSearchValue, refreshKey])
   
   // 作废提单
   const handleVoidBill = async (bill: BillOfLading) => {
@@ -362,12 +356,16 @@ export default function OrderBills() {
       key: 'createTime',
       label: '创建时间',
       sorter: (a, b) => {
-        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
-        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        // 空值始终排在最后
+        if (!a.createTime && !b.createTime) return 0
+        if (!a.createTime) return 1
+        if (!b.createTime) return -1
+        const dateA = new Date(a.createTime).getTime()
+        const dateB = new Date(b.createTime).getTime()
         return dateA - dateB
       },
       render: (_value, record: BillOfLading) => (
-        <span className={textSecondary}>{formatDateTime(record.createTime)}</span>
+        <span className={textSecondary}>{formatDate(record.createTime)}</span>
       ),
     },
     {
@@ -629,8 +627,12 @@ export default function OrderBills() {
       key: 'etd',
       label: 'ETD',
       sorter: (a, b) => {
-        const dateA = a.etd ? new Date(a.etd).getTime() : 0
-        const dateB = b.etd ? new Date(b.etd).getTime() : 0
+        // 空值始终排在最后
+        if (!a.etd && !b.etd) return 0
+        if (!a.etd) return 1  // a 为空，排后面
+        if (!b.etd) return -1 // b 为空，排后面
+        const dateA = new Date(a.etd).getTime()
+        const dateB = new Date(b.etd).getTime()
         return dateA - dateB
       },
       dateFilterable: true,
@@ -643,8 +645,12 @@ export default function OrderBills() {
       key: 'eta',
       label: 'ETA/ATA',
       sorter: (a, b) => {
-        const dateA = a.eta ? new Date(a.eta).getTime() : 0
-        const dateB = b.eta ? new Date(b.eta).getTime() : 0
+        // 空值始终排在最后
+        if (!a.eta && !b.eta) return 0
+        if (!a.eta) return 1
+        if (!b.eta) return -1
+        const dateA = new Date(a.eta).getTime()
+        const dateB = new Date(b.eta).getTime()
         return dateA - dateB
       },
       dateFilterable: true,
@@ -662,8 +668,12 @@ export default function OrderBills() {
       key: 'customsClearedDate',
       label: '清关完成',
       sorter: (a, b) => {
-        const dateA = a.customsReleaseTime ? new Date(a.customsReleaseTime).getTime() : 0
-        const dateB = b.customsReleaseTime ? new Date(b.customsReleaseTime).getTime() : 0
+        // 空值始终排在最后
+        if (!a.customsReleaseTime && !b.customsReleaseTime) return 0
+        if (!a.customsReleaseTime) return 1
+        if (!b.customsReleaseTime) return -1
+        const dateA = new Date(a.customsReleaseTime).getTime()
+        const dateB = new Date(b.customsReleaseTime).getTime()
         return dateA - dateB
       },
       dateFilterable: true,
@@ -678,8 +688,12 @@ export default function OrderBills() {
       key: 'dischargeDate',
       label: '卸货日期',
       sorter: (a, b) => {
-        const dateA = a.cmrUnloadingCompleteTime ? new Date(a.cmrUnloadingCompleteTime).getTime() : 0
-        const dateB = b.cmrUnloadingCompleteTime ? new Date(b.cmrUnloadingCompleteTime).getTime() : 0
+        // 空值始终排在最后
+        if (!a.cmrUnloadingCompleteTime && !b.cmrUnloadingCompleteTime) return 0
+        if (!a.cmrUnloadingCompleteTime) return 1
+        if (!b.cmrUnloadingCompleteTime) return -1
+        const dateA = new Date(a.cmrUnloadingCompleteTime).getTime()
+        const dateB = new Date(b.cmrUnloadingCompleteTime).getTime()
         return dateA - dateB
       },
       dateFilterable: true,
@@ -740,10 +754,19 @@ export default function OrderBills() {
     {
       key: 'creator',
       label: '创建者/时间',
+      sorter: (a, b) => {
+        // 空值始终排在最后
+        if (!a.createTime && !b.createTime) return 0
+        if (!a.createTime) return 1
+        if (!b.createTime) return -1
+        const dateA = new Date(a.createTime).getTime()
+        const dateB = new Date(b.createTime).getTime()
+        return dateA - dateB
+      },
       render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
           <div className={`font-medium ${textPrimary}`}>{record.creator || '-'}</div>
-          <div className={`text-xs ${textMuted}`}>{formatDateTime(record.createTime)}</div>
+          <div className={`text-xs ${textMuted}`}>{formatDate(record.createTime)}</div>
         </div>
       ),
     },
@@ -844,7 +867,8 @@ export default function OrderBills() {
             navigate(path)
           }
         }}
-        searchPlaceholder={isDraftTab ? "搜索提单ID..." : "搜索提单号、集装箱号..."}
+        searchPlaceholder={isDraftTab ? "搜索订单号、提单号..." : "搜索订单号、提单号、集装箱号..."}
+        defaultSearchValue={searchValue}
         onSearch={setSearchValue}
         onSettingsClick={handleSettingsClick}
         summary={
@@ -893,7 +917,7 @@ export default function OrderBills() {
             data={displayBills}
             loading={loading}
             searchValue={searchValue}
-            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'companyName'] : ['billNumber', 'containerNumber', 'vessel']}
+            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'orderNumber', 'companyName'] : ['orderNumber', 'billNumber', 'containerNumber', 'vessel']}
             visibleColumns={visibleColumns}
             compact={true}
             initialFilters={tableFilters}

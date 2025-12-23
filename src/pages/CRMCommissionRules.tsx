@@ -138,7 +138,7 @@ export default function CRMCommissionRules() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(20)
   const [searchValue, setSearchValue] = useState('')
   const [filterType, setFilterType] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'reward' | 'penalty'>('reward') // 奖励/惩罚切换
@@ -206,7 +206,7 @@ export default function CRMCommissionRules() {
   useEffect(() => {
     loadRules()
     loadPenaltyRules()
-  }, [page, filterType])
+  }, [page, pageSize, filterType])
 
   const loadRules = async () => {
     setLoading(true)
@@ -927,6 +927,19 @@ export default function CRMCommissionRules() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

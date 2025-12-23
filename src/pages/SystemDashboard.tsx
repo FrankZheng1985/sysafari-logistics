@@ -454,20 +454,27 @@ export default function SystemDashboard() {
             </button>
           </div>
           <div className="space-y-3">
-            {recentActivities.map(activity => (
-              <div key={activity.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50">
-                <div className="p-1.5 bg-gray-100 rounded-lg">
-                  {getActivityIcon(activity.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">{activity.action}</span>
-                    <span className="text-xs text-gray-400">{activity.time}</span>
+            {recentActivities.length > 0 ? (
+              recentActivities.map(activity => (
+                <div key={activity.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50">
+                  <div className="p-1.5 bg-gray-100 rounded-lg">
+                    {getActivityIcon(activity.type)}
                   </div>
-                  <p className="text-xs text-gray-500 truncate">{activity.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">{activity.action}</span>
+                      <span className="text-xs text-gray-400">{activity.time}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">{activity.description}</p>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                <Clock className="w-8 h-8 mb-2" />
+                <p className="text-sm">暂无最近活动</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

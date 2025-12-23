@@ -334,14 +334,14 @@ export default function SecuritySettings() {
     { 
       key: 'loginTime', 
       label: '登录时间',
-      render: (_value, record: LoginLog) => new Date(record.loginTime).toLocaleString('zh-CN')
+      render: (_value: unknown, record: LoginLog) => new Date(record.loginTime).toLocaleString('zh-CN')
     },
     { key: 'username', label: '用户名' },
     { key: 'ipAddress', label: 'IP地址' },
     { 
       key: 'status', 
       label: '状态',
-      render: (_value, record: LoginLog) => (
+      render: (_value: unknown, record: LoginLog) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
           record.status === 'success' ? 'bg-green-100 text-green-700' :
           record.status === 'failed' ? 'bg-red-100 text-red-700' :
@@ -359,12 +359,12 @@ export default function SecuritySettings() {
     { 
       key: 'failureReason', 
       label: '失败原因',
-      render: (_value, record: LoginLog) => record.failureReason || '-'
+      render: (_value: unknown, record: LoginLog) => record.failureReason || '-'
     },
     { 
       key: 'userAgent', 
       label: '设备',
-      render: (_value, record: LoginLog) => {
+      render: (_value: unknown, record: LoginLog) => {
         const ua = record.userAgent || ''
         if (ua.includes('Chrome')) return 'Chrome'
         if (ua.includes('Firefox')) return 'Firefox'
@@ -557,7 +557,6 @@ export default function SecuritySettings() {
                     aria-label="每页显示条数"
                     className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
                   >
-                    <option value={10}>10 条/页</option>
                     <option value={20}>20 条/页</option>
                     <option value={50}>50 条/页</option>
                     <option value={100}>100 条/页</option>

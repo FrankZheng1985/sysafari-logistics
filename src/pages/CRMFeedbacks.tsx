@@ -50,7 +50,7 @@ export default function CRMFeedbacks() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   const [searchValue, setSearchValue] = useState('')
   const [filterType, setFilterType] = useState<string>('')
   const [filterStatus, setFilterStatus] = useState<string>('')
@@ -73,7 +73,7 @@ export default function CRMFeedbacks() {
   useEffect(() => {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, filterType, filterStatus])
+  }, [page, pageSize, searchValue, filterType, filterStatus])
 
   const loadData = async () => {
     setLoading(true)
@@ -194,10 +194,10 @@ export default function CRMFeedbacks() {
   }
 
   const handleDelete = async (item: Feedback) => {
-    if (!confirm(`确定要删除反馈"${record.subject}"吗？`)) return
+    if (!confirm(`确定要删除反馈"${item.subject}"吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE}/api/feedbacks/${record.id}`, {
+      const response = await fetch(`${API_BASE}/api/feedbacks/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -244,6 +244,7 @@ export default function CRMFeedbacks() {
       key: 'feedbackNumber',
       label: '反馈编号',
       width: 130,
+      sorter: true,
       render: (_value, record) => (
         <span className="text-primary-600 font-medium text-xs">{record.feedbackNumber}</span>
       )
@@ -252,6 +253,14 @@ export default function CRMFeedbacks() {
       key: 'feedbackType',
       label: '类型',
       width: 80,
+      sorter: true,
+      filters: [
+        { text: '投诉', value: 'complaint' },
+        { text: '建议', value: 'suggestion' },
+        { text: '咨询', value: 'inquiry' },
+        { text: '表扬', value: 'praise' },
+      ],
+      onFilter: (value, record) => record.feedbackType === value,
       render: (_value, record) => {
         const info = getTypeInfo(record.feedbackType)
         const Icon = info.icon
@@ -267,6 +276,8 @@ export default function CRMFeedbacks() {
       key: 'subject',
       label: '主题',
       width: 200,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900 text-xs line-clamp-1">{record.subject}</div>
@@ -278,6 +289,8 @@ export default function CRMFeedbacks() {
       key: 'customerName',
       label: '客户',
       width: 120,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <span className="text-xs text-gray-700">{record.customerName || '-'}</span>
       )
@@ -286,6 +299,14 @@ export default function CRMFeedbacks() {
       key: 'priority',
       label: '优先级',
       width: 70,
+      sorter: true,
+      filters: [
+        { text: '低', value: 'low' },
+        { text: '中', value: 'medium' },
+        { text: '高', value: 'high' },
+        { text: '紧急', value: 'urgent' },
+      ],
+      onFilter: (value, record) => record.priority === value,
       render: (_value, record) => {
         const info = getPriorityInfo(record.priority)
         return (
@@ -299,6 +320,8 @@ export default function CRMFeedbacks() {
       key: 'assignedName',
       label: '处理人',
       width: 80,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <span className="text-xs text-gray-600">{record.assignedName || '-'}</span>
       )
@@ -307,6 +330,14 @@ export default function CRMFeedbacks() {
       key: 'status',
       label: '状态',
       width: 90,
+      sorter: true,
+      filters: [
+        { text: '待处理', value: 'open' },
+        { text: '处理中', value: 'processing' },
+        { text: '已解决', value: 'resolved' },
+        { text: '已关闭', value: 'closed' },
+      ],
+      onFilter: (value, record) => record.status === value,
       render: (_value, record) => {
         const info = getStatusInfo(record.status)
         const Icon = info.icon
@@ -322,6 +353,11 @@ export default function CRMFeedbacks() {
       key: 'createTime',
       label: '创建时间',
       width: 100,
+      sorter: (a, b) => {
+        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
+        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => (
         <span className="text-xs text-gray-500">
           {record.createTime ? new Date(record.createTime).toLocaleDateString() : '-'}
@@ -441,6 +477,7 @@ export default function CRMFeedbacks() {
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选反馈类型"
           >
             <option value="">全部类型</option>
             <option value="complaint">投诉</option>
@@ -453,6 +490,7 @@ export default function CRMFeedbacks() {
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选反馈状态"
           >
             <option value="">全部状态</option>
             <option value="open">待处理</option>
@@ -498,6 +536,19 @@ export default function CRMFeedbacks() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}
@@ -508,7 +559,7 @@ export default function CRMFeedbacks() {
           <div className="bg-white rounded-lg w-[560px] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-sm font-medium">新建反馈</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -528,6 +579,7 @@ export default function CRMFeedbacks() {
                       })
                     }}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择客户"
                   >
                     <option value="">请选择客户</option>
                     {customers.map(c => (
@@ -541,6 +593,7 @@ export default function CRMFeedbacks() {
                     value={formData.feedbackType}
                     onChange={(e) => setFormData({...formData, feedbackType: e.target.value})}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择反馈类型"
                   >
                     <option value="inquiry">咨询</option>
                     <option value="suggestion">建议</option>
@@ -557,6 +610,7 @@ export default function CRMFeedbacks() {
                     value={formData.priority}
                     onChange={(e) => setFormData({...formData, priority: e.target.value})}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择优先级"
                   >
                     <option value="low">低</option>
                     <option value="medium">中</option>
@@ -641,6 +695,7 @@ export default function CRMFeedbacks() {
                   setResolution('')
                 }} 
                 className="p-1 hover:bg-gray-100 rounded"
+                title="关闭"
               >
                 <X className="w-4 h-4" />
               </button>

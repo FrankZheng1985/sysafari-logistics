@@ -127,6 +127,7 @@ export default function CMRExceptionManage() {
     {
       key: 'billNumber',
       label: '提单号',
+      sorter: true,
       render: (_value, record) => (
         <span 
           className="text-primary-600 hover:underline cursor-pointer font-medium"
@@ -139,11 +140,13 @@ export default function CMRExceptionManage() {
     {
       key: 'containerNumber',
       label: '集装箱号',
+      sorter: true,
       render: (_value, record) => <span className="text-gray-900">{record.containerNumber || '-'}</span>
     },
     {
       key: 'cmrExceptionNote',
       label: '异常说明',
+      sorter: true,
       render: (_value, record) => (
         <div className="max-w-xs">
           <p className="text-sm text-gray-900 truncate">{record.cmrExceptionNote || '暂无说明'}</p>
@@ -153,6 +156,11 @@ export default function CMRExceptionManage() {
     {
       key: 'cmrExceptionTime',
       label: '异常时间',
+      sorter: (a: ExceptionBill, b: ExceptionBill) => {
+        const dateA = a.cmrExceptionTime ? new Date(a.cmrExceptionTime).getTime() : 0
+        const dateB = b.cmrExceptionTime ? new Date(b.cmrExceptionTime).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => (
         <span className="text-gray-600 text-sm">
           {record.cmrExceptionTime ? new Date(record.cmrExceptionTime).toLocaleString('zh-CN') : '-'}
@@ -162,11 +170,13 @@ export default function CMRExceptionManage() {
     {
       key: 'cmrExceptionStatus',
       label: '处理状态',
+      sorter: true,
       render: (_value, record) => getStatusBadge(record.cmrExceptionStatus || 'pending')
     },
     {
       key: 'deliveryStatus',
       label: '派送状态',
+      sorter: true,
       render: (_value, record) => {
         const status = record.deliveryStatus || '待派送'
         const isException = status === '订单异常'
@@ -181,9 +191,9 @@ export default function CMRExceptionManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (_value, record) => (
+      render: (_value, item) => (
         <div className="flex items-center gap-2">
-          {record.deliveryStatus !== '异常关闭' && (
+          {item.deliveryStatus !== '异常关闭' && (
             <>
               <button
                 onClick={() => {
@@ -195,7 +205,7 @@ export default function CMRExceptionManage() {
                 处理
               </button>
               <button
-                onClick={() => handleClose(record.id)}
+                onClick={() => handleClose(item.id)}
                 className="px-2 py-1 text-xs bg-gray-50 text-gray-600 rounded hover:bg-gray-100 transition-colors"
               >
                 关闭
@@ -203,7 +213,7 @@ export default function CMRExceptionManage() {
             </>
           )}
           <button
-            onClick={() => navigate(`/cmr-manage/${record.id}`)}
+            onClick={() => navigate(`/cmr-manage/${item.id}`)}
             className="px-2 py-1 text-xs bg-primary-50 text-primary-600 rounded hover:bg-primary-100 transition-colors"
           >
             详情
@@ -297,7 +307,7 @@ export default function CMRExceptionManage() {
               data={bills}
               loading={loading}
               rowKey="id"
-              onRowClick={(item) => navigate(`/cmr-manage/${record.id}`)}
+              onRowClick={(item) => navigate(`/cmr-manage/${item.id}`)}
             />
           )}
         </div>

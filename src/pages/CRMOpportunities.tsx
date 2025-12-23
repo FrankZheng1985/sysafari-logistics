@@ -74,7 +74,7 @@ export default function CRMOpportunities() {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   const [searchValue, setSearchValue] = useState('')
   const [filterStage, setFilterStage] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
@@ -103,7 +103,7 @@ export default function CRMOpportunities() {
   useEffect(() => {
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, filterStage])
+  }, [page, pageSize, searchValue, filterStage])
 
   const loadData = async () => {
     setLoading(true)
@@ -144,19 +144,19 @@ export default function CRMOpportunities() {
   }
 
   const handleOpenModal = (item?: Opportunity) => {
-    if (record) {
-      setEditingItem(record)
+    if (item) {
+      setEditingItem(item)
       setFormData({
-        opportunityName: record.opportunityName,
-        customerId: record.customerId || '',
-        customerName: record.customerName || '',
-        stage: record.stage,
-        inquiryCount: record.inquiryCount || 0,
-        orderCount: record.orderCount || 0,
-        expectedCloseDate: record.expectedCloseDate || '',
-        source: record.source || '',
-        description: record.description || '',
-        contractId: record.contractId || ''
+        opportunityName: item.opportunityName,
+        customerId: item.customerId || '',
+        customerName: item.customerName || '',
+        stage: item.stage,
+        inquiryCount: item.inquiryCount || 0,
+        orderCount: item.orderCount || 0,
+        expectedCloseDate: item.expectedCloseDate || '',
+        source: item.source || '',
+        description: item.description || '',
+        contractId: item.contractId || ''
       })
     } else {
       setEditingItem(null)
@@ -178,11 +178,11 @@ export default function CRMOpportunities() {
 
   // 打开跟进记录弹窗
   const handleOpenFollowUp = async (item: Opportunity) => {
-    setEditingItem(record)
+    setEditingItem(item)
     setFollowUpForm({ followUpType: 'phone', content: '', nextFollowUpDate: '' })
     // 加载该商机的跟进记录
     try {
-      const response = await fetch(`${API_BASE}/api/opportunities/${record.id}/follow-ups`)
+      const response = await fetch(`${API_BASE}/api/opportunities/${item.id}/follow-ups`)
       const data = await response.json()
       if (data.errCode === 200) {
         setFollowUpRecords(data.data || [])
@@ -320,19 +320,19 @@ export default function CRMOpportunities() {
   // 检查是否可以成交
   const handleCheckCanClose = async (item: Opportunity) => {
     try {
-      const response = await fetch(`${API_BASE}/api/opportunities/${record.id}/can-close`)
+      const response = await fetch(`${API_BASE}/api/opportunities/${item.id}/can-close`)
       const data = await response.json()
       
       if (data.errCode === 200) {
         const result = data.data
         if (result.canClose) {
           // 可以成交，执行成交操作
-          handleUpdateStage(record.id, 'closed_won')
+          handleUpdateStage(item.id, 'closed_won')
         } else {
           // 不能成交，显示原因
           if (result.needGenerateContract) {
             if (confirm(`${result.reason}\n\n是否立即为该机会生成合同？`)) {
-              await handleGenerateContract(record.id)
+              await handleGenerateContract(item.id)
             }
           } else if (result.needSign) {
             alert(`${result.reason}\n\n请前往【合同管理】页面上传已签署的合同文件。`)
@@ -347,10 +347,10 @@ export default function CRMOpportunities() {
   }
 
   const handleDelete = async (item: Opportunity) => {
-    if (!confirm(`确定要删除销售机会"${record.opportunityName}"吗？`)) return
+    if (!confirm(`确定要删除销售机会"${item.opportunityName}"吗？`)) return
 
     try {
-      const response = await fetch(`${API_BASE}/api/opportunities/${record.id}`, {
+      const response = await fetch(`${API_BASE}/api/opportunities/${item.id}`, {
         method: 'DELETE'
       })
       const data = await response.json()
@@ -379,6 +379,8 @@ export default function CRMOpportunities() {
       key: 'opportunityName',
       label: '机会名称',
       width: 200,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900 text-xs">{record.opportunityName}</div>
@@ -390,6 +392,16 @@ export default function CRMOpportunities() {
       key: 'stage',
       label: '阶段',
       width: 100,
+      sorter: true,
+      filters: [
+        { text: '线索', value: 'lead' },
+        { text: '资格确认', value: 'qualification' },
+        { text: '方案报价', value: 'proposal' },
+        { text: '谈判中', value: 'negotiation' },
+        { text: '成交', value: 'closed_won' },
+        { text: '失败', value: 'closed_lost' },
+      ],
+      onFilter: (value, record) => record.stage === value,
       render: (_value, record) => {
         const info = getStageInfo(record.stage)
         return (
@@ -403,6 +415,7 @@ export default function CRMOpportunities() {
       key: 'inquiryCount',
       label: '询价次数',
       width: 80,
+      sorter: (a, b) => (a.inquiryCount || 0) - (b.inquiryCount || 0),
       render: (_value, record) => (
         <span className="text-xs font-medium text-gray-900">
           {record.inquiryCount || 0} 次
@@ -413,6 +426,7 @@ export default function CRMOpportunities() {
       key: 'orderCount',
       label: '成交订单',
       width: 80,
+      sorter: (a, b) => (a.orderCount || 0) - (b.orderCount || 0),
       render: (_value, record) => (
         <span className="text-xs font-medium text-green-600">
           {record.orderCount || 0} 单
@@ -423,6 +437,11 @@ export default function CRMOpportunities() {
       key: 'conversionRate',
       label: '转化率',
       width: 100,
+      sorter: (a, b) => {
+        const rateA = a.inquiryCount > 0 ? (a.orderCount / a.inquiryCount) : 0
+        const rateB = b.inquiryCount > 0 ? (b.orderCount / b.inquiryCount) : 0
+        return rateA - rateB
+      },
       render: (_value, record) => {
         const rate = record.inquiryCount > 0 
           ? Math.round((record.orderCount / record.inquiryCount) * 100) 
@@ -444,6 +463,11 @@ export default function CRMOpportunities() {
       key: 'expectedCloseDate',
       label: '预计成交',
       width: 100,
+      sorter: (a, b) => {
+        const dateA = a.expectedCloseDate ? new Date(a.expectedCloseDate).getTime() : 0
+        const dateB = b.expectedCloseDate ? new Date(b.expectedCloseDate).getTime() : 0
+        return dateA - dateB
+      },
       render: (_value, record) => (
         <span className="text-xs text-gray-500">
           {record.expectedCloseDate || '-'}
@@ -454,6 +478,8 @@ export default function CRMOpportunities() {
       key: 'source',
       label: '来源',
       width: 80,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <span className="text-xs text-gray-600">{record.source || '-'}</span>
       )
@@ -462,6 +488,7 @@ export default function CRMOpportunities() {
       key: 'followUpCount',
       label: '跟进',
       width: 80,
+      sorter: (a, b) => (a.followUpCount || 0) - (b.followUpCount || 0),
       render: (_value, record) => (
         <div className="text-center">
           <div className="text-xs font-medium text-gray-900">{record.followUpCount || 0} 次</div>
@@ -475,6 +502,7 @@ export default function CRMOpportunities() {
       key: 'contractNumber',
       label: '关联合同',
       width: 100,
+      sorter: true,
       render: (_value, record) => (
         record.contractNumber ? (
           <span className="text-xs text-primary-600 font-medium">{record.contractNumber}</span>
@@ -487,6 +515,8 @@ export default function CRMOpportunities() {
       key: 'assignedName',
       label: '负责人',
       width: 80,
+      sorter: true,
+      filterable: true,
       render: (_value, record) => (
         <span className="text-xs text-gray-600">{record.assignedName || '-'}</span>
       )
@@ -540,12 +570,14 @@ export default function CRMOpportunities() {
           <button 
             onClick={() => handleOpenModal(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500"
+            title="编辑"
           >
             <Edit className="w-3.5 h-3.5" />
           </button>
           <button 
             onClick={() => handleDelete(record)}
             className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
+            title="删除"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -642,6 +674,7 @@ export default function CRMOpportunities() {
             value={filterStage}
             onChange={(e) => setFilterStage(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选销售阶段"
           >
             <option value="">全部阶段</option>
             <option value="lead">线索</option>
@@ -691,6 +724,19 @@ export default function CRMOpportunities() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}
@@ -701,7 +747,7 @@ export default function CRMOpportunities() {
           <div className="bg-white rounded-lg w-[560px] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-sm font-medium">{editingItem ? '编辑销售机会' : '新建销售机会'}</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -732,6 +778,7 @@ export default function CRMOpportunities() {
                       })
                     }}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择客户"
                   >
                     <option value="">请选择客户</option>
                     {customers.map(c => (
@@ -745,6 +792,7 @@ export default function CRMOpportunities() {
                     value={formData.stage}
                     onChange={(e) => setFormData({...formData, stage: e.target.value})}
                     className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    title="选择阶段"
                   >
                     <option value="lead">线索</option>
                     <option value="qualification">资格确认</option>
@@ -765,6 +813,7 @@ export default function CRMOpportunities() {
                   className={`w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white ${
                     formData.stage === 'closed_won' && !formData.contractId ? 'border-red-300' : ''
                   }`}
+                  title="选择关联合同"
                 >
                   <option value="">请选择已签订的合同</option>
                   {contracts.map(c => (
@@ -878,6 +927,7 @@ export default function CRMOpportunities() {
               <button
                 onClick={() => setShowFollowUpModal(false)}
                 className="p-1 hover:bg-gray-100 rounded"
+                title="关闭"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -894,6 +944,7 @@ export default function CRMOpportunities() {
                       value={followUpForm.followUpType}
                       onChange={(e) => setFollowUpForm({...followUpForm, followUpType: e.target.value as any})}
                       className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      title="选择跟进方式"
                     >
                       <option value="phone">电话</option>
                       <option value="email">邮件</option>

@@ -453,12 +453,13 @@ export async function viewPaymentReceipt(req, res) {
  */
 export async function getFees(req, res) {
   try {
-    const { category, billId, customerId, startDate, endDate, search, page, pageSize } = req.query
+    const { category, billId, customerId, feeType, startDate, endDate, search, page, pageSize } = req.query
     
     const result = await model.getFees({
       category,
       billId,
       customerId,
+      feeType,
       startDate,
       endDate,
       search,

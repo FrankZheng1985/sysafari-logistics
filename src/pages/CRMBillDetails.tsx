@@ -67,7 +67,7 @@ export default function CRMBillDetails() {
     try {
       const response = await getBillById(id!)
       if (response.errCode === 200 && response.data) {
-        setBill(response.data)
+        setBill(response.data as any)
       }
     } catch (error) {
       console.error('加载提单详情失败:', error)

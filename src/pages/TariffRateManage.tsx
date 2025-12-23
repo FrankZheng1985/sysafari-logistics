@@ -903,7 +903,7 @@ export default function TariffRateManage() {
   const [dutyRateMax, setDutyRateMax] = useState('')
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
   
   const [importModalVisible, setImportModalVisible] = useState(false)
@@ -953,7 +953,7 @@ export default function TariffRateManage() {
     loadRates()
     loadStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, hsCodeFilter, originFilter, dataSourceFilter, statusFilter, dutyRateMin, dutyRateMax])
+  }, [page, pageSize, searchValue, hsCodeFilter, originFilter, dataSourceFilter, statusFilter, dutyRateMin, dutyRateMax])
 
   const handleSearch = () => {
     setPage(1)
@@ -1385,6 +1385,19 @@ export default function TariffRateManage() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}

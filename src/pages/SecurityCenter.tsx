@@ -579,17 +579,19 @@ export default function SecurityCenter() {
     { 
       key: 'createdAt', 
       label: '时间',
-      render: (_value, record: AuditLog) => new Date(record.createdAt).toLocaleString('zh-CN')
+      sorter: (a: AuditLog, b: AuditLog) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      render: (_value: unknown, record: AuditLog) => new Date(record.createdAt).toLocaleString('zh-CN')
     },
-    { key: 'username', label: '用户' },
-    { key: 'actionName', label: '操作' },
-    { key: 'resourceType', label: '资源类型' },
-    { key: 'resourceName', label: '资源' },
-    { key: 'ipAddress', label: 'IP' },
+    { key: 'username', label: '用户', sorter: true },
+    { key: 'actionName', label: '操作', sorter: true },
+    { key: 'resourceType', label: '资源类型', sorter: true },
+    { key: 'resourceName', label: '资源', sorter: true },
+    { key: 'ipAddress', label: 'IP', sorter: true },
     { 
       key: 'result', 
       label: '结果',
-      render: (_value, record: AuditLog) => (
+      sorter: true,
+      render: (_value: unknown, record: AuditLog) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
           record.result === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
         }`}>
@@ -601,25 +603,32 @@ export default function SecurityCenter() {
 
   // 黑名单列定义
   const blacklistColumns = [
-    { key: 'ipAddress', label: 'IP地址' },
-    { key: 'reason', label: '原因' },
-    { key: 'blockedBy', label: '操作人' },
+    { key: 'ipAddress', label: 'IP地址', sorter: true },
+    { key: 'reason', label: '原因', sorter: true },
+    { key: 'blockedBy', label: '操作人', sorter: true },
     { 
       key: 'blockedAt', 
       label: '封禁时间',
-      render: (_value, record: IpBlacklistItem) => new Date(record.blockedAt).toLocaleString('zh-CN')
+      sorter: (a: IpBlacklistItem, b: IpBlacklistItem) => new Date(a.blockedAt).getTime() - new Date(b.blockedAt).getTime(),
+      render: (_value: unknown, record: IpBlacklistItem) => new Date(record.blockedAt).toLocaleString('zh-CN')
     },
     { 
       key: 'expiresAt', 
       label: '过期时间',
-      render: (_value, record: IpBlacklistItem) => record.expiresAt 
+      sorter: (a: IpBlacklistItem, b: IpBlacklistItem) => {
+        const timeA = a.expiresAt ? new Date(a.expiresAt).getTime() : Infinity
+        const timeB = b.expiresAt ? new Date(b.expiresAt).getTime() : Infinity
+        return timeA - timeB
+      },
+      render: (_value: unknown, record: IpBlacklistItem) => record.expiresAt 
         ? new Date(record.expiresAt).toLocaleString('zh-CN') 
         : '永久'
     },
     { 
       key: 'isActive', 
       label: '状态',
-      render: (_value, record: IpBlacklistItem) => (
+      sorter: true,
+      render: (_value: unknown, record: IpBlacklistItem) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
           record.isActive ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
         }`}>
@@ -630,7 +639,7 @@ export default function SecurityCenter() {
     {
       key: 'actions',
       label: '操作',
-      render: (_value, record: IpBlacklistItem) => (
+      render: (_value: unknown, record: IpBlacklistItem) => (
         <button
           onClick={() => handleRemoveIp(record.ipAddress)}
           disabled={!record.isActive}
@@ -645,23 +654,25 @@ export default function SecurityCenter() {
 
   // 会话列定义
   const sessionColumns = [
-    { key: 'username', label: '用户' },
-    { key: 'name', label: '姓名' },
-    { key: 'ipAddress', label: 'IP地址' },
+    { key: 'username', label: '用户', sorter: true },
+    { key: 'name', label: '姓名', sorter: true },
+    { key: 'ipAddress', label: 'IP地址', sorter: true },
     { 
       key: 'loginTime', 
       label: '登录时间',
-      render: (_value, record: ActiveSession) => new Date(record.loginTime).toLocaleString('zh-CN')
+      sorter: (a: ActiveSession, b: ActiveSession) => new Date(a.loginTime).getTime() - new Date(b.loginTime).getTime(),
+      render: (_value: unknown, record: ActiveSession) => new Date(record.loginTime).toLocaleString('zh-CN')
     },
     { 
       key: 'lastActivity', 
       label: '最后活动',
-      render: (_value, record: ActiveSession) => new Date(record.lastActivity).toLocaleString('zh-CN')
+      sorter: (a: ActiveSession, b: ActiveSession) => new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime(),
+      render: (_value: unknown, record: ActiveSession) => new Date(record.lastActivity).toLocaleString('zh-CN')
     },
     {
       key: 'actions',
       label: '操作',
-      render: (_value, record: ActiveSession) => (
+      render: (_value: unknown, record: ActiveSession) => (
         <button
           onClick={() => handleTerminateSession(record.sessionId)}
           className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -675,16 +686,18 @@ export default function SecurityCenter() {
 
   // 备份列定义
   const backupColumns = [
-    { key: 'backupName', label: '备份名称' },
+    { key: 'backupName', label: '备份名称', sorter: true },
     { 
       key: 'backupType', 
       label: '类型',
-      render: (_value, record: BackupRecord) => record.backupType === 'full' ? '完整备份' : '增量备份'
+      sorter: true,
+      render: (_value: unknown, record: BackupRecord) => record.backupType === 'full' ? '完整备份' : '增量备份'
     },
     { 
       key: 'backupStatus', 
       label: '状态',
-      render: (_value, record: BackupRecord) => (
+      sorter: true,
+      render: (_value: unknown, record: BackupRecord) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
           record.backupStatus === 'completed' ? 'bg-green-100 text-green-700' :
           record.backupStatus === 'running' ? 'bg-blue-100 text-blue-700' :
@@ -698,14 +711,24 @@ export default function SecurityCenter() {
     { 
       key: 'startedAt', 
       label: '开始时间',
-      render: (_value, record: BackupRecord) => record.startedAt 
+      sorter: (a: BackupRecord, b: BackupRecord) => {
+        const timeA = a.startedAt ? new Date(a.startedAt).getTime() : 0
+        const timeB = b.startedAt ? new Date(b.startedAt).getTime() : 0
+        return timeA - timeB
+      },
+      render: (_value: unknown, record: BackupRecord) => record.startedAt 
         ? new Date(record.startedAt).toLocaleString('zh-CN') 
         : '-'
     },
     { 
       key: 'completedAt', 
       label: '完成时间',
-      render: (_value, record: BackupRecord) => record.completedAt 
+      sorter: (a: BackupRecord, b: BackupRecord) => {
+        const timeA = a.completedAt ? new Date(a.completedAt).getTime() : 0
+        const timeB = b.completedAt ? new Date(b.completedAt).getTime() : 0
+        return timeA - timeB
+      },
+      render: (_value: unknown, record: BackupRecord) => record.completedAt 
         ? new Date(record.completedAt).toLocaleString('zh-CN') 
         : '-'
     }
@@ -778,7 +801,6 @@ export default function SecurityCenter() {
             onChange={(e) => setAuditPagination(prev => ({ ...prev, pageSize: Number(e.target.value), page: 1 }))}
             className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
           >
-            <option value={10}>10 条/页</option>
             <option value={20}>20 条/页</option>
             <option value={50}>50 条/页</option>
             <option value={100}>100 条/页</option>

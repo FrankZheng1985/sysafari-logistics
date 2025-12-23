@@ -382,7 +382,7 @@ export default function InspectionDetails() {
             searchableColumns={['billNumber', 'containerNumber', 'vessel']}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

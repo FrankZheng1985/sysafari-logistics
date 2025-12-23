@@ -186,8 +186,8 @@ export default function PureLabels() {
 
   const statusCounts = {
     all: mockData.length,
-    printed: mockData.filter(item => record.printStatus === '已打印').length,
-    unprinted: mockData.filter(item => record.printStatus === '未打印').length,
+    printed: mockData.filter(item => item.printStatus === '已打印').length,
+    unprinted: mockData.filter(item => item.printStatus === '未打印').length,
   }
 
   return (
@@ -240,7 +240,7 @@ export default function PureLabels() {
           visibleColumns={visibleColumns}
           compact={true}
           pagination={{
-            pageSize: 10,
+            pageSize: 20,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条记录`,
           }}

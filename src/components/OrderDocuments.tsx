@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import DocumentUpload from './DocumentUpload'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -33,20 +34,6 @@ const formatFileSize = (bytes: number) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-// 格式化日期
-const formatDate = (dateStr: string | null | undefined) => {
-  if (!dateStr) return '-'
-  try {
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return dateStr
-  }
-}
 
 interface Document {
   id: string
@@ -209,7 +196,7 @@ export default function OrderDocuments({
           <span>•</span>
           <span>{doc.uploadedByName || '未知'}</span>
           <span>•</span>
-          <span>{formatDate(doc.uploadTime)}</span>
+          <span>{formatDateTime(doc.uploadTime)}</span>
         </div>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

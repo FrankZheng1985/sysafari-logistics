@@ -294,7 +294,8 @@ export default function TMSConditions() {
       key: 'conditionCode',
       label: '条件编码',
       width: '100px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
           {record.conditionCode}
         </span>
@@ -303,6 +304,7 @@ export default function TMSConditions() {
     {
       key: 'conditionName',
       label: '条件名称',
+      sorter: true,
       render: (_value, record) => {
         const typeConfig = getConditionTypeConfig(record.conditionType)
         const TypeIcon = typeConfig.icon
@@ -331,6 +333,7 @@ export default function TMSConditions() {
       key: 'conditionType',
       label: '类型',
       width: '100px',
+      sorter: true,
       render: (_value, record) => {
         const typeConfig = getConditionTypeConfig(record.conditionType)
         const bgMap: Record<string, string> = {
@@ -350,7 +353,8 @@ export default function TMSConditions() {
       key: 'threshold',
       label: '阈值标准',
       width: '150px',
-      render: (_value, _record) => (
+      sorter: (a: Condition, b: Condition) => (a.thresholdValue || 0) - (b.thresholdValue || 0),
+      render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900">
             {record.operator === 'between' 
@@ -366,7 +370,8 @@ export default function TMSConditions() {
       key: 'scopeType',
       label: '适用范围',
       width: '100px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <span className="text-sm text-gray-600">
           {getScopeTypeLabel(record.scopeType)}
         </span>
@@ -376,7 +381,8 @@ export default function TMSConditions() {
       key: 'alertEnabled',
       label: '预警',
       width: '80px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           {record.alertEnabled ? (
             <>
@@ -399,7 +405,8 @@ export default function TMSConditions() {
       key: 'status',
       label: '状态',
       width: '80px',
-      render: (_value, _record) => (
+      sorter: true,
+      render: (_value, record) => (
         <button
           onClick={() => handleToggleStatus(record)}
           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
