@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Package, Ship, Anchor, FileText, 
   MapPin, Calendar, Weight, Box, RefreshCw,
-  ExternalLink, User, Building, Truck
+  ExternalLink, User, Building, Truck, Copy
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getBillById } from '../utils/api'
+import { copyToClipboard } from '../components/Toast'
 
 interface BillDetail {
   id: string
@@ -165,8 +166,28 @@ export default function CRMBillDetails() {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-gray-900">订单号: {getOrderNumber()}</h2>
+              {getOrderNumber() && getOrderNumber() !== '-' && (
+                <button
+                  onClick={(e) => copyToClipboard(getOrderNumber(), e)}
+                  className="text-gray-400 hover:text-gray-600"
+                  title="复制订单号"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              )}
             </div>
-            <p className="text-sm text-gray-500">提单号: {bill.billNumber}</p>
+            <p className="text-sm text-gray-500 flex items-center gap-1">
+              提单号: {bill.billNumber}
+              {bill.billNumber && (
+                <button
+                  onClick={(e) => copyToClipboard(bill.billNumber, e)}
+                  className="text-gray-400 hover:text-gray-600"
+                  title="复制提单号"
+                >
+                  <Copy className="w-3 h-3" />
+                </button>
+              )}
+            </p>
           </div>
         </div>
         <button
@@ -221,15 +242,48 @@ export default function CRMBillDetails() {
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
               <span className="text-gray-500">订单号</span>
-              <p className="text-gray-900 font-medium mt-1">{getOrderNumber()}</p>
+              <p className="text-gray-900 font-medium mt-1 flex items-center gap-1">
+                {getOrderNumber()}
+                {getOrderNumber() && getOrderNumber() !== '-' && (
+                  <button
+                    onClick={(e) => copyToClipboard(getOrderNumber(), e)}
+                    className="text-gray-400 hover:text-gray-600"
+                    title="复制订单号"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                )}
+              </p>
             </div>
             <div>
               <span className="text-gray-500">提单号</span>
-              <p className="text-gray-900 font-medium mt-1">{bill.billNumber}</p>
+              <p className="text-gray-900 font-medium mt-1 flex items-center gap-1">
+                {bill.billNumber}
+                {bill.billNumber && (
+                  <button
+                    onClick={(e) => copyToClipboard(bill.billNumber, e)}
+                    className="text-gray-400 hover:text-gray-600"
+                    title="复制提单号"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                )}
+              </p>
             </div>
             <div>
               <span className="text-gray-500">集装箱号</span>
-              <p className="text-gray-900 mt-1">{bill.containerNumber || '-'}</p>
+              <p className="text-gray-900 mt-1 flex items-center gap-1">
+                {bill.containerNumber || '-'}
+                {bill.containerNumber && (
+                  <button
+                    onClick={(e) => copyToClipboard(bill.containerNumber, e)}
+                    className="text-gray-400 hover:text-gray-600"
+                    title="复制集装箱号"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                )}
+              </p>
             </div>
             <div>
               <span className="text-gray-500">船名/航次</span>

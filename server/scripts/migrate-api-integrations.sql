@@ -4,7 +4,7 @@
 -- ==================== API服务配置表 ====================
 CREATE TABLE IF NOT EXISTS api_integrations (
     id SERIAL PRIMARY KEY,
-    api_code TEXT UNIQUE NOT NULL,           -- 唯一标识：ship24, tencent_ocr, tencent_cos 等
+    api_code TEXT UNIQUE NOT NULL,           -- 唯一标识：tencent_ocr, tencent_cos, exchange_rate 等
     api_name TEXT NOT NULL,                  -- 显示名称
     provider TEXT,                           -- 服务商
     category TEXT DEFAULT 'other',           -- 分类：tracking/ocr/storage/translation/tariff/validation/infrastructure
@@ -79,18 +79,9 @@ CREATE INDEX IF NOT EXISTS idx_api_recharge_code ON api_recharge_records(api_cod
 CREATE INDEX IF NOT EXISTS idx_api_recharge_time ON api_recharge_records(recharge_time);
 CREATE INDEX IF NOT EXISTS idx_api_recharge_api_id ON api_recharge_records(api_id);
 
--- ==================== 初始化数据：10个已对接的API服务 ====================
+-- ==================== 初始化数据：9个已对接的API服务 ====================
 
--- 1. Ship24 物流跟踪
-INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
-VALUES ('ship24', 'Ship24 物流跟踪', 'Ship24', 'tracking', 'https://api.ship24.com/public/v1', 'https://api.ship24.com/public/v1', 'per_call', 'https://www.ship24.com/pricing', '聚合物流跟踪服务，支持1200+船公司和快递公司', 'Ship', 1)
-ON CONFLICT (api_code) DO UPDATE SET
-    api_name = EXCLUDED.api_name,
-    provider = EXCLUDED.provider,
-    health_check_url = EXCLUDED.health_check_url,
-    updated_at = CURRENT_TIMESTAMP;
-
--- 2. 腾讯云OCR
+-- 1. 腾讯云OCR
 INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, pricing_model, recharge_url, description, icon, sort_order)
 VALUES ('tencent_ocr', '腾讯云OCR', '腾讯云', 'ocr', 'https://ocr.tencentcloudapi.com', 'per_call', 'https://console.cloud.tencent.com/ocr', '文档识别服务，支持运输单据OCR识别', 'FileText', 2)
 ON CONFLICT (api_code) DO UPDATE SET
@@ -173,5 +164,5 @@ ON CONFLICT (api_code) DO UPDATE SET
 DO $$
 BEGIN
     RAISE NOTICE '✅ API对接管理模块数据库表创建完成！';
-    RAISE NOTICE '📊 已初始化10个API服务配置';
+    RAISE NOTICE '📊 已初始化9个API服务配置';
 END $$;

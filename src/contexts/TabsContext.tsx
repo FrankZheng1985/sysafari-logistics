@@ -21,6 +21,7 @@ type TabsAction =
   | { type: 'REMOVE_OTHERS' }
   | { type: 'REMOVE_ALL' }
   | { type: 'SET_ACTIVE'; payload: string }
+  | { type: 'UPDATE_TAB_TITLE'; payload: { key: string; title: string } }
   | { type: 'INIT'; payload: TabsState }
 
 // 路由到标题的映射
@@ -227,6 +228,14 @@ function tabsReducer(state: TabsState, action: TabsAction): TabsState {
     case 'SET_ACTIVE':
       return { ...state, activeKey: action.payload }
 
+    case 'UPDATE_TAB_TITLE': {
+      const { key, title } = action.payload
+      const newTabs = state.tabs.map(tab => 
+        tab.key === key ? { ...tab, title } : tab
+      )
+      return { ...state, tabs: newTabs }
+    }
+
     default:
       return state
   }
@@ -241,6 +250,7 @@ interface TabsContextValue {
   removeOthers: () => void
   removeAll: () => void
   setActiveTab: (key: string) => void
+  updateTabTitle: (key: string, title: string) => void
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null)
@@ -355,6 +365,11 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     navigate(key)
   }, [navigate])
 
+  // 更新标签标题
+  const updateTabTitle = useCallback((key: string, title: string) => {
+    dispatch({ type: 'UPDATE_TAB_TITLE', payload: { key, title } })
+  }, [])
+
   return (
     <TabsContext.Provider value={{
       tabs: state.tabs,
@@ -363,7 +378,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       removeTab,
       removeOthers,
       removeAll,
-      setActiveTab
+      setActiveTab,
+      updateTabTitle
     }}>
       {children}
     </TabsContext.Provider>

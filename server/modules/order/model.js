@@ -857,6 +857,9 @@ export function convertBillToCamelCase(row) {
     containerNumber: row.container_number,
     vessel: row.vessel,
     voyage: row.voyage,
+    shippingCompany: row.shipping_company,
+    transportMethod: row.transport_method,
+    containerSize: row.container_type,  // 柜型 (40HQ, 20GP等)
     shipper: row.shipper,
     consignee: row.consignee,
     notifyParty: row.notify_party,
@@ -876,6 +879,7 @@ export function convertBillToCamelCase(row) {
     docSwapStatus: row.doc_swap_status,
     docSwapTime: row.doc_swap_time,
     customsStatus: row.customs_status,
+    customsReleaseTime: row.customs_release_time,
     inspection: row.inspection,
     inspectionDetail: row.inspection_detail,
     inspectionEstimatedTime: row.inspection_estimated_time,

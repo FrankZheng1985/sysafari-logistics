@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit } from 'lucide-react'
+import { useTabs } from '../contexts/TabsContext'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { copyToClipboard } from '../components/Toast'
 import DatePicker from '../components/DatePicker'
 // DataTable available if needed
 import Timeline, { TimelineItem } from '../components/Timeline'
@@ -114,6 +116,7 @@ export default function BillDetails() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
+  const { updateTabTitle } = useTabs()
   
   // 检测来源：支持财务模块访问
   const source = searchParams.get('source') || (location.state as any)?.source || ''
@@ -483,29 +486,20 @@ export default function BillDetails() {
       
       setLoading(true)
       try {
-        const response = await getBillByIdFromAPI(id)
+        // 并行加载提单详情、操作日志和文件列表
+        const [response] = await Promise.all([
+          getBillByIdFromAPI(id),
+          loadOperationLogs(),
+          loadBillFiles()
+        ])
+        
         if (response.errCode === 200 && response.data) {
-          // 调试日志：打印后端返回的附加属性字段
-          console.log('📦 提单详情 - 附加属性字段:', {
-            containerType: response.data.containerType,
-            billType: response.data.billType,
-            transportArrangement: response.data.transportArrangement,
-            consigneeType: response.data.consigneeType,
-            containerReturn: response.data.containerReturn,
-            fullContainerTransport: response.data.fullContainerTransport,
-            lastMileTransport: response.data.lastMileTransport,
-            devanning: response.data.devanning,
-            t1Declaration: response.data.t1Declaration,
-          })
           setBillDetail(response.data)
         } else {
           // 降级到 mock 数据
           const mockBill = getBillByIdFromMock(id) || getBillByIdFromMock('1')
           setBillDetail(mockBill)
         }
-        // 加载操作日志和文件列表
-        await loadOperationLogs()
-        await loadBillFiles()
       } catch (error) {
         console.error('加载提单详情失败:', error)
         // 降级到 mock 数据
@@ -543,6 +537,13 @@ export default function BillDetails() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billDetail?.id])
+
+  // 当提单详情加载后，更新标签页标题为订单号
+  useEffect(() => {
+    if (billDetail?.orderNumber && location.pathname) {
+      updateTabTitle(location.pathname, billDetail.orderNumber)
+    }
+  }, [billDetail?.orderNumber, location.pathname, updateTabTitle])
 
   // 当提单详情加载后，根据目的港加载跳港选项
   useEffect(() => {
@@ -674,42 +675,115 @@ export default function BillDetails() {
                 <FileText className="w-3 h-3 text-primary-600" />
                 提单信息
               </h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 <div>
-                  <span className="text-xs text-gray-500">序号:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.billNumber}</span>
+                  <span className="text-xs text-gray-500">订单号:</span>
+                  <span className="ml-2 font-medium text-xs text-primary-600">{billDetail.orderNumber || '-'}</span>
+                  {billDetail.orderNumber && (
+                    <button
+                      onClick={(e) => copyToClipboard(billDetail.orderNumber || '', e)}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                      title="复制订单号"
+                    >
+                      <Copy className="w-3 h-3 inline" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">提单号:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.containerNumber}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.billNumber || '-'}</span>
+                  {billDetail.billNumber && (
+                    <button
+                      onClick={(e) => copyToClipboard(billDetail.billNumber || '', e)}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                      title="复制提单号"
+                    >
+                      <Copy className="w-3 h-3 inline" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">集装箱号:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.containerNumber || '-'}</span>
+                  {billDetail.containerNumber && (
+                    <button
+                      onClick={(e) => copyToClipboard(billDetail.containerNumber || '', e)}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                      title="复制集装箱号"
+                    >
+                      <Copy className="w-3 h-3 inline" />
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">船公司:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.shippingCompany || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">运输方式:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.transportMethod === 'sea' || billDetail.transportMethod === '海运' ? '🚢 海运' :
+                     billDetail.transportMethod === 'air' || billDetail.transportMethod === '空运' ? '✈️ 空运' :
+                     billDetail.transportMethod === 'rail' || billDetail.transportMethod === '铁路' ? '🚂 铁路' :
+                     billDetail.transportMethod === 'truck' || billDetail.transportMethod === '卡车' ? '🚛 卡车' :
+                     billDetail.transportMethod || '-'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">船名航次:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.vessel}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.vessel || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">柜型:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.containerSize || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">封号:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.sealNumber || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">起运港:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.portOfLoading || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">目的港:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.portOfDischarge || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">ETD:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.etd || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">ETA:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.eta || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ATA:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.ata || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-500">ETA:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.eta}</span>
-                </div>
-                <div>
                   <span className="text-xs text-gray-500">实际到港:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.actualArrivalDate || '-'}</span>
                 </div>
                 <div>
+                  <span className="text-xs text-gray-500">清关完成:</span>
+                  <span className={`ml-2 font-medium text-xs ${billDetail.customsReleaseTime ? 'text-green-600' : 'text-gray-400'}`}>
+                    {billDetail.customsReleaseTime || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">卸货日期:</span>
+                  <span className={`ml-2 font-medium text-xs ${billDetail.cmrUnloadingCompleteTime ? 'text-green-600' : 'text-gray-400'}`}>
+                    {billDetail.cmrUnloadingCompleteTime || '-'}
+                  </span>
+                </div>
+                <div>
                   <span className="text-xs text-gray-500">件数:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.pieces}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.pieces || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">毛重 (KGS):</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.weight}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.weight || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">体积 (CBM):</span>
@@ -717,15 +791,15 @@ export default function BillDetails() {
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">报关统计:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.customsStats}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.customsStats || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">创建者:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.creator}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.creator || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">创建时间:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.createTime}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.createTime || '-'}</span>
                 </div>
                 {/* 附加属性字段已移至独立的"附加属性"区块显示 */}
               </div>

@@ -50,6 +50,41 @@ export default function OrderBills() {
   const [voidApplyModalVisible, setVoidApplyModalVisible] = useState(false)
   const [selectedBillForVoid, setSelectedBillForVoid] = useState<BillOfLading | null>(null)
   
+  // 从 URL 参数读取筛选状态
+  const getInitialFilters = (): Record<string, string[]> => {
+    const searchParams = new URLSearchParams(location.search)
+    const filtersParam = searchParams.get('filters')
+    if (filtersParam) {
+      try {
+        return JSON.parse(decodeURIComponent(filtersParam))
+      } catch {
+        return {}
+      }
+    }
+    return {}
+  }
+  
+  const [tableFilters, setTableFilters] = useState<Record<string, string[]>>(getInitialFilters)
+  
+  // 筛选状态变化时更新 URL
+  const handleFilterChange = (filters: Record<string, string[]>) => {
+    setTableFilters(filters)
+    const searchParams = new URLSearchParams(location.search)
+    
+    // 检查是否有任何筛选条件
+    const hasFilters = Object.values(filters).some(arr => arr.length > 0)
+    
+    if (hasFilters) {
+      searchParams.set('filters', encodeURIComponent(JSON.stringify(filters)))
+    } else {
+      searchParams.delete('filters')
+    }
+    
+    // 使用 replace 避免产生过多历史记录
+    const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`
+    navigate(newUrl, { replace: true })
+  }
+  
   // 根据当前路径确定激活的标签页
   const currentPath = location.pathname
   const activeTabPath = currentPath === '/bookings/bill/draft' 
@@ -244,7 +279,18 @@ export default function OrderBills() {
       label: '订单号',
       sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
       render: (_value, record: BillOfLading) => (
-        <span className="font-medium text-primary-600">{record.orderNumber || '-'}</span>
+        <div className="flex items-center gap-1">
+          <span className="font-medium text-primary-600">{record.orderNumber || '-'}</span>
+          {record.orderNumber && (
+            <button
+              title="复制订单号"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
@@ -260,7 +306,6 @@ export default function OrderBills() {
       key: 'billNumber',
       label: '提单号',
       sorter: true,
-      filterable: true,
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span className={`font-medium ${textPrimary}`}>{record.billNumber}</span>
@@ -440,33 +485,54 @@ export default function OrderBills() {
       key: 'orderNumber',
       label: '订单号',
       sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
-      filterable: true,
       render: (_value, record: BillOfLading) => (
-        <span className={`font-medium ${record.isVoid ? 'text-gray-400 line-through' : 'text-primary-600'}`}>
-          {record.orderNumber || '-'}
-        </span>
+        <div className="flex items-center gap-1">
+          <button
+            className={`font-medium hover:underline ${record.isVoid ? 'text-gray-400 line-through cursor-not-allowed' : 'text-primary-600 cursor-pointer'}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!record.isVoid) {
+                navigate(`/bookings/bill/${record.id}`)
+              }
+            }}
+            disabled={record.isVoid}
+          >
+            {record.orderNumber || '-'}
+          </button>
+          {record.orderNumber && !record.isVoid && (
+            <button
+              title="复制订单号"
+              className="text-gray-400 hover:text-gray-600 p-0.5"
+              onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
       key: 'billNumber',
       label: '提单号',
       sorter: true,
-      filterable: true,
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          <span
-            className={`font-semibold cursor-pointer hover:underline ${record.isVoid ? 'text-gray-400 line-through' : 'text-gray-900'}`}
+          <button
+            className={`font-semibold hover:underline ${record.isVoid ? 'text-gray-400 line-through cursor-not-allowed' : 'text-gray-900 cursor-pointer'}`}
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${record.id}`)
+              if (!record.isVoid) {
+                navigate(`/bookings/bill/${record.id}`)
+              }
             }}
+            disabled={record.isVoid}
           >
             {record.billNumber}
-          </span>
+          </button>
           {record.billNumber && (
             <button
               title="复制提单号"
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 hover:text-gray-600 p-0.5"
               onClick={(e) => copyToClipboard(record.billNumber, e)}
             >
               <Copy className="w-3 h-3" />
@@ -482,22 +548,24 @@ export default function OrderBills() {
       key: 'containerNumber',
       label: '集装箱号',
       sorter: true,
-      filterable: true,
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          <span
-            className="font-medium text-primary-600 hover:underline cursor-pointer"
+          <button
+            className={`font-medium hover:underline ${record.isVoid ? 'text-gray-400 line-through cursor-not-allowed' : 'text-primary-600 cursor-pointer'}`}
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${record.id}`)
+              if (!record.isVoid) {
+                navigate(`/bookings/bill/${record.id}`)
+              }
             }}
+            disabled={record.isVoid}
           >
             {record.containerNumber || '-'}
-          </span>
+          </button>
           {record.containerNumber && (
             <button
-              title="复制提单号"
-              className="text-gray-400 hover:text-gray-600"
+              title="复制集装箱号"
+              className="text-gray-400 hover:text-gray-600 p-0.5"
               onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
             >
               <Copy className="w-3 h-3" />
@@ -516,6 +584,48 @@ export default function OrderBills() {
       ),
     },
     {
+      key: 'shippingCompany',
+      label: '船公司',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.shippingCompany || '-'}</span>
+      ),
+    },
+    {
+      key: 'transportMethod',
+      label: '运输方式',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.transportMethod || '-'}</span>
+      ),
+    },
+    {
+      key: 'portOfLoading',
+      label: '起运港/目的港',
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="space-y-0.5">
+          <div className={textPrimary}>{record.portOfLoading || '-'}</div>
+          <div className="text-xs text-blue-600">→ {record.portOfDischarge || '-'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'containerSize',
+      label: '柜型/封号',
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="space-y-0.5">
+          <div className={textPrimary}>{record.containerSize || '-'}</div>
+          {record.sealNumber && (
+            <div className={`text-xs ${textSecondary}`}>{record.sealNumber}</div>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'etd',
       label: 'ETD',
       sorter: (a, b) => {
@@ -523,6 +633,8 @@ export default function OrderBills() {
         const dateB = b.etd ? new Date(b.etd).getTime() : 0
         return dateA - dateB
       },
+      dateFilterable: true,
+      dateField: 'etd',
       render: (_value, record: BillOfLading) => (
         <span className={textPrimary}>{record.etd || '-'}</span>
       ),
@@ -535,6 +647,8 @@ export default function OrderBills() {
         const dateB = b.eta ? new Date(b.eta).getTime() : 0
         return dateA - dateB
       },
+      dateFilterable: true,
+      dateField: 'eta',
       render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
           <div className={textPrimary}>{record.eta || '-'}</div>
@@ -542,6 +656,38 @@ export default function OrderBills() {
             <div className="text-green-600 text-xs">{record.ata}</div>
           )}
         </div>
+      ),
+    },
+    {
+      key: 'customsClearedDate',
+      label: '清关完成',
+      sorter: (a, b) => {
+        const dateA = a.customsReleaseTime ? new Date(a.customsReleaseTime).getTime() : 0
+        const dateB = b.customsReleaseTime ? new Date(b.customsReleaseTime).getTime() : 0
+        return dateA - dateB
+      },
+      dateFilterable: true,
+      dateField: 'customsReleaseTime',
+      render: (_value, record: BillOfLading) => (
+        <span className={record.customsReleaseTime ? textPrimary : textMuted}>
+          {record.customsReleaseTime || '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'dischargeDate',
+      label: '卸货日期',
+      sorter: (a, b) => {
+        const dateA = a.cmrUnloadingCompleteTime ? new Date(a.cmrUnloadingCompleteTime).getTime() : 0
+        const dateB = b.cmrUnloadingCompleteTime ? new Date(b.cmrUnloadingCompleteTime).getTime() : 0
+        return dateA - dateB
+      },
+      dateFilterable: true,
+      dateField: 'cmrUnloadingCompleteTime',
+      render: (_value, record: BillOfLading) => (
+        <span className={record.cmrUnloadingCompleteTime ? textPrimary : textMuted}>
+          {record.cmrUnloadingCompleteTime || '-'}
+        </span>
       ),
     },
     {
@@ -750,6 +896,8 @@ export default function OrderBills() {
             searchableColumns={isDraftTab ? ['billId', 'billNumber', 'companyName'] : ['billNumber', 'containerNumber', 'vessel']}
             visibleColumns={visibleColumns}
             compact={true}
+            initialFilters={tableFilters}
+            onFilterChange={handleFilterChange}
             pagination={{
               pageSize: 15,
               showSizeChanger: true,

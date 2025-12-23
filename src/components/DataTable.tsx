@@ -1,4 +1,4 @@
-import { ReactNode, useState, useMemo, useEffect } from 'react'
+import React, { ReactNode, useState, useMemo, useEffect, useRef } from 'react'
 import { Filter, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 
 export type SortOrder = 'asc' | 'desc' | null
@@ -10,6 +10,8 @@ export interface Column<T> {
   render?: (value: any, record: T) => ReactNode  // 支持 antd 风格的 (value, record) 格式
   sorter?: boolean | ((a: T, b: T) => number)
   filterable?: boolean
+  dateFilterable?: boolean  // 日期筛选（按年月日）
+  dateField?: string  // 日期字段名（用于从 record 中获取日期值）
   filters?: { text: string; value: string }[]
   onFilter?: (value: string, record: T) => boolean
   width?: string | number
@@ -46,6 +48,9 @@ export interface DataTableProps<T> {
   compact?: boolean // 紧凑模式，缩小字体和间距
   emptyText?: string // 空数据时的提示文字
   onRowClick?: (record: T, index: number) => void // 行点击事件
+  // 筛选状态持久化支持
+  initialFilters?: Record<string, string[]> // 初始筛选状态
+  onFilterChange?: (filters: Record<string, string[]>) => void // 筛选状态变化回调
 }
 
 export default function DataTable<T extends Record<string, any>>({
@@ -60,16 +65,28 @@ export default function DataTable<T extends Record<string, any>>({
   rowSelection,
   onRow,
   compact = false,
+  initialFilters,
+  onFilterChange,
 }: DataTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>(null)
-  const [filterStates, setFilterStates] = useState<Record<string, string[]>>({})
+  const [filterStates, setFilterStates] = useState<Record<string, string[]>>(initialFilters || {})
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(pagination?.pageSize || 10)
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>(
     rowSelection?.selectedRowKeys || []
   )
   const [openFilterDropdown, setOpenFilterDropdown] = useState<string | null>(null)
+  
+  // 当筛选状态变化时，通知父组件（使用 ref 避免依赖回调导致循环）
+  const onFilterChangeRef = useRef(onFilterChange)
+  onFilterChangeRef.current = onFilterChange
+  
+  useEffect(() => {
+    if (onFilterChangeRef.current) {
+      onFilterChangeRef.current(filterStates)
+    }
+  }, [filterStates])
 
   // Get row key
   const getRowKey = (record: T, index: number): string => {
@@ -107,6 +124,28 @@ export default function DataTable<T extends Record<string, any>>({
       const column = columns.find((col) => col.key === columnKey)
       if (column && filterStates[columnKey].length > 0) {
         result = result.filter((record) => {
+          // 日期筛选逻辑
+          if (column.dateFilterable) {
+            const dateField = column.dateField || column.key
+            const dateValue = record[dateField]
+            if (!dateValue) return false
+            
+            const dateStr = String(dateValue)
+            const match = dateStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+            if (!match) return false
+            
+            const [, year, month, day] = match
+            const filterYear = filterStates[columnKey].find(f => f.startsWith('year:'))?.replace('year:', '')
+            const filterMonth = filterStates[columnKey].find(f => f.startsWith('month:'))?.replace('month:', '')
+            const filterDay = filterStates[columnKey].find(f => f.startsWith('day:'))?.replace('day:', '')
+            
+            if (filterYear && year !== filterYear) return false
+            if (filterMonth && month.padStart(2, '0') !== filterMonth) return false
+            if (filterDay && day.padStart(2, '0') !== filterDay) return false
+            
+            return true
+          }
+          
           if (column.onFilter) {
             return filterStates[columnKey].some((value) =>
               column.onFilter!(value, record)
@@ -263,18 +302,180 @@ export default function DataTable<T extends Record<string, any>>({
     return <ChevronDown className="w-4 h-4 text-primary-600" />
   }
 
+  // 日期筛选下拉框
+  const renderDateFilterDropdown = (column: Column<T>) => {
+    const dateField = column.dateField || column.key
+    const activeFilters = filterStates[column.key] || []
+    
+    // 从数据中提取所有日期并解析年月日
+    const years = new Set<string>()
+    const months = new Set<string>()
+    const days = new Set<string>()
+    
+    data.forEach(record => {
+      const dateValue = record[dateField]
+      if (dateValue) {
+        const dateStr = String(dateValue)
+        // 支持 YYYY-MM-DD 或 YYYY/MM/DD 格式
+        const match = dateStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+        if (match) {
+          years.add(match[1])
+          months.add(match[2].padStart(2, '0'))
+          days.add(match[3].padStart(2, '0'))
+        }
+      }
+    })
+    
+    // 解析当前筛选状态
+    const currentYear = activeFilters.find(f => f.startsWith('year:'))?.replace('year:', '') || ''
+    const currentMonth = activeFilters.find(f => f.startsWith('month:'))?.replace('month:', '') || ''
+    const currentDay = activeFilters.find(f => f.startsWith('day:'))?.replace('day:', '') || ''
+    
+    const hasFilter = currentYear || currentMonth || currentDay
+    
+    const handleDateFilterChange = (type: 'year' | 'month' | 'day', value: string) => {
+      const newFilters = activeFilters.filter(f => !f.startsWith(`${type}:`))
+      if (value) {
+        newFilters.push(`${type}:${value}`)
+      }
+      handleFilter(column.key, newFilters)
+    }
+    
+    return (
+      <div
+        className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[200px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 清除筛选按钮 */}
+        <div className="border-b border-gray-200 p-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleFilter(column.key, [])
+              setOpenFilterDropdown(null)
+            }}
+            disabled={!hasFilter}
+            className={`w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs rounded transition-colors ${
+              hasFilter
+                ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            取消筛选
+          </button>
+        </div>
+        
+        {/* 年月日选择 */}
+        <div className="p-3 space-y-2">
+          {/* 年份选择 */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 w-8">年</span>
+            <select
+              value={currentYear}
+              onChange={(e) => handleDateFilterChange('year', e.target.value)}
+              className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              title="选择年份"
+            >
+              <option value="">全部</option>
+              {Array.from(years).sort().reverse().map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* 月份选择 */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 w-8">月</span>
+            <select
+              value={currentMonth}
+              onChange={(e) => handleDateFilterChange('month', e.target.value)}
+              className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              title="选择月份"
+            >
+              <option value="">全部</option>
+              {Array.from(months).sort().map(month => (
+                <option key={month} value={month}>{parseInt(month)}月</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* 日期选择 */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 w-8">日</span>
+            <select
+              value={currentDay}
+              onChange={(e) => handleDateFilterChange('day', e.target.value)}
+              className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              title="选择日期"
+            >
+              <option value="">全部</option>
+              {Array.from(days).sort().map(day => (
+                <option key={day} value={day}>{parseInt(day)}日</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Render filter dropdown
   const renderFilterDropdown = (column: Column<T>) => {
+    // 日期筛选
+    if (column.dateFilterable) {
+      return renderDateFilterDropdown(column)
+    }
+    
     if (!column.filterable && !column.filters) return null
 
     const activeFilters = filterStates[column.key] || []
-    const filterOptions = column.filters || []
+    
+    // 如果有预定义的 filters，使用它们；否则从数据中动态生成
+    let filterOptions = column.filters || []
+    
+    if (filterOptions.length === 0 && column.filterable) {
+      // 从完整数据中动态生成筛选选项（不限制数量）
+      const uniqueValues = new Set<string>()
+      data.forEach(record => {
+        const value = record[column.key]
+        if (value !== null && value !== undefined && value !== '') {
+          uniqueValues.add(String(value))
+        }
+      })
+      filterOptions = Array.from(uniqueValues)
+        .sort()
+        .map(value => ({ text: value, value }))
+    }
 
     return (
       <div
-        className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[150px]"
+        className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[180px]"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* 清除筛选按钮 - 始终显示在顶部 */}
+        <div className="border-b border-gray-200 p-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleFilter(column.key, [])
+              setOpenFilterDropdown(null)
+            }}
+            disabled={activeFilters.length === 0}
+            className={`w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs rounded transition-colors ${
+              activeFilters.length > 0
+                ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            取消筛选 {activeFilters.length > 0 && `(${activeFilters.length})`}
+          </button>
+        </div>
         <div className="p-2 max-h-64 overflow-y-auto">
           {filterOptions.length > 0 ? (
             filterOptions.map((filter) => {
@@ -284,19 +485,22 @@ export default function DataTable<T extends Record<string, any>>({
                   key={filter.value}
                   className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer rounded"
                 >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={(e) => {
-                      e.stopPropagation()
-                      const newFilters = e.target.checked
-                        ? [...activeFilters, filter.value]
-                        : activeFilters.filter((v) => v !== filter.value)
-                      handleFilter(column.key, newFilters)
-                    }}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <span className="text-sm text-gray-700">{filter.text}</span>
+                  <span className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        const newFilters = e.target.checked
+                          ? [...activeFilters, filter.value]
+                          : activeFilters.filter((v) => v !== filter.value)
+                        handleFilter(column.key, newFilters)
+                      }}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
+                      style={{ width: '16px', height: '16px', minWidth: '16px', minHeight: '16px' }}
+                    />
+                  </span>
+                  <span className="text-sm text-gray-700 break-words">{filter.text}</span>
                 </label>
               )
             })
@@ -306,19 +510,6 @@ export default function DataTable<T extends Record<string, any>>({
             </div>
           )}
         </div>
-        {activeFilters.length > 0 && (
-          <div className="border-t border-gray-200 p-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleFilter(column.key, [])
-              }}
-              className="w-full text-xs text-primary-600 hover:text-primary-700"
-            >
-              清除过滤
-            </button>
-          </div>
-        )}
       </div>
     )
   }
@@ -372,7 +563,7 @@ export default function DataTable<T extends Record<string, any>>({
 
               {/* Data columns */}
               {visibleCols.map((column) => {
-                const hasFilter = column.filterable || column.filters
+                const hasFilter = column.filterable || column.filters || column.dateFilterable
                 const activeFilters = filterStates[column.key] || []
 
                 return (

@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Download, DollarSign, PieChart, BarChart3, 
-  RefreshCw, Package
+  RefreshCw, Package, Copy
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
+import { copyToClipboard } from '../components/Toast'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -227,17 +228,39 @@ export default function FinanceOrderReport() {
                   return (
                     <tr key={item.billId + item.customerId} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-3">
-                        <span className="font-medium text-primary-600">
-                          {item.orderNumber || '-'}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="font-medium text-primary-600">
+                            {item.orderNumber || '-'}
+                          </span>
+                          {item.orderNumber && (
+                            <button
+                              onClick={(e) => copyToClipboard(item.orderNumber || '', e)}
+                              className="text-gray-400 hover:text-gray-600"
+                              title="复制订单号"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-3">
-                        <span 
-                          className="text-gray-900 hover:underline cursor-pointer"
-                          onClick={() => navigate(`/finance/bill-details/${item.billId}`)}
-                        >
-                          {item.billNumber}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span 
+                            className="text-gray-900 hover:underline cursor-pointer"
+                            onClick={() => navigate(`/finance/bill-details/${item.billId}`)}
+                          >
+                            {item.billNumber}
+                          </span>
+                          {item.billNumber && (
+                            <button
+                              onClick={(e) => copyToClipboard(item.billNumber, e)}
+                              className="text-gray-400 hover:text-gray-600"
+                              title="复制提单号"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-3 text-gray-600">{item.customerName || '-'}</td>
                       <td className="py-3 px-3 text-right text-gray-900">{item.feeCount}</td>

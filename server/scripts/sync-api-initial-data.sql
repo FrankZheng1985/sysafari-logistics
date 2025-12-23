@@ -1,18 +1,9 @@
 -- ==================== API对接管理初始数据 ====================
 -- 日期：2024-12-19
--- 说明：初始化10个已对接的API服务配置
+-- 说明：初始化9个已对接的API服务配置
 -- 注意：使用 ON CONFLICT 确保不会重复插入
 
--- 1. Ship24 物流跟踪
-INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
-VALUES ('ship24', 'Ship24 物流跟踪', 'Ship24', 'tracking', 'https://api.ship24.com/public/v1', 'https://api.ship24.com/public/v1', 'per_call', 'https://www.ship24.com/pricing', '聚合物流跟踪服务，支持1200+船公司和快递公司', 'Ship', 1)
-ON CONFLICT (api_code) DO UPDATE SET
-    api_name = EXCLUDED.api_name,
-    provider = EXCLUDED.provider,
-    health_check_url = EXCLUDED.health_check_url,
-    updated_at = CURRENT_TIMESTAMP;
-
--- 2. 腾讯云OCR
+-- 1. 腾讯云OCR
 INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, pricing_model, recharge_url, description, icon, sort_order)
 VALUES ('tencent_ocr', '腾讯云OCR', '腾讯云', 'ocr', 'https://ocr.tencentcloudapi.com', 'per_call', 'https://console.cloud.tencent.com/ocr', '文档识别服务，支持运输单据OCR识别', 'FileText', 2)
 ON CONFLICT (api_code) DO UPDATE SET
@@ -95,5 +86,5 @@ ON CONFLICT (api_code) DO UPDATE SET
 DO $$
 BEGIN
     RAISE NOTICE '✅ API服务初始数据插入完成！';
-    RAISE NOTICE '📊 已初始化10个API服务配置';
+    RAISE NOTICE '📊 已初始化9个API服务配置';
 END $$;

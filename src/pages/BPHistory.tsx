@@ -8,6 +8,7 @@ import ColumnSettingsModal from '../components/ColumnSettingsModal'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
 import { getBillsList, type BillOfLading } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
+import { copyToClipboard } from '../components/Toast'
 
 type CompletedBillOfLading = BillOfLading & {
   completeTime: string
@@ -71,20 +72,11 @@ export default function BPHistory() {
     
     loadBills()
   }, [searchValue])
-  
-  const handleCopy = (text: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(text).then(() => {
-      alert('已复制到剪贴板')
-    }).catch(() => {
-      alert('复制失败')
-    })
-  }
 
   const columns: Column<CompletedBillOfLading>[] = [
     {
       key: 'billNumber',
-      label: '序号',
+      label: '提单号',
       sorter: true,
       filterable: true,
       render: (_value, record: CompletedBillOfLading) => (
@@ -98,13 +90,15 @@ export default function BPHistory() {
           >
             {record.billNumber}
           </span>
-          <button
-            onClick={(e) => handleCopy(record.billNumber || '', e)}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            title="复制序号"
-          >
-            <Copy className="w-3 h-3" />
-          </button>
+          {record.billNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.billNumber || '', e)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="复制提单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -124,13 +118,15 @@ export default function BPHistory() {
           >
             {record.containerNumber}
           </span>
-          <button
-            onClick={(e) => handleCopy(record.containerNumber || '', e)}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            title="复制提单号"
-          >
-            <Copy className="w-3 h-3" />
-          </button>
+          {record.containerNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="复制集装箱号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },

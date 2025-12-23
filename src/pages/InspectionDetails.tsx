@@ -6,6 +6,7 @@ import DataTable, { Column } from '../components/DataTable'
 import InspectionModal, { type InspectionDetail } from '../components/InspectionModal'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { getInspectionsList, updateBillInspection, type BillOfLading, type InspectionDetailData } from '../utils/api'
+import { copyToClipboard } from '../components/Toast'
 
 export default function InspectionDetails() {
   const navigate = useNavigate()
@@ -63,15 +64,6 @@ export default function InspectionDetails() {
     
     loadInspections()
   }, [isReleasedTab, searchValue])
-  
-  const handleCopy = (text: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(text).then(() => {
-      alert('已复制到剪贴板')
-    }).catch(() => {
-      alert('复制失败')
-    })
-  }
   
   // 打开查验模态框
   const openInspectionModal = (bill: BillOfLading) => {
@@ -152,7 +144,7 @@ export default function InspectionDetails() {
   const columns: Column<BillOfLading>[] = [
     {
       key: 'billNumber',
-      label: '序号',
+      label: '提单号',
       sorter: true,
       filterable: true,
       render: (_value, record: BillOfLading) => (
@@ -166,13 +158,15 @@ export default function InspectionDetails() {
           >
             {record.billNumber}
           </span>
-          <button
-            onClick={(e) => handleCopy(record.billNumber, e)}
-            className="text-gray-400 hover:text-gray-600"
-            title="复制序号"
-          >
-            <Copy className="w-3 h-3" />
-          </button>
+          {record.billNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制提单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -186,9 +180,9 @@ export default function InspectionDetails() {
           <span className="text-xs">{record.containerNumber || '-'}</span>
           {record.containerNumber && (
             <button
-              onClick={(e) => handleCopy(record.containerNumber || '', e)}
+              onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
               className="text-gray-400 hover:text-gray-600"
-              title="复制提单号"
+              title="复制集装箱号"
             >
               <Copy className="w-3 h-3" />
             </button>

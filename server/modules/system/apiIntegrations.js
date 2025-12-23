@@ -95,16 +95,15 @@ async function initTables() {
     if (!count || count.count === 0) {
       // 插入初始数据
       const initialApis = [
-        { code: 'ship24', name: 'Ship24 物流跟踪', provider: 'Ship24', category: 'tracking', pricing_model: 'per_call', health_check_url: 'https://api.ship24.com/public/v1', recharge_url: 'https://www.ship24.com/pricing', description: '聚合物流跟踪服务，支持1200+船公司和快递公司', icon: 'Ship', sort_order: 1 },
-        { code: 'tencent_ocr', name: '腾讯云OCR', provider: '腾讯云', category: 'ocr', pricing_model: 'per_call', recharge_url: 'https://console.cloud.tencent.com/ocr', description: '文档识别服务，支持运输单据OCR识别', icon: 'FileText', sort_order: 2 },
-        { code: 'tencent_cos', name: '腾讯云COS', provider: '腾讯云', category: 'storage', pricing_model: 'per_volume', recharge_url: 'https://console.cloud.tencent.com/cos', description: '云存储服务，用于存储发票和文档文件', icon: 'HardDrive', sort_order: 3 },
-        { code: 'exchange_rate', name: '汇率API', provider: 'ExchangeRate-API', category: 'finance', pricing_model: 'free', health_check_url: 'https://api.exchangerate-api.com/v4/latest/EUR', description: '免费汇率查询服务，获取实时汇率', icon: 'DollarSign', sort_order: 4 },
-        { code: 'google_translate', name: 'Google翻译', provider: 'Google', category: 'translation', pricing_model: 'free', health_check_url: 'https://translate.googleapis.com', description: '免费翻译服务，用于费用名称翻译', icon: 'Languages', sort_order: 5 },
-        { code: 'taric', name: 'TARIC关税查询', provider: 'EU Commission', category: 'tariff', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/dds2/taric/taric_consultation.jsp', description: '欧盟TARIC关税税率查询系统', icon: 'Calculator', sort_order: 6 },
-        { code: 'eu_vies', name: 'EU VAT验证', provider: 'EU Commission', category: 'validation', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/vies', api_url: 'https://ec.europa.eu/taxation_customs/vies/services/checkVatService', description: '欧盟VIES系统，验证VAT税号有效性', icon: 'BadgeCheck', sort_order: 7 },
-        { code: 'eu_eori', name: 'EU EORI验证', provider: 'EU Commission', category: 'validation', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/dds2/eos', api_url: 'https://ec.europa.eu/taxation_customs/dds2/eos/validation/services/validation', description: '欧盟EORI号码验证服务', icon: 'ShieldCheck', sort_order: 8 },
-        { code: 'render_backend', name: 'Render后端服务器', provider: 'Render', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://sysafari-logistics-api.onrender.com/api/health', recharge_url: 'https://dashboard.render.com', description: '后端API服务器，托管于Render平台', icon: 'Server', sort_order: 9 },
-        { code: 'vercel_frontend', name: 'Vercel前端', provider: 'Vercel', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://sysafari-logistics.vercel.app', recharge_url: 'https://vercel.com/dashboard', description: '前端应用，托管于Vercel平台', icon: 'Globe', sort_order: 10 }
+        { code: 'tencent_ocr', name: '腾讯云OCR', provider: '腾讯云', category: 'ocr', pricing_model: 'per_call', recharge_url: 'https://console.cloud.tencent.com/ocr', description: '文档识别服务，支持运输单据OCR识别', icon: 'FileText', sort_order: 1 },
+        { code: 'tencent_cos', name: '腾讯云COS', provider: '腾讯云', category: 'storage', pricing_model: 'per_volume', recharge_url: 'https://console.cloud.tencent.com/cos', description: '云存储服务，用于存储发票和文档文件', icon: 'HardDrive', sort_order: 2 },
+        { code: 'exchange_rate', name: '汇率API', provider: 'ExchangeRate-API', category: 'finance', pricing_model: 'free', health_check_url: 'https://api.exchangerate-api.com/v4/latest/EUR', description: '免费汇率查询服务，获取实时汇率', icon: 'DollarSign', sort_order: 3 },
+        { code: 'google_translate', name: 'Google翻译', provider: 'Google', category: 'translation', pricing_model: 'free', health_check_url: 'https://translate.googleapis.com', description: '免费翻译服务，用于费用名称翻译', icon: 'Languages', sort_order: 4 },
+        { code: 'taric', name: 'TARIC关税查询', provider: 'EU Commission', category: 'tariff', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/dds2/taric/taric_consultation.jsp', description: '欧盟TARIC关税税率查询系统', icon: 'Calculator', sort_order: 5 },
+        { code: 'eu_vies', name: 'EU VAT验证', provider: 'EU Commission', category: 'validation', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/vies', api_url: 'https://ec.europa.eu/taxation_customs/vies/services/checkVatService', description: '欧盟VIES系统，验证VAT税号有效性', icon: 'BadgeCheck', sort_order: 6 },
+        { code: 'eu_eori', name: 'EU EORI验证', provider: 'EU Commission', category: 'validation', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/dds2/eos', api_url: 'https://ec.europa.eu/taxation_customs/dds2/eos/validation/services/validation', description: '欧盟EORI号码验证服务', icon: 'ShieldCheck', sort_order: 7 },
+        { code: 'render_backend', name: 'Render后端服务器', provider: 'Render', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://sysafari-logistics-api.onrender.com/api/health', recharge_url: 'https://dashboard.render.com', description: '后端API服务器，托管于Render平台', icon: 'Server', sort_order: 8 },
+        { code: 'vercel_frontend', name: 'Vercel前端', provider: 'Vercel', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://sysafari-logistics.vercel.app', recharge_url: 'https://vercel.com/dashboard', description: '前端应用，托管于Vercel平台', icon: 'Globe', sort_order: 9 }
       ]
       
       for (const api of initialApis) {
@@ -115,7 +114,7 @@ async function initTables() {
         `).run(api.code, api.name, api.provider, api.category, api.api_url || '', api.health_check_url || '', api.pricing_model, api.recharge_url || '', api.description, api.icon, api.sort_order)
       }
       
-      console.log('✅ API对接管理模块初始化完成，已插入10个API配置')
+      console.log('✅ API对接管理模块初始化完成，已插入9个API配置')
     }
     
     isInitialized = true
@@ -616,64 +615,6 @@ async function checkGoogleTranslateHealth() {
 }
 
 /**
- * 检查Ship24配置
- */
-async function checkShip24Health() {
-  const db = getDatabase()
-  
-  try {
-    // 从tracking_api_configs表获取Ship24配置
-    const config = await db.prepare(`
-      SELECT api_key FROM tracking_api_configs WHERE provider_code = 'ship24' AND status = 'active'
-    `).get()
-    
-    // 先检查Ship24网站是否可访问（即使没有API Key，网站可访问说明服务在线）
-    const websiteCheck = await httpHealthCheck('https://www.ship24.com')
-    
-    // 如果网站可访问（即使返回403或其他非2xx状态码，只要不是连接错误就说明服务在线）
-    if (websiteCheck.status === 'online' || websiteCheck.status === 'degraded' || 
-        (websiteCheck.status === 'offline' && websiteCheck.statusCode && websiteCheck.statusCode >= 400)) {
-      // 网站有响应，说明服务在线
-      if (!config || !config.api_key || config.api_key === 'YOUR_SHIP24_API_KEY') {
-        return {
-          status: 'degraded',
-          responseTime: websiteCheck.responseTime || 0,
-          message: '服务在线，未配置API Key'
-        }
-      } else {
-        return {
-          status: 'online',
-          responseTime: websiteCheck.responseTime || 0,
-          message: '服务在线，API Key已配置'
-        }
-      }
-    }
-    
-    // 如果网站不可访问，再尝试API端点
-    if (config && config.api_key && config.api_key !== 'YOUR_SHIP24_API_KEY') {
-      // API端点返回403是正常的（需要认证），说明服务在线
-      const apiCheck = await httpHealthCheck('https://api.ship24.com/public/v1', 5000)
-      if (apiCheck.statusCode === 403 || apiCheck.statusCode === 401) {
-        return {
-          status: 'online',
-          responseTime: apiCheck.responseTime || 0,
-          message: '服务在线（API需要认证）'
-        }
-      }
-    }
-    
-    return {
-      status: 'offline',
-      responseTime: 0,
-      message: '服务不可访问'
-    }
-  } catch (error) {
-    // 表可能不存在，直接检查网站可用性
-    return await httpHealthCheck('https://www.ship24.com')
-  }
-}
-
-/**
  * 执行单个API健康检查
  */
 export async function performHealthCheck(apiCode) {
@@ -692,9 +633,6 @@ export async function performHealthCheck(apiCode) {
       break
     case 'tencent_cos':
       result = await checkTencentCosHealth()
-      break
-    case 'ship24':
-      result = await checkShip24Health()
       break
     case 'google_translate':
       result = await checkGoogleTranslateHealth()

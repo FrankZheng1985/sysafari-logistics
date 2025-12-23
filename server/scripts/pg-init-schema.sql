@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     container_number TEXT,
     vessel TEXT,
     voyage TEXT,
+    shipping_company TEXT,
     etd TEXT,
     eta TEXT,
     ata TEXT,
@@ -1406,7 +1407,7 @@ CREATE INDEX IF NOT EXISTS idx_import_records_status ON import_records(status);
 -- ==================== API对接管理模块 ====================
 CREATE TABLE IF NOT EXISTS api_integrations (
     id SERIAL PRIMARY KEY,
-    api_code TEXT UNIQUE NOT NULL,           -- 唯一标识：ship24, tencent_ocr, tencent_cos 等
+    api_code TEXT UNIQUE NOT NULL,           -- 唯一标识：tencent_ocr, tencent_cos, exchange_rate 等
     api_name TEXT NOT NULL,                  -- 显示名称
     provider TEXT,                           -- 服务商
     category TEXT DEFAULT 'other',           -- 分类：tracking/ocr/storage/translation/tariff/validation/infrastructure

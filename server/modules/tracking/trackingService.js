@@ -5,7 +5,8 @@
  * 
  * 支持的配置方式：
  * 1. 数据库配置 (tracking_api_configs 表)
- * 2. 环境变量配置 (SHIP24_API_KEY)
+ * 2. 环境变量配置
+ * 3. 爬虫方式（免费，无需API Key）
  */
 
 import { 
@@ -18,14 +19,14 @@ import {
   NODE_TYPES
 } from './model.js'
 
-// 从环境变量获取 Ship24 API Key（优先级最高）
-const SHIP24_API_KEY = process.env.SHIP24_API_KEY
-
 // 导入各渠道适配器
 import shipAdapter from './adapters/shipAdapter.js'
 import airAdapter from './adapters/airAdapter.js'
 import railAdapter from './adapters/railAdapter.js'
 import truckAdapter from './adapters/truckAdapter.js'
+
+// 导入爬虫模块
+import scrapers from './scrapers/index.js'
 
 // 适配器映射
 const adapters = {
@@ -93,29 +94,16 @@ export async function fetchExternalTracking(billId, transportType, options = {})
     return []
   }
   
-  // 获取API配置（优先使用环境变量中的 Ship24 配置）
-  let config = null
+  // 从数据库获取API配置
+  const configs = await getTrackingApiConfigs({
+    transportType,
+    status: 'active'
+  })
   
-  if (SHIP24_API_KEY && transportType === 'sea') {
-    // 使用环境变量配置的 Ship24
-    config = {
-      providerCode: 'ship24',
-      providerName: 'Ship24 (环境变量)',
-      apiKey: SHIP24_API_KEY,
-      apiUrl: 'https://api.ship24.com/public/v1',
-    }
-  } else {
-    // 从数据库获取配置
-    const configs = await getTrackingApiConfigs({
-      transportType,
-      status: 'active'
-    })
-    
-    if (!configs.list || configs.list.length === 0) {
-      console.warn(`未找到${transportType}的API配置，将使用模拟数据`)
-    }
-    config = configs.list?.[0] || null
+  if (!configs.list || configs.list.length === 0) {
+    console.warn(`未找到${transportType}的API配置，将使用模拟数据`)
   }
+  const config = configs.list?.[0] || null
   
   try {
     // 调用适配器获取跟踪数据
@@ -249,26 +237,12 @@ export async function getSupplementInfo(params) {
     return null
   }
   
-  // 获取API配置（优先使用环境变量中的 Ship24 配置）
-  let config = null
-  
-  if (SHIP24_API_KEY && transportType === 'sea') {
-    // 使用环境变量配置的 Ship24
-    console.log('使用环境变量配置的 Ship24 API')
-    config = {
-      providerCode: 'ship24',
-      providerName: 'Ship24 (环境变量)',
-      apiKey: SHIP24_API_KEY,
-      apiUrl: 'https://api.ship24.com/public/v1',
-    }
-  } else {
-    // 从数据库获取配置
-    const configs = await getTrackingApiConfigs({
-      transportType,
-      status: 'active'
-    })
-    config = configs.list?.[0] || null
-  }
+  // 从数据库获取API配置
+  const configs = await getTrackingApiConfigs({
+    transportType,
+    status: 'active'
+  })
+  const config = configs.list?.[0] || null
   
   try {
     // 调用适配器获取跟踪数据
@@ -315,6 +289,92 @@ export async function getSupplementInfo(params) {
   }
 }
 
+/**
+ * 通过爬虫获取集装箱追踪信息（免费，无需API Key）
+ * @param {string} containerNumber - 集装箱号
+ * @returns {Promise<Object>} 追踪结果
+ */
+export async function scrapeContainerTracking(containerNumber) {
+  if (!containerNumber) {
+    throw new Error('集装箱号不能为空')
+  }
+  
+  console.log(`[TrackingService] 爬虫追踪集装箱: ${containerNumber}`)
+  
+  try {
+    const result = await scrapers.trackByContainer(containerNumber)
+    return result
+  } catch (error) {
+    console.error('爬虫追踪失败:', error)
+    return null
+  }
+}
+
+/**
+ * 通过爬虫获取提单追踪信息（免费，无需API Key）
+ * @param {string} billNumber - 提单号
+ * @returns {Promise<Object>} 追踪结果
+ */
+export async function scrapeBillTracking(billNumber) {
+  if (!billNumber) {
+    throw new Error('提单号不能为空')
+  }
+  
+  console.log(`[TrackingService] 爬虫追踪提单: ${billNumber}`)
+  
+  try {
+    const result = await scrapers.trackByBillNumber(billNumber)
+    return result
+  } catch (error) {
+    console.error('爬虫追踪失败:', error)
+    return null
+  }
+}
+
+/**
+ * 智能追踪（自动判断是集装箱号还是提单号）
+ * @param {string} trackingNumber - 追踪号
+ * @param {string} shippingCompany - 可选，船公司名称（用于纯数字提单号的船公司识别）
+ * @returns {Promise<Object>} 追踪结果
+ */
+export async function smartTrack(trackingNumber, shippingCompany) {
+  if (!trackingNumber) {
+    throw new Error('追踪号不能为空')
+  }
+  
+  console.log(`[TrackingService] 智能追踪: ${trackingNumber}, 船公司: ${shippingCompany || '未指定'}`)
+  
+  try {
+    const result = await scrapers.smartTrack(trackingNumber, shippingCompany)
+    return result
+  } catch (error) {
+    console.error('智能追踪失败:', error)
+    return null
+  }
+}
+
+/**
+ * 获取支持的船公司列表
+ * @returns {Array} 船公司列表
+ */
+export function getSupportedCarriers() {
+  return scrapers.getSupportedCarriers()
+}
+
+/**
+ * 清理爬虫缓存
+ */
+export function clearScraperCache() {
+  scrapers.clearCache()
+}
+
+/**
+ * 获取爬虫缓存统计
+ */
+export function getScraperCacheStats() {
+  return scrapers.getCacheStats()
+}
+
 export default {
   getTrackingInfo,
   fetchExternalTracking,
@@ -323,4 +383,11 @@ export default {
   getTrackingNodeTemplates,
   calculateETA,
   getSupplementInfo,
+  // 爬虫相关
+  scrapeContainerTracking,
+  scrapeBillTracking,
+  smartTrack,
+  getSupportedCarriers,
+  clearScraperCache,
+  getScraperCacheStats,
 }

@@ -573,6 +573,8 @@ export interface BillOfLading {
   cmrExceptionResolvedTime?: string
   // 附加属性字段
   containerType?: string  // 箱型: 'cfs' | 'fcl'
+  containerSize?: string  // 柜型: '20GP' | '40GP' | '40HQ' 等
+  sealNumber?: string  // 封号
   billType?: string  // 提单类型: 'master' | 'house'
   transportArrangement?: string  // 运输安排: 'entrust' | 'self'
   consigneeType?: string  // 收货人类型: 'asl' | 'not-asl'
@@ -1699,17 +1701,39 @@ export async function getContainerCodesByCompany(companyCode: string): Promise<A
  * @param query 搜索关键词
  * @returns 匹配的集装箱代码列表
  * 
- * 接口地址: GET /api/container-codes/search?q=xxx
+ * 接口地址: GET /api/container-codes
  */
 export async function searchContainerCodes(query: string): Promise<ApiResponse<ContainerCode[]>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/container-codes/search?q=${encodeURIComponent(query)}`)
+    const response = await fetch(`${API_BASE_URL}/api/container-codes`)
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
     
-    return await response.json()
+    const result = await response.json()
+    
+    // 转换数据格式
+    if (result.errCode === 200 && result.data) {
+      result.data = result.data.map((item: any) => ({
+        containerCode: item.containerCode || item.container_code || '',
+        companyName: item.shippingCompanyName || item.shipping_company_name || item.companyName || '',
+        companyCode: item.companyCode || '',
+        description: item.description || '',
+      }))
+      
+      // 如果有搜索关键词，进行前端过滤
+      if (query) {
+        const search = query.toLowerCase()
+        result.data = result.data.filter((item: any) => 
+          (item.containerCode || '').toLowerCase().includes(search) ||
+          (item.companyName || '').toLowerCase().includes(search) ||
+          (item.companyCode || '').toLowerCase().includes(search)
+        )
+      }
+    }
+    
+    return result
   } catch (error) {
     console.error('搜索集装箱代码失败:', error)
     throw error
@@ -5159,6 +5183,123 @@ export async function getTrackingSupplementInfo(params: {
     return await response.json()
   } catch (error) {
     console.error('获取追踪补充信息失败:', error)
+    throw error
+  }
+}
+
+// ==================== 爬虫追踪 API ====================
+
+/**
+ * 爬虫追踪结果类型
+ */
+export interface ScraperTrackingResult {
+  containerNumber: string | null
+  billNumber: string | null
+  carrier: string | null
+  carrierCode: string | null
+  vessel: string | null
+  voyage: string | null
+  portOfLoading: string | null
+  portOfDischarge: string | null
+  etd: string | null
+  eta: string | null
+  atd: string | null
+  ata: string | null
+  status: string | null
+  containerType: string | null
+  sealNumber: string | null
+  grossWeight: number | null
+  volume: number | null
+  events: Array<{
+    date: string | null
+    time?: string | null
+    location: string | null
+    event: string | null
+    vessel?: string | null
+    voyage?: string | null
+  }>
+  _source: string
+  _fetchedAt: string
+}
+
+/**
+ * 支持的船公司
+ */
+export interface SupportedCarrier {
+  code: string
+  name: string
+  scraper: string
+}
+
+/**
+ * 智能追踪（自动判断是集装箱号还是提单号）- 免费爬虫
+ * @param trackingNumber - 追踪号（提单号或集装箱号）
+ * @param shippingCompany - 可选，船公司名称（用于纯数字提单号的船公司识别）
+ */
+export async function smartTrack(trackingNumber: string, shippingCompany?: string): Promise<ApiResponse<ScraperTrackingResult | null>> {
+  try {
+    let url = `${API_BASE_URL}/api/tracking/scrape?trackingNumber=${encodeURIComponent(trackingNumber)}`
+    if (shippingCompany) {
+      url += `&shippingCompany=${encodeURIComponent(shippingCompany)}`
+    }
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('智能追踪失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 按集装箱号追踪 - 免费爬虫
+ */
+export async function scrapeContainerTracking(containerNumber: string): Promise<ApiResponse<ScraperTrackingResult | null>> {
+  try {
+    const url = `${API_BASE_URL}/api/tracking/scrape/container?containerNumber=${encodeURIComponent(containerNumber)}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('集装箱追踪失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 按提单号追踪 - 免费爬虫
+ */
+export async function scrapeBillTracking(billNumber: string): Promise<ApiResponse<ScraperTrackingResult | null>> {
+  try {
+    const url = `${API_BASE_URL}/api/tracking/scrape/bill?billNumber=${encodeURIComponent(billNumber)}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('提单追踪失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取支持的船公司列表
+ */
+export async function getSupportedCarriers(): Promise<ApiResponse<SupportedCarrier[]>> {
+  try {
+    const url = `${API_BASE_URL}/api/tracking/scrape/carriers`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取船公司列表失败:', error)
     throw error
   }
 }

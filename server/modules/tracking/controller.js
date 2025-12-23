@@ -23,6 +23,12 @@ import {
   batchRefreshTracking,
   getTrackingNodeTemplates,
   getSupplementInfo,
+  scrapeContainerTracking,
+  scrapeBillTracking,
+  smartTrack,
+  getSupportedCarriers,
+  clearScraperCache,
+  getScraperCacheStats,
 } from './trackingService.js'
 
 // ==================== 跟踪记录 API ====================
@@ -413,6 +419,184 @@ export async function deleteApiConfig(req, res) {
   }
 }
 
+// ==================== 爬虫追踪 API ====================
+
+/**
+ * 通过爬虫追踪集装箱（免费，无需API Key）
+ */
+export async function scrapeContainer(req, res) {
+  try {
+    const { containerNumber } = req.query
+    
+    if (!containerNumber) {
+      return res.status(400).json({
+        errCode: 400,
+        msg: '请提供集装箱号',
+      })
+    }
+    
+    console.log(`[Controller] 爬虫追踪集装箱: ${containerNumber}`)
+    const result = await scrapeContainerTracking(containerNumber)
+    
+    if (result) {
+      res.json({
+        errCode: 200,
+        msg: 'success',
+        data: result,
+      })
+    } else {
+      res.json({
+        errCode: 200,
+        msg: '未找到追踪信息。可能原因：\n1. 集装箱号不存在或已过期\n2. 船公司网站暂时无法访问\n3. 集装箱号格式不正确\n建议：请确认集装箱号是否正确，或联系船公司核实',
+        data: null,
+      })
+    }
+  } catch (error) {
+    console.error('爬虫追踪失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: error.message || '追踪失败',
+    })
+  }
+}
+
+/**
+ * 通过爬虫追踪提单（免费，无需API Key）
+ */
+export async function scrapeBill(req, res) {
+  try {
+    const { billNumber } = req.query
+    
+    if (!billNumber) {
+      return res.status(400).json({
+        errCode: 400,
+        msg: '请提供提单号',
+      })
+    }
+    
+    console.log(`[Controller] 爬虫追踪提单: ${billNumber}`)
+    const result = await scrapeBillTracking(billNumber)
+    
+    if (result) {
+      res.json({
+        errCode: 200,
+        msg: 'success',
+        data: result,
+      })
+    } else {
+      res.json({
+        errCode: 200,
+        msg: '未找到追踪信息。可能原因：\n1. 提单号不存在或已过期\n2. 船公司网站暂时无法访问\n3. 提单号格式不正确\n建议：请确认提单号是否正确，或联系船公司核实',
+        data: null,
+      })
+    }
+  } catch (error) {
+    console.error('爬虫追踪失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: error.message || '追踪失败',
+    })
+  }
+}
+
+/**
+ * 智能追踪（自动判断是集装箱号还是提单号）
+ */
+export async function smartTrackApi(req, res) {
+  try {
+    const { trackingNumber, shippingCompany } = req.query
+    
+    if (!trackingNumber) {
+      return res.status(400).json({
+        errCode: 400,
+        msg: '请提供追踪号（集装箱号或提单号）',
+      })
+    }
+    
+    console.log(`[Controller] 智能追踪: ${trackingNumber}, 船公司: ${shippingCompany || '未指定'}`)
+    const result = await smartTrack(trackingNumber, shippingCompany)
+    
+    if (result) {
+      res.json({
+        errCode: 200,
+        msg: 'success',
+        data: result,
+      })
+    } else {
+      res.json({
+        errCode: 200,
+        msg: '未找到追踪信息。可能原因：\n1. 提单号不存在或已过期\n2. 船公司网站暂时无法访问\n3. 提单号格式不正确\n建议：请确认提单号是否正确，或联系船公司核实',
+        data: null,
+      })
+    }
+  } catch (error) {
+    console.error('智能追踪失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: error.message || '追踪失败',
+    })
+  }
+}
+
+/**
+ * 获取支持的船公司列表
+ */
+export async function getCarriers(req, res) {
+  try {
+    const carriers = getSupportedCarriers()
+    res.json({
+      errCode: 200,
+      msg: 'success',
+      data: carriers,
+    })
+  } catch (error) {
+    console.error('获取船公司列表失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: error.message || '获取失败',
+    })
+  }
+}
+
+/**
+ * 清理爬虫缓存
+ */
+export async function clearCache(req, res) {
+  try {
+    clearScraperCache()
+    res.json({
+      errCode: 200,
+      msg: '缓存已清理',
+    })
+  } catch (error) {
+    console.error('清理缓存失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: error.message || '清理失败',
+    })
+  }
+}
+
+/**
+ * 获取爬虫缓存统计
+ */
+export async function getCacheStatsApi(req, res) {
+  try {
+    const stats = getScraperCacheStats()
+    res.json({
+      errCode: 200,
+      msg: 'success',
+      data: stats,
+    })
+  } catch (error) {
+    console.error('获取缓存统计失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: error.message || '获取失败',
+    })
+  }
+}
+
 export default {
   // 跟踪记录
   getBillTracking,
@@ -432,4 +616,12 @@ export default {
   createApiConfig,
   updateApiConfig,
   deleteApiConfig,
+  
+  // 爬虫追踪
+  scrapeContainer,
+  scrapeBill,
+  smartTrackApi,
+  getCarriers,
+  clearCache,
+  getCacheStatsApi,
 }

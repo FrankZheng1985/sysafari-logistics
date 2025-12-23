@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Printer, CheckSquare, Square } from 'lucide-react'
+import { ArrowLeft, Printer, CheckSquare, Square, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { copyToClipboard } from '../components/Toast'
 
 interface PrintLabel {
   id: string
@@ -137,8 +138,19 @@ export default function PureLabelPrintBatch() {
       label: '订单号',
       sorter: true,
       render: (_value, record: PrintLabel) => (
-        <div className="text-primary-600">
-          {record.orderNumber}
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600">
+            {record.orderNumber}
+          </span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },

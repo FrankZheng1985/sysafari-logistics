@@ -3,11 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Search, Plus, Edit2, Trash2, Receipt,
   Truck, Shield, Building2, FileText, Package, Settings,
-  CheckSquare, Square, Loader2
+  CheckSquare, Square, Loader2, Copy
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import FeeModal from '../components/FeeModal'
+import { copyToClipboard } from '../components/Toast'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -278,21 +279,41 @@ export default function FinanceFees() {
     {
       key: 'orderNumber',
       label: '订单号',
-      width: 100,
+      width: 120,
       render: (_value, record) => (
-        <span className="font-medium text-primary-600">{record.orderNumber || '-'}</span>
+        <div className="flex items-center gap-1">
+          <span className="font-medium text-primary-600">{record.orderNumber || '-'}</span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       )
     },
     {
       key: 'billNumber',
       label: '关联提单',
-      width: 150,
+      width: 170,
       render: (_value, record) => (
-        <div>
+        <div className="flex items-center gap-1">
           {record.billNumber ? (
-            <span className="text-sm text-primary-600 hover:underline cursor-pointer">
-              {record.billNumber}
-            </span>
+            <>
+              <span className="text-sm text-primary-600 hover:underline cursor-pointer">
+                {record.billNumber}
+              </span>
+              <button
+                onClick={(e) => copyToClipboard(record.billNumber, e)}
+                className="text-gray-400 hover:text-gray-600"
+                title="复制提单号"
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+            </>
           ) : (
             <span className="text-gray-400">-</span>
           )}

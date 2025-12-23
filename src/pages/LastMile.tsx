@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Truck, MapPin, Clock, Package } from 'lucide-react'
+import { Truck, MapPin, Clock, Package, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
+import { copyToClipboard } from '../components/Toast'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { useColumnSettings } from '../hooks/useColumnSettings'
 
@@ -75,16 +76,38 @@ export default function LastMile() {
       key: 'orderNumber',
       label: '订单号',
       render: (_value, record: LastMileOrder) => (
-        <span className="text-primary-600 font-medium">{record.orderNumber}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 font-medium">{record.orderNumber}</span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
       key: 'billNumber',
       label: '提单号',
       render: (_value, record: LastMileOrder) => (
-        <span className="text-primary-600 hover:underline cursor-pointer">
-          {record.billNumber}
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
+            {record.billNumber}
+          </span>
+          {record.billNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制提单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     { key: 'recipient', label: '收件人' },

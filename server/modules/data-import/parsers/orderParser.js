@@ -16,6 +16,7 @@ const FIELD_MAPPING = {
   '是否授权': { field: 'is_authorized', required: false },
   '运输方式': { field: 'transport_method', required: false },
   '型号': { field: 'container_type', required: false }, // 集装箱类型(如40HQ、20GP)
+  '船公司': { field: 'shipping_company', required: false }, // 船公司名称(如EMC、COSCO)
   '船名航次': { field: 'vessel_voyage', required: false },
   '提单号': { field: 'bill_number', required: true, unique: true },
   '起运港': { field: 'port_of_loading', required: false },
@@ -316,6 +317,7 @@ export async function importData(data, options = {}) {
               port_of_loading = COALESCE(?, port_of_loading),
               place_of_delivery = COALESCE(?, place_of_delivery),
               vessel = COALESCE(?, vessel),
+              shipping_company = COALESCE(?, shipping_company),
               eta = COALESCE(?, eta),
               etd = COALESCE(?, etd),
               weight = COALESCE(?, weight),
@@ -336,6 +338,7 @@ export async function importData(data, options = {}) {
             row.port_of_loading,
             row.destination,
             row.vessel_voyage,
+            row.shipping_company,
             row.eta,
             row.etd,
             row.weight,
@@ -357,6 +360,7 @@ export async function importData(data, options = {}) {
               port_of_loading = COALESCE(?, port_of_loading),
               place_of_delivery = COALESCE(?, place_of_delivery),
               vessel = COALESCE(?, vessel),
+              shipping_company = COALESCE(?, shipping_company),
               eta = COALESCE(?, eta),
               etd = COALESCE(?, etd),
               weight = COALESCE(?, weight),
@@ -375,6 +379,7 @@ export async function importData(data, options = {}) {
             row.port_of_loading,
             row.destination,
             row.vessel_voyage,
+            row.shipping_company,
             row.eta,
             row.etd,
             row.weight,
@@ -398,11 +403,11 @@ export async function importData(data, options = {}) {
           await db.prepare(`
             INSERT INTO bills_of_lading (
               id, bill_number, container_number, customer_id, customer_name,
-              port_of_loading, place_of_delivery, vessel, eta, etd,
+              port_of_loading, place_of_delivery, vessel, shipping_company, eta, etd,
               weight, volume, pieces, container_type,
               transport_method, cmr_delivery_address, cmr_unloading_complete_time,
               status, complete_time, is_void, create_time, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '已完成', NOW(), 0, COALESCE(?, NOW()), NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '已完成', NOW(), 0, COALESCE(?, NOW()), NOW())
           `).run(
             billId,
             row.bill_number,
@@ -412,6 +417,7 @@ export async function importData(data, options = {}) {
             row.port_of_loading,
             row.destination,
             row.vessel_voyage,
+            row.shipping_company,
             row.eta,
             row.etd,
             row.weight,
@@ -428,11 +434,11 @@ export async function importData(data, options = {}) {
           await db.prepare(`
             INSERT INTO bills_of_lading (
               id, bill_number, container_number, customer_id, customer_name,
-              port_of_loading, place_of_delivery, vessel, eta, etd,
+              port_of_loading, place_of_delivery, vessel, shipping_company, eta, etd,
               weight, volume, pieces, container_type,
               transport_method, cmr_delivery_address, cmr_unloading_complete_time,
               status, is_void, create_time, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, COALESCE(?, NOW()), NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, COALESCE(?, NOW()), NOW())
           `).run(
             billId,
             row.bill_number,
@@ -442,6 +448,7 @@ export async function importData(data, options = {}) {
             row.port_of_loading,
             row.destination,
             row.vessel_voyage,
+            row.shipping_company,
             row.eta,
             row.etd,
             row.weight,

@@ -1,19 +1,17 @@
 /**
  * 船公司跟踪API适配器
  * 
- * 支持的跟踪方式：
- * 1. Ship24 聚合API（推荐，支持1200+船公司）
- * 2. 各船公司直连API：
+ * 支持各船公司直连API：
  *    - 马士基 (Maersk)
  *    - 中远海运 (COSCO)
  *    - 地中海航运 (MSC)
  *    - 达飞轮船 (CMA CGM)
  *    - 长荣海运 (Evergreen)
  *    - 赫伯罗特 (Hapag-Lloyd)
+ *    - 东方海外 (OOCL)
  */
 
 import { NODE_TYPES, TRACKING_STATUS } from '../model.js'
-import ship24Adapter from './ship24Adapter.js'
 
 // 船公司代码映射
 const CARRIER_CODES = {
@@ -43,10 +41,6 @@ export async function fetchTracking(params) {
   const carrier = CARRIER_CODES[carrierCode]
   
   console.log(`跟踪查询: ${number}, 识别船公司: ${carrier || '未知'}`)
-  
-  // ==================== 优先级调整 ====================
-  // 如果能识别出具体船公司，优先使用船公司官方 API（数据更准确）
-  // Ship24 作为备选方案
   
   // 1. 尝试使用船公司直连 API（数据更准确）
   if (carrier && config?.apiKey) {
@@ -84,29 +78,10 @@ export async function fetchTracking(params) {
       }
     } catch (error) {
       console.error(`${carrier} 官方API调用失败:`, error.message)
-      // 失败后尝试 Ship24
     }
   }
   
-  // 2. 使用 Ship24 聚合API 作为备选
-  if (config?.providerCode === 'ship24' && config?.apiKey) {
-    try {
-      console.log('📡 使用 Ship24 聚合API 获取跟踪数据...')
-      const result = await ship24Adapter.fetchTracking(params)
-      if (result && (result.events?.length > 0 || result.carrier)) {
-        console.log('✅ Ship24 返回数据')
-        // 添加数据来源警告
-        result._dataSource = 'ship24'
-        result._warning = 'Ship24为第三方聚合数据，可能与船公司官网有差异'
-        return result
-      }
-      console.log('⚠️ Ship24 未返回有效数据')
-    } catch (error) {
-      console.error('Ship24 API 调用失败:', error.message)
-    }
-  }
-  
-  // 3. 尝试通用跟踪API
+  // 2. 尝试通用跟踪API
   if (config && config.apiUrl && !config.providerCode) {
     try {
       return await fetchGenericTracking(trackingNumber, containerNumber, config)
@@ -792,11 +767,6 @@ export function getNodeTemplates() {
 export function extractSupplementInfo(trackingData) {
   if (!trackingData) {
     return null
-  }
-  
-  // 如果是 Ship24 返回的数据，使用其适配器处理
-  if (trackingData._raw || trackingData.carrierCode) {
-    return ship24Adapter.extractSupplementInfo(trackingData)
   }
   
   const info = {

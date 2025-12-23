@@ -154,26 +154,6 @@ INSERT INTO tracking_api_configs (
   updated_at = CURRENT_TIMESTAMP;
 
 -- =====================================================
--- 第三方聚合 API（备选方案）
--- =====================================================
-
--- 8. Ship24 聚合跟踪服务（备选）
-INSERT INTO tracking_api_configs (
-  provider_code, provider_name, transport_type, 
-  api_type, api_url, api_key, 
-  status, description, priority
-) VALUES (
-  'ship24', 'Ship24 聚合跟踪服务', 'sea',
-  'rest', 'https://api.ship24.com/public/v1', 'YOUR_SHIP24_API_KEY',
-  'inactive', 'Ship24 第三方聚合跟踪服务，支持 1200+ 船公司。申请地址: https://www.ship24.com/',
-  100
-) ON CONFLICT (provider_code) DO UPDATE SET
-  provider_name = EXCLUDED.provider_name,
-  api_url = EXCLUDED.api_url,
-  description = EXCLUDED.description,
-  updated_at = CURRENT_TIMESTAMP;
-
--- =====================================================
 -- 其他船公司（可选）
 -- =====================================================
 

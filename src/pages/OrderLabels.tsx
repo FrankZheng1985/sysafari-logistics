@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { FileText } from 'lucide-react'
+import { FileText, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
+import { copyToClipboard } from '../components/Toast'
 import { useColumnSettings } from '../hooks/useColumnSettings'
 
 interface Order {
@@ -84,10 +85,19 @@ export default function OrderLabels() {
       sorter: true,
       filterable: true,
       render: (_value, record: Order) => (
-        <div>
-          <div className="text-primary-600 hover:underline cursor-pointer">
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
             {record.orderNumber}
-          </div>
+          </span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },

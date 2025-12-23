@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Building, Building2, User, Phone, Mail, MapPin,
   Package, TrendingUp, Ship, Plus, Trash2, Star,
-  Edit, ExternalLink, RefreshCw, FileText, X, CheckCircle, ChevronDown
+  Edit, ExternalLink, RefreshCw, FileText, X, CheckCircle, ChevronDown, Copy
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { copyToClipboard } from '../components/Toast'
 import { 
   getCustomerById, getCustomerOrders, getCustomerOrderStats, 
   getCustomerAddresses, createCustomerAddress, updateCustomerAddress, deleteCustomerAddress,
@@ -264,28 +265,64 @@ export default function CRMCustomerDetail() {
     {
       key: 'orderNumber',
       label: '订单号',
-      width: 110,
+      width: 130,
       render: (_value, record) => (
-        <button
-          onClick={() => navigate(`/crm/bill/${record.id}`)}
-          className="text-primary-600 hover:text-primary-800 hover:underline font-medium"
-        >
-          {record.orderNumber || '-'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => navigate(`/crm/bill/${record.id}`)}
+            className="text-primary-600 hover:text-primary-800 hover:underline font-medium"
+          >
+            {record.orderNumber || '-'}
+          </button>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       )
     },
     {
       key: 'billNumber',
       label: '提单号',
-      width: 140,
+      width: 160,
       render: (_value, record) => (
-        <span className="text-gray-900">{record.billNumber}</span>
+        <div className="flex items-center gap-1">
+          <span className="text-gray-900">{record.billNumber}</span>
+          {record.billNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制提单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       )
     },
     {
       key: 'containerNumber',
       label: '集装箱号',
-      width: 120,
+      width: 140,
+      render: (_value, record) => (
+        <div className="flex items-center gap-1">
+          <span className="text-gray-900">{record.containerNumber || '-'}</span>
+          {record.containerNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.containerNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制集装箱号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )
     },
     {
       key: 'portOfLoading',
