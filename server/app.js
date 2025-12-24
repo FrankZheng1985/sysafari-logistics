@@ -182,9 +182,7 @@ app.use('/api', clearanceRoutes)
 app.use('/api/taric', taricRoutes)
 
 // 税率管理模块（前端使用的接口）
-console.log('🔧 [DEBUG] 注册 tariff-rates 路由, tariffRatesRoutes:', typeof tariffRatesRoutes)
 app.use('/api/tariff-rates', tariffRatesRoutes)
-console.log('✅ [DEBUG] tariff-rates 路由注册成功')
 
 // 货物/商品管理模块
 app.use('/api/cargo', cargoRoutes)
