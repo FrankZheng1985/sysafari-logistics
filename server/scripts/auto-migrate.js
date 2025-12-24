@@ -1727,7 +1727,6 @@ export async function runMigrations() {
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_backup_status ON backup_records(backup_status)`)
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_backup_cloud_synced ON backup_records(is_cloud_synced)`)
     
     // 为现有表添加 COS 相关字段（兼容已有数据库）
     const backupCosColumns = [
@@ -1745,6 +1744,13 @@ export async function runMigrations() {
       } catch (e) {
         // 忽略已存在的列
       }
+    }
+    
+    // 在添加字段后再创建索引
+    try {
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_backup_cloud_synced ON backup_records(is_cloud_synced)`)
+    } catch (e) {
+      // 忽略索引创建失败
     }
     
     // 创建恢复记录表
