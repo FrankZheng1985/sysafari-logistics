@@ -105,17 +105,24 @@ export function summarizeFees(fees) {
  * 生成PDF发票
  */
 export async function generatePDF(invoiceData) {
+  console.log('[generatePDF] 开始生成 HTML...')
   const html = generateInvoiceHTML(invoiceData)
+  console.log(`[generatePDF] HTML 生成完成, 长度: ${html?.length || 0}`)
   
   let browser = null
   try {
+    console.log('[generatePDF] 正在启动 Puppeteer...')
     browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     })
+    console.log('[generatePDF] Puppeteer 启动成功')
     
     const page = await browser.newPage()
+    console.log('[generatePDF] 新页面创建成功')
+    
     await page.setContent(html, { waitUntil: 'networkidle0' })
+    console.log('[generatePDF] 页面内容设置成功')
     
     const pdfData = await page.pdf({
       format: 'A4',
@@ -127,12 +134,17 @@ export async function generatePDF(invoiceData) {
         left: '15mm'
       }
     })
+    console.log(`[generatePDF] PDF 生成成功, 大小: ${pdfData?.length || 0} bytes`)
     
     // 确保返回 Node.js Buffer（COS SDK 需要）
     return Buffer.from(pdfData)
+  } catch (error) {
+    console.error('[generatePDF] 生成 PDF 失败:', error.message || error)
+    throw error
   } finally {
     if (browser) {
       await browser.close()
+      console.log('[generatePDF] 浏览器已关闭')
     }
   }
 }
@@ -712,7 +724,10 @@ export async function regenerateInvoiceFiles(invoiceId) {
     exchangeRate: parseFloat(invoice.exchange_rate) || 1
   }
 
+  console.log(`[regenerateInvoiceFiles] 准备生成 PDF, items 数量: ${items.length}, 客户: ${pdfData.customer.name}`)
+  console.log(`[regenerateInvoiceFiles] 开始生成 PDF...`)
   const pdfBuffer = await generatePDF(pdfData)
+  console.log(`[regenerateInvoiceFiles] PDF 生成成功, 大小: ${pdfBuffer?.length || 0} bytes`)
 
   // 生成Excel
   // 获取集装箱号
