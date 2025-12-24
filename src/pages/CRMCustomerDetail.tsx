@@ -104,6 +104,15 @@ export default function CRMCustomerDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // 当切换到门户 tab 时加载数据
+  useEffect(() => {
+    if (id && activeInfoTab === 'portal') {
+      loadPortalAccounts()
+      loadApiKeys()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, activeInfoTab])
+
   useEffect(() => {
     if (id) {
       loadOrders()
@@ -170,6 +179,160 @@ export default function CRMCustomerDetail() {
       }
     } catch (error) {
       console.error('加载税号列表失败:', error)
+    }
+  }
+
+  // 加载门户账户
+  const loadPortalAccounts = async () => {
+    setPortalLoading(true)
+    try {
+      const response = await getCustomerAccounts({ customerId: id })
+      if (response.errCode === 200 && response.data) {
+        setPortalAccounts(response.data.list || [])
+      }
+    } catch (error) {
+      console.error('加载门户账户失败:', error)
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  // 加载 API 密钥
+  const loadApiKeys = async () => {
+    try {
+      const response = await getCustomerApiKeys(id!)
+      if (response.errCode === 200 && response.data) {
+        setApiKeys(response.data)
+      }
+    } catch (error) {
+      console.error('加载API密钥失败:', error)
+    }
+  }
+
+  // 创建门户账户
+  const handleCreateAccount = async () => {
+    if (!accountForm.username || !accountForm.password) {
+      alert('请填写用户名和密码')
+      return
+    }
+    if (accountForm.password.length < 8) {
+      alert('密码长度不能少于8位')
+      return
+    }
+    try {
+      const response = await createCustomerAccount({
+        customerId: id!,
+        username: accountForm.username,
+        password: accountForm.password,
+        email: accountForm.email || undefined
+      })
+      if (response.errCode === 200) {
+        setShowAccountModal(false)
+        setAccountForm({ username: '', password: '', email: '' })
+        loadPortalAccounts()
+        alert('账户创建成功')
+      } else {
+        alert(response.msg || response.errMessage || '创建失败')
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : '创建失败'
+      alert(errorMessage)
+    }
+  }
+
+  // 重置密码
+  const handleResetPassword = async () => {
+    if (!editingAccount || !newPassword) {
+      alert('请输入新密码')
+      return
+    }
+    try {
+      const response = await resetCustomerAccountPassword(editingAccount.id, newPassword)
+      if (response.errCode === 200) {
+        setShowPasswordModal(false)
+        setNewPassword('')
+        setEditingAccount(null)
+        alert('密码重置成功')
+      }
+    } catch (error) {
+      console.error('重置密码失败:', error)
+      alert('重置密码失败')
+    }
+  }
+
+  // 切换账户状态
+  const handleToggleAccountStatus = async (account: CustomerAccount) => {
+    const newStatus = account.status === 'active' ? 'suspended' : 'active'
+    try {
+      const response = await updateCustomerAccount(account.id, { status: newStatus })
+      if (response.errCode === 200) {
+        loadPortalAccounts()
+      }
+    } catch (error) {
+      console.error('更新账户状态失败:', error)
+    }
+  }
+
+  // 删除账户
+  const handleDeleteAccount = async (account: CustomerAccount) => {
+    if (!confirm(`确定要删除账户 "${account.username}" 吗？`)) return
+    try {
+      const response = await deleteCustomerAccount(account.id)
+      if (response.errCode === 200) {
+        loadPortalAccounts()
+      }
+    } catch (error) {
+      console.error('删除账户失败:', error)
+    }
+  }
+
+  // 创建 API 密钥
+  const handleCreateApiKey = async () => {
+    if (!apiKeyForm.keyName) {
+      alert('请填写密钥名称')
+      return
+    }
+    try {
+      const response = await createCustomerApiKey(id!, {
+        keyName: apiKeyForm.keyName,
+        permissions: apiKeyForm.permissions,
+        rateLimit: apiKeyForm.rateLimit
+      })
+      if (response.errCode === 200 && response.data) {
+        setNewApiSecret(response.data.apiSecret)
+        setShowApiSecret(true)
+        loadApiKeys()
+        setApiKeyForm({ keyName: '', permissions: ['order:read'], rateLimit: 100 })
+        // 不关闭弹窗，让用户先看到 apiSecret
+      }
+    } catch (error) {
+      console.error('创建API密钥失败:', error)
+      alert('创建失败')
+    }
+  }
+
+  // 删除 API 密钥
+  const handleDeleteApiKey = async (key: CustomerApiKey) => {
+    if (!confirm(`确定要删除API密钥 "${key.keyName}" 吗？`)) return
+    try {
+      const response = await deleteCustomerApiKey(key.id)
+      if (response.errCode === 200) {
+        loadApiKeys()
+      }
+    } catch (error) {
+      console.error('删除API密钥失败:', error)
+    }
+  }
+
+  // 切换 API 密钥状态
+  const handleToggleApiKeyStatus = async (key: CustomerApiKey) => {
+    try {
+      const response = await updateCustomerApiKey(key.id, { isActive: !key.isActive })
+      if (response.errCode === 200) {
+        loadApiKeys()
+      }
+    } catch (error) {
+      console.error('更新API密钥状态失败:', error)
     }
   }
 
@@ -632,6 +795,19 @@ export default function CRMCustomerDetail() {
                 税号 ({new Set(taxNumbers.map(t => t.companyName || '未命名公司')).size})
               </div>
             </button>
+            <button
+              onClick={() => setActiveInfoTab('portal')}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeInfoTab === 'portal'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Key className="w-4 h-4" />
+                门户账户
+              </div>
+            </button>
           </div>
         </div>
 
@@ -871,7 +1047,429 @@ export default function CRMCustomerDetail() {
             })()}
           </div>
         )}
+
+        {/* 门户账户管理 */}
+        {activeInfoTab === 'portal' && (
+          <div className="p-4">
+            {portalLoading ? (
+              <div className="text-center py-8 text-gray-400">加载中...</div>
+            ) : (
+              <div className="space-y-6">
+                {/* 门户登录账户 */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                      <UserCheck className="w-4 h-4" />
+                      门户登录账户
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setAccountForm({ username: '', password: '', email: '' })
+                        setShowAccountModal(true)
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      创建账户
+                    </button>
+                  </div>
+                  
+                  {portalAccounts.length === 0 ? (
+                    <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                      <UserCheck className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">该客户暂无门户账户</p>
+                      <p className="text-xs text-gray-400 mt-1">创建账户后，客户可登录门户系统查看订单</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {portalAccounts.map((account) => (
+                        <div 
+                          key={account.id} 
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              account.status === 'active' ? 'bg-green-100' : 'bg-gray-200'
+                            }`}>
+                              <User className={`w-4 h-4 ${
+                                account.status === 'active' ? 'text-green-600' : 'text-gray-500'
+                              }`} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{account.username}</div>
+                              {account.email && (
+                                <div className="text-xs text-gray-500">{account.email}</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 text-xs rounded ${
+                              account.status === 'active' 
+                                ? 'bg-green-100 text-green-700' 
+                                : account.status === 'suspended'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {account.status === 'active' ? '正常' : account.status === 'suspended' ? '已停用' : '未激活'}
+                            </span>
+                            <button
+                              onClick={() => handleToggleAccountStatus(account)}
+                              className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
+                              title={account.status === 'active' ? '停用账户' : '启用账户'}
+                            >
+                              {account.status === 'active' ? <X className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAccount(account)
+                                setNewPassword('')
+                                setShowPasswordModal(true)
+                              }}
+                              className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-blue-600"
+                              title="重置密码"
+                            >
+                              <Key className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAccount(account)}
+                              className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-red-600"
+                              title="删除账户"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* API 密钥 */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      API 密钥
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setApiKeyForm({ keyName: '', permissions: ['order:read'], rateLimit: 100 })
+                        setNewApiSecret(null)
+                        setShowApiKeyModal(true)
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      创建密钥
+                    </button>
+                  </div>
+
+                  {apiKeys.length === 0 ? (
+                    <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                      <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">该客户暂无 API 密钥</p>
+                      <p className="text-xs text-gray-400 mt-1">创建密钥后，客户可通过 API 对接自有系统</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {apiKeys.map((key) => (
+                        <div 
+                          key={key.id} 
+                          className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-900">{key.keyName}</span>
+                              <span className={`px-2 py-0.5 text-xs rounded ${
+                                key.isActive 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {key.isActive ? '启用中' : '已禁用'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleToggleApiKeyStatus(key)}
+                                className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
+                                title={key.isActive ? '禁用密钥' : '启用密钥'}
+                              >
+                                {key.isActive ? <X className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteApiKey(key)}
+                                className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-red-600"
+                                title="删除密钥"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-gray-500">API Key:</span>
+                            <code className="px-2 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">{key.apiKey}</code>
+                            <button
+                              onClick={() => copyToClipboard(key.apiKey)}
+                              className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
+                              title="复制"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            <span>权限: {key.permissions.join(', ')}</span>
+                            <span>限频: {key.rateLimit}/分钟</span>
+                            {key.lastUsedAt && (
+                              <span>最后使用: {new Date(key.lastUsedAt).toLocaleString('zh-CN')}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* 创建门户账户弹窗 */}
+      {showAccountModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-[400px] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-medium">创建门户账户</h3>
+              <button onClick={() => setShowAccountModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">用户名 *</label>
+                <input
+                  type="text"
+                  value={accountForm.username}
+                  onChange={(e) => setAccountForm({ ...accountForm, username: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  placeholder="请输入登录用户名"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">密码 * <span className="text-gray-400 font-normal">(至少8位)</span></label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={accountForm.password}
+                    onChange={(e) => setAccountForm({ ...accountForm, password: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 pr-10"
+                    placeholder="请输入登录密码（至少8位）"
+                    minLength={8}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">邮箱</label>
+                <input
+                  type="email"
+                  value={accountForm.email}
+                  onChange={(e) => setAccountForm({ ...accountForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  placeholder="可选，用于接收通知"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t">
+              <button
+                onClick={() => setShowAccountModal(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateAccount}
+                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 重置密码弹窗 */}
+      {showPasswordModal && editingAccount && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-[400px]">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-medium">重置密码</h3>
+              <button onClick={() => setShowPasswordModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-gray-600">
+                为账户 <span className="font-medium text-gray-900">{editingAccount.username}</span> 设置新密码
+              </p>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">新密码 *</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 pr-10"
+                    placeholder="请输入新密码"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t">
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleResetPassword}
+                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                确认重置
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 创建 API 密钥弹窗 */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-[480px] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-medium">创建 API 密钥</h3>
+              <button onClick={() => { setShowApiKeyModal(false); setNewApiSecret(null); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {newApiSecret ? (
+              // 显示生成的密钥
+              <div className="p-4 space-y-4">
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-800 font-medium mb-2">✓ API 密钥创建成功</p>
+                  <p className="text-xs text-green-600">请立即保存 API Secret，此密钥只显示一次！</p>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">API Secret</label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 px-3 py-2 bg-gray-100 rounded text-sm font-mono text-gray-800 break-all">
+                      {newApiSecret}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(newApiSecret)}
+                      className="p-2 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-700"
+                      title="复制"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => { setShowApiKeyModal(false); setNewApiSecret(null); }}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                  >
+                    我已保存，关闭
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // 创建表单
+              <>
+                <div className="p-4 space-y-4">
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">密钥名称 *</label>
+                    <input
+                      type="text"
+                      value={apiKeyForm.keyName}
+                      onChange={(e) => setApiKeyForm({ ...apiKeyForm, keyName: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      placeholder="如：ERP对接、WMS系统"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">权限范围</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: 'order:read', label: '读取订单' },
+                        { value: 'order:create', label: '创建订单' },
+                        { value: 'cargo:create', label: '导入货物' },
+                        { value: 'bill:read', label: '查看账单' },
+                      ].map((perm) => (
+                        <label key={perm.value} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={apiKeyForm.permissions.includes(perm.value)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setApiKeyForm({ ...apiKeyForm, permissions: [...apiKeyForm.permissions, perm.value] })
+                              } else {
+                                setApiKeyForm({ ...apiKeyForm, permissions: apiKeyForm.permissions.filter(p => p !== perm.value) })
+                              }
+                            }}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          {perm.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">请求限频（次/分钟）</label>
+                    <input
+                      type="number"
+                      value={apiKeyForm.rateLimit}
+                      onChange={(e) => setApiKeyForm({ ...apiKeyForm, rateLimit: parseInt(e.target.value) || 100 })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      min={1}
+                      max={1000}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 p-4 border-t">
+                  <button
+                    onClick={() => setShowApiKeyModal(false)}
+                    className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleCreateApiKey}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                  >
+                    创建
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 地址编辑弹窗 */}
       {addressModalVisible && (
