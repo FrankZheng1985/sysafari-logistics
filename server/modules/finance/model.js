@@ -605,6 +605,7 @@ export async function deletePayment(id) {
 
 /**
  * 获取费用列表（按订单分组分页）
+ * 当按 billId 精确查询时，直接返回该订单的费用（不使用分组逻辑）
  */
 export async function getFees(params = {}) {
   const db = getDatabase()
@@ -613,6 +614,19 @@ export async function getFees(params = {}) {
     startDate, endDate, search,
     page = 1, pageSize = 20 
   } = params
+  
+  // 当按 billId 精确查询时，使用简单查询（避免分组逻辑导致的重复问题）
+  if (billId && !search && !customerId && !supplierId) {
+    return getFeesSimple({
+      billId,
+      category,
+      feeType,
+      startDate,
+      endDate,
+      page,
+      pageSize
+    })
+  }
   
   // 构建基础 WHERE 条件
   let whereClause = 'WHERE 1=1'
@@ -704,6 +718,7 @@ export async function getFees(params = {}) {
   }
   
   // 步骤3: 获取这些分组键对应的所有费用记录
+  // 重要：保留原始 WHERE 条件以确保不返回超出范围的数据
   const placeholders = groupKeys.map(() => '?').join(',')
   const feesQuery = `
     SELECT f.*, 
@@ -715,14 +730,73 @@ export async function getFees(params = {}) {
            COALESCE(b.order_number, f.bill_number, f.id) as group_key
     FROM fees f 
     LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
-    WHERE COALESCE(b.order_number, f.bill_number, f.id) IN (${placeholders})
+    ${whereClause} AND COALESCE(b.order_number, f.bill_number, f.id) IN (${placeholders})
     ORDER BY f.fee_date DESC, f.created_at DESC
   `
-  const list = await db.prepare(feesQuery).all(...groupKeys)
+  const list = await db.prepare(feesQuery).all(...queryParams, ...groupKeys)
   
   return {
     list: list.map(convertFeeToCamelCase),
     total: totalGroups,  // 返回订单组总数，而不是费用记录总数
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 简单费用查询（按 billId 精确查询时使用，避免分组导致的重复问题）
+ */
+async function getFeesSimple(params = {}) {
+  const db = getDatabase()
+  const { billId, category, feeType, startDate, endDate, page = 1, pageSize = 20 } = params
+  
+  let whereClause = 'WHERE f.bill_id = ?'
+  const queryParams = [billId]
+  
+  if (feeType) {
+    whereClause += ' AND f.fee_type = ?'
+    queryParams.push(feeType)
+  }
+  
+  if (category) {
+    whereClause += ' AND f.category = ?'
+    queryParams.push(category)
+  }
+  
+  if (startDate) {
+    whereClause += ' AND f.fee_date >= ?'
+    queryParams.push(startDate)
+  }
+  
+  if (endDate) {
+    whereClause += ' AND f.fee_date <= ?'
+    queryParams.push(endDate)
+  }
+  
+  // 获取总数
+  const countQuery = `SELECT COUNT(*) as total FROM fees f ${whereClause}`
+  const totalResult = await db.prepare(countQuery).get(...queryParams)
+  const total = totalResult?.total || 0
+  
+  // 获取列表（按 fee_id 去重，确保不返回重复记录）
+  const listQuery = `
+    SELECT DISTINCT f.*, 
+           b.order_number AS bill_order_number,
+           b.container_number AS bill_container_number,
+           COALESCE(NULLIF(f.bill_number, ''), b.bill_number) as resolved_bill_number,
+           COALESCE(NULLIF(f.customer_id, ''), b.customer_id) as resolved_customer_id,
+           COALESCE(NULLIF(f.customer_name, ''), b.customer_name) as resolved_customer_name
+    FROM fees f 
+    LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
+    ${whereClause}
+    ORDER BY f.fee_date DESC, f.created_at DESC
+    LIMIT ? OFFSET ?
+  `
+  const list = await db.prepare(listQuery).all(...queryParams, pageSize, (page - 1) * pageSize)
+  
+  return {
+    list: list.map(convertFeeToCamelCase),
+    total,
     page,
     pageSize
   }

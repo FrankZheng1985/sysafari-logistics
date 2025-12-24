@@ -3,6 +3,7 @@ import { FlaskConical, AlertTriangle } from 'lucide-react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import TabsBar from './TabsBar'
+import ContextualHelp from './ContextualHelp'
 import { useAuth } from '../contexts/AuthContext'
 
 interface LayoutProps {
@@ -46,6 +47,8 @@ export default function Layout({ children }: LayoutProps) {
           {children}
         </main>
       </div>
+      {/* 全局上下文帮助按钮 */}
+      <ContextualHelp />
     </div>
   )
 }

@@ -10,12 +10,12 @@ import crypto from 'crypto'
 
 dotenv.config()
 
-// COS 配置
+// COS 配置（兼容两种环境变量命名方式）
 const cosConfig = {
-  SecretId: process.env.COS_SECRET_ID,
-  SecretKey: process.env.COS_SECRET_KEY,
-  Bucket: process.env.COS_BUCKET,
-  Region: process.env.COS_REGION || 'ap-guangzhou'
+  SecretId: process.env.COS_SECRET_ID || process.env.TENCENT_SECRET_ID,
+  SecretKey: process.env.COS_SECRET_KEY || process.env.TENCENT_SECRET_KEY,
+  Bucket: process.env.COS_BUCKET || process.env.TENCENT_COS_BUCKET,
+  Region: process.env.COS_REGION || process.env.TENCENT_COS_REGION || 'ap-guangzhou'
 }
 
 // 创建 COS 实例

@@ -106,6 +106,9 @@ import DocumentSupplement from './pages/DocumentSupplement'
 import HSMatchRecords from './pages/HSMatchRecords'
 // 文档中心模块
 import DocumentCenter from './pages/DocumentCenter'
+// 帮助中心模块
+import HelpCenter from './pages/HelpCenter'
+import HelpVideoManage from './pages/HelpVideoManage'
 import { initMenuSettings } from './utils/menuSettings'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { SocketProvider } from './contexts/SocketContext'
@@ -236,6 +239,9 @@ function AppRoutes() {
         <Route path="/documents/match-records" element={<HSMatchRecords />} />
         {/* 文档中心（COS存储） */}
         <Route path="/document-center" element={<DocumentCenter />} />
+        {/* 帮助中心 */}
+        <Route path="/help" element={<HelpCenter />} />
+        <Route path="/help/videos" element={<HelpVideoManage />} />
         {/* 财务管理 */}
         <Route path="/finance" element={<FinanceDashboard />} />
         <Route path="/finance/invoices" element={<FinanceInvoices />} />

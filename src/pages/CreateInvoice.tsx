@@ -467,9 +467,13 @@ export default function CreateInvoice() {
       const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&feeType=${feeType}&pageSize=100`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
-        setBillFees(data.data.list)
+        // 基于 feeId 去重，防止重复费用
+        const uniqueFees = data.data.list.filter((fee: Fee, index: number, self: Fee[]) => 
+          index === self.findIndex((f: Fee) => f.id === fee.id)
+        )
+        setBillFees(uniqueFees)
         // 自动将费用转换为发票明细（确保金额是数字类型）
-        const items: InvoiceItem[] = data.data.list.map((fee: Fee, index: number) => ({
+        const items: InvoiceItem[] = uniqueFees.map((fee: Fee, index: number) => ({
           id: (index + 1).toString(),
           description: fee.feeName || feeCategoryMap[fee.category] || '费用',
           quantity: 1,
@@ -831,10 +835,15 @@ export default function CreateInvoice() {
           allFees.push(...feesWithBillInfo)
         }
       }
-      setBillFees(allFees)
+      
+      // 基于 feeId 去重，防止重复费用（同一费用可能在多个查询中返回）
+      const uniqueFees = allFees.filter((fee, index, self) => 
+        index === self.findIndex((f) => f.id === fee.id)
+      )
+      setBillFees(uniqueFees)
       
       // 转换为发票明细
-      const items: InvoiceItem[] = allFees.map((fee: Fee & { billNumber?: string }, index: number) => ({
+      const items: InvoiceItem[] = uniqueFees.map((fee: Fee & { billNumber?: string }, index: number) => ({
         id: (index + 1).toString(),
         description: fee.feeName || feeCategoryMap[fee.category] || '费用',
         quantity: 1,
