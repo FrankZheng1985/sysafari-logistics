@@ -620,6 +620,10 @@ export interface BillOfLading {
   lastMileTransport?: string  // 末端运输方式
   devanning?: string  // 拆柜: 'required' | 'not-required'
   t1Declaration?: string  // T1报关: 'yes' | 'no'
+  // 导入者追踪字段
+  importedBy?: number  // 导入者用户ID
+  importedByName?: string  // 导入者用户名
+  importTime?: string  // 导入时间
   // Reference List（包含多个卸货地址）
   referenceList?: Array<{
     referenceNumber: string

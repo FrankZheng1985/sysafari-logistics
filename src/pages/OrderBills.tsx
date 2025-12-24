@@ -753,7 +753,7 @@ export default function OrderBills() {
     },
     {
       key: 'creator',
-      label: '创建者/时间',
+      label: '创建/导入',
       sorter: (a, b) => {
         // 空值始终排在最后
         if (!a.createTime && !b.createTime) return 0
@@ -763,12 +763,20 @@ export default function OrderBills() {
         const dateB = new Date(b.createTime).getTime()
         return dateA - dateB
       },
-      render: (_value, record: BillOfLading) => (
-        <div className="space-y-0.5">
-          <div className={`font-medium ${textPrimary}`}>{record.creator || '-'}</div>
-          <div className={`text-xs ${textMuted}`}>{formatDate(record.createTime)}</div>
-        </div>
-      ),
+      render: (_value, record: BillOfLading) => {
+        // 优先显示导入者，其次显示创建者
+        const operatorName = record.importedByName || record.creator || '-'
+        const operatorTime = record.importTime || record.createTime
+        const operationType = record.importedByName ? '导入' : '创建'
+        return (
+          <div className="space-y-0.5">
+            <div className={`font-medium ${textPrimary}`}>{operatorName}</div>
+            <div className={`text-xs ${textMuted}`}>
+              {operationType}: {formatDate(operatorTime)}
+            </div>
+          </div>
+        )
+      },
     },
     {
       key: 'actions',

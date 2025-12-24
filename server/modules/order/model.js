@@ -241,20 +241,15 @@ export async function createBill(data) {
   const db = getDatabase()
   const id = generateId()
   
-  // 获取下一个订单序号
+  // 原子操作：递增并返回新序号（防止并发导致重复）
   const seqResult = await db.prepare(
-    "SELECT current_seq FROM order_sequences WHERE business_type = 'BILL'"
+    "UPDATE order_sequences SET current_seq = current_seq + 1, updated_at = NOW() WHERE business_type = 'BILL' RETURNING current_seq"
   ).get()
-  const nextSeq = (seqResult?.current_seq || 0) + 1
+  const nextSeq = seqResult?.current_seq || 1
   
   // 生成订单号: BP + 年份(25) + 5位序号
   const year = new Date().getFullYear().toString().slice(-2)
   const orderNumber = `BP${year}${String(nextSeq).padStart(5, '0')}`
-  
-  // 更新序列计数器
-  await db.prepare(
-    "UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'BILL'"
-  ).run(nextSeq)
   
   const result = await db.prepare(`
     INSERT INTO bills_of_lading (
@@ -969,7 +964,11 @@ export function convertBillToCamelCase(row) {
     serviceType: row.service_type,
     cargoValue: row.cargo_value,
     documentsSentDate: row.documents_sent_date,
-    cmrSentDate: row.cmr_sent_date
+    cmrSentDate: row.cmr_sent_date,
+    // 导入者追踪字段
+    importedBy: row.imported_by,
+    importedByName: row.imported_by_name,
+    importTime: row.import_time
   }
 }
 
