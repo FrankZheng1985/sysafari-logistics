@@ -103,9 +103,33 @@ function getCronExpression(frequency, time) {
 let currentTask = null
 
 /**
+ * 检查是否是生产环境
+ */
+function isProductionEnvironment() {
+  // 方式1: 检查 NODE_ENV
+  if (process.env.NODE_ENV === 'production') {
+    return true
+  }
+  
+  // 方式2: 检查是否使用 Render 的 PostgreSQL（生产数据库）
+  const dbUrl = process.env.DATABASE_URL || ''
+  if (dbUrl.includes('render.com') || dbUrl.includes('oregon-postgres')) {
+    return true
+  }
+  
+  return false
+}
+
+/**
  * 启动备份调度器
  */
 export async function startBackupScheduler() {
+  // 只在生产环境启动自动备份
+  if (!isProductionEnvironment()) {
+    console.log('📦 非生产环境，跳过自动备份调度器')
+    return
+  }
+  
   const settings = await getBackupSettings()
   
   if (!settings.enabled) {
@@ -115,7 +139,8 @@ export async function startBackupScheduler() {
   
   const cronExpression = getCronExpression(settings.frequency, settings.time)
   
-  console.log('📦 启动数据库备份调度器')
+  console.log('📦 启动数据库备份调度器（生产环境）')
+  console.log(`   环境: ${process.env.NODE_ENV || 'unknown'}`)
   console.log(`   频率: ${settings.frequency}`)
   console.log(`   时间: ${settings.time}`)
   console.log(`   Cron: ${cronExpression}`)
