@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Search, Plus, FileText, Edit2, Trash2, Eye,
   CheckCircle, Clock, AlertTriangle, XCircle,
-  Download, FileSpreadsheet
+  Download, FileSpreadsheet, CreditCard
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -331,6 +331,15 @@ export default function FinanceInvoices() {
               title="下载Excel对账单"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {record.status !== 'paid' && record.status !== 'cancelled' && (
+            <button
+              onClick={() => navigate(`/finance/invoices/${record.id}/payment`)}
+              className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+              title="登记收款"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
             </button>
           )}
           <button
