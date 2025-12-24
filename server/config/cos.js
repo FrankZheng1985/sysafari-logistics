@@ -48,24 +48,12 @@ const cosConfig = {
  * 检查 COS 配置是否完整
  */
 export function isCosConfigured() {
-  const configured = !!(
+  return !!(
     cosConfig.secretId && 
     cosConfig.secretKey && 
     cosConfig.bucket && 
     cosConfig.region
   )
-  
-  // 调试日志（生产环境可移除）
-  if (!configured) {
-    console.log('[COS] 配置检查:', {
-      hasSecretId: !!cosConfig.secretId,
-      hasSecretKey: !!cosConfig.secretKey,
-      bucket: cosConfig.bucket || '未设置',
-      region: cosConfig.region || '未设置'
-    })
-  }
-  
-  return configured
 }
 
 /**
