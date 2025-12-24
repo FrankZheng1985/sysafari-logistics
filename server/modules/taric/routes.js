@@ -38,16 +38,16 @@ const upload = multer({
 // ==================== 同步状态和管理 ====================
 
 // 获取 TARIC 同步状态（最新同步信息、文件状态等）
-router.get('/taric/status', controller.getSyncStatus)
+router.get('/status', controller.getSyncStatus)
 
 // 获取同步历史记录
-router.get('/taric/history', controller.getSyncHistory)
+router.get('/history', controller.getSyncHistory)
 
 // 手动触发同步（使用本地已有的数据文件）
-router.post('/taric/sync', controller.triggerSync)
+router.post('/sync', controller.triggerSync)
 
 // 上传数据文件并同步
-router.post('/taric/upload-sync', 
+router.post('/upload-sync', 
   upload.fields([
     { name: 'nomenclature', maxCount: 1 },
     { name: 'duties', maxCount: 1 }
@@ -58,69 +58,69 @@ router.post('/taric/upload-sync',
 // ==================== 数据查询（本地数据库） ====================
 
 // 查询特定 HS 编码的完整税率信息（从本地数据库）
-router.get('/taric/lookup/:hsCode', controller.lookupHsCode)
+router.get('/lookup/:hsCode', controller.lookupHsCode)
 
 // 获取贸易协定列表
-router.get('/taric/agreements', controller.getTradeAgreements)
+router.get('/agreements', controller.getTradeAgreements)
 
 // ==================== 实时 API 查询（从欧盟 TARIC 系统） ====================
 
 // 实时查询单个 HS 编码
 // GET /api/taric/realtime/:hsCode?originCountry=CN&saveToDb=true
-router.get('/taric/realtime/:hsCode', controller.lookupHsCodeRealtime)
+router.get('/realtime/:hsCode', controller.lookupHsCodeRealtime)
 
 // 批量实时查询 HS 编码
 // POST /api/taric/realtime-batch
 // body: { hsCodes: ['6109100010', '8471300000'], originCountry: 'CN' }
-router.post('/taric/realtime-batch', controller.batchLookupRealtime)
+router.post('/realtime-batch', controller.batchLookupRealtime)
 
 // 获取 HS 编码的贸易措施详情
 // GET /api/taric/measures/:hsCode?originCountry=CN
-router.get('/taric/measures/:hsCode', controller.getMeasures)
+router.get('/measures/:hsCode', controller.getMeasures)
 
 // 获取国家/地区代码列表
-router.get('/taric/countries', controller.getCountryCodes)
+router.get('/countries', controller.getCountryCodes)
 
 // 检查 TARIC API 健康状态
-router.get('/taric/api-health', controller.checkApiHealth)
+router.get('/api-health', controller.checkApiHealth)
 
 // 清除 API 缓存
-router.post('/taric/clear-cache', controller.clearApiCache)
+router.post('/clear-cache', controller.clearApiCache)
 
 // ==================== 文件管理 ====================
 
 // 获取本地数据文件状态
-router.get('/taric/files', controller.getFileStatus)
+router.get('/files', controller.getFileStatus)
 
 // 获取数据文件模板/说明
-router.get('/taric/template/:type', controller.downloadTemplate)
+router.get('/template/:type', controller.downloadTemplate)
 
 // ==================== 翻译功能 ====================
 
 // 触发翻译任务（将商品描述翻译为中文）
 // POST /api/taric/translate
-router.post('/taric/translate', controller.triggerTranslation)
+router.post('/translate', controller.triggerTranslation)
 
 // 获取翻译任务状态
 // GET /api/taric/translate-status
-router.get('/taric/translate-status', controller.getTranslationStatus)
+router.get('/translate-status', controller.getTranslationStatus)
 
 // 清除翻译缓存
 // POST /api/taric/clear-translation-cache
-router.post('/taric/clear-translation-cache', controller.clearTranslationCache)
+router.post('/clear-translation-cache', controller.clearTranslationCache)
 
 // ==================== 中国反倾销税查询 ====================
 
 // 获取中国反倾销税摘要（按产品类别分组统计）
 // GET /api/taric/china-anti-dumping/summary
-router.get('/taric/china-anti-dumping/summary', controller.getChinaAntiDumpingSummary)
+router.get('/china-anti-dumping/summary', controller.getChinaAntiDumpingSummary)
 
 // 获取所有中国反倾销税 HS 编码列表
 // GET /api/taric/china-anti-dumping/codes
-router.get('/taric/china-anti-dumping/codes', controller.getChinaAntiDumpingCodes)
+router.get('/china-anti-dumping/codes', controller.getChinaAntiDumpingCodes)
 
 // 查询单个 HS 编码的中国反倾销税
 // GET /api/taric/china-anti-dumping/:hsCode
-router.get('/taric/china-anti-dumping/:hsCode', controller.lookupChinaAntiDumping)
+router.get('/china-anti-dumping/:hsCode', controller.lookupChinaAntiDumping)
 
 export default router
