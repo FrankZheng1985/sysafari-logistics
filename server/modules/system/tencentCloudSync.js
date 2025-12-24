@@ -507,6 +507,127 @@ export async function syncTencentOcr(db) {
 }
 
 /**
+ * 获取COS存储桶实时存储量（通过云监控API）
+ * 返回存储桶的当前存储使用量（标准存储、低频存储、归档存储）
+ */
+export async function getCosBucketStorage() {
+  try {
+    const bucket = process.env.TENCENT_COS_BUCKET || process.env.COS_BUCKET
+    const region = process.env.TENCENT_COS_REGION || process.env.COS_REGION || 'ap-guangzhou'
+    
+    if (!bucket) {
+      return {
+        success: false,
+        error: '未配置COS存储桶',
+        data: { totalStorage: 0, usedStorage: 0 }
+      }
+    }
+    
+    // 提取存储桶名称（去掉 -appid 后缀用于监控查询）
+    // 例如: my-bucket-1234567890 -> my-bucket-1234567890
+    const bucketName = bucket
+    
+    // 计算时间范围（最近1小时的数据）
+    const now = new Date()
+    const endTime = now.toISOString()
+    const startTime = new Date(now.getTime() - 3600 * 1000).toISOString()
+    
+    // 使用云监控API获取COS存储量
+    // 指标：StdStorage（标准存储字节数）、IaStorage（低频存储）、ArcStorage（归档存储）
+    try {
+      const response = await callTencentApiWithVersion('monitor', 'GetMonitorData', '2018-07-24', {
+        Namespace: 'QCE/COS',
+        MetricName: 'StdStorage',
+        Period: 3600, // 1小时粒度
+        StartTime: startTime,
+        EndTime: endTime,
+        Instances: [{
+          Dimensions: [
+            { Name: 'appid', Value: bucket.split('-').pop() },
+            { Name: 'bucket', Value: bucketName }
+          ]
+        }]
+      })
+      
+      let totalUsedBytes = 0
+      
+      if (response && response.DataPoints && response.DataPoints.length > 0) {
+        const dataPoints = response.DataPoints[0]
+        if (dataPoints.Values && dataPoints.Values.length > 0) {
+          // 取最新的数据点
+          totalUsedBytes = dataPoints.Values[dataPoints.Values.length - 1] || 0
+        }
+      }
+      
+      // 转换为GB
+      const usedStorageGB = totalUsedBytes / (1024 * 1024 * 1024)
+      
+      // 腾讯云COS没有固定配额限制，使用量即为实际使用
+      // 可以设置一个参考值（如1TB作为预警线）
+      const quotaGB = 1024 // 1TB作为参考值
+      
+      console.log(`COS存储用量: ${usedStorageGB.toFixed(2)} GB`)
+      
+      return {
+        success: true,
+        data: {
+          usedStorage: usedStorageGB,        // 已使用（GB）
+          usedStorageBytes: totalUsedBytes,  // 已使用（字节）
+          quotaStorage: quotaGB,             // 参考配额（GB）
+          usagePercent: (usedStorageGB / quotaGB * 100).toFixed(2),
+          bucket: bucket,
+          region: region,
+          syncTime: new Date().toISOString()
+        }
+      }
+    } catch (monitorError) {
+      console.log('云监控API获取存储量失败，尝试通过计费估算:', monitorError.message)
+      
+      // 备用方案：通过费用反推存储量
+      // COS标准存储费用：约0.099元/GB/月（广州区域）
+      const usageResult = await getCosMonthlyUsage()
+      if (usageResult.success && usageResult.data.cost > 0) {
+        // 从费用反推存储量（假设主要是存储费用）
+        const estimatedGB = usageResult.data.cost / 0.099
+        return {
+          success: true,
+          data: {
+            usedStorage: estimatedGB,
+            usedStorageBytes: estimatedGB * 1024 * 1024 * 1024,
+            quotaStorage: 1024,
+            usagePercent: (estimatedGB / 1024 * 100).toFixed(2),
+            bucket: bucket,
+            region: region,
+            estimated: true,
+            syncTime: new Date().toISOString()
+          }
+        }
+      }
+      
+      return {
+        success: true,
+        data: {
+          usedStorage: 0,
+          usedStorageBytes: 0,
+          quotaStorage: 1024,
+          usagePercent: '0.00',
+          bucket: bucket,
+          region: region,
+          syncTime: new Date().toISOString()
+        }
+      }
+    }
+  } catch (error) {
+    console.error('获取COS存储量失败:', error.message)
+    return {
+      success: false,
+      error: error.message,
+      data: { usedStorage: 0, usedStorageBytes: 0, quotaStorage: 1024 }
+    }
+  }
+}
+
+/**
  * 获取COS本月用量（存储量、请求次数、费用）
  */
 export async function getCosMonthlyUsage() {
@@ -629,6 +750,11 @@ export async function syncTencentCos(db) {
     const cosRequests = usageResult.data?.requests || 0
     const cosStorage = usageResult.data?.storage || 0
     
+    // 获取存储桶实时存储量
+    const storageResult = await getCosBucketStorage()
+    const usedStorageGB = storageResult.data?.usedStorage || 0
+    const quotaStorageGB = storageResult.data?.quotaStorage || 1024
+    
     if (balanceResult.success) {
       const balance = balanceResult.data.totalBalance
       const summaryCosCost = summaryResult.success ? summaryResult.data.cosCost : 0
@@ -640,6 +766,19 @@ export async function syncTencentCos(db) {
         cosCost = usageCost > 100 ? usageCost / 100 : usageCost
       }
       
+      // 构建配置JSON，存储额外信息（存储量等）
+      const configJson = JSON.stringify({
+        storage: {
+          usedGB: usedStorageGB,
+          quotaGB: quotaStorageGB,
+          usagePercent: storageResult.data?.usagePercent || '0.00',
+          bucket: storageResult.data?.bucket || '',
+          region: storageResult.data?.region || '',
+          estimated: storageResult.data?.estimated || false
+        },
+        lastSync: new Date().toISOString()
+      })
+      
       // 更新数据库（同步成功说明API可用，更新健康状态为正常）
       await db.prepare(`
         UPDATE api_integrations SET
@@ -649,20 +788,22 @@ export async function syncTencentCos(db) {
           health_check_message = '同步成功，API可用',
           last_health_check = NOW(),
           last_sync_time = NOW(),
+          config_json = $2,
           updated_at = NOW()
         WHERE api_code = 'tencent_cos'
-      `).run(balance)
+      `).run(balance, configJson)
       
-      // 记录本月用量（请求次数和费用）
+      // 记录本月用量（请求次数、费用、存储量）
       const today = new Date().toISOString().split('T')[0]
       await db.prepare(`
-        INSERT INTO api_usage_records (api_code, usage_date, call_count, cost)
-        VALUES ('tencent_cos', $1, $2, $3)
+        INSERT INTO api_usage_records (api_code, usage_date, call_count, cost, data_volume)
+        VALUES ('tencent_cos', $1, $2, $3, $4)
         ON CONFLICT (api_code, usage_date) DO UPDATE SET
           call_count = $2,
           cost = $3,
+          data_volume = $4,
           updated_at = NOW()
-      `).run(today, cosRequests, cosCost)
+      `).run(today, cosRequests, cosCost, usedStorageGB)
       
       return {
         success: true,
@@ -672,6 +813,13 @@ export async function syncTencentCos(db) {
           monthCalls: cosRequests,
           monthStorage: cosStorage,
           monthCost: cosCost,
+          storage: {
+            usedGB: usedStorageGB,
+            quotaGB: quotaStorageGB,
+            usagePercent: storageResult.data?.usagePercent || '0.00',
+            bucket: storageResult.data?.bucket || '',
+            region: storageResult.data?.region || ''
+          },
           syncTime: balanceResult.data.syncTime
         }
       }

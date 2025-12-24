@@ -298,6 +298,25 @@ export async function syncAllApiData(req, res) {
   }
 }
 
+/**
+ * 获取COS存储桶使用情况
+ */
+export async function getCosStorage(req, res) {
+  try {
+    const { getCosBucketStorage } = await import('./tencentCloudSync.js')
+    const result = await getCosBucketStorage()
+    
+    if (result.success) {
+      return success(res, result.data)
+    } else {
+      return badRequest(res, result.error || '获取存储信息失败')
+    }
+  } catch (error) {
+    console.error('获取COS存储信息失败:', error)
+    return serverError(res, '获取COS存储信息失败')
+  }
+}
+
 export default {
   getApiIntegrations,
   getApiByCode,
@@ -312,5 +331,6 @@ export default {
   getRechargeHistory,
   getCategories,
   syncApiData,
-  syncAllApiData
+  syncAllApiData,
+  getCosStorage
 }

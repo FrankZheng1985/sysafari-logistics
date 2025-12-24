@@ -44,6 +44,15 @@ const healthStatusConfig: Record<string, { color: string; bgColor: string; icon:
   unknown: { color: 'text-gray-400', bgColor: 'bg-gray-400', icon: Clock, label: '未知' }
 }
 
+interface CosStorageInfo {
+  usedGB: number
+  quotaGB: number
+  usagePercent: string
+  bucket: string
+  region: string
+  estimated?: boolean
+}
+
 interface ApiIntegration {
   id: number
   api_code: string
@@ -70,6 +79,7 @@ interface ApiIntegration {
   icon: string
   month_calls: number
   month_cost: number
+  config_json?: string  // 存储额外配置信息（如COS存储量）
 }
 
 interface Stats {
@@ -149,6 +159,27 @@ function HealthIndicator({
 // 支持自动同步的API列表
 const syncableApis = ['tencent_ocr', 'tencent_cos']
 
+// 格式化存储空间大小
+function formatStorageSize(sizeGB: number): string {
+  if (sizeGB < 1) {
+    return `${(sizeGB * 1024).toFixed(1)} MB`
+  } else if (sizeGB >= 1024) {
+    return `${(sizeGB / 1024).toFixed(2)} TB`
+  }
+  return `${sizeGB.toFixed(2)} GB`
+}
+
+// 解析 config_json 获取 COS 存储信息
+function parseCosStorage(configJson?: string): CosStorageInfo | null {
+  if (!configJson) return null
+  try {
+    const config = JSON.parse(configJson)
+    return config.storage || null
+  } catch {
+    return null
+  }
+}
+
 // API卡片组件
 function ApiCard({ 
   api, 
@@ -168,6 +199,9 @@ function ApiCard({
   const alertThreshold = Number(api.alert_threshold || 0)
   const isLowBalance = api.pricing_model !== 'free' && balance > 0 && balance <= alertThreshold
   const canSync = syncableApis.includes(api.api_code)
+  
+  // 解析COS存储信息
+  const cosStorage = api.api_code === 'tencent_cos' ? parseCosStorage(api.config_json) : null
   
   // 格式化同步时间
   const formatSyncTime = (time: string | null) => {
@@ -262,6 +296,51 @@ function ApiCard({
             <span className="text-sm font-semibold text-blue-600">
               ¥{Number(api.month_cost).toFixed(2)}
             </span>
+          </div>
+        </div>
+      )}
+      
+      {/* COS存储空间使用情况（仅COS显示） */}
+      {api.api_code === 'tencent_cos' && cosStorage && cosStorage.usedGB > 0 && (
+        <div className="bg-purple-50 rounded p-2 mb-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-gray-500">
+              存储空间 {cosStorage.estimated && <span className="text-amber-500">(估算)</span>}
+            </span>
+            <span className="text-xs font-medium text-purple-600">
+              {formatStorageSize(cosStorage.usedGB)}
+            </span>
+          </div>
+          {/* 存储进度条 */}
+          <div className="h-1.5 bg-purple-200 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all ${
+                parseFloat(cosStorage.usagePercent) > 80 
+                  ? 'bg-red-500' 
+                  : parseFloat(cosStorage.usagePercent) > 50 
+                    ? 'bg-amber-500' 
+                    : 'bg-purple-500'
+              }`}
+              style={{ width: `${Math.min(parseFloat(cosStorage.usagePercent), 100)}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[10px] text-gray-400">
+              {cosStorage.bucket}
+            </span>
+            <span className="text-[10px] text-gray-400">
+              参考配额: {formatStorageSize(cosStorage.quotaGB)}
+            </span>
+          </div>
+        </div>
+      )}
+      
+      {/* COS存储桶信息（未同步时显示提示） */}
+      {api.api_code === 'tencent_cos' && (!cosStorage || cosStorage.usedGB === 0) && (
+        <div className="bg-gray-50 rounded p-2 mb-3">
+          <div className="flex items-center gap-1.5">
+            <HardDrive className="w-3 h-3 text-gray-400" />
+            <span className="text-[10px] text-gray-500">点击同步获取存储空间使用情况</span>
           </div>
         </div>
       )}

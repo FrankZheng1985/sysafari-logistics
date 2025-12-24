@@ -162,6 +162,9 @@ router.post('/api-integrations/:code/recharge', apiIntegrationsController.record
 // 获取充值记录
 router.get('/api-integrations/:code/recharge-history', apiIntegrationsController.getRechargeHistory)
 
+// 获取COS存储桶使用情况
+router.get('/api-integrations/cos/storage', apiIntegrationsController.getCosStorage)
+
 // ==================== 安全管理路由 ====================
 
 // 安全概览（需要管理员权限）
