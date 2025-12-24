@@ -2000,6 +2000,9 @@ export async function runMigrations() {
     await client.query(`UPDATE roles SET role_level = 2, can_manage_team = 1, can_approve = 1 WHERE role_code = 'boss'`)
     await client.query(`UPDATE roles SET role_level = 3, can_manage_team = 1, can_approve = 1 WHERE role_code = 'manager'`)
     await client.query(`UPDATE roles SET role_level = 3, can_manage_team = 1, can_approve = 1 WHERE role_code = 'finance_director'`)
+    // 操作经理和财务经理也可以作为直属上级
+    await client.query(`UPDATE roles SET role_level = 3, can_manage_team = 1, can_approve = 1 WHERE role_code = 'czjl'`)
+    await client.query(`UPDATE roles SET role_level = 3, can_manage_team = 1, can_approve = 1 WHERE role_code = 'finance_manager'`)
     await client.query(`UPDATE roles SET role_level = 4, can_manage_team = 0, can_approve = 0 WHERE role_code IN ('doc_clerk', 'doc_officer', 'finance_assistant', 'operator')`)
     await client.query(`UPDATE roles SET role_level = 5, can_manage_team = 0, can_approve = 0 WHERE role_code = 'viewer'`)
     console.log('  ✅ roles 表字段就绪')
