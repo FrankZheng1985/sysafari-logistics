@@ -10,6 +10,7 @@ import * as model from './model.js'
 import * as financeModel from '../finance/model.js'
 import { recognizeTransportDocument, checkOcrConfig } from '../ocr/tencentOcrService.js'
 import { parseTransportDocument, detectTransportType } from '../ocr/documentParser.js'
+import { triggerOrderStatusWebhook } from '../open-api/webhookService.js'
 
 // ==================== 提单文件解析 ====================
 
@@ -592,6 +593,13 @@ export async function updateShipStatus(req, res) {
       operatorId: req.user?.id,
       module: 'order'
     })
+    
+    // 触发 Webhook 通知客户系统
+    if (oldStatus !== shipStatus) {
+      triggerOrderStatusWebhook(id, oldStatus, shipStatus, { actualArrivalDate }).catch(err => {
+        console.error('Webhook触发失败:', err)
+      })
+    }
     
     const updatedBill = await model.getBillById(id)
     return success(res, updatedBill, '更新成功')

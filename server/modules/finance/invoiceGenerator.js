@@ -534,11 +534,20 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
  */
 export async function regenerateInvoiceFiles(invoiceId) {
   const db = getDatabase()
+  console.log(`[regenerateInvoiceFiles] 开始处理发票: ${invoiceId}`)
+  
   // 获取发票记录
   const invoice = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId)
   if (!invoice) {
     throw new Error('发票不存在')
   }
+  console.log(`[regenerateInvoiceFiles] 发票类型: ${invoice.invoice_type}, 编号: ${invoice.invoice_number}`)
+
+  // 根据发票类型确定要筛选的费用类型
+  // sales = 销售发票(应收) -> fee_type = 'receivable'
+  // purchase = 采购发票(应付) -> fee_type = 'payable'
+  const targetFeeType = invoice.invoice_type === 'purchase' ? 'payable' : 'receivable'
+  console.log(`[regenerateInvoiceFiles] 目标费用类型: ${targetFeeType}`)
 
   // 尝试解析fee_ids
   let feeIds = []
@@ -553,19 +562,32 @@ export async function regenerateInvoiceFiles(invoiceId) {
   let fees = [] // 存储原始费用记录，用于 Excel
 
   if (feeIds.length > 0) {
-    // 有关联费用记录，使用费用数据
-    invoiceData = await prepareInvoiceData(feeIds, invoice.customer_id)
-    items = invoiceData.summarizedItems
-    fees = invoiceData.fees || []
-  } else if (invoice.bill_id) {
-    // fee_ids 为空但有 bill_id，直接从 fees 表获取费用
+    // 有关联费用记录，使用费用数据（但要过滤费用类型）
+    const placeholders = feeIds.map(() => '?').join(',')
     fees = await db.prepare(`
       SELECT f.*, b.container_number, b.bill_number
       FROM fees f
       LEFT JOIN bills_of_lading b ON f.bill_id = b.id
-      WHERE f.bill_id = ?
+      WHERE f.id IN (${placeholders}) 
+        AND (f.fee_type = ? OR f.fee_type IS NULL)
       ORDER BY f.fee_name
-    `).all(invoice.bill_id)
+    `).all(...feeIds, targetFeeType)
+    
+    if (fees.length > 0) {
+      items = summarizeFees(fees)
+    }
+    console.log(`[regenerateInvoiceFiles] 从 fee_ids 获取到 ${fees.length} 条${targetFeeType}费用`)
+  } else if (invoice.bill_id) {
+    // fee_ids 为空但有 bill_id，直接从 fees 表获取费用（过滤费用类型）
+    fees = await db.prepare(`
+      SELECT f.*, b.container_number, b.bill_number
+      FROM fees f
+      LEFT JOIN bills_of_lading b ON f.bill_id = b.id
+      WHERE f.bill_id = ? 
+        AND (f.fee_type = ? OR f.fee_type IS NULL)
+      ORDER BY f.fee_name
+    `).all(invoice.bill_id, targetFeeType)
+    console.log(`[regenerateInvoiceFiles] 从 bill_id 获取到 ${fees.length} 条${targetFeeType}费用`)
     
     if (fees.length > 0) {
       // 按费用类型分组合并
@@ -745,27 +767,61 @@ export async function regenerateInvoiceFiles(invoiceId) {
     currency: invoice.currency || 'EUR'
   }
 
+  console.log(`[regenerateInvoiceFiles] 开始生成 Excel...`)
   const excelBuffer = await generateExcel(excelData)
+  console.log(`[regenerateInvoiceFiles] Excel 生成成功, 大小: ${excelBuffer?.length || 0} bytes`)
 
   // 上传到COS或保存到本地
   let pdfUrl = null
   let excelUrl = null
   
   const cosConfig = cosStorage.checkCosConfig()
+  console.log(`[regenerateInvoiceFiles] COS 配置状态: ${cosConfig.configured ? '已配置' : '未配置'}`)
+  
   if (cosConfig.configured) {
+    // 尝试上传到 COS
     try {
+      console.log(`[regenerateInvoiceFiles] 正在上传 PDF 到 COS...`)
       pdfUrl = await cosStorage.uploadInvoicePDF(pdfBuffer, invoice.invoice_number)
+      console.log(`[regenerateInvoiceFiles] PDF 上传成功: ${pdfUrl}`)
+    } catch (pdfError) {
+      console.error('[regenerateInvoiceFiles] PDF上传到COS失败:', pdfError.message || pdfError)
+    }
+    
+    try {
+      console.log(`[regenerateInvoiceFiles] 正在上传 Excel 到 COS...`)
       excelUrl = await cosStorage.uploadStatementExcel(excelBuffer, invoice.invoice_number)
-    } catch (error) {
-      console.error('上传到COS失败:', error)
+      console.log(`[regenerateInvoiceFiles] Excel 上传成功: ${excelUrl}`)
+    } catch (excelError) {
+      console.error('[regenerateInvoiceFiles] Excel上传到COS失败:', excelError.message || excelError)
+    }
+    
+    // 如果 COS 上传失败，尝试本地存储
+    if (!pdfUrl || !excelUrl) {
+      console.log(`[regenerateInvoiceFiles] COS 上传部分失败，尝试本地存储...`)
+      try {
+        if (!pdfUrl) {
+          pdfUrl = await saveFileLocally(pdfBuffer, `${invoice.invoice_number}.pdf`)
+          console.log(`[regenerateInvoiceFiles] PDF 本地保存成功: ${pdfUrl}`)
+        }
+        if (!excelUrl) {
+          excelUrl = await saveFileLocally(excelBuffer, `${invoice.invoice_number}_statement.xlsx`)
+          console.log(`[regenerateInvoiceFiles] Excel 本地保存成功: ${excelUrl}`)
+        }
+      } catch (localError) {
+        console.error('[regenerateInvoiceFiles] 本地存储也失败:', localError.message || localError)
+      }
     }
   } else {
     // COS未配置，使用本地存储
+    console.log(`[regenerateInvoiceFiles] 使用本地存储...`)
     try {
       pdfUrl = await saveFileLocally(pdfBuffer, `${invoice.invoice_number}.pdf`)
+      console.log(`[regenerateInvoiceFiles] PDF 本地保存成功: ${pdfUrl}`)
       excelUrl = await saveFileLocally(excelBuffer, `${invoice.invoice_number}_statement.xlsx`)
+      console.log(`[regenerateInvoiceFiles] Excel 本地保存成功: ${excelUrl}`)
     } catch (error) {
-      console.error('本地存储失败:', error)
+      console.error('[regenerateInvoiceFiles] 本地存储失败:', error.message || error)
     }
   }
   

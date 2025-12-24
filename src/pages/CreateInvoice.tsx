@@ -144,7 +144,7 @@ export default function CreateInvoice() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])  // 上传的对账单/发票文件
   const [previewFile, setPreviewFile] = useState<string | null>(null)  // 预览的文件URL
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [mergeSameFees, setMergeSameFees] = useState(false)  // 是否合并相同费用项
+  const [mergeSameFees, setMergeSameFees] = useState(true)  // 是否合并相同费用项（默认开启）
   
   // Refs for click outside detection
   const customerDropdownRef = useRef<HTMLDivElement>(null)
@@ -473,22 +473,80 @@ export default function CreateInvoice() {
           index === self.findIndex((f: Fee) => f.id === fee.id)
         )
         setBillFees(uniqueFees)
-        // 自动将费用转换为发票明细（确保金额是数字类型）
-        const items: InvoiceItem[] = uniqueFees.map((fee: Fee, index: number) => ({
-          id: (index + 1).toString(),
-          description: fee.feeName || feeCategoryMap[fee.category] || '费用',
-          quantity: 1,
-          unitPrice: Number(fee.amount) || 0,
-          currency: fee.currency || 'EUR',
-          amount: Number(fee.amount) || 0,
-          taxRate: 0,
-          taxAmount: 0,
-          discountPercent: 0,
-          discountAmount: 0,
-          finalAmount: Number(fee.amount) || 0,
-          feeId: fee.id,
-          isFromOrder: true  // 标记为来自订单，禁止修改
-        }))
+        
+        let items: InvoiceItem[]
+        
+        if (mergeSameFees) {
+          // 合并相同费用项：按费用名称分组汇总
+          const feeMap = new Map<string, {
+            feeName: string
+            totalAmount: number
+            count: number
+            currency: string
+            feeIds: string[]
+            unitPrices: number[]
+          }>()
+          
+          uniqueFees.forEach((fee: Fee) => {
+            const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
+            const amount = Number(fee.amount) || 0
+            const existing = feeMap.get(feeName)
+            
+            if (existing) {
+              existing.totalAmount += amount
+              existing.count += 1
+              existing.feeIds.push(fee.id)
+              existing.unitPrices.push(amount)
+            } else {
+              feeMap.set(feeName, {
+                feeName,
+                totalAmount: amount,
+                count: 1,
+                currency: fee.currency || 'EUR',
+                feeIds: [fee.id],
+                unitPrices: [amount]
+              })
+            }
+          })
+          
+          // 转换为发票明细项
+          items = Array.from(feeMap.values()).map((group, index) => {
+            const allSamePrice = group.unitPrices.every(p => p === group.unitPrices[0])
+            return {
+              id: (index + 1).toString(),
+              description: group.feeName,
+              quantity: group.count,
+              unitPrice: allSamePrice ? group.unitPrices[0] : -1,
+              currency: group.currency,
+              amount: group.totalAmount,
+              taxRate: 0,
+              taxAmount: 0,
+              discountPercent: 0,
+              discountAmount: 0,
+              finalAmount: group.totalAmount,
+              feeId: group.feeIds.join(','),
+              isFromOrder: true
+            }
+          })
+        } else {
+          // 不合并：每个费用项单独显示
+          items = uniqueFees.map((fee: Fee, index: number) => ({
+            id: (index + 1).toString(),
+            description: fee.feeName || feeCategoryMap[fee.category] || '费用',
+            quantity: 1,
+            unitPrice: Number(fee.amount) || 0,
+            currency: fee.currency || 'EUR',
+            amount: Number(fee.amount) || 0,
+            taxRate: 0,
+            taxAmount: 0,
+            discountPercent: 0,
+            discountAmount: 0,
+            finalAmount: Number(fee.amount) || 0,
+            feeId: fee.id,
+            isFromOrder: true
+          }))
+        }
+        
         setFormData(prev => ({ ...prev, items }))
       } else {
         setBillFees([])
@@ -916,7 +974,7 @@ export default function CreateInvoice() {
       
       let items: InvoiceItem[]
       
-      if (mergeSameFees && selectedBills.length > 1) {
+      if (mergeSameFees) {
         // 合并相同费用项：按费用名称分组汇总
         const feeMap = new Map<string, {
           feeName: string
@@ -1172,6 +1230,7 @@ export default function CreateInvoice() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/finance/invoices')}
+            title="返回发票列表"
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -1187,6 +1246,7 @@ export default function CreateInvoice() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/finance/invoices')}
+            title="取消并返回"
             className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             取消
@@ -1194,6 +1254,7 @@ export default function CreateInvoice() {
           <button
             onClick={handleSubmit}
             disabled={loading || (formData.invoiceType === 'sales' ? !selectedBill : formData.items.length === 0)}
+            title={isEditMode ? '更新发票' : '保存发票'}
             className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
@@ -1215,6 +1276,7 @@ export default function CreateInvoice() {
           <button
             type="button"
             onClick={() => setFormData(prev => ({ ...prev, invoiceType: 'sales' }))}
+            title="选择销售发票类型"
             className={`flex-1 px-4 py-4 rounded-lg border-2 transition-all ${
               formData.invoiceType === 'sales'
                 ? 'bg-blue-50 border-blue-500 text-blue-700'
@@ -1227,6 +1289,7 @@ export default function CreateInvoice() {
           <button
             type="button"
             onClick={() => setFormData(prev => ({ ...prev, invoiceType: 'purchase' }))}
+            title="选择采购发票类型"
             className={`flex-1 px-4 py-4 rounded-lg border-2 transition-all ${
               formData.invoiceType === 'purchase'
                 ? 'bg-orange-50 border-orange-500 text-orange-700'
@@ -1342,7 +1405,8 @@ export default function CreateInvoice() {
                   )}
                 </div>
                 <button 
-                  onClick={clearCustomerSelection} 
+                  onClick={clearCustomerSelection}
+                  title="更换客户"
                   className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors"
                 >
                   更换客户
@@ -1387,6 +1451,7 @@ export default function CreateInvoice() {
                   }}
                   disabled={!formData.customerId}
                   placeholder={formData.customerId ? "搜索提单号、集装箱号（支持空格分隔多个批量搜索）" : "请先选择客户"}
+                  title="搜索订单"
                   className={`w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                     !formData.customerId ? 'bg-gray-100 cursor-not-allowed' : ''
                   }`}
@@ -1409,6 +1474,7 @@ export default function CreateInvoice() {
                             e.stopPropagation()
                             toggleBillSelection(bill)
                           }}
+                          title="取消选择"
                           className="text-blue-400 hover:text-blue-600"
                         >
                           <X className="w-3 h-3" />
@@ -1424,6 +1490,7 @@ export default function CreateInvoice() {
                         id="mergeSalesFees"
                         checked={mergeSameFees}
                         onChange={(e) => setMergeSameFees(e.target.checked)}
+                        title="合并相同费用项"
                         className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
                       />
                       <label htmlFor="mergeSalesFees" className="text-xs text-amber-800 cursor-pointer">
@@ -1435,6 +1502,7 @@ export default function CreateInvoice() {
                   <div className="flex justify-end">
                     <button
                       onClick={confirmMultiBillSelection}
+                      title="确认选择订单"
                       className="px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700"
                     >
                       确认选择
@@ -1589,7 +1657,7 @@ export default function CreateInvoice() {
                     </div>
                   )}
                 </div>
-                <button onClick={clearBillSelection} className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors flex-shrink-0">更换订单</button>
+                <button onClick={clearBillSelection} title="更换订单" className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors flex-shrink-0">更换订单</button>
               </div>
             </div>
           )}
@@ -1670,7 +1738,7 @@ export default function CreateInvoice() {
                     </div>
                   </div>
                 </div>
-                <button onClick={clearSupplierSelection} className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors">更换供应商</button>
+                <button onClick={clearSupplierSelection} title="更换供应商" className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors">更换供应商</button>
               </div>
             </div>
           )}
@@ -1707,6 +1775,7 @@ export default function CreateInvoice() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
+                    title="点击上传对账单或发票文件"
                     className="text-sm text-orange-600 hover:text-orange-700 font-medium"
                   >
                     点击上传对账单/发票
@@ -1787,6 +1856,7 @@ export default function CreateInvoice() {
                   <button
                     type="button"
                     onClick={toggleSelectAll}
+                    title={supplierFees.every(f => f.selected) ? '取消全选' : '全选费用项'}
                     className="text-xs text-orange-600 hover:text-orange-700"
                   >
                     {supplierFees.every(f => f.selected) ? '取消全选' : '全选'}
@@ -1816,6 +1886,7 @@ export default function CreateInvoice() {
                         type="checkbox"
                         checked={fee.selected || false}
                         onChange={() => {}}
+                        title="选择此费用项"
                         className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
                       />
                       <div className="flex-1 min-w-0">
@@ -1847,12 +1918,13 @@ export default function CreateInvoice() {
                   </div>
                   
                   {/* 合并相同费用项选项 */}
-                  <div className="flex items-center gap-2 mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                      <div className="flex items-center gap-2 mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
                     <input
                       type="checkbox"
                       id="mergeSameFees"
                       checked={mergeSameFees}
                       onChange={(e) => setMergeSameFees(e.target.checked)}
+                      title="合并相同费用项"
                       className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
                     />
                     <label htmlFor="mergeSameFees" className="text-xs text-amber-800 cursor-pointer flex-1">
@@ -1866,6 +1938,7 @@ export default function CreateInvoice() {
                   <button
                     type="button"
                     onClick={confirmSelectedFees}
+                    title="确认选择并生成发票明细"
                     className="w-full py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
                   >
                     确认选择并生成发票明细
@@ -1996,16 +2069,18 @@ export default function CreateInvoice() {
                     {formData.invoiceType === 'sales' && !formData.billId && showCustomerDropdown && customers.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
                         {customers.map(customer => (
-                          <div
+                          <button
+                            type="button"
                             key={customer.id}
                             onClick={() => selectCustomer(customer)}
-                            className="px-2 py-1.5 hover:bg-gray-50 cursor-pointer"
+                            title={`选择客户: ${customer.customerName}`}
+                            className="w-full text-left px-2 py-1.5 hover:bg-gray-50 cursor-pointer"
                           >
                             <div className="text-xs text-gray-900">{customer.customerName}</div>
                             {customer.customerCode && (
                               <div className="text-[10px] text-gray-500">{customer.customerCode}</div>
                             )}
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -2023,6 +2098,7 @@ export default function CreateInvoice() {
                         setFormData(prev => ({ ...prev, currency: newCurrency }))
                         fetchExchangeRate(newCurrency)
                       }}
+                      title="选择货币"
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
                     >
                       {currencies.map(c => (
@@ -2066,6 +2142,7 @@ export default function CreateInvoice() {
                   <button
                     type="button"
                     onClick={addItem}
+                    title="添加发票项目"
                     className="flex items-center gap-1 px-3 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -2081,6 +2158,7 @@ export default function CreateInvoice() {
                   <button
                     type="button"
                     onClick={addItem}
+                    title="手动添加发票项"
                     className="mt-2 text-xs text-primary-600 hover:text-primary-700"
                   >
                     手动添加发票项
@@ -2127,6 +2205,7 @@ export default function CreateInvoice() {
                               onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                               min="0"
                               step="1"
+                              title="数量"
                               className="w-full px-1 py-1 text-[11px] lg:text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                             />
                           </td>
@@ -2144,6 +2223,7 @@ export default function CreateInvoice() {
                                 min="0"
                                 step="0.01"
                                 disabled={item.isFromOrder}
+                                title="单价"
                                 className={`w-full px-1 py-1 text-[11px] lg:text-xs text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${item.isFromOrder ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : ''}`}
                               />
                             )}
@@ -2153,6 +2233,7 @@ export default function CreateInvoice() {
                               value={item.currency}
                               onChange={(e) => updateItem(item.id, 'currency', e.target.value)}
                               disabled={item.isFromOrder}
+                              title="货币"
                               className={`w-full px-0.5 py-1 text-[11px] lg:text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${item.isFromOrder ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : 'bg-white'}`}
                             >
                               {currencies.map(c => (
@@ -2164,6 +2245,7 @@ export default function CreateInvoice() {
                             <select
                               value={item.taxRate}
                               onChange={(e) => updateItem(item.id, 'taxRate', parseFloat(e.target.value))}
+                              title="税率"
                               className="w-full px-0.5 py-1 text-[11px] lg:text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                             >
                               {taxRates.map(rate => (
@@ -2412,6 +2494,7 @@ export default function CreateInvoice() {
             <button
               onClick={handleSubmit}
               disabled={loading || (formData.invoiceType === 'sales' ? !selectedBill : formData.items.length === 0)}
+              title={isEditMode ? '更新发票' : '保存发票'}
               className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
                 formData.invoiceType === 'sales'
                   ? 'bg-blue-600 text-white hover:bg-blue-700 border-2 border-blue-600'
@@ -2434,6 +2517,7 @@ export default function CreateInvoice() {
                 URL.revokeObjectURL(previewFile)
                 setPreviewFile(null)
               }}
+              title="关闭预览"
               className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70"
             >
               <X className="w-5 h-5" />

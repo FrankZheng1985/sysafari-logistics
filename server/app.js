@@ -53,6 +53,8 @@ import commissionRoutes from './modules/commission/routes.js'
 import contractTemplateRoutes from './modules/contract-template/routes.js'
 import dataImportRoutes from './modules/data-import/routes.js'
 import helpVideoRoutes from './modules/help-video/routes.js'
+import portalApiRoutes from './modules/portal-api/routes.js'
+import openApiRoutes from './modules/open-api/routes.js'
 import { initSocketServer } from './modules/chat/socket.js'
 
 // 供应商模块初始化
@@ -89,9 +91,15 @@ app.use(cors({
     'http://localhost:3000', 
     'http://localhost:3001', 
     'http://127.0.0.1:5173',
+    // 客户门户本地开发
+    'http://localhost:5174',
+    'http://localhost:5175',
     // 生产环境
     'https://erp.xianfeng-eu.com',
     'https://www.erp.xianfeng-eu.com',
+    // 客户门户生产环境
+    'https://portal.xianfeng-eu.com',
+    'https://customer.xianfeng-eu.com',
     // 演示环境
     'https://demo.xianfeng-eu.com',
     'https://sysafari-logistics.vercel.app',
@@ -100,7 +108,7 @@ app.use(cors({
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-API-Key', 'X-API-Secret']
 }))
 
 // JSON解析
@@ -206,6 +214,12 @@ app.use('/api/data-import', dataImportRoutes)
 
 // 帮助视频模块
 app.use('/api/help-videos', helpVideoRoutes)
+
+// 客户门户 API 模块（供客户门户系统使用）
+app.use('/api/portal', portalApiRoutes)
+
+// 开放 API 模块（供客户 ERP/WMS 系统对接）
+app.use('/open-api', openApiRoutes)
 
 // ==================== 错误处理 ====================
 

@@ -94,7 +94,12 @@ export async function getInvoiceById(req, res) {
     // 如果 items 为空但有 bill_id，从 fees 表获取费用数据
     let items = invoice.items
     if ((!items || items.length === 0) && invoice.billId) {
-      const fees = await model.getFees({ billId: invoice.billId })
+      // 根据发票类型确定要筛选的费用类型
+      // sales = 销售发票(应收) -> fee_type = 'receivable'
+      // purchase = 采购发票(应付) -> fee_type = 'payable'
+      const targetFeeType = invoice.invoiceType === 'purchase' ? 'payable' : 'receivable'
+      
+      const fees = await model.getFees({ billId: invoice.billId, feeType: targetFeeType })
       if (fees && fees.list && fees.list.length > 0) {
         // 按费用名称汇总
         const feeGroups = {}
