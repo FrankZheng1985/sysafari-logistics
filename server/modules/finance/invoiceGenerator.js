@@ -338,10 +338,10 @@ export async function generateExcel(data) {
  */
 export async function prepareInvoiceData(feeIds, customerId) {
   const db = getDatabase()
-  // 获取费用记录（包含 fee_name_en 字段）
+  // 获取费用记录
   const placeholders = feeIds.map(() => '?').join(',')
   const fees = await db.prepare(`
-    SELECT f.*, f.fee_name_en, b.container_number, b.bill_number
+    SELECT f.*, b.container_number, b.bill_number
     FROM fees f
     LEFT JOIN bills_of_lading b ON f.bill_id = b.id
     WHERE f.id IN (${placeholders})

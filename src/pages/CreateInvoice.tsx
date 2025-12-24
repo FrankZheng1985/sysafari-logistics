@@ -1334,6 +1334,7 @@ export default function CreateInvoice() {
                     setShowCustomerDropdown(true)
                   }}
                   placeholder="搜索客户名称..."
+                  title="搜索客户"
                   className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
@@ -1693,6 +1694,7 @@ export default function CreateInvoice() {
                     setShowSupplierDropdown(true)
                   }}
                   placeholder="搜索供应商名称、编码..."
+                  title="搜索供应商"
                   className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                 />
               </div>
@@ -1768,6 +1770,7 @@ export default function CreateInvoice() {
                   accept=".pdf,.jpg,.jpeg,.png"
                   multiple
                   onChange={handleFileUpload}
+                  title="选择文件上传"
                   className="hidden"
                 />
                 <div className="text-center">
@@ -1829,6 +1832,7 @@ export default function CreateInvoice() {
                       value={formData.supplierInvoiceNumber}
                       onChange={(e) => setFormData(prev => ({ ...prev, supplierInvoiceNumber: e.target.value }))}
                       placeholder="输入发票号"
+                      title="供应商发票号"
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
                   </div>
@@ -2001,6 +2005,7 @@ export default function CreateInvoice() {
                         onChange={(e) => handlePaymentDaysChange(e.target.value ? parseInt(e.target.value) : '')}
                         min="0"
                         placeholder="输入"
+                        title="账期天数"
                         className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded-l-md focus:outline-none focus:ring-1 focus:ring-primary-500 h-8"
                       />
                       <span className="px-2 py-1.5 text-xs bg-gray-100 border border-l-0 border-gray-200 rounded-r-md text-gray-500 h-8 flex items-center">天</span>
@@ -2266,6 +2271,7 @@ export default function CreateInvoice() {
                               onChange={(e) => updateItem(item.id, 'discountPercent', parseFloat(e.target.value) || 0)}
                               step="0.1"
                               placeholder="0"
+                              title="优惠百分比"
                               className="w-full px-1 py-1 text-[11px] lg:text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                             />
                           </td>
@@ -2276,6 +2282,7 @@ export default function CreateInvoice() {
                               onChange={(e) => updateItem(item.id, 'discountAmount', parseFloat(e.target.value) || 0)}
                               step="0.01"
                               placeholder="0"
+                              title="优惠金额"
                               className="w-full px-1 py-1 text-[11px] lg:text-xs text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
                             />
                           </td>
@@ -2339,6 +2346,7 @@ export default function CreateInvoice() {
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="输入发票说明..."
+                    title="发票说明"
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
@@ -2349,6 +2357,7 @@ export default function CreateInvoice() {
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="输入内部备注（不会显示在发票上）..."
                     rows={3}
+                    title="内部备注"
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                   />
                 </div>
