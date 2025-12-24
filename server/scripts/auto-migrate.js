@@ -1897,6 +1897,30 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_contract_signatures_status ON contract_signatures(status)`)
     console.log('  ✅ 合同模板模块表就绪')
 
+    // ==================== Users 表字段补充 ====================
+    const userColumns = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'users' AND column_name IN ('supervisor_id', 'department', 'position')
+    `)
+    const existingUserCols = userColumns.rows.map(r => r.column_name)
+    
+    if (!existingUserCols.includes('supervisor_id')) {
+      await client.query(`ALTER TABLE users ADD COLUMN supervisor_id INTEGER`)
+      console.log('  ✅ users.supervisor_id 字段已添加')
+    }
+    if (!existingUserCols.includes('department')) {
+      await client.query(`ALTER TABLE users ADD COLUMN department VARCHAR(100) DEFAULT ''`)
+      console.log('  ✅ users.department 字段已添加')
+    }
+    if (!existingUserCols.includes('position')) {
+      await client.query(`ALTER TABLE users ADD COLUMN position VARCHAR(100) DEFAULT ''`)
+      console.log('  ✅ users.position 字段已添加')
+    }
+    
+    // 为 supervisor_id 创建索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_users_supervisor_id ON users(supervisor_id)`)
+    console.log('  ✅ users 表字段就绪')
+
     console.log('✅ 数据库迁移完成！')
     return true
     
