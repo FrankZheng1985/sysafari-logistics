@@ -298,8 +298,8 @@ export default function CreateInvoice() {
           if (billData.errCode === 200 && billData.data) {
             setSelectedBill(billData.data)
             setBillSearch(billData.data.billNumber)
-            // 加载订单费用
-            fetchBillFees(invoice.billId)
+            // 加载订单费用（根据发票类型筛选费用类型）
+            fetchBillFees(invoice.billId, invoice.invoiceType)
           }
         }
 
@@ -456,10 +456,15 @@ export default function CreateInvoice() {
   }
 
   // 获取订单关联的费用
-  const fetchBillFees = async (billId: string) => {
+  // 根据发票类型筛选对应的费用类型：销售发票->应收费用，采购发票->应付费用
+  const fetchBillFees = async (billId: string, invoiceType?: 'sales' | 'purchase') => {
     setLoadingFees(true)
     try {
-      const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&pageSize=100`)
+      // 根据发票类型确定费用类型
+      // 销售发票(sales) -> 应收费用(receivable)
+      // 采购发票(purchase) -> 应付费用(payable)
+      const feeType = invoiceType === 'purchase' ? 'payable' : 'receivable'
+      const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&feeType=${feeType}&pageSize=100`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setBillFees(data.data.list)
@@ -500,8 +505,8 @@ export default function CreateInvoice() {
   const fetchSupplierFees = async (supplierId: string) => {
     setLoadingSupplierFees(true)
     try {
-      // 获取该供应商的所有费用（跨订单）
-      const response = await fetch(`${API_BASE}/api/fees?supplierId=${supplierId}&pageSize=200`)
+      // 获取该供应商的所有应付费用（跨订单），采购发票只显示应付费用
+      const response = await fetch(`${API_BASE}/api/fees?supplierId=${supplierId}&feeType=payable&pageSize=200`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         // 按订单分组显示费用，并标记选中状态
@@ -776,8 +781,8 @@ export default function CreateInvoice() {
     }))
     setCustomerSearch(bill.customerName || bill.consignee || '')
     
-    // 获取订单关联的费用
-    await fetchBillFees(bill.id)
+    // 获取订单关联的费用（根据发票类型筛选费用类型）
+    await fetchBillFees(bill.id, formData.invoiceType)
   }
 
   // 切换订单选择（多选模式）
@@ -807,12 +812,14 @@ export default function CreateInvoice() {
     }))
     setCustomerSearch(firstBill.customerName || firstBill.consignee || '')
     
-    // 获取所有订单的费用
+    // 获取所有订单的费用（根据发票类型筛选费用类型）
     setLoadingFees(true)
     try {
       const allFees: Fee[] = []
+      // 销售发票(sales) -> 应收费用(receivable)，采购发票(purchase) -> 应付费用(payable)
+      const feeType = formData.invoiceType === 'purchase' ? 'payable' : 'receivable'
       for (const bill of selectedBills) {
-        const response = await fetch(`${API_BASE}/api/fees?billId=${bill.id}&pageSize=100`)
+        const response = await fetch(`${API_BASE}/api/fees?billId=${bill.id}&feeType=${feeType}&pageSize=100`)
         const data = await response.json()
         if (data.errCode === 200 && data.data?.list) {
           // 为每个费用添加订单信息
