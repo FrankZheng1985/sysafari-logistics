@@ -115,6 +115,7 @@ import { SocketProvider } from './contexts/SocketContext'
 import { TabsProvider } from './contexts/TabsContext'
 import { ToastProvider } from './components/Toast'
 import { Loader2 } from 'lucide-react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 
 // 保护路由组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -292,6 +293,7 @@ function App() {
           </Routes>
         </Router>
       </AuthProvider>
+      <SpeedInsights />
     </ToastProvider>
   )
 }
