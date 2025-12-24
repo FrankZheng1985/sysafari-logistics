@@ -23,9 +23,9 @@ dotenv.config({ path: path.join(__dirname, '../.env') })
 
 // COS 配置
 const cosConfig = {
-  // 腾讯云 API 密钥
-  secretId: process.env.TENCENT_COS_SECRET_ID || '',
-  secretKey: process.env.TENCENT_COS_SECRET_KEY || '',
+  // 腾讯云 API 密钥（兼容两种命名方式）
+  secretId: process.env.TENCENT_COS_SECRET_ID || process.env.TENCENT_SECRET_ID || '',
+  secretKey: process.env.TENCENT_COS_SECRET_KEY || process.env.TENCENT_SECRET_KEY || '',
   
   // 存储桶配置
   bucket: process.env.TENCENT_COS_BUCKET || '',
