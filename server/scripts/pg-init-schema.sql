@@ -1483,6 +1483,28 @@ CREATE INDEX IF NOT EXISTS idx_api_recharge_code ON api_recharge_records(api_cod
 CREATE INDEX IF NOT EXISTS idx_api_recharge_time ON api_recharge_records(recharge_time);
 CREATE INDEX IF NOT EXISTS idx_api_recharge_api_id ON api_recharge_records(api_id);
 
+-- ==================== 银行账户表 ====================
+CREATE TABLE IF NOT EXISTS bank_accounts (
+    id SERIAL PRIMARY KEY,
+    account_name TEXT NOT NULL,
+    account_number TEXT NOT NULL,
+    bank_name TEXT NOT NULL,
+    bank_branch TEXT,
+    swift_code TEXT,
+    iban TEXT,
+    currency TEXT DEFAULT 'EUR',
+    account_type TEXT DEFAULT 'current',
+    is_default BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_currency ON bank_accounts(currency);
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_active ON bank_accounts(is_active);
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_default ON bank_accounts(is_default);
+
 -- ==================== 船公司跟踪API配置表 ====================
 CREATE TABLE IF NOT EXISTS tracking_api_configs (
     id SERIAL PRIMARY KEY,
@@ -1511,5 +1533,5 @@ CREATE INDEX IF NOT EXISTS idx_tracking_api_configs_status ON tracking_api_confi
 DO $$
 BEGIN
     RAISE NOTICE '✅ PostgreSQL 数据库表结构初始化完成！';
-    RAISE NOTICE '📊 共创建 63 个数据表';
+    RAISE NOTICE '📊 共创建 64 个数据表';
 END $$;

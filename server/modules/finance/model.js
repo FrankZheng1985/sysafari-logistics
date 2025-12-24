@@ -1478,7 +1478,7 @@ export async function getBankAccounts(options = {}) {
   
   if (isActive !== undefined) {
     sql += ' AND is_active = ?'
-    params.push(isActive ? 1 : 0)
+    params.push(isActive)  // PostgreSQL 直接使用 true/false
   }
   
   if (currency) {
@@ -1509,7 +1509,7 @@ export async function createBankAccount(data) {
   
   // 如果设为默认，先取消其他默认
   if (data.isDefault) {
-    await db.prepare('UPDATE bank_accounts SET is_default = 0').run()
+    await db.prepare('UPDATE bank_accounts SET is_default = FALSE').run()
   }
   
   const result = await db.prepare(`
@@ -1527,8 +1527,8 @@ export async function createBankAccount(data) {
     data.iban || '',
     data.currency || 'EUR',
     data.accountType || 'current',
-    data.isDefault ? 1 : 0,
-    data.isActive !== false ? 1 : 0,
+    data.isDefault === true,    // PostgreSQL 使用 true/false
+    data.isActive !== false,    // PostgreSQL 使用 true/false
     data.notes || ''
   )
   
@@ -1543,7 +1543,7 @@ export async function updateBankAccount(id, data) {
   
   // 如果设为默认，先取消其他默认
   if (data.isDefault) {
-    await db.prepare('UPDATE bank_accounts SET is_default = 0 WHERE id != ?').run(id)
+    await db.prepare('UPDATE bank_accounts SET is_default = FALSE WHERE id != ?').run(id)
   }
   
   const fields = []
@@ -1566,8 +1566,9 @@ export async function updateBankAccount(id, data) {
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
     if (data[jsField] !== undefined) {
       fields.push(`${dbField} = ?`)
+      // PostgreSQL 直接使用布尔值
       if (jsField === 'isDefault' || jsField === 'isActive') {
-        values.push(data[jsField] ? 1 : 0)
+        values.push(data[jsField] === true)
       } else {
         values.push(data[jsField])
       }
@@ -1606,8 +1607,9 @@ function formatBankAccount(row) {
     iban: row.iban,
     currency: row.currency,
     accountType: row.account_type,
-    isDefault: row.is_default === 1,
-    isActive: row.is_active === 1,
+    // PostgreSQL 返回的布尔值可能是 true/false 或 1/0
+    isDefault: row.is_default === true || row.is_default === 1,
+    isActive: row.is_active === true || row.is_active === 1,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at

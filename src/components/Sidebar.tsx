@@ -35,8 +35,28 @@ import { useState, useEffect } from 'react'
 import clsx from 'clsx'
 import { loadMenuSettingsAsync } from '../utils/menuSettings'
 import { getApiBaseUrl } from '../utils/api'
+import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE = getApiBaseUrl()
+
+// 菜单权限映射：定义每个菜单路径需要的权限
+const MENU_PERMISSIONS: Record<string, string[]> = {
+  '/dashboard': ['dashboard:view'],
+  '/bp-view': ['bp:view'],
+  '/bookings': ['bill:view', 'bill:create', 'bill:edit'],
+  '/bookings/bill': ['bill:view'],
+  '/bookings/labels': ['bill:view'],
+  '/bookings/packages': ['bill:view'],
+  '/bookings/declarations': ['bill:view'],
+  '/documents': ['document:view', 'document:import', 'document:match'],
+  '/inspection': ['inspection:view', 'inspection:operate'],
+  '/tms': ['cmr:view', 'cmr:operate'],
+  '/crm': ['crm:view', 'crm:customer_manage', 'crm:opportunity_manage'],
+  '/suppliers': ['supplier:view', 'supplier:manage'],
+  '/finance': ['finance:view', 'finance:invoice_view', 'finance:payment_view'],
+  '/tools': ['product:view', 'system:tariff_rate'],
+  '/system': ['system:user', 'system:menu', 'system:basic_data', 'system:security'],
+}
 
 interface MenuItem {
   path: string
@@ -167,9 +187,26 @@ const menuItems: MenuItem[] = [
 
 export default function Sidebar() {
   const navigate = useNavigate()
+  const { hasAnyPermission, isAdmin, isManager } = useAuth()
   const [expandedItems, setExpandedItems] = useState<string[]>(['/bookings', '/documents', '/tools', '/system', '/crm', '/tms', '/suppliers', '/inspection', '/finance'])
   const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({})
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
+
+  // 检查用户是否有权限访问某个菜单
+  const canAccessMenu = (path: string): boolean => {
+    // 管理员和经理可以访问所有菜单
+    if (isAdmin() || isManager()) return true
+    
+    // 获取该菜单需要的权限
+    const requiredPermissions = MENU_PERMISSIONS[path]
+    if (!requiredPermissions || requiredPermissions.length === 0) {
+      // 如果没有定义权限要求，默认允许访问
+      return true
+    }
+    
+    // 检查用户是否有任意一个所需权限
+    return hasAnyPermission(requiredPermissions)
+  }
 
   // 加载菜单设置并监听变化
   useEffect(() => {
@@ -301,6 +338,10 @@ export default function Sidebar() {
               <div className="ml-2">
                 {item.children
                   ?.filter((child) => {
+                    // 检查用户权限
+                    if (!canAccessMenu(child.path)) {
+                      return false
+                    }
                     // 如果是订单管理下的菜单项，检查开关状态
                     if (item.path === '/bookings') {
                       // 如果 menuSettings 为空或未初始化，使用默认值（开启）
@@ -363,6 +404,10 @@ export default function Sidebar() {
           .filter(item => {
             // 检查顶级菜单项的开关状态
             if (menuSettings[item.path] === false) {
+              return false
+            }
+            // 检查用户权限
+            if (!canAccessMenu(item.path)) {
               return false
             }
             return true

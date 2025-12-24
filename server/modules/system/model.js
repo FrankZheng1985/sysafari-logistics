@@ -207,9 +207,10 @@ export async function changePassword(id, newPassword) {
 }
 
 /**
- * 验证密码
+ * 验证密码（同步函数，因为没有异步操作）
  */
-export async function verifyPassword(user, password) {
+export function verifyPassword(user, password) {
+  if (!user || !password) return false
   const passwordHash = hashPassword(password)
   return user.passwordHash === passwordHash
 }
