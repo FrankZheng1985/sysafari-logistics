@@ -507,7 +507,7 @@ export default function InvoiceDetail() {
                   <Package className="w-4 h-4 text-primary-600" />
                   {(billInfo.orderNumber || invoice.orderNumber) ? (
                     <button 
-                      onClick={() => navigate(`/bill/${invoice.billId}`)}
+                      onClick={() => navigate(`/bookings/bill/${invoice.billId}`)}
                       className="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
                     >
                       {billInfo.orderNumber || invoice.orderNumber}
