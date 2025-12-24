@@ -446,7 +446,18 @@ export default function UserManage() {
   const loadSupervisors = useCallback(async () => {
     try {
       const apiBaseUrl = getApiBaseUrl()
-      const token = localStorage.getItem('token')
+      // 从本地存储获取 token
+      let token = ''
+      const testModeData = localStorage.getItem('bp_logistics_test_mode')
+      if (testModeData) {
+        try {
+          const data = JSON.parse(testModeData)
+          token = data.token || ''
+        } catch (e) {
+          console.error('解析登录数据失败:', e)
+        }
+      }
+      
       const response = await fetch(`${apiBaseUrl}/api/supervisors`, {
         headers: {
           'Authorization': `Bearer ${token}`,
