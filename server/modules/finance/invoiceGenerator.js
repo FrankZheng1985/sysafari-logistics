@@ -117,7 +117,7 @@ export async function generatePDF(invoiceData) {
     const page = await browser.newPage()
     await page.setContent(html, { waitUntil: 'networkidle0' })
     
-    const pdfBuffer = await page.pdf({
+    const pdfData = await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: {
@@ -128,7 +128,8 @@ export async function generatePDF(invoiceData) {
       }
     })
     
-    return pdfBuffer
+    // 确保返回 Node.js Buffer（COS SDK 需要）
+    return Buffer.from(pdfData)
   } finally {
     if (browser) {
       await browser.close()
