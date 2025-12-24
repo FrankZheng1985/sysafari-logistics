@@ -56,49 +56,26 @@ async function getBackupSettings() {
 
 /**
  * 执行备份
+ * 备份脚本会自动记录备份信息到数据库，包括 COS 上传状态
  */
 async function executeBackup(type = 'full') {
   console.log(`🔄 [${new Date().toLocaleString('zh-CN')}] 开始执行${type === 'full' ? '完整' : '增量'}备份...`)
   
   try {
     const { stdout, stderr } = await execAsync(`node "${backupScriptPath}" --type ${type}`, {
-      timeout: 300000 // 5分钟超时
+      timeout: 600000, // 10分钟超时（大数据库可能需要更长时间）
+      maxBuffer: 1024 * 1024 * 10 // 10MB buffer
     })
     
     if (stdout) console.log(stdout)
-    if (stderr) console.error(stderr)
+    if (stderr && !stderr.includes('warning')) console.error(stderr)
     
-    // 记录备份到数据库
-    await recordBackup(type, 'completed')
-    
-    console.log(`✅ [${new Date().toLocaleString('zh-CN')}] 备份完成`)
+    // 备份脚本已经记录到数据库，这里不需要重复记录
+    console.log(`✅ [${new Date().toLocaleString('zh-CN')}] 备份任务完成`)
     
   } catch (error) {
     console.error(`❌ [${new Date().toLocaleString('zh-CN')}] 备份失败:`, error.message)
-    
-    // 记录失败
-    await recordBackup(type, 'failed', error.message)
-  }
-}
-
-/**
- * 记录备份到数据库
- */
-async function recordBackup(type, status, errorMessage = null) {
-  try {
-    const db = getDatabase()
-    await db.prepare(`
-      INSERT INTO backup_records (
-        backup_name, backup_type, backup_status, started_at, completed_at, error_message
-      ) VALUES (?, ?, ?, NOW(), NOW(), ?)
-    `).run(
-      `auto_backup_${new Date().toISOString().split('T')[0]}`,
-      type,
-      status,
-      errorMessage
-    )
-  } catch (error) {
-    console.error('记录备份信息失败:', error.message)
+    // 备份脚本内部会处理失败记录
   }
 }
 

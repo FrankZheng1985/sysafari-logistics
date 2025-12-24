@@ -14,6 +14,20 @@ import { getDatabase } from '../../config/database.js'
 import auditLogger, { AuditActionTypes } from '../../utils/auditLogger.js'
 import { addToBlacklist, removeFromBlacklist } from '../../middleware/security.js'
 import { triggerBackup, getBackupHistory } from '../../jobs/backupScheduler.js'
+import fs from 'fs'
+
+// 动态导入 COS 工具（可能未配置）
+let cosUploader = null
+async function getCosUploader() {
+  if (!cosUploader) {
+    try {
+      cosUploader = await import('../../utils/cosUploader.js')
+    } catch (error) {
+      console.warn('COS 模块加载失败:', error.message)
+    }
+  }
+  return cosUploader
+}
 
 // ==================== 默认安全设置 ====================
 const DEFAULT_SECURITY_SETTINGS = [
@@ -540,8 +554,32 @@ export async function terminateSession(req, res) {
  */
 export async function getBackups(req, res) {
   try {
-    const { limit = 20 } = req.query
-    const backups = await getBackupHistory(parseInt(limit))
+    const { limit = 20, status, type } = req.query
+    const db = getDatabase()
+    
+    let sql = `
+      SELECT id, backup_name, backup_type, backup_size, backup_path, backup_status,
+             started_at, completed_at, error_message, created_by, created_at,
+             cos_key, is_cloud_synced, file_name, description, restored_at, restore_count
+      FROM backup_records
+      WHERE 1=1
+    `
+    const params = []
+    let paramIndex = 1
+    
+    if (status) {
+      sql += ` AND backup_status = $${paramIndex++}`
+      params.push(status)
+    }
+    if (type) {
+      sql += ` AND backup_type = $${paramIndex++}`
+      params.push(type)
+    }
+    
+    sql += ` ORDER BY created_at DESC LIMIT $${paramIndex}`
+    params.push(parseInt(limit))
+    
+    const backups = await db.prepare(sql).all(...params)
     
     return success(res, backups.map(item => ({
       id: item.id,
@@ -554,7 +592,13 @@ export async function getBackups(req, res) {
       completedAt: item.completed_at,
       errorMessage: item.error_message,
       createdBy: item.created_by,
-      createdAt: item.created_at
+      createdAt: item.created_at,
+      cosKey: item.cos_key,
+      isCloudSynced: item.is_cloud_synced === 1,
+      fileName: item.file_name,
+      description: item.description,
+      restoredAt: item.restored_at,
+      restoreCount: item.restore_count || 0
     })))
   } catch (error) {
     console.error('获取备份历史失败:', error)
@@ -567,7 +611,7 @@ export async function getBackups(req, res) {
  */
 export async function createBackup(req, res) {
   try {
-    const { type = 'full' } = req.body
+    const { type = 'full', description } = req.body
     
     // 异步执行备份（不阻塞响应）
     triggerBackup(type).catch(err => {
@@ -578,7 +622,7 @@ export async function createBackup(req, res) {
     await auditLogger.log({
       actionType: 'backup_create',
       resourceType: 'backup',
-      description: `手动触发${type === 'full' ? '完整' : '增量'}备份`,
+      description: `手动触发${type === 'full' ? '完整' : '增量'}备份${description ? ': ' + description : ''}`,
       user: req.user,
       req
     })
@@ -587,6 +631,422 @@ export async function createBackup(req, res) {
   } catch (error) {
     console.error('触发备份失败:', error)
     return serverError(res, '触发备份失败')
+  }
+}
+
+/**
+ * 删除备份
+ */
+export async function deleteBackup(req, res) {
+  try {
+    const { id } = req.params
+    const db = getDatabase()
+    
+    // 获取备份记录
+    const backup = await db.prepare(`
+      SELECT * FROM backup_records WHERE id = $1
+    `).get(id)
+    
+    if (!backup) {
+      return notFound(res, '备份记录不存在')
+    }
+    
+    // 删除本地文件
+    if (backup.backup_path && fs.existsSync(backup.backup_path)) {
+      try {
+        fs.unlinkSync(backup.backup_path)
+      } catch (e) {
+        console.warn('删除本地备份文件失败:', e.message)
+      }
+    }
+    
+    // 删除 COS 文件
+    if (backup.cos_key) {
+      try {
+        const cos = await getCosUploader()
+        if (cos && cos.isCosConfigured && cos.isCosConfigured()) {
+          await cos.deleteFile(backup.cos_key)
+        }
+      } catch (e) {
+        console.warn('删除 COS 备份文件失败:', e.message)
+      }
+    }
+    
+    // 删除数据库记录
+    await db.prepare(`DELETE FROM backup_records WHERE id = $1`).run(id)
+    
+    // 记录审计日志
+    await auditLogger.log({
+      actionType: 'backup_delete',
+      resourceType: 'backup',
+      resourceId: id,
+      resourceName: backup.backup_name,
+      description: `删除备份: ${backup.backup_name}`,
+      user: req.user,
+      req
+    })
+    
+    return success(res, null, '备份已删除')
+  } catch (error) {
+    console.error('删除备份失败:', error)
+    return serverError(res, '删除备份失败')
+  }
+}
+
+/**
+ * 获取备份下载链接
+ */
+export async function getBackupDownloadUrl(req, res) {
+  try {
+    const { id } = req.params
+    const db = getDatabase()
+    
+    // 获取备份记录
+    const backup = await db.prepare(`
+      SELECT * FROM backup_records WHERE id = $1
+    `).get(id)
+    
+    if (!backup) {
+      return notFound(res, '备份记录不存在')
+    }
+    
+    if (backup.backup_status !== 'completed') {
+      return badRequest(res, '该备份尚未完成，无法下载')
+    }
+    
+    let downloadUrl = null
+    let source = 'local'
+    
+    // 优先从 COS 获取下载链接
+    if (backup.cos_key && backup.is_cloud_synced) {
+      try {
+        const cos = await getCosUploader()
+        if (cos && cos.isCosConfigured && cos.isCosConfigured()) {
+          downloadUrl = await cos.getSignedUrl(backup.cos_key, 3600) // 1小时有效
+          source = 'cos'
+        }
+      } catch (e) {
+        console.warn('获取 COS 下载链接失败:', e.message)
+      }
+    }
+    
+    // 如果 COS 不可用，检查本地文件
+    if (!downloadUrl && backup.backup_path && fs.existsSync(backup.backup_path)) {
+      // 返回本地文件路径，前端需要通过另一个接口下载
+      downloadUrl = `/api/security/backups/${id}/file`
+      source = 'local'
+    }
+    
+    if (!downloadUrl) {
+      return notFound(res, '备份文件不可用')
+    }
+    
+    // 记录审计日志
+    await auditLogger.log({
+      actionType: 'backup_download',
+      resourceType: 'backup',
+      resourceId: id,
+      resourceName: backup.backup_name,
+      description: `下载备份: ${backup.backup_name} (来源: ${source})`,
+      user: req.user,
+      req
+    })
+    
+    return success(res, {
+      downloadUrl,
+      source,
+      fileName: backup.file_name || backup.backup_name,
+      fileSize: backup.backup_size,
+      expiresIn: source === 'cos' ? 3600 : null
+    })
+  } catch (error) {
+    console.error('获取下载链接失败:', error)
+    return serverError(res, '获取下载链接失败')
+  }
+}
+
+/**
+ * 下载本地备份文件
+ */
+export async function downloadBackupFile(req, res) {
+  try {
+    const { id } = req.params
+    const db = getDatabase()
+    
+    // 获取备份记录
+    const backup = await db.prepare(`
+      SELECT * FROM backup_records WHERE id = $1
+    `).get(id)
+    
+    if (!backup) {
+      return notFound(res, '备份记录不存在')
+    }
+    
+    if (!backup.backup_path || !fs.existsSync(backup.backup_path)) {
+      return notFound(res, '本地备份文件不存在')
+    }
+    
+    const fileName = backup.file_name || `backup_${backup.id}.sql.gz`
+    
+    res.setHeader('Content-Type', 'application/gzip')
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+    res.setHeader('Content-Length', fs.statSync(backup.backup_path).size)
+    
+    const fileStream = fs.createReadStream(backup.backup_path)
+    fileStream.pipe(res)
+  } catch (error) {
+    console.error('下载备份文件失败:', error)
+    return serverError(res, '下载备份文件失败')
+  }
+}
+
+/**
+ * 恢复数据库
+ */
+export async function restoreBackup(req, res) {
+  try {
+    const { id } = req.params
+    const { noBackupBefore = false, force = false } = req.body
+    const db = getDatabase()
+    
+    // 检查权限（只有超级管理员可以恢复）
+    if (req.user?.role !== 'admin' && req.user?.role !== 'super_admin') {
+      return badRequest(res, '只有管理员可以执行恢复操作')
+    }
+    
+    // 获取备份记录
+    const backup = await db.prepare(`
+      SELECT * FROM backup_records WHERE id = $1
+    `).get(id)
+    
+    if (!backup) {
+      return notFound(res, '备份记录不存在')
+    }
+    
+    if (backup.backup_status !== 'completed') {
+      return badRequest(res, '该备份尚未完成，无法恢复')
+    }
+    
+    // 记录审计日志（恢复开始）
+    await auditLogger.log({
+      actionType: 'backup_restore_start',
+      resourceType: 'backup',
+      resourceId: id,
+      resourceName: backup.backup_name,
+      description: `开始恢复数据库: ${backup.backup_name}`,
+      user: req.user,
+      req
+    })
+    
+    // 异步执行恢复（不阻塞响应）
+    const restorePromise = (async () => {
+      try {
+        // 动态导入恢复脚本
+        const { performRestore } = await import('../../scripts/restore-database.js')
+        
+        const result = await performRestore({
+          backupId: id,
+          noBackup: noBackupBefore,
+          force: true, // API 调用时强制执行
+          restoredBy: req.user?.username || 'api',
+          ipAddress: req.ip
+        })
+        
+        if (result.success) {
+          // 记录审计日志（恢复成功）
+          await auditLogger.log({
+            actionType: 'backup_restore_success',
+            resourceType: 'backup',
+            resourceId: id,
+            resourceName: backup.backup_name,
+            description: `数据库恢复成功: ${backup.backup_name}，耗时 ${result.duration} 秒`,
+            user: req.user,
+            req
+          })
+        }
+        
+        return result
+      } catch (error) {
+        // 记录审计日志（恢复失败）
+        await auditLogger.log({
+          actionType: 'backup_restore_failed',
+          resourceType: 'backup',
+          resourceId: id,
+          resourceName: backup.backup_name,
+          description: `数据库恢复失败: ${error.message}`,
+          result: 'failure',
+          user: req.user,
+          req
+        })
+        throw error
+      }
+    })()
+    
+    restorePromise.catch(err => {
+      console.error('恢复执行失败:', err.message)
+    })
+    
+    return success(res, {
+      backupId: id,
+      backupName: backup.backup_name,
+      message: '恢复任务已启动，请稍后查看恢复状态'
+    }, '恢复任务已启动')
+  } catch (error) {
+    console.error('触发恢复失败:', error)
+    return serverError(res, '触发恢复失败')
+  }
+}
+
+/**
+ * 获取恢复记录
+ */
+export async function getRestoreRecords(req, res) {
+  try {
+    const { limit = 20, backupId } = req.query
+    const db = getDatabase()
+    
+    let sql = `
+      SELECT * FROM restore_records
+      WHERE 1=1
+    `
+    const params = []
+    let paramIndex = 1
+    
+    if (backupId) {
+      sql += ` AND backup_id = $${paramIndex++}`
+      params.push(backupId)
+    }
+    
+    sql += ` ORDER BY created_at DESC LIMIT $${paramIndex}`
+    params.push(parseInt(limit))
+    
+    const records = await db.prepare(sql).all(...params)
+    
+    return success(res, records.map(item => ({
+      id: item.id,
+      backupId: item.backup_id,
+      backupName: item.backup_name,
+      restoreType: item.restore_type,
+      restoreStatus: item.restore_status,
+      startedAt: item.started_at,
+      completedAt: item.completed_at,
+      errorMessage: item.error_message,
+      restoredBy: item.restored_by,
+      ipAddress: item.ip_address,
+      createdAt: item.created_at
+    })))
+  } catch (error) {
+    console.error('获取恢复记录失败:', error)
+    return serverError(res, '获取恢复记录失败')
+  }
+}
+
+/**
+ * 获取备份设置
+ */
+export async function getBackupSettings(req, res) {
+  try {
+    const db = getDatabase()
+    
+    const settings = await db.prepare(`
+      SELECT setting_key, setting_value FROM security_settings 
+      WHERE setting_key LIKE 'backup_%'
+    `).all()
+    
+    const result = {
+      enabled: true,
+      frequency: 'daily',
+      time: '03:00',
+      retentionCount: 30,
+      uploadToCos: true
+    }
+    
+    for (const s of settings) {
+      switch (s.setting_key) {
+        case 'backup_enabled':
+          result.enabled = s.setting_value !== 'false'
+          break
+        case 'backup_frequency':
+          result.frequency = s.setting_value || 'daily'
+          break
+        case 'backup_time':
+          result.time = s.setting_value || '03:00'
+          break
+        case 'backup_retention_count':
+          result.retentionCount = parseInt(s.setting_value) || 30
+          break
+        case 'backup_upload_to_cos':
+          result.uploadToCos = s.setting_value !== 'false'
+          break
+      }
+    }
+    
+    // 检查 COS 是否已配置
+    let cosConfigured = false
+    try {
+      const cos = await getCosUploader()
+      cosConfigured = cos && cos.isCosConfigured && cos.isCosConfigured()
+    } catch (e) {
+      // 忽略
+    }
+    
+    return success(res, {
+      ...result,
+      cosConfigured
+    })
+  } catch (error) {
+    console.error('获取备份设置失败:', error)
+    return serverError(res, '获取备份设置失败')
+  }
+}
+
+/**
+ * 更新备份设置
+ */
+export async function updateBackupSettings(req, res) {
+  try {
+    const { enabled, frequency, time, retentionCount, uploadToCos } = req.body
+    const db = getDatabase()
+    
+    const settingsToUpdate = []
+    
+    if (enabled !== undefined) {
+      settingsToUpdate.push({ key: 'backup_enabled', value: enabled ? 'true' : 'false' })
+    }
+    if (frequency) {
+      settingsToUpdate.push({ key: 'backup_frequency', value: frequency })
+    }
+    if (time) {
+      settingsToUpdate.push({ key: 'backup_time', value: time })
+    }
+    if (retentionCount !== undefined) {
+      settingsToUpdate.push({ key: 'backup_retention_count', value: String(retentionCount) })
+    }
+    if (uploadToCos !== undefined) {
+      settingsToUpdate.push({ key: 'backup_upload_to_cos', value: uploadToCos ? 'true' : 'false' })
+    }
+    
+    for (const setting of settingsToUpdate) {
+      await db.prepare(`
+        INSERT INTO security_settings (setting_key, setting_value, setting_type, category, description)
+        VALUES ($1, $2, 'string', 'backup', '')
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2
+      `).run(setting.key, setting.value)
+    }
+    
+    // 记录审计日志
+    await auditLogger.log({
+      actionType: 'backup_settings_update',
+      resourceType: 'settings',
+      description: '更新备份设置',
+      user: req.user,
+      req
+    })
+    
+    return success(res, null, '备份设置已更新')
+  } catch (error) {
+    console.error('更新备份设置失败:', error)
+    return serverError(res, '更新备份设置失败')
   }
 }
 
@@ -676,9 +1136,16 @@ export default {
   // 活动会话
   getActiveSessions,
   terminateSession,
-  // 备份
+  // 备份管理
   getBackups,
   createBackup,
+  deleteBackup,
+  getBackupDownloadUrl,
+  downloadBackupFile,
+  restoreBackup,
+  getRestoreRecords,
+  getBackupSettings,
+  updateBackupSettings,
   // 概览
   getSecurityOverview
 }

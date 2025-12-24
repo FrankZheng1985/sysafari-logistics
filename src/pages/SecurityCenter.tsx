@@ -1,7 +1,8 @@
 import { 
   Shield, Save, Loader2, RefreshCw, Info, Lock, Mail, Clock, Key, History,
   AlertTriangle, Globe, Users, Database, Eye, Trash2, Play, FileDown,
-  Activity, Ban, CheckCircle, XCircle
+  Activity, Ban, CheckCircle, XCircle, Cloud, CloudOff, Download, RotateCcw,
+  Settings, HardDrive
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import PageHeader from '../components/PageHeader'
@@ -81,10 +82,28 @@ interface BackupRecord {
   id: number
   backupName: string
   backupType: string
+  backupSize: number | null
+  backupPath: string | null
   backupStatus: string
   startedAt: string
   completedAt: string
   errorMessage: string | null
+  cosKey: string | null
+  isCloudSynced: boolean
+  fileName: string | null
+  description: string | null
+  restoredAt: string | null
+  restoreCount: number
+  createdAt: string
+}
+
+interface BackupSettings {
+  enabled: boolean
+  frequency: string
+  time: string
+  retentionCount: number
+  uploadToCos: boolean
+  cosConfigured: boolean
 }
 
 type TabType = 'overview' | 'settings' | 'audit' | 'blacklist' | 'sessions' | 'backup'
@@ -120,6 +139,11 @@ export default function SecurityCenter() {
   // 备份记录
   const [backups, setBackups] = useState<BackupRecord[]>([])
   const [creatingBackup, setCreatingBackup] = useState(false)
+  const [backupSettings, setBackupSettings] = useState<BackupSettings | null>(null)
+  const [showRestoreModal, setShowRestoreModal] = useState(false)
+  const [restoreTarget, setRestoreTarget] = useState<BackupRecord | null>(null)
+  const [restoring, setRestoring] = useState(false)
+  const [savingBackupSettings, setSavingBackupSettings] = useState(false)
 
   // 加载概览数据
   const loadOverview = useCallback(async () => {
@@ -206,13 +230,26 @@ export default function SecurityCenter() {
   // 加载备份记录
   const loadBackups = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/security/backups?limit=20`)
+      const response = await fetch(`${API_BASE_URL}/api/security/backups?limit=30`)
       const data = await response.json()
       if (data.errCode === 200) {
         setBackups(data.data)
       }
     } catch (error) {
       console.error('加载备份记录失败:', error)
+    }
+  }, [])
+
+  // 加载备份设置
+  const loadBackupSettings = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/security/backup-settings`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setBackupSettings(data.data)
+      }
+    } catch (error) {
+      console.error('加载备份设置失败:', error)
     }
   }, [])
 
@@ -246,6 +283,7 @@ export default function SecurityCenter() {
         break
       case 'backup':
         loadBackups()
+        loadBackupSettings()
         break
     }
   }, [activeTab, loadOverview, loadSettings, loadAuditLogs, loadBlacklist, loadSessions, loadBackups])
@@ -357,7 +395,7 @@ export default function SecurityCenter() {
 
   // 创建备份
   const handleCreateBackup = async () => {
-    if (!confirm('确定要立即执行数据库备份吗？')) return
+    if (!confirm('确定要立即执行数据库备份吗？\n备份将上传到腾讯云 COS 存储。')) return
     
     setCreatingBackup(true)
     try {
@@ -368,8 +406,8 @@ export default function SecurityCenter() {
       })
       const data = await response.json()
       if (data.errCode === 200) {
-        alert('备份任务已启动')
-        setTimeout(loadBackups, 3000)
+        alert('备份任务已启动，请稍后刷新查看结果')
+        setTimeout(loadBackups, 5000)
       } else {
         alert(data.msg || '备份失败')
       }
@@ -379,6 +417,111 @@ export default function SecurityCenter() {
     } finally {
       setCreatingBackup(false)
     }
+  }
+
+  // 删除备份
+  const handleDeleteBackup = async (backup: BackupRecord) => {
+    if (!confirm(`确定要删除备份 "${backup.backupName}" 吗？\n此操作将同时删除本地和云端的备份文件，无法恢复！`)) return
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/security/backups/${backup.id}`, {
+        method: 'DELETE'
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert('备份已删除')
+        loadBackups()
+      } else {
+        alert(data.msg || '删除失败')
+      }
+    } catch (error) {
+      console.error('删除备份失败:', error)
+      alert('删除失败')
+    }
+  }
+
+  // 下载备份
+  const handleDownloadBackup = async (backup: BackupRecord) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/security/backups/${backup.id}/download`)
+      const data = await response.json()
+      if (data.errCode === 200 && data.data?.downloadUrl) {
+        // 打开下载链接
+        window.open(data.data.downloadUrl, '_blank')
+      } else {
+        alert(data.msg || '获取下载链接失败')
+      }
+    } catch (error) {
+      console.error('下载备份失败:', error)
+      alert('下载失败')
+    }
+  }
+
+  // 打开恢复确认弹窗
+  const handleOpenRestoreModal = (backup: BackupRecord) => {
+    setRestoreTarget(backup)
+    setShowRestoreModal(true)
+  }
+
+  // 执行恢复
+  const handleRestoreBackup = async () => {
+    if (!restoreTarget) return
+    
+    setRestoring(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/security/backups/${restoreTarget.id}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ noBackupBefore: false })
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert('恢复任务已启动，请稍后查看结果。\n注意：恢复过程中系统可能需要重启。')
+        setShowRestoreModal(false)
+        setRestoreTarget(null)
+        setTimeout(loadBackups, 3000)
+      } else {
+        alert(data.msg || '恢复失败')
+      }
+    } catch (error) {
+      console.error('恢复失败:', error)
+      alert('恢复失败')
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  // 保存备份设置
+  const handleSaveBackupSettings = async () => {
+    if (!backupSettings) return
+    
+    setSavingBackupSettings(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/security/backup-settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backupSettings)
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert('备份设置已保存')
+      } else {
+        alert(data.msg || '保存失败')
+      }
+    } catch (error) {
+      console.error('保存备份设置失败:', error)
+      alert('保存失败')
+    } finally {
+      setSavingBackupSettings(false)
+    }
+  }
+
+  // 格式化文件大小
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return '-'
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
   }
 
   // 渲染概览页
@@ -686,51 +829,131 @@ export default function SecurityCenter() {
 
   // 备份列定义
   const backupColumns = [
-    { key: 'backupName', label: '备份名称', sorter: true },
+    { 
+      key: 'backupName', 
+      label: '备份名称', 
+      sorter: true,
+      render: (_value: unknown, record: BackupRecord) => (
+        <div className="max-w-[180px]">
+          <div className="font-medium text-gray-900 truncate" title={record.backupName}>
+            {record.fileName || record.backupName}
+          </div>
+          {record.description && (
+            <div className="text-xs text-gray-500 truncate" title={record.description}>
+              {record.description}
+            </div>
+          )}
+        </div>
+      )
+    },
     { 
       key: 'backupType', 
       label: '类型',
       sorter: true,
-      render: (_value: unknown, record: BackupRecord) => record.backupType === 'full' ? '完整备份' : '增量备份'
+      render: (_value: unknown, record: BackupRecord) => (
+        <div className="flex items-center justify-center">
+          <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded text-xs ${
+            record.backupType === 'full' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+          }`}>
+            {record.backupType === 'full' ? '完整' : '增量'}
+          </span>
+        </div>
+      )
+    },
+    {
+      key: 'backupSize',
+      label: '大小',
+      render: (_value: unknown, record: BackupRecord) => (
+        <span className="text-gray-600 text-xs">{formatFileSize(record.backupSize)}</span>
+      )
     },
     { 
       key: 'backupStatus', 
       label: '状态',
       sorter: true,
       render: (_value: unknown, record: BackupRecord) => (
-        <span className={`px-2 py-0.5 rounded text-xs ${
-          record.backupStatus === 'completed' ? 'bg-green-100 text-green-700' :
-          record.backupStatus === 'running' ? 'bg-blue-100 text-blue-700' :
-          'bg-red-100 text-red-700'
-        }`}>
-          {record.backupStatus === 'completed' ? '完成' :
-           record.backupStatus === 'running' ? '进行中' : '失败'}
-        </span>
+        <div className="flex items-center justify-center">
+          <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded text-xs ${
+            record.backupStatus === 'completed' ? 'bg-green-100 text-green-700' :
+            record.backupStatus === 'running' ? 'bg-blue-100 text-blue-700' :
+            'bg-red-100 text-red-700'
+          }`}>
+            {record.backupStatus === 'completed' ? '完成' :
+             record.backupStatus === 'running' ? '进行中' : '失败'}
+          </span>
+        </div>
+      )
+    },
+    {
+      key: 'isCloudSynced',
+      label: '云同步',
+      render: (_value: unknown, record: BackupRecord) => (
+        <div className="flex items-center justify-center">
+          {record.isCloudSynced ? (
+            <span className="flex items-center gap-1 text-green-600" title="已同步到腾讯云 COS">
+              <Cloud className="w-4 h-4" />
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-gray-400" title="仅本地存储">
+              <HardDrive className="w-4 h-4" />
+            </span>
+          )}
+        </div>
       )
     },
     { 
-      key: 'startedAt', 
-      label: '开始时间',
+      key: 'createdAt', 
+      label: '备份时间',
       sorter: (a: BackupRecord, b: BackupRecord) => {
-        const timeA = a.startedAt ? new Date(a.startedAt).getTime() : 0
-        const timeB = b.startedAt ? new Date(b.startedAt).getTime() : 0
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0
         return timeA - timeB
       },
-      render: (_value: unknown, record: BackupRecord) => record.startedAt 
-        ? new Date(record.startedAt).toLocaleString('zh-CN') 
-        : '-'
+      render: (_value: unknown, record: BackupRecord) => (
+        <span className="text-xs text-gray-600">
+          {record.createdAt ? new Date(record.createdAt).toLocaleString('zh-CN') : '-'}
+        </span>
+      )
     },
-    { 
-      key: 'completedAt', 
-      label: '完成时间',
-      sorter: (a: BackupRecord, b: BackupRecord) => {
-        const timeA = a.completedAt ? new Date(a.completedAt).getTime() : 0
-        const timeB = b.completedAt ? new Date(b.completedAt).getTime() : 0
-        return timeA - timeB
-      },
-      render: (_value: unknown, record: BackupRecord) => record.completedAt 
-        ? new Date(record.completedAt).toLocaleString('zh-CN') 
-        : '-'
+    {
+      key: 'restoreCount',
+      label: '恢复次数',
+      render: (_value: unknown, record: BackupRecord) => (
+        <span className="text-xs text-gray-600">{record.restoreCount || 0}</span>
+      )
+    },
+    {
+      key: 'actions',
+      label: '操作',
+      render: (_value: unknown, record: BackupRecord) => (
+        <div className="flex items-center justify-center gap-1">
+          {record.backupStatus === 'completed' && (
+            <>
+              <button
+                onClick={() => handleDownloadBackup(record)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-blue-600"
+                title="下载备份"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleOpenRestoreModal(record)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-amber-600"
+                title="恢复数据"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => handleDeleteBackup(record)}
+            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
+            title="删除备份"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      )
     }
   ]
 
@@ -908,13 +1131,14 @@ export default function SecurityCenter() {
   // 渲染备份页
   const renderBackup = () => (
     <div className="space-y-4">
+      {/* 顶部操作栏 */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-gray-600">
-          最近 {backups.length} 条备份记录
+          共 {backups.length} 条备份记录
         </span>
         <div className="flex gap-2">
           <button
-            onClick={loadBackups}
+            onClick={() => { loadBackups(); loadBackupSettings(); }}
             className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-sm flex items-center gap-1"
           >
             <RefreshCw className="w-4 h-4" />
@@ -930,18 +1154,168 @@ export default function SecurityCenter() {
           </button>
         </div>
       </div>
+
+      {/* 备份设置卡片 */}
+      {backupSettings && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-gray-600" />
+              <h3 className="font-medium text-gray-900">备份设置</h3>
+            </div>
+            <button
+              onClick={handleSaveBackupSettings}
+              disabled={savingBackupSettings}
+              className="px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              {savingBackupSettings ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+              保存设置
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* 自动备份开关 */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">自动备份</label>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={backupSettings.enabled}
+                  onChange={(e) => setBackupSettings({ ...backupSettings, enabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+                <span className="ml-2 text-sm text-gray-700">{backupSettings.enabled ? '已启用' : '已禁用'}</span>
+              </label>
+            </div>
+            
+            {/* 备份频率 */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">备份频率</label>
+              <select
+                value={backupSettings.frequency}
+                onChange={(e) => setBackupSettings({ ...backupSettings, frequency: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              >
+                <option value="hourly">每小时</option>
+                <option value="daily">每天</option>
+                <option value="weekly">每周</option>
+                <option value="monthly">每月</option>
+              </select>
+            </div>
+            
+            {/* 备份时间 */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">备份时间</label>
+              <input
+                type="time"
+                value={backupSettings.time}
+                onChange={(e) => setBackupSettings({ ...backupSettings, time: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              />
+            </div>
+            
+            {/* 保留份数 */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">保留份数</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={backupSettings.retentionCount}
+                onChange={(e) => setBackupSettings({ ...backupSettings, retentionCount: parseInt(e.target.value) || 30 })}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+              />
+            </div>
+            
+            {/* 云同步状态 */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">云端存储</label>
+              <div className="flex items-center gap-2 py-1.5">
+                {backupSettings.cosConfigured ? (
+                  <span className="flex items-center gap-1 text-green-600 text-sm">
+                    <Cloud className="w-4 h-4" />
+                    腾讯云 COS 已配置
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-amber-600 text-sm">
+                    <CloudOff className="w-4 h-4" />
+                    未配置云存储
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
+      {/* 提示信息 */}
       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
         <div className="flex items-start gap-2">
-          <Info className="w-4 h-4 text-blue-500 mt-0.5" />
+          <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-blue-700">
-            <p>系统已配置自动备份，每天凌晨3点执行完整备份。</p>
-            <p>备份文件将保留最近30天的记录。</p>
+            <p>备份文件将自动上传到腾讯云 COS 存储，确保数据安全。</p>
+            <p className="mt-1 text-xs text-blue-600">
+              恢复操作会覆盖现有数据，请谨慎操作。恢复前系统会自动创建一份当前数据的备份。
+            </p>
           </div>
         </div>
       </div>
       
+      {/* 备份列表 */}
       <DataTable columns={backupColumns} data={backups} compact />
+      
+      {/* 恢复确认弹窗 */}
+      {showRestoreModal && restoreTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                确认恢复数据库
+              </h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800 font-medium">警告：此操作不可撤销！</p>
+                <p className="text-sm text-amber-700 mt-1">
+                  恢复数据库将覆盖当前所有数据，请确保您已知悉风险。
+                </p>
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                <p><span className="text-gray-500">备份名称：</span>{restoreTarget.fileName || restoreTarget.backupName}</p>
+                <p><span className="text-gray-500">备份时间：</span>{restoreTarget.createdAt ? new Date(restoreTarget.createdAt).toLocaleString('zh-CN') : '-'}</p>
+                <p><span className="text-gray-500">备份大小：</span>{formatFileSize(restoreTarget.backupSize)}</p>
+                <p><span className="text-gray-500">数据来源：</span>{restoreTarget.isCloudSynced ? '腾讯云 COS' : '本地存储'}</p>
+              </div>
+              
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-xs text-gray-600">
+                  恢复前，系统将自动为当前数据库创建一份备份，以便在需要时可以回退。
+                </p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowRestoreModal(false); setRestoreTarget(null); }}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                disabled={restoring}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRestoreBackup}
+                disabled={restoring}
+                className="px-4 py-2 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                {restoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                确认恢复
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 

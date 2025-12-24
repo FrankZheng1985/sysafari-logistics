@@ -192,6 +192,13 @@ router.delete('/security/active-sessions/:sessionId', authenticate, requireRole(
 // 备份管理
 router.get('/security/backups', authenticate, requireRole('admin'), securityController.getBackups)
 router.post('/security/backups', authenticate, requireRole('admin'), securityController.createBackup)
+router.delete('/security/backups/:id', authenticate, requireRole('admin'), securityController.deleteBackup)
+router.get('/security/backups/:id/download', authenticate, requireRole('admin'), securityController.getBackupDownloadUrl)
+router.get('/security/backups/:id/file', authenticate, requireRole('admin'), securityController.downloadBackupFile)
+router.post('/security/backups/:id/restore', authenticate, requireRole('admin'), securityController.restoreBackup)
+router.get('/security/restore-records', authenticate, requireRole('admin'), securityController.getRestoreRecords)
+router.get('/security/backup-settings', authenticate, requireRole('admin'), securityController.getBackupSettings)
+router.put('/security/backup-settings', authenticate, requireRole('admin'), securityController.updateBackupSettings)
 
 // ==================== 审批管理路由 ====================
 
