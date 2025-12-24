@@ -158,6 +158,25 @@ export default function BPHistory() {
       ),
     },
     {
+      key: 'customerName',
+      label: '关联客户',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: CompletedBillOfLading) => (
+        <div className="max-w-[120px]">
+          <span 
+            className="text-xs text-gray-900 truncate block" 
+            title={record.customerName || '-'}
+          >
+            {record.customerName || '-'}
+          </span>
+          {record.customerCode && (
+            <span className="text-[10px] text-gray-500">{record.customerCode}</span>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'vessel',
       label: '航班号/船名航次',
       sorter: true,

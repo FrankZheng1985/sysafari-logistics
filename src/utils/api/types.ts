@@ -164,6 +164,10 @@ export interface BillOfLading {
   lastMileTransport?: 'truck' | 'train' | 'air' | string  // 末端运输方式：卡车派送/铁路运输/空运
   devanning?: 'required' | 'not-required' | string  // 拆柜：需要拆柜分货服务/不需要拆柜
   t1Declaration?: 'yes' | 'no' | string  // 海关经停报关服务(T1报关)：是/否
+  // 客户关联字段
+  customerId?: string       // 关联客户ID
+  customerName?: string     // 关联客户名称
+  customerCode?: string     // 关联客户编码
 }
 
 export interface GetBillsParams {
