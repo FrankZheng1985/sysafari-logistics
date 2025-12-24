@@ -12,13 +12,12 @@ import {
   updateUserStatus, 
   resetUserPassword,
   getRoleList,
+  getApiBaseUrl,
   type User as UserType, 
   type Role 
 } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
-// API 基础地址
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
 
 // 上级用户类型
 interface Supervisor {
@@ -446,7 +445,14 @@ export default function UserManage() {
   // 加载上级用户列表
   const loadSupervisors = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/supervisors`)
+      const apiBaseUrl = getApiBaseUrl()
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${apiBaseUrl}/api/supervisors`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
         setSupervisors(data.data)
