@@ -156,7 +156,7 @@ const menuItems: MenuItem[] = [
       { path: '/system/data-import', label: '数据导入', icon: Upload },
       { path: '/system/menu-settings', label: '板块开关', icon: ToggleLeft },
       { path: '/system/user-manage', label: '用户管理', icon: Users },
-      { path: '/system/security-settings', label: '安全设置', icon: Shield },
+      { path: '/system/security-center', label: '安全管理中心', icon: Shield },
       { path: '/system/logo-manage', label: 'Logo 管理', icon: Image },
       { path: '/system/basic-data', label: '基础数据管理', icon: Database },
       { path: '/system/tariff-rates', label: 'HS Code数据库', icon: FileText },
