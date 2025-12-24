@@ -107,7 +107,8 @@ export async function createUser(data) {
       username, password_hash, name, email, phone,
       avatar, role, status, supervisor_id, department, position, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-  `).run(
+    RETURNING id
+  `).get(
     data.username,
     passwordHash,
     data.name,
@@ -121,7 +122,7 @@ export async function createUser(data) {
     data.position || ''
   )
   
-  return { id: result.lastInsertRowid }
+  return { id: result.id }
 }
 
 /**
