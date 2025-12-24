@@ -594,16 +594,19 @@ export default function CreateInvoice() {
         feeIds: string[]
         billIds: string[]
         billNumbers: string[]
+        unitPrices: number[]  // 记录所有单价，用于判断是否一致
       }>()
       
       selectedFeesList.forEach(fee => {
         const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
+        const amount = Number(fee.amount) || 0
         const existing = feeMap.get(feeName)
         
         if (existing) {
-          existing.totalAmount += Number(fee.amount) || 0
+          existing.totalAmount += amount
           existing.count += 1
           existing.feeIds.push(fee.id)
+          existing.unitPrices.push(amount)
           if (!existing.billIds.includes(fee.billId)) {
             existing.billIds.push(fee.billId)
           }
@@ -613,34 +616,39 @@ export default function CreateInvoice() {
         } else {
           feeMap.set(feeName, {
             feeName,
-            totalAmount: Number(fee.amount) || 0,
+            totalAmount: amount,
             count: 1,
             currency: fee.currency || 'EUR',
             feeIds: [fee.id],
             billIds: [fee.billId],
-            billNumbers: [fee.billNumber]
+            billNumbers: [fee.billNumber],
+            unitPrices: [amount]
           })
         }
       })
       
       // 转换为发票明细项
-      items = Array.from(feeMap.values()).map((group, index) => ({
-        id: (index + 1).toString(),
-        description: group.feeName,
-        quantity: group.count,
-        unitPrice: group.totalAmount / group.count,  // 平均单价
-        currency: group.currency,
-        amount: group.totalAmount,
-        taxRate: 0,
-        taxAmount: 0,
-        discountPercent: 0,
-        discountAmount: 0,
-        finalAmount: group.totalAmount,
-        feeId: group.feeIds.join(','),  // 保存所有关联的费用ID
-        billId: group.billIds.join(','),  // 保存所有关联的订单ID
-        billNumber: group.billNumbers.join(','),  // 保存所有关联的订单号
-        isFromOrder: true
-      }))
+      items = Array.from(feeMap.values()).map((group, index) => {
+        // 检查单价是否一致
+        const allSamePrice = group.unitPrices.every(p => p === group.unitPrices[0])
+        return {
+          id: (index + 1).toString(),
+          description: group.feeName,
+          quantity: group.count,
+          unitPrice: allSamePrice ? group.unitPrices[0] : -1,  // -1 表示单价不一致，显示"多项"
+          currency: group.currency,
+          amount: group.totalAmount,
+          taxRate: 0,
+          taxAmount: 0,
+          discountPercent: 0,
+          discountAmount: 0,
+          finalAmount: group.totalAmount,
+          feeId: group.feeIds.join(','),  // 保存所有关联的费用ID
+          billId: group.billIds.join(','),  // 保存所有关联的订单ID
+          billNumber: group.billNumbers.join(','),  // 保存所有关联的订单号
+          isFromOrder: true
+        }
+      })
     } else {
       // 不合并：每个费用项单独显示
       items = selectedFeesList.map((fee, index) => ({
@@ -720,7 +728,8 @@ export default function CreateInvoice() {
     const discountPercent = Number(item.discountPercent) || 0
     const discountAmount = Number(item.discountAmount) || 0
     
-    const amount = quantity * unitPrice
+    // 如果单价为 -1（表示"多项"合并），保持原有金额不变
+    const amount = unitPrice === -1 ? (Number(item.amount) || 0) : quantity * unitPrice
     const taxAmount = amount * (taxRate / 100)
     
     // 计算优惠：百分比优惠 + 固定金额优惠（支持负数）
@@ -917,6 +926,7 @@ export default function CreateInvoice() {
           feeIds: string[]
           billIds: string[]
           billNumbers: string[]
+          unitPrices: number[]  // 记录所有单价，用于判断是否一致
         }>()
         
         uniqueFees.forEach(fee => {
@@ -928,6 +938,7 @@ export default function CreateInvoice() {
             existing.totalAmount += amount
             existing.count += 1
             existing.feeIds.push(fee.id)
+            existing.unitPrices.push(amount)
             if (!existing.billIds.includes(fee.billId)) {
               existing.billIds.push(fee.billId)
             }
@@ -942,29 +953,34 @@ export default function CreateInvoice() {
               currency: fee.currency || 'EUR',
               feeIds: [fee.id],
               billIds: [fee.billId],
-              billNumbers: [fee.billNumber]
+              billNumbers: [fee.billNumber],
+              unitPrices: [amount]
             })
           }
         })
         
         // 转换为发票明细项
-        items = Array.from(feeMap.values()).map((group, index) => ({
-          id: (index + 1).toString(),
-          description: group.feeName,
-          quantity: group.count,
-          unitPrice: group.totalAmount / group.count,  // 平均单价
-          currency: group.currency,
-          amount: group.totalAmount,
-          taxRate: 0,
-          taxAmount: 0,
-          discountPercent: 0,
-          discountAmount: 0,
-          finalAmount: group.totalAmount,
-          feeId: group.feeIds.join(','),  // 保存所有关联的费用ID
-          billId: group.billIds.join(','),  // 保存所有关联的订单ID
-          billNumber: group.billNumbers.join(','),  // 保存所有关联的订单号
-          isFromOrder: true
-        }))
+        items = Array.from(feeMap.values()).map((group, index) => {
+          // 检查单价是否一致
+          const allSamePrice = group.unitPrices.every(p => p === group.unitPrices[0])
+          return {
+            id: (index + 1).toString(),
+            description: group.feeName,
+            quantity: group.count,
+            unitPrice: allSamePrice ? group.unitPrices[0] : -1,  // -1 表示单价不一致，显示"多项"
+            currency: group.currency,
+            amount: group.totalAmount,
+            taxRate: 0,
+            taxAmount: 0,
+            discountPercent: 0,
+            discountAmount: 0,
+            finalAmount: group.totalAmount,
+            feeId: group.feeIds.join(','),  // 保存所有关联的费用ID
+            billId: group.billIds.join(','),  // 保存所有关联的订单ID
+            billNumber: group.billNumbers.join(','),  // 保存所有关联的订单号
+            isFromOrder: true
+          }
+        })
       } else {
         // 不合并：每个费用项单独显示
         items = uniqueFees.map((fee, index) => ({
@@ -2115,15 +2131,22 @@ export default function CreateInvoice() {
                             />
                           </td>
                           <td className="py-1.5 px-1.5">
-                            <input
-                              type="number"
-                              value={item.unitPrice}
-                              onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                              min="0"
-                              step="0.01"
-                              disabled={item.isFromOrder}
-                              className={`w-full px-1 py-1 text-[11px] lg:text-xs text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${item.isFromOrder ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : ''}`}
-                            />
+                            {item.unitPrice === -1 ? (
+                              // 单价不一致时显示"多项"
+                              <div className="w-full px-1 py-1 text-[11px] lg:text-xs text-center bg-amber-50 border border-amber-200 rounded text-amber-700">
+                                多项
+                              </div>
+                            ) : (
+                              <input
+                                type="number"
+                                value={item.unitPrice}
+                                onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                min="0"
+                                step="0.01"
+                                disabled={item.isFromOrder}
+                                className={`w-full px-1 py-1 text-[11px] lg:text-xs text-right border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${item.isFromOrder ? 'bg-gray-100 text-gray-600 cursor-not-allowed' : ''}`}
+                              />
+                            )}
                           </td>
                           <td className="py-1.5 px-1.5">
                             <select

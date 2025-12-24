@@ -295,6 +295,43 @@ router.put('/shared-tax-numbers/:id', controller.updateSharedTaxNumber)
 // 删除共享税号
 router.delete('/shared-tax-numbers/:id', controller.deleteSharedTaxNumber)
 
+// ==================== 客户门户账户管理路由 ====================
+
+// 获取客户门户账户列表
+router.get('/customer-accounts', controller.getCustomerAccounts)
+
+// 获取单个账户详情
+router.get('/customer-accounts/:id', controller.getCustomerAccountById)
+
+// 创建客户门户账户
+router.post('/customer-accounts', controller.createCustomerAccount)
+
+// 更新客户门户账户
+router.put('/customer-accounts/:id', controller.updateCustomerAccount)
+
+// 重置客户账户密码
+router.put('/customer-accounts/:id/reset-password', controller.resetCustomerAccountPassword)
+
+// 删除客户门户账户
+router.delete('/customer-accounts/:id', controller.deleteCustomerAccount)
+
+// ==================== API 密钥管理路由 ====================
+
+// 获取客户的 API 密钥列表
+router.get('/customers/:customerId/api-keys', controller.getCustomerApiKeys)
+
+// 创建 API 密钥
+router.post('/customers/:customerId/api-keys', controller.createApiKey)
+
+// 更新 API 密钥
+router.put('/api-keys/:id', controller.updateApiKey)
+
+// 删除 API 密钥
+router.delete('/api-keys/:id', controller.deleteApiKey)
+
+// 获取 API 调用日志
+router.get('/api-call-logs', controller.getApiCallLogs)
+
 // ==================== 最后里程费率集成路由 ====================
 
 // 获取最后里程费率（用于报价单）

@@ -2037,6 +2037,274 @@ export async function checkOcrStatus(req, res) {
   }
 }
 
+// ==================== 客户门户账户管理 ====================
+
+/**
+ * 获取客户门户账户列表
+ */
+export async function getCustomerAccounts(req, res) {
+  try {
+    const { customerId, status, keyword, page, pageSize } = req.query
+    
+    const result = await model.getCustomerAccounts({
+      customerId,
+      status,
+      keyword,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取客户账户列表失败:', error)
+    return serverError(res, '获取客户账户列表失败')
+  }
+}
+
+/**
+ * 获取单个客户门户账户详情
+ */
+export async function getCustomerAccountById(req, res) {
+  try {
+    const account = await model.getCustomerAccountById(req.params.id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    return success(res, account)
+  } catch (error) {
+    console.error('获取账户详情失败:', error)
+    return serverError(res, '获取账户详情失败')
+  }
+}
+
+/**
+ * 创建客户门户账户
+ */
+export async function createCustomerAccount(req, res) {
+  try {
+    const { customerId, username, password, email, phone } = req.body
+    
+    if (!customerId || !username || !password) {
+      return badRequest(res, '客户ID、用户名和密码为必填项')
+    }
+    
+    // 密码强度检查
+    if (password.length < 8) {
+      return badRequest(res, '密码长度不能少于8位')
+    }
+    
+    const result = await model.createCustomerAccount({
+      customerId,
+      username,
+      password,
+      email,
+      phone,
+      createdBy: req.user?.userId
+    })
+    
+    return success(res, result, '客户账户创建成功')
+  } catch (error) {
+    console.error('创建客户账户失败:', error)
+    if (error.message.includes('已存在') || error.message.includes('已有')) {
+      return conflict(res, error.message)
+    }
+    return serverError(res, '创建客户账户失败')
+  }
+}
+
+/**
+ * 更新客户门户账户
+ */
+export async function updateCustomerAccount(req, res) {
+  try {
+    const { id } = req.params
+    const { email, phone, status } = req.body
+    
+    const account = await model.getCustomerAccountById(id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    
+    await model.updateCustomerAccount(id, { email, phone, status })
+    return success(res, null, '账户更新成功')
+  } catch (error) {
+    console.error('更新账户失败:', error)
+    return serverError(res, '更新账户失败')
+  }
+}
+
+/**
+ * 重置客户账户密码
+ */
+export async function resetCustomerAccountPassword(req, res) {
+  try {
+    const { id } = req.params
+    const { newPassword } = req.body
+    
+    if (!newPassword || newPassword.length < 8) {
+      return badRequest(res, '新密码长度不能少于8位')
+    }
+    
+    const account = await model.getCustomerAccountById(id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    
+    await model.resetCustomerAccountPassword(id, newPassword)
+    return success(res, null, '密码重置成功')
+  } catch (error) {
+    console.error('重置密码失败:', error)
+    return serverError(res, '重置密码失败')
+  }
+}
+
+/**
+ * 删除客户门户账户
+ */
+export async function deleteCustomerAccount(req, res) {
+  try {
+    const { id } = req.params
+    
+    const account = await model.getCustomerAccountById(id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    
+    await model.deleteCustomerAccount(id)
+    return success(res, null, '账户删除成功')
+  } catch (error) {
+    console.error('删除账户失败:', error)
+    return serverError(res, '删除账户失败')
+  }
+}
+
+// ==================== API 密钥管理 ====================
+
+/**
+ * 获取客户的 API 密钥列表
+ */
+export async function getCustomerApiKeys(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const keys = await model.getCustomerApiKeys(customerId)
+    return success(res, keys)
+  } catch (error) {
+    console.error('获取API密钥列表失败:', error)
+    return serverError(res, '获取API密钥列表失败')
+  }
+}
+
+/**
+ * 创建 API 密钥
+ */
+export async function createApiKey(req, res) {
+  try {
+    const { customerId } = req.params
+    const { keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl } = req.body
+    
+    if (!keyName) {
+      return badRequest(res, '密钥名称为必填项')
+    }
+    
+    const result = await model.createApiKey({
+      customerId,
+      keyName,
+      permissions,
+      ipWhitelist,
+      rateLimit,
+      expiresAt,
+      webhookUrl,
+      createdBy: req.user?.userId
+    })
+    
+    // 返回完整信息（包括 API Secret，只显示一次）
+    return success(res, {
+      id: result.id,
+      apiKey: result.apiKey,
+      apiSecret: result.apiSecret,
+      webhookSecret: result.webhookSecret,
+      message: '请妥善保存 API Secret，此信息只显示一次'
+    }, 'API密钥创建成功')
+  } catch (error) {
+    console.error('创建API密钥失败:', error)
+    return serverError(res, '创建API密钥失败')
+  }
+}
+
+/**
+ * 更新 API 密钥
+ */
+export async function updateApiKey(req, res) {
+  try {
+    const { id } = req.params
+    const { keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl, isActive } = req.body
+    
+    await model.updateApiKey(id, {
+      keyName,
+      permissions,
+      ipWhitelist,
+      rateLimit,
+      expiresAt,
+      webhookUrl,
+      isActive
+    })
+    
+    return success(res, null, 'API密钥更新成功')
+  } catch (error) {
+    console.error('更新API密钥失败:', error)
+    return serverError(res, '更新API密钥失败')
+  }
+}
+
+/**
+ * 删除 API 密钥
+ */
+export async function deleteApiKey(req, res) {
+  try {
+    const { id } = req.params
+    
+    await model.deleteApiKey(id)
+    return success(res, null, 'API密钥删除成功')
+  } catch (error) {
+    console.error('删除API密钥失败:', error)
+    return serverError(res, '删除API密钥失败')
+  }
+}
+
+/**
+ * 获取 API 调用日志
+ */
+export async function getApiCallLogs(req, res) {
+  try {
+    const { customerId, apiKeyId, endpoint, status, startDate, endDate, page, pageSize } = req.query
+    
+    const result = await model.getApiCallLogs({
+      customerId,
+      apiKeyId: apiKeyId ? parseInt(apiKeyId) : undefined,
+      endpoint,
+      status: status ? parseInt(status) : undefined,
+      startDate,
+      endDate,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取API调用日志失败:', error)
+    return serverError(res, '获取API调用日志失败')
+  }
+}
+
 // ==================== 最后里程费率集成 ====================
 
 /**

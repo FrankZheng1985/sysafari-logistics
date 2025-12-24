@@ -769,26 +769,40 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }
   }
   
-  // 更新发票记录
-  if (pdfUrl || excelUrl) {
-    try {
-      if (pdfUrl && excelUrl) {
-        await db.prepare(`UPDATE invoices SET pdf_url = ?, excel_url = ? WHERE id = ?`).run(pdfUrl, excelUrl, invoiceId)
-      } else if (pdfUrl) {
-        await db.prepare(`UPDATE invoices SET pdf_url = ? WHERE id = ?`).run(pdfUrl, invoiceId)
-      } else if (excelUrl) {
-        await db.prepare(`UPDATE invoices SET excel_url = ? WHERE id = ?`).run(excelUrl, invoiceId)
-      }
-    } catch (dbError) {
-      console.error('更新数据库失败:', dbError)
+  // 更新发票记录（包括 items 字段，使前端能正确显示费用明细金额）
+  try {
+    const updateFields = []
+    const updateValues = []
+    
+    if (pdfUrl) {
+      updateFields.push('pdf_url = ?')
+      updateValues.push(pdfUrl)
     }
+    if (excelUrl) {
+      updateFields.push('excel_url = ?')
+      updateValues.push(excelUrl)
+    }
+    // 更新 items 字段，保存费用明细数据
+    if (items && items.length > 0) {
+      updateFields.push('items = ?')
+      updateValues.push(JSON.stringify(items))
+    }
+    
+    if (updateFields.length > 0) {
+      updateValues.push(invoiceId)
+      await db.prepare(`UPDATE invoices SET ${updateFields.join(', ')} WHERE id = ?`).run(...updateValues)
+      console.log(`[发票文件生成] 数据库已更新: ${updateFields.join(', ')}`)
+    }
+  } catch (dbError) {
+    console.error('更新数据库失败:', dbError)
   }
   
   return {
     id: invoiceId,
     invoiceNumber: invoice.invoice_number,
     pdfUrl,
-    excelUrl
+    excelUrl,
+    items
   }
 }
 

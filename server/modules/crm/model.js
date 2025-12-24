@@ -4,6 +4,8 @@
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
+import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
 
 // ==================== 常量定义 ====================
 
@@ -2782,6 +2784,622 @@ export function convertFeedbackToCamelCase(row) {
   }
 }
 
+// ==================== 客户门户账户管理 ====================
+
+/**
+ * 客户门户账户状态常量
+ */
+export const ACCOUNT_STATUS = {
+  ACTIVE: 'active',       // 正常
+  INACTIVE: 'inactive',   // 禁用
+  LOCKED: 'locked'        // 锁定
+}
+
+/**
+ * API 权限常量
+ */
+export const API_PERMISSIONS = {
+  ORDER_CREATE: 'order:create',     // 创建订单
+  ORDER_READ: 'order:read',         // 查询订单
+  ORDER_UPDATE: 'order:update',     // 更新订单
+  INVOICE_READ: 'invoice:read',     // 查询账单
+  BALANCE_READ: 'balance:read',     // 查询余额
+  WEBHOOK_MANAGE: 'webhook:manage'  // 管理Webhook
+}
+
+/**
+ * 获取客户门户账户列表
+ */
+export async function getCustomerAccounts(params = {}) {
+  const db = getDatabase()
+  const { customerId, status, keyword, page = 1, pageSize = 20 } = params
+  
+  let sql = `
+    SELECT ca.*, c.customer_name, c.customer_code
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE 1=1
+  `
+  const conditions = []
+  
+  if (customerId) {
+    sql += ` AND ca.customer_id = ?`
+    conditions.push(customerId)
+  }
+  if (status) {
+    sql += ` AND ca.status = ?`
+    conditions.push(status)
+  }
+  if (keyword) {
+    sql += ` AND (ca.username LIKE ? OR ca.email LIKE ? OR c.customer_name LIKE ?)`
+    conditions.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`)
+  }
+  
+  // 计数
+  const countSql = sql.replace('SELECT ca.*, c.customer_name, c.customer_code', 'SELECT COUNT(*) as total')
+  const countResult = await db.prepare(countSql).get(...conditions)
+  
+  // 分页
+  sql += ` ORDER BY ca.created_at DESC LIMIT ? OFFSET ?`
+  conditions.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(sql).all(...conditions)
+  
+  return {
+    list: rows.map(convertAccountToCamelCase),
+    total: countResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 根据ID获取客户账户
+ */
+export async function getCustomerAccountById(id) {
+  const db = getDatabase()
+  const row = await db.prepare(`
+    SELECT ca.*, c.customer_name, c.customer_code
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE ca.id = ?
+  `).get(id)
+  
+  return row ? convertAccountToCamelCase(row) : null
+}
+
+/**
+ * 根据用户名获取客户账户（用于登录验证）
+ */
+export async function getCustomerAccountByUsername(username) {
+  const db = getDatabase()
+  const row = await db.prepare(`
+    SELECT ca.*, c.customer_name, c.customer_code, c.id as customer_id
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE ca.username = ?
+  `).get(username)
+  
+  return row ? convertAccountToCamelCase(row) : null
+}
+
+/**
+ * 创建客户门户账户
+ */
+export async function createCustomerAccount(data) {
+  const db = getDatabase()
+  const { customerId, username, password, email, phone, createdBy } = data
+  
+  // 检查用户名是否已存在
+  const existing = await db.prepare('SELECT id FROM customer_accounts WHERE username = ?').get(username)
+  if (existing) {
+    throw new Error('用户名已存在')
+  }
+  
+  // 检查客户是否已有账户
+  const existingCustomer = await db.prepare('SELECT id FROM customer_accounts WHERE customer_id = ?').get(customerId)
+  if (existingCustomer) {
+    throw new Error('该客户已有门户账户')
+  }
+  
+  // 密码加密
+  const passwordHash = await bcrypt.hash(password, 10)
+  
+  const result = await db.prepare(`
+    INSERT INTO customer_accounts (customer_id, username, password_hash, email, phone, status, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'active', ?, NOW(), NOW())
+  `).run(customerId, username, passwordHash, email || null, phone || null, createdBy || null)
+  
+  return { id: result.lastInsertRowid }
+}
+
+/**
+ * 更新客户门户账户
+ */
+export async function updateCustomerAccount(id, data) {
+  const db = getDatabase()
+  const { email, phone, status } = data
+  
+  const updates = ['updated_at = NOW()']
+  const values = []
+  
+  if (email !== undefined) {
+    updates.push('email = ?')
+    values.push(email)
+  }
+  if (phone !== undefined) {
+    updates.push('phone = ?')
+    values.push(phone)
+  }
+  if (status !== undefined) {
+    updates.push('status = ?')
+    values.push(status)
+    // 如果重新激活，清除锁定状态
+    if (status === 'active') {
+      updates.push('login_attempts = 0')
+      updates.push('locked_until = NULL')
+    }
+  }
+  
+  values.push(id)
+  
+  await db.prepare(`UPDATE customer_accounts SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+  return true
+}
+
+/**
+ * 重置客户账户密码
+ */
+export async function resetCustomerAccountPassword(id, newPassword) {
+  const db = getDatabase()
+  const passwordHash = await bcrypt.hash(newPassword, 10)
+  
+  await db.prepare(`
+    UPDATE customer_accounts 
+    SET password_hash = ?, password_changed_at = NOW(), login_attempts = 0, locked_until = NULL, updated_at = NOW()
+    WHERE id = ?
+  `).run(passwordHash, id)
+  
+  return true
+}
+
+/**
+ * 删除客户门户账户
+ */
+export async function deleteCustomerAccount(id) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_accounts WHERE id = ?').run(id)
+  return true
+}
+
+/**
+ * 验证客户登录
+ */
+export async function verifyCustomerLogin(username, password) {
+  const db = getDatabase()
+  const account = await db.prepare(`
+    SELECT ca.*, c.customer_name, c.customer_code
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE ca.username = ?
+  `).get(username)
+  
+  if (!account) {
+    return { success: false, error: '账户不存在' }
+  }
+  
+  // 检查账户状态
+  if (account.status === 'inactive') {
+    return { success: false, error: '账户已禁用，请联系管理员' }
+  }
+  
+  if (account.status === 'locked') {
+    if (account.locked_until && new Date(account.locked_until) > new Date()) {
+      return { success: false, error: '账户已锁定，请稍后再试' }
+    }
+    // 锁定时间已过，解除锁定
+    await db.prepare(`UPDATE customer_accounts SET status = 'active', login_attempts = 0, locked_until = NULL WHERE id = ?`).run(account.id)
+  }
+  
+  // 验证密码
+  const isValid = await bcrypt.compare(password, account.password_hash)
+  
+  if (!isValid) {
+    // 增加失败次数
+    const attempts = (account.login_attempts || 0) + 1
+    if (attempts >= 5) {
+      // 锁定账户30分钟
+      const lockedUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      await db.prepare(`UPDATE customer_accounts SET login_attempts = ?, locked_until = ?, status = 'locked' WHERE id = ?`).run(attempts, lockedUntil, account.id)
+      return { success: false, error: '密码错误次数过多，账户已锁定30分钟' }
+    } else {
+      await db.prepare(`UPDATE customer_accounts SET login_attempts = ? WHERE id = ?`).run(attempts, account.id)
+      return { success: false, error: `密码错误，还有 ${5 - attempts} 次机会` }
+    }
+  }
+  
+  // 登录成功，清除失败计数
+  await db.prepare(`
+    UPDATE customer_accounts 
+    SET login_attempts = 0, locked_until = NULL, last_login_at = NOW()
+    WHERE id = ?
+  `).run(account.id)
+  
+  return { 
+    success: true, 
+    account: convertAccountToCamelCase(account)
+  }
+}
+
+/**
+ * 记录登录IP
+ */
+export async function updateLoginInfo(accountId, ip) {
+  const db = getDatabase()
+  await db.prepare(`
+    UPDATE customer_accounts SET last_login_at = NOW(), last_login_ip = ? WHERE id = ?
+  `).run(ip, accountId)
+}
+
+// ==================== API 密钥管理 ====================
+
+/**
+ * 生成 API Key
+ */
+function generateApiKey() {
+  const prefix = 'ak_live_'
+  const random = crypto.randomBytes(24).toString('hex')
+  return prefix + random
+}
+
+/**
+ * 生成 API Secret
+ */
+function generateApiSecret() {
+  const prefix = 'sk_live_'
+  const random = crypto.randomBytes(32).toString('hex')
+  return prefix + random
+}
+
+/**
+ * 生成 Webhook Secret
+ */
+function generateWebhookSecret() {
+  return 'whsec_' + crypto.randomBytes(24).toString('hex')
+}
+
+/**
+ * 获取客户的 API 密钥列表
+ */
+export async function getCustomerApiKeys(customerId) {
+  const db = getDatabase()
+  const rows = await db.prepare(`
+    SELECT * FROM customer_api_keys 
+    WHERE customer_id = ?
+    ORDER BY created_at DESC
+  `).all(customerId)
+  
+  return rows.map(convertApiKeyToCamelCase)
+}
+
+/**
+ * 根据 API Key 获取密钥信息（用于认证）
+ */
+export async function getApiKeyByKey(apiKey) {
+  const db = getDatabase()
+  const row = await db.prepare(`
+    SELECT ak.*, c.customer_name, c.customer_code
+    FROM customer_api_keys ak
+    LEFT JOIN customers c ON ak.customer_id = c.id
+    WHERE ak.api_key = ?
+  `).get(apiKey)
+  
+  return row ? convertApiKeyToCamelCase(row) : null
+}
+
+/**
+ * 创建 API 密钥
+ */
+export async function createApiKey(data) {
+  const db = getDatabase()
+  const { customerId, keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl, createdBy } = data
+  
+  const apiKey = generateApiKey()
+  const apiSecret = generateApiSecret()
+  const apiSecretHash = await bcrypt.hash(apiSecret, 10)
+  const webhookSecret = webhookUrl ? generateWebhookSecret() : null
+  
+  const result = await db.prepare(`
+    INSERT INTO customer_api_keys (
+      customer_id, key_name, api_key, api_secret_hash, permissions, 
+      ip_whitelist, rate_limit, expires_at, webhook_url, webhook_secret, created_by, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+  `).run(
+    customerId,
+    keyName,
+    apiKey,
+    apiSecretHash,
+    JSON.stringify(permissions || ['order:read']),
+    ipWhitelist ? `{${ipWhitelist.join(',')}}` : null,
+    rateLimit || 100,
+    expiresAt || null,
+    webhookUrl || null,
+    webhookSecret,
+    createdBy || null
+  )
+  
+  // 返回密钥信息（Secret 只在创建时返回一次）
+  return {
+    id: result.lastInsertRowid,
+    apiKey,
+    apiSecret,  // 只在创建时返回，之后不可查看
+    webhookSecret  // 只在创建时返回
+  }
+}
+
+/**
+ * 更新 API 密钥
+ */
+export async function updateApiKey(id, data) {
+  const db = getDatabase()
+  const { keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl, isActive } = data
+  
+  const updates = ['updated_at = NOW()']
+  const values = []
+  
+  if (keyName !== undefined) {
+    updates.push('key_name = ?')
+    values.push(keyName)
+  }
+  if (permissions !== undefined) {
+    updates.push('permissions = ?')
+    values.push(JSON.stringify(permissions))
+  }
+  if (ipWhitelist !== undefined) {
+    updates.push('ip_whitelist = ?')
+    values.push(ipWhitelist && ipWhitelist.length > 0 ? `{${ipWhitelist.join(',')}}` : null)
+  }
+  if (rateLimit !== undefined) {
+    updates.push('rate_limit = ?')
+    values.push(rateLimit)
+  }
+  if (expiresAt !== undefined) {
+    updates.push('expires_at = ?')
+    values.push(expiresAt)
+  }
+  if (webhookUrl !== undefined) {
+    updates.push('webhook_url = ?')
+    values.push(webhookUrl)
+    // 如果设置了新的 webhook_url，生成新的 webhook_secret
+    if (webhookUrl) {
+      const webhookSecret = generateWebhookSecret()
+      updates.push('webhook_secret = ?')
+      values.push(webhookSecret)
+    }
+  }
+  if (isActive !== undefined) {
+    updates.push('is_active = ?')
+    values.push(isActive)
+  }
+  
+  values.push(id)
+  
+  await db.prepare(`UPDATE customer_api_keys SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+  return true
+}
+
+/**
+ * 删除 API 密钥
+ */
+export async function deleteApiKey(id) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_api_keys WHERE id = ?').run(id)
+  return true
+}
+
+/**
+ * 验证 API 密钥
+ */
+export async function verifyApiKey(apiKey, apiSecret) {
+  const db = getDatabase()
+  const keyInfo = await db.prepare(`
+    SELECT ak.*, c.customer_name, c.customer_code
+    FROM customer_api_keys ak
+    LEFT JOIN customers c ON ak.customer_id = c.id
+    WHERE ak.api_key = ?
+  `).get(apiKey)
+  
+  if (!keyInfo) {
+    return { valid: false, error: 'API Key 无效', errorCode: '401001' }
+  }
+  
+  if (!keyInfo.is_active) {
+    return { valid: false, error: '密钥已禁用', errorCode: '401003' }
+  }
+  
+  if (keyInfo.expires_at && new Date(keyInfo.expires_at) < new Date()) {
+    return { valid: false, error: '密钥已过期', errorCode: '401004' }
+  }
+  
+  // 验证 Secret
+  const isSecretValid = await bcrypt.compare(apiSecret, keyInfo.api_secret_hash)
+  if (!isSecretValid) {
+    return { valid: false, error: 'API Secret 错误', errorCode: '401002' }
+  }
+  
+  return { 
+    valid: true, 
+    keyInfo: convertApiKeyToCamelCase(keyInfo)
+  }
+}
+
+/**
+ * 更新 API 密钥使用信息
+ */
+export async function updateApiKeyUsage(apiKeyId, ip) {
+  const db = getDatabase()
+  await db.prepare(`
+    UPDATE customer_api_keys 
+    SET last_used_at = NOW(), last_used_ip = ?, usage_count = usage_count + 1 
+    WHERE id = ?
+  `).run(ip, apiKeyId)
+}
+
+/**
+ * 记录 API 调用日志
+ */
+export async function logApiCall(data) {
+  const db = getDatabase()
+  const { 
+    apiKeyId, customerId, apiKey, endpoint, method, 
+    requestIp, requestHeaders, requestBody, 
+    responseStatus, responseBody, errorMessage, durationMs 
+  } = data
+  
+  await db.prepare(`
+    INSERT INTO api_call_logs (
+      api_key_id, customer_id, api_key, endpoint, method, 
+      request_ip, request_headers, request_body, 
+      response_status, response_body, error_message, duration_ms, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `).run(
+    apiKeyId || null,
+    customerId || null,
+    apiKey || null,
+    endpoint,
+    method,
+    requestIp || null,
+    requestHeaders ? JSON.stringify(requestHeaders) : null,
+    requestBody ? JSON.stringify(requestBody) : null,
+    responseStatus || null,
+    responseBody ? JSON.stringify(responseBody) : null,
+    errorMessage || null,
+    durationMs || null
+  )
+}
+
+/**
+ * 获取 API 调用日志
+ */
+export async function getApiCallLogs(params = {}) {
+  const db = getDatabase()
+  const { customerId, apiKeyId, endpoint, status, startDate, endDate, page = 1, pageSize = 50 } = params
+  
+  let sql = `SELECT * FROM api_call_logs WHERE 1=1`
+  const conditions = []
+  
+  if (customerId) {
+    sql += ` AND customer_id = ?`
+    conditions.push(customerId)
+  }
+  if (apiKeyId) {
+    sql += ` AND api_key_id = ?`
+    conditions.push(apiKeyId)
+  }
+  if (endpoint) {
+    sql += ` AND endpoint LIKE ?`
+    conditions.push(`%${endpoint}%`)
+  }
+  if (status) {
+    sql += ` AND response_status = ?`
+    conditions.push(status)
+  }
+  if (startDate) {
+    sql += ` AND created_at >= ?`
+    conditions.push(startDate)
+  }
+  if (endDate) {
+    sql += ` AND created_at <= ?`
+    conditions.push(endDate)
+  }
+  
+  // 计数
+  const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const countResult = await db.prepare(countSql).get(...conditions)
+  
+  // 分页
+  sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+  conditions.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(sql).all(...conditions)
+  
+  return {
+    list: rows.map(convertApiLogToCamelCase),
+    total: countResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+// ==================== 数据转换函数 ====================
+
+function convertAccountToCamelCase(row) {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    customerCode: row.customer_code,
+    username: row.username,
+    email: row.email,
+    phone: row.phone,
+    avatarUrl: row.avatar_url,
+    status: row.status,
+    loginAttempts: row.login_attempts,
+    lockedUntil: row.locked_until,
+    lastLoginAt: row.last_login_at,
+    lastLoginIp: row.last_login_ip,
+    passwordChangedAt: row.password_changed_at,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function convertApiKeyToCamelCase(row) {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    customerCode: row.customer_code,
+    keyName: row.key_name,
+    apiKey: row.api_key,
+    permissions: typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions,
+    ipWhitelist: row.ip_whitelist,
+    rateLimit: row.rate_limit,
+    isActive: row.is_active,
+    lastUsedAt: row.last_used_at,
+    lastUsedIp: row.last_used_ip,
+    usageCount: row.usage_count,
+    expiresAt: row.expires_at,
+    webhookUrl: row.webhook_url,
+    webhookSecret: row.webhook_secret,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function convertApiLogToCamelCase(row) {
+  return {
+    id: row.id,
+    apiKeyId: row.api_key_id,
+    customerId: row.customer_id,
+    apiKey: row.api_key,
+    endpoint: row.endpoint,
+    method: row.method,
+    requestIp: row.request_ip,
+    requestHeaders: row.request_headers ? JSON.parse(row.request_headers) : null,
+    requestBody: row.request_body ? JSON.parse(row.request_body) : null,
+    responseStatus: row.response_status,
+    responseBody: row.response_body ? JSON.parse(row.response_body) : null,
+    errorMessage: row.error_message,
+    durationMs: row.duration_ms,
+    createdAt: row.created_at
+  }
+}
+
 export default {
   // 常量
   CUSTOMER_TYPE,
@@ -2795,6 +3413,8 @@ export default {
   FEEDBACK_TYPE,
   FEEDBACK_STATUS,
   FEEDBACK_PRIORITY,
+  ACCOUNT_STATUS,
+  API_PERMISSIONS,
   
   // 客户管理
   getCustomers,
@@ -2889,7 +3509,29 @@ export default {
   // 客户分析
   getCustomerValueAnalysis,
   getSalesFunnel,
-  getCustomerActivityRanking
+  getCustomerActivityRanking,
+  
+  // 客户门户账户管理
+  getCustomerAccounts,
+  getCustomerAccountById,
+  getCustomerAccountByUsername,
+  createCustomerAccount,
+  updateCustomerAccount,
+  resetCustomerAccountPassword,
+  deleteCustomerAccount,
+  verifyCustomerLogin,
+  updateLoginInfo,
+  
+  // API 密钥管理
+  getCustomerApiKeys,
+  getApiKeyByKey,
+  createApiKey,
+  updateApiKey,
+  deleteApiKey,
+  verifyApiKey,
+  updateApiKeyUsage,
+  logApiCall,
+  getApiCallLogs
 }
 
 // ==================== 最后里程费率集成 ====================

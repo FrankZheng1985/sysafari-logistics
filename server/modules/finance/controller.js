@@ -91,8 +91,38 @@ export async function getInvoiceById(req, res) {
     // 获取关联付款记录
     const payments = await model.getPayments({ invoiceId: invoice.id })
     
+    // 如果 items 为空但有 bill_id，从 fees 表获取费用数据
+    let items = invoice.items
+    if ((!items || items.length === 0) && invoice.billId) {
+      const fees = await model.getFees({ billId: invoice.billId })
+      if (fees && fees.list && fees.list.length > 0) {
+        // 按费用名称汇总
+        const feeGroups = {}
+        fees.list.forEach(fee => {
+          const feeName = fee.feeName || 'Other'
+          if (!feeGroups[feeName]) {
+            feeGroups[feeName] = {
+              description: feeName,
+              quantity: 0,
+              totalAmount: 0
+            }
+          }
+          feeGroups[feeName].quantity += 1
+          feeGroups[feeName].totalAmount += parseFloat(fee.amount) || 0
+        })
+        
+        items = Object.values(feeGroups).map(group => ({
+          description: group.description,
+          quantity: group.quantity,
+          unitValue: group.totalAmount / group.quantity,
+          amount: group.totalAmount
+        }))
+      }
+    }
+    
     return success(res, {
       ...invoice,
+      items,
       payments: payments.list
     })
   } catch (error) {
