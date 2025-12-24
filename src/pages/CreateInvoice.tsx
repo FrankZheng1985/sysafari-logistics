@@ -144,6 +144,7 @@ export default function CreateInvoice() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])  // 上传的对账单/发票文件
   const [previewFile, setPreviewFile] = useState<string | null>(null)  // 预览的文件URL
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [mergeSameFees, setMergeSameFees] = useState(false)  // 是否合并相同费用项
   
   // Refs for click outside detection
   const customerDropdownRef = useRef<HTMLDivElement>(null)
@@ -581,23 +582,85 @@ export default function CreateInvoice() {
       return
     }
     
-    const items: InvoiceItem[] = selectedFeesList.map((fee, index) => ({
-      id: (index + 1).toString(),
-      description: `${fee.billNumber} - ${fee.feeName || feeCategoryMap[fee.category] || '费用'}`,
-      quantity: 1,
-      unitPrice: Number(fee.amount) || 0,
-      currency: fee.currency || 'EUR',
-      amount: Number(fee.amount) || 0,
-      taxRate: 0,
-      taxAmount: 0,
-      discountPercent: 0,
-      discountAmount: 0,
-      finalAmount: Number(fee.amount) || 0,
-      feeId: fee.id,
-      billId: fee.billId,
-      billNumber: fee.billNumber,
-      isFromOrder: true
-    }))
+    let items: InvoiceItem[]
+    
+    if (mergeSameFees) {
+      // 合并相同费用项：按费用名称分组汇总
+      const feeMap = new Map<string, {
+        feeName: string
+        totalAmount: number
+        count: number
+        currency: string
+        feeIds: string[]
+        billIds: string[]
+        billNumbers: string[]
+      }>()
+      
+      selectedFeesList.forEach(fee => {
+        const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
+        const existing = feeMap.get(feeName)
+        
+        if (existing) {
+          existing.totalAmount += Number(fee.amount) || 0
+          existing.count += 1
+          existing.feeIds.push(fee.id)
+          if (!existing.billIds.includes(fee.billId)) {
+            existing.billIds.push(fee.billId)
+          }
+          if (!existing.billNumbers.includes(fee.billNumber)) {
+            existing.billNumbers.push(fee.billNumber)
+          }
+        } else {
+          feeMap.set(feeName, {
+            feeName,
+            totalAmount: Number(fee.amount) || 0,
+            count: 1,
+            currency: fee.currency || 'EUR',
+            feeIds: [fee.id],
+            billIds: [fee.billId],
+            billNumbers: [fee.billNumber]
+          })
+        }
+      })
+      
+      // 转换为发票明细项
+      items = Array.from(feeMap.values()).map((group, index) => ({
+        id: (index + 1).toString(),
+        description: group.feeName,
+        quantity: group.count,
+        unitPrice: group.totalAmount / group.count,  // 平均单价
+        currency: group.currency,
+        amount: group.totalAmount,
+        taxRate: 0,
+        taxAmount: 0,
+        discountPercent: 0,
+        discountAmount: 0,
+        finalAmount: group.totalAmount,
+        feeId: group.feeIds.join(','),  // 保存所有关联的费用ID
+        billId: group.billIds.join(','),  // 保存所有关联的订单ID
+        billNumber: group.billNumbers.join(','),  // 保存所有关联的订单号
+        isFromOrder: true
+      }))
+    } else {
+      // 不合并：每个费用项单独显示
+      items = selectedFeesList.map((fee, index) => ({
+        id: (index + 1).toString(),
+        description: `${fee.billNumber} - ${fee.feeName || feeCategoryMap[fee.category] || '费用'}`,
+        quantity: 1,
+        unitPrice: Number(fee.amount) || 0,
+        currency: fee.currency || 'EUR',
+        amount: Number(fee.amount) || 0,
+        taxRate: 0,
+        taxAmount: 0,
+        discountPercent: 0,
+        discountAmount: 0,
+        finalAmount: Number(fee.amount) || 0,
+        feeId: fee.id,
+        billId: fee.billId,
+        billNumber: fee.billNumber,
+        isFromOrder: true
+      }))
+    }
     
     setFormData(prev => ({ ...prev, items }))
   }
@@ -819,7 +882,7 @@ export default function CreateInvoice() {
     // 获取所有订单的费用（根据发票类型筛选费用类型）
     setLoadingFees(true)
     try {
-      const allFees: Fee[] = []
+      const allFees: (Fee & { billId: string; billNumber: string })[] = []
       // 销售发票(sales) -> 应收费用(receivable)，采购发票(purchase) -> 应付费用(payable)
       const feeType = formData.invoiceType === 'purchase' ? 'payable' : 'receivable'
       for (const bill of selectedBills) {
@@ -842,24 +905,86 @@ export default function CreateInvoice() {
       )
       setBillFees(uniqueFees)
       
-      // 转换为发票明细
-      const items: InvoiceItem[] = uniqueFees.map((fee: Fee & { billNumber?: string }, index: number) => ({
-        id: (index + 1).toString(),
-        description: fee.feeName || feeCategoryMap[fee.category] || '费用',
-        quantity: 1,
-        unitPrice: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
-        currency: fee.currency || 'EUR',
-        amount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
-        taxRate: typeof (fee as any).taxRate === 'string' ? parseFloat((fee as any).taxRate) || 0 : (fee as any).taxRate || 0,
-        taxAmount: 0,
-        discountPercent: 0,
-        discountAmount: 0,
-        finalAmount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
-        feeId: fee.id,
-        billId: (fee as any).billId,
-        billNumber: (fee as any).billNumber,
-        isFromOrder: true
-      }))
+      let items: InvoiceItem[]
+      
+      if (mergeSameFees && selectedBills.length > 1) {
+        // 合并相同费用项：按费用名称分组汇总
+        const feeMap = new Map<string, {
+          feeName: string
+          totalAmount: number
+          count: number
+          currency: string
+          feeIds: string[]
+          billIds: string[]
+          billNumbers: string[]
+        }>()
+        
+        uniqueFees.forEach(fee => {
+          const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
+          const amount = typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0
+          const existing = feeMap.get(feeName)
+          
+          if (existing) {
+            existing.totalAmount += amount
+            existing.count += 1
+            existing.feeIds.push(fee.id)
+            if (!existing.billIds.includes(fee.billId)) {
+              existing.billIds.push(fee.billId)
+            }
+            if (!existing.billNumbers.includes(fee.billNumber)) {
+              existing.billNumbers.push(fee.billNumber)
+            }
+          } else {
+            feeMap.set(feeName, {
+              feeName,
+              totalAmount: amount,
+              count: 1,
+              currency: fee.currency || 'EUR',
+              feeIds: [fee.id],
+              billIds: [fee.billId],
+              billNumbers: [fee.billNumber]
+            })
+          }
+        })
+        
+        // 转换为发票明细项
+        items = Array.from(feeMap.values()).map((group, index) => ({
+          id: (index + 1).toString(),
+          description: group.feeName,
+          quantity: group.count,
+          unitPrice: group.totalAmount / group.count,  // 平均单价
+          currency: group.currency,
+          amount: group.totalAmount,
+          taxRate: 0,
+          taxAmount: 0,
+          discountPercent: 0,
+          discountAmount: 0,
+          finalAmount: group.totalAmount,
+          feeId: group.feeIds.join(','),  // 保存所有关联的费用ID
+          billId: group.billIds.join(','),  // 保存所有关联的订单ID
+          billNumber: group.billNumbers.join(','),  // 保存所有关联的订单号
+          isFromOrder: true
+        }))
+      } else {
+        // 不合并：每个费用项单独显示
+        items = uniqueFees.map((fee, index) => ({
+          id: (index + 1).toString(),
+          description: fee.feeName || feeCategoryMap[fee.category] || '费用',
+          quantity: 1,
+          unitPrice: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
+          currency: fee.currency || 'EUR',
+          amount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
+          taxRate: typeof (fee as any).taxRate === 'string' ? parseFloat((fee as any).taxRate) || 0 : (fee as any).taxRate || 0,
+          taxAmount: 0,
+          discountPercent: 0,
+          discountAmount: 0,
+          finalAmount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
+          feeId: fee.id,
+          billId: fee.billId,
+          billNumber: fee.billNumber,
+          isFromOrder: true
+        }))
+      }
       
       if (items.length > 0) {
         setFormData(prev => ({ ...prev, items }))
@@ -1254,31 +1379,51 @@ export default function CreateInvoice() {
               
               {/* 已选订单标签 */}
               {selectedBills.length > 0 && (
-                <div className="flex flex-wrap gap-2 p-2 bg-blue-50 rounded-lg">
-                  <span className="text-xs text-blue-600 font-medium">已选 {selectedBills.length} 个订单:</span>
-                  {selectedBills.map(bill => (
-                    <span 
-                      key={bill.id}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 rounded text-xs text-blue-700"
-                    >
-                      {bill.containerNumber || bill.billNumber}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleBillSelection(bill)
-                        }}
-                        className="text-blue-400 hover:text-blue-600"
+                <div className="space-y-2 p-2 bg-blue-50 rounded-lg">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="text-xs text-blue-600 font-medium">已选 {selectedBills.length} 个订单:</span>
+                    {selectedBills.map(bill => (
+                      <span 
+                        key={bill.id}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 rounded text-xs text-blue-700"
                       >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <button
-                    onClick={confirmMultiBillSelection}
-                    className="ml-auto px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700"
-                  >
-                    确认选择
-                  </button>
+                        {bill.containerNumber || bill.billNumber}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleBillSelection(bill)
+                          }}
+                          className="text-blue-400 hover:text-blue-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {/* 多订单合并选项 */}
+                  {selectedBills.length > 1 && (
+                    <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-50 rounded border border-amber-200">
+                      <input
+                        type="checkbox"
+                        id="mergeSalesFees"
+                        checked={mergeSameFees}
+                        onChange={(e) => setMergeSameFees(e.target.checked)}
+                        className="w-3.5 h-3.5 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+                      />
+                      <label htmlFor="mergeSalesFees" className="text-xs text-amber-800 cursor-pointer">
+                        <span className="font-medium">合并相同费用项</span>
+                        <span className="text-[10px] text-amber-600 ml-1">(如关税、包价一口价等)</span>
+                      </label>
+                    </div>
+                  )}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={confirmMultiBillSelection}
+                      className="px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700"
+                    >
+                      确认选择
+                    </button>
+                  </div>
                 </div>
               )}
               
@@ -1684,6 +1829,24 @@ export default function CreateInvoice() {
                       合计: {supplierFees.filter(f => f.selected).reduce((sum, f) => sum + Number(f.amount), 0).toFixed(2)} {supplierFees.find(f => f.selected)?.currency || 'EUR'}
                     </span>
                   </div>
+                  
+                  {/* 合并相同费用项选项 */}
+                  <div className="flex items-center gap-2 mb-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                    <input
+                      type="checkbox"
+                      id="mergeSameFees"
+                      checked={mergeSameFees}
+                      onChange={(e) => setMergeSameFees(e.target.checked)}
+                      className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                    />
+                    <label htmlFor="mergeSameFees" className="text-xs text-amber-800 cursor-pointer flex-1">
+                      <span className="font-medium">合并相同费用项</span>
+                      <span className="block text-[10px] text-amber-600 mt-0.5">
+                        将同名费用（如"关税"、"包价一口价"）合并为一行显示
+                      </span>
+                    </label>
+                  </div>
+                  
                   <button
                     type="button"
                     onClick={confirmSelectedFees}
