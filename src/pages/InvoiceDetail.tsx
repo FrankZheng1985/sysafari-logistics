@@ -505,12 +505,12 @@ export default function InvoiceDetail() {
                 </h2>
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-primary-600" />
-                  {invoice.billNumber ? (
+                  {(billInfo.orderNumber || invoice.orderNumber) ? (
                     <button 
                       onClick={() => navigate(`/bill/${invoice.billId}`)}
                       className="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
                     >
-                      {invoice.billNumber}
+                      {billInfo.orderNumber || invoice.orderNumber}
                     </button>
                   ) : '-'}
                   <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
@@ -528,7 +528,7 @@ export default function InvoiceDetail() {
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">提单号:</span>
-                    <span className="text-gray-900 font-medium font-mono">{billInfo.containerNumber || '-'}</span>
+                    <span className="text-gray-900 font-medium font-mono">{billInfo.billNumber || invoice.billNumber || '-'}</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">集装箱号:</span>

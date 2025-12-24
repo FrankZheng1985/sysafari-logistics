@@ -1375,7 +1375,7 @@ export default function CreateInvoice() {
                       <div className="space-y-1">
                         <div className="text-gray-400 font-medium border-b border-gray-200 pb-1 mb-1">基本信息</div>
                         <div className="flex gap-1"><span className="text-gray-500">客户:</span><span className="text-gray-900">{selectedBill.customerName || selectedBill.consignee || '-'}</span></div>
-                        <div className="flex gap-1"><span className="text-gray-500">提单号:</span><span className="text-gray-900 font-medium">{selectedBill.containerNumber || '-'}</span></div>
+                        <div className="flex gap-1"><span className="text-gray-500">提单号:</span><span className="text-gray-900 font-medium">{selectedBill.billNumber || '-'}</span></div>
                         <div className="flex gap-1"><span className="text-gray-500">集装箱号:</span><span className="text-gray-900 font-medium">{selectedBill.containerNumber || '-'}</span></div>
                       </div>
                       <div className="space-y-1">
