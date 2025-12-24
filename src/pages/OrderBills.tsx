@@ -573,6 +573,25 @@ export default function OrderBills() {
       ),
     },
     {
+      key: 'customerName',
+      label: '关联客户',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="max-w-[120px]">
+          <span 
+            className={`${textPrimary} truncate block`}
+            title={record.customerName || '-'}
+          >
+            {record.customerName || '-'}
+          </span>
+          {record.customerCode && (
+            <span className={`text-xs ${textSecondary}`}>{record.customerCode}</span>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'vessel',
       label: '航班号/船名航次',
       sorter: true,
