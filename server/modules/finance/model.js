@@ -78,6 +78,14 @@ export async function getInvoices(params = {}) {
     } else if (status === 'unpaid_all') {
       // 所有未付清的发票（包括逾期的）- issued、unpaid、partial 都算未付清
       query += ` AND status IN ('issued', 'unpaid', 'partial')`
+    } else if (status.includes(',')) {
+      // 支持多个状态值（逗号分隔），用于历史记录页面查询 paid,cancelled
+      const statuses = status.split(',').map(s => s.trim()).filter(s => s)
+      if (statuses.length > 0) {
+        const placeholders = statuses.map(() => '?').join(', ')
+        query += ` AND status IN (${placeholders})`
+        queryParams.push(...statuses)
+      }
     } else {
       query += ' AND status = ?'
       queryParams.push(status)
