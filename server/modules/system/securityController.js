@@ -21,7 +21,8 @@ let cosUploader = null
 async function getCosUploader() {
   if (!cosUploader) {
     try {
-      cosUploader = await import('../../utils/cosUploader.js')
+      const module = await import('../../utils/cosUploader.js')
+      cosUploader = module.default // 获取 default export
     } catch (error) {
       console.warn('COS 模块加载失败:', error.message)
     }
