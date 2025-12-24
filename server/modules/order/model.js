@@ -122,18 +122,45 @@ export async function getBills(params = {}) {
   }
   
   // 搜索（支持订单号、提单号、集装箱号、客户名称等）
+  // 支持多关键词批量搜索：用空格、逗号、分号分隔的多个关键词
   if (search) {
-    query += ` AND (
-      order_number LIKE ? OR
-      bill_number LIKE ? OR 
-      container_number LIKE ? OR 
-      customer_name LIKE ? OR
-      shipper LIKE ? OR 
-      consignee LIKE ? OR
-      vessel LIKE ?
-    )`
-    const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+    // 将搜索词按分隔符拆分，过滤空值
+    const keywords = search.split(/[\s,;，；]+/).filter(k => k.trim().length > 0)
+    
+    if (keywords.length === 1) {
+      // 单关键词：原有逻辑
+      query += ` AND (
+        order_number LIKE ? OR
+        bill_number LIKE ? OR 
+        container_number LIKE ? OR 
+        customer_name LIKE ? OR
+        shipper LIKE ? OR 
+        consignee LIKE ? OR
+        vessel LIKE ?
+      )`
+      const searchPattern = `%${search}%`
+      queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+    } else {
+      // 多关键词：每个关键词都能匹配的订单（集装箱号精确匹配优先）
+      // 构建 OR 条件：任意一个关键词匹配即可
+      const keywordConditions = keywords.map(() => `(
+        order_number LIKE ? OR
+        bill_number LIKE ? OR 
+        container_number LIKE ? OR 
+        customer_name LIKE ? OR
+        shipper LIKE ? OR 
+        consignee LIKE ? OR
+        vessel LIKE ?
+      )`).join(' OR ')
+      
+      query += ` AND (${keywordConditions})`
+      
+      // 为每个关键词添加参数
+      keywords.forEach(keyword => {
+        const searchPattern = `%${keyword.trim()}%`
+        queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+      })
+    }
   }
   
   // 获取总数
