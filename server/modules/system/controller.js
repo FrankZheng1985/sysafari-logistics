@@ -1524,13 +1524,14 @@ export async function getSupervisorCandidates(req, res) {
     const db = getDatabase()
     
     // 获取具有团队管理权限的用户
+    // 条件：状态为 active，且 (can_manage_team=1 或角色是管理角色)
     const supervisors = await db.prepare(`
       SELECT u.id, u.name, u.username, u.role, u.department, r.role_name, r.role_level
       FROM users u
       LEFT JOIN roles r ON u.role = r.role_code
       WHERE u.status = 'active' 
-        AND (r.can_manage_team = TRUE OR u.role IN ('admin', 'boss', 'manager', 'finance_director'))
-      ORDER BY r.role_level, u.name
+        AND (COALESCE(r.can_manage_team, 0) = 1 OR u.role IN ('admin', 'boss', 'manager', 'finance_director'))
+      ORDER BY COALESCE(r.role_level, 99), u.name
     `).all()
     
     return success(res, supervisors.map(s => ({
