@@ -1495,6 +1495,19 @@ function TaxModal({
   const [eoriValidating, setEoriValidating] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   
+  // 按公司分组的共享税号类型定义（需要在状态声明前定义）
+  interface GroupedSharedTax {
+    companyKey: string
+    companyShortName: string
+    companyName: string
+    companyAddress: string
+    country: string
+    vatNumber?: string
+    vatVerified?: boolean
+    eoriNumber?: string
+    eoriVerified?: boolean
+  }
+
   // 共享税号选择相关状态
   const [taxSource, setTaxSource] = useState<'self' | 'shared'>('self')
   const [sharedTaxList, setSharedTaxList] = useState<Array<{
@@ -1510,7 +1523,7 @@ function TaxModal({
   const [sharedTaxSearch, setSharedTaxSearch] = useState('')
   const [loadingSharedTax, setLoadingSharedTax] = useState(false)
   const [showSharedTaxDropdown, setShowSharedTaxDropdown] = useState(false)
-  const [selectedSharedCompany, setSelectedSharedCompany] = useState<string>('')
+  const [selectedSharedCompanies, setSelectedSharedCompanies] = useState<GroupedSharedTax[]>([])
 
   useEffect(() => {
     loadCountries()
@@ -1540,19 +1553,7 @@ function TaxModal({
     }
   }, [taxSource])
 
-  // 按公司分组的共享税号（一个公司一条记录，包含VAT和EORI）
-  interface GroupedSharedTax {
-    companyKey: string
-    companyShortName: string
-    companyName: string
-    companyAddress: string
-    country: string
-    vatNumber?: string
-    vatVerified?: boolean
-    eoriNumber?: string
-    eoriVerified?: boolean
-  }
-  
+  // 按公司分组的共享税号列表
   const groupedSharedTaxList: GroupedSharedTax[] = useMemo(() => {
     const grouped: Record<string, GroupedSharedTax> = {}
     
@@ -1591,28 +1592,32 @@ function TaxModal({
     company.companyShortName.toLowerCase().includes(sharedTaxSearch.toLowerCase())
   )
 
-  // 选择共享公司，填充该公司的所有税号
-  const handleSelectSharedCompany = (company: GroupedSharedTax) => {
-    setFormData(prev => ({
-      ...prev,
-      companyShortName: company.companyShortName || prev.companyShortName,
-      companyName: company.companyName || prev.companyName,
-      companyAddress: company.companyAddress || prev.companyAddress,
-      country: company.country || prev.country,
-      vatEnabled: !!company.vatNumber,
-      vatNumber: company.vatNumber || '',
-      vatVerified: company.vatVerified || false,
-      vatValidationStatus: company.vatVerified ? 'valid' : 'none',
-      vatValidationError: '',
-      eoriEnabled: !!company.eoriNumber,
-      eoriNumber: company.eoriNumber || '',
-      eoriVerified: company.eoriVerified || false,
-      eoriValidationStatus: company.eoriVerified ? 'valid' : 'none',
-      eoriValidationError: ''
-    }))
-    if (company.country) setCountrySearch(company.country)
-    setSelectedSharedCompany(company.companyShortName || company.companyName)
-    setShowSharedTaxDropdown(false)
+  // 切换选中共享公司（多选模式）
+  const toggleSelectSharedCompany = (company: GroupedSharedTax) => {
+    setSelectedSharedCompanies(prev => {
+      const isSelected = prev.some(c => c.companyKey === company.companyKey)
+      if (isSelected) {
+        // 取消选中
+        return prev.filter(c => c.companyKey !== company.companyKey)
+      } else {
+        // 添加选中
+        return [...prev, company]
+      }
+    })
+  }
+
+  // 全选/取消全选
+  const toggleSelectAll = () => {
+    if (selectedSharedCompanies.length === filteredGroupedSharedTaxList.length) {
+      setSelectedSharedCompanies([])
+    } else {
+      setSelectedSharedCompanies([...filteredGroupedSharedTaxList])
+    }
+  }
+
+  // 检查公司是否被选中
+  const isCompanySelected = (company: GroupedSharedTax) => {
+    return selectedSharedCompanies.some(c => c.companyKey === company.companyKey)
   }
 
   useEffect(() => {
@@ -1663,6 +1668,7 @@ function TaxModal({
       setCountrySearch('')
       setTaxSource('self')  // 重置为自建模式
       setSharedTaxSearch('')
+      setSelectedSharedCompanies([])  // 重置多选公司列表
     }
     setValidationError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1822,6 +1828,76 @@ function TaxModal({
   }
 
   const handleSave = async () => {
+    // 从共享库多选模式
+    if (taxSource === 'shared' && selectedSharedCompanies.length > 0) {
+      if (selectedSharedCompanies.length === 0) {
+        alert('请至少选择一个共享税号公司')
+        return
+      }
+
+      setSaving(true)
+      try {
+        // 收集所有选中公司的税号
+        const allTaxNumbers: Array<{
+          taxType: 'vat' | 'eori' | 'other'
+          taxNumber: string
+          companyShortName: string
+          companyName: string
+          companyAddress: string
+          country: string
+          isVerified: boolean
+        }> = []
+
+        selectedSharedCompanies.forEach(company => {
+          if (company.vatNumber) {
+            allTaxNumbers.push({
+              taxType: 'vat',
+              taxNumber: company.vatNumber,
+              companyShortName: company.companyShortName,
+              companyName: company.companyName,
+              companyAddress: company.companyAddress,
+              country: company.country,
+              isVerified: company.vatVerified || false
+            })
+          }
+          if (company.eoriNumber) {
+            allTaxNumbers.push({
+              taxType: 'eori',
+              taxNumber: company.eoriNumber,
+              companyShortName: company.companyShortName,
+              companyName: company.companyName,
+              companyAddress: company.companyAddress,
+              country: company.country,
+              isVerified: company.eoriVerified || false
+            })
+          }
+        })
+
+        // 批量保存
+        for (let i = 0; i < allTaxNumbers.length; i++) {
+          const tax = allTaxNumbers[i]
+          const isLast = i === allTaxNumbers.length - 1
+          await onSave({
+            taxType: tax.taxType,
+            taxNumber: tax.taxNumber,
+            companyShortName: tax.companyShortName,
+            companyName: tax.companyName,
+            companyAddress: tax.companyAddress,
+            country: tax.country,
+            isVerified: tax.isVerified,
+            isDefault: false
+          }, isLast)
+        }
+      } catch (error) {
+        console.error('批量保存税号失败:', error)
+        alert('保存失败，请重试')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    // 自建税号模式 - 原有逻辑
     // 收集所有选中的税号
     const taxNumbers: Array<{ 
       taxType: 'vat' | 'eori' | 'other'
@@ -2009,12 +2085,19 @@ function TaxModal({
             </div>
           )}
 
-          {/* 共享税号选择 - 下拉菜单形式 */}
+          {/* 共享税号选择 - 多选模式 */}
           {!isEditMode && taxSource === 'shared' && (
             <div className="mb-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Building2 className="w-4 h-4 text-amber-600" />
-                <span className="text-xs font-medium text-amber-800">共享税号库</span>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-medium text-amber-800">共享税号库</span>
+                </div>
+                {selectedSharedCompanies.length > 0 && (
+                  <span className="text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                    已选择 {selectedSharedCompanies.length} 家公司
+                  </span>
+                )}
               </div>
               <div className="relative">
                 <button
@@ -2022,8 +2105,10 @@ function TaxModal({
                   onClick={() => setShowSharedTaxDropdown(!showSharedTaxDropdown)}
                   className="w-full flex items-center justify-between px-3 py-2 text-xs border border-amber-300 rounded-lg bg-amber-50 hover:bg-amber-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
-                  <span className={selectedSharedCompany ? 'text-gray-900' : 'text-gray-500'}>
-                    {selectedSharedCompany || '请选择共享税号公司...'}
+                  <span className={selectedSharedCompanies.length > 0 ? 'text-gray-900' : 'text-gray-500'}>
+                    {selectedSharedCompanies.length > 0 
+                      ? selectedSharedCompanies.map(c => c.companyShortName || c.companyName).join(', ')
+                      : '请选择共享税号公司（可多选）...'}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-amber-600 transition-transform ${showSharedTaxDropdown ? 'rotate-180' : ''}`} />
                 </button>
@@ -2040,6 +2125,23 @@ function TaxModal({
                         onClick={(e) => e.stopPropagation()}
                       />
                     </div>
+                    {/* 全选操作栏 */}
+                    {filteredGroupedSharedTaxList.length > 0 && (
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSharedCompanies.length === filteredGroupedSharedTaxList.length && filteredGroupedSharedTaxList.length > 0}
+                            onChange={toggleSelectAll}
+                            className="w-3.5 h-3.5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                          />
+                          <span className="text-xs text-gray-600">全选</span>
+                        </label>
+                        <span className="text-[10px] text-gray-400">
+                          {selectedSharedCompanies.length}/{filteredGroupedSharedTaxList.length}
+                        </span>
+                      </div>
+                    )}
                     <div className="max-h-48 overflow-y-auto">
                       {loadingSharedTax ? (
                         <div className="text-xs text-gray-400 text-center py-4">加载中...</div>
@@ -2049,14 +2151,23 @@ function TaxModal({
                         filteredGroupedSharedTaxList.map(company => (
                           <div
                             key={company.companyKey}
-                            onClick={() => handleSelectSharedCompany(company)}
-                            className="flex items-center justify-between p-3 hover:bg-amber-50 cursor-pointer border-b border-gray-50 last:border-b-0"
+                            onClick={() => toggleSelectSharedCompany(company)}
+                            className={`flex items-center gap-3 p-3 cursor-pointer border-b border-gray-50 last:border-b-0 transition-colors ${
+                              isCompanySelected(company) ? 'bg-amber-50' : 'hover:bg-gray-50'
+                            }`}
                           >
+                            <input
+                              type="checkbox"
+                              checked={isCompanySelected(company)}
+                              onChange={() => toggleSelectSharedCompany(company)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                            />
                             <div className="flex-1 min-w-0">
                               <div className="text-xs font-medium text-gray-900 truncate">
                                 {company.companyShortName || company.companyName}
                               </div>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 {company.vatNumber && (
                                   <div className="flex items-center gap-1">
                                     <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-100 text-blue-700">VAT</span>
@@ -2080,8 +2191,31 @@ function TaxModal({
                   </div>
                 )}
               </div>
+              {/* 已选公司列表预览 */}
+              {selectedSharedCompanies.length > 0 && (
+                <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="text-[10px] text-amber-700 mb-1.5 font-medium">已选择的公司：</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedSharedCompanies.map(company => (
+                      <div 
+                        key={company.companyKey}
+                        className="flex items-center gap-1 px-2 py-1 bg-white rounded border border-amber-200 text-[10px]"
+                      >
+                        <span className="text-gray-700">{company.companyShortName || company.companyName}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectSharedCompany(company)}
+                          className="text-gray-400 hover:text-red-500 ml-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="text-[10px] text-amber-600 mt-2">
-                💡 选择公司后，将自动填充该公司的所有税号信息
+                💡 可选择多个公司，保存时将批量添加所有选中公司的税号
               </div>
             </div>
           )}

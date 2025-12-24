@@ -177,6 +177,21 @@ export default function CreateBillModal({
   // 爬虫追踪状态
   const [isScrapingContainer, setIsScrapingContainer] = useState(false)
   const [scraperError, setScraperError] = useState<string | null>(null)
+  
+  // 模板导入相关状态
+  const [templateFile, setTemplateFile] = useState<File | null>(null)
+  const [templateImporting, setTemplateImporting] = useState(false)
+  const [templatePreview, setTemplatePreview] = useState<{
+    previewId: string
+    totalRows: number
+    validRows: number
+    errorRows: number
+    warningRows: number
+    errors?: Array<{ row: number; errors?: string[]; error?: string }>
+    warnings?: Array<{ row: number; warnings: string[] }>
+  } | null>(null)
+  const [templateError, setTemplateError] = useState<string | null>(null)
+  const [templateSuccess, setTemplateSuccess] = useState<string | null>(null)
 
   // 加载集装箱代码列表（仅海运时）
   useEffect(() => {
@@ -827,6 +842,98 @@ export default function CreateBillModal({
       setScraperError(error instanceof Error ? error.message : '查询失败')
     } finally {
       setIsScrapingContainer(false)
+    }
+  }
+
+  // 处理模板上传
+  const handleTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setTemplateFile(file)
+    setTemplateImporting(true)
+    setTemplateError(null)
+    setTemplateSuccess(null)
+    setTemplatePreview(null)
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const response = await fetch(`${apiUrl}/api/data-import/preview/orders`, {
+        method: 'POST',
+        body: formData,
+      })
+      
+      const result = await response.json()
+      
+      if (result.errCode === 200 && result.data) {
+        setTemplatePreview({
+          previewId: result.data.previewId,
+          totalRows: result.data.totalRows,
+          validRows: result.data.validRows,
+          errorRows: result.data.errorRows,
+          warningRows: result.data.warningRows,
+          errors: result.data.errors,
+          warnings: result.data.warnings,
+        })
+      } else {
+        setTemplateError(result.msg || '解析文件失败')
+      }
+    } catch (error) {
+      console.error('模板上传失败:', error)
+      setTemplateError(error instanceof Error ? error.message : '上传失败')
+    } finally {
+      setTemplateImporting(false)
+      // 重置input，允许重复上传同一文件
+      e.target.value = ''
+    }
+  }
+  
+  // 确认导入模板数据
+  const handleConfirmTemplateImport = async () => {
+    if (!templatePreview?.previewId) return
+    
+    setTemplateImporting(true)
+    setTemplateError(null)
+    setTemplateSuccess(null)
+    
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const response = await fetch(`${apiUrl}/api/data-import/confirm/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          previewId: templatePreview.previewId,
+          skipErrors: false,
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.errCode === 200 && result.data) {
+        const { successCount, errorCount } = result.data
+        setTemplateSuccess(`成功导入 ${successCount} 条提单记录${errorCount > 0 ? `，${errorCount} 条失败` : ''}`)
+        setTemplatePreview(null)
+        setTemplateFile(null)
+        
+        // 触发刷新回调
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess()
+          }, 1500)
+        }
+      } else {
+        setTemplateError(result.msg || '导入失败')
+      }
+    } catch (error) {
+      console.error('确认导入失败:', error)
+      setTemplateError(error instanceof Error ? error.message : '导入失败')
+    } finally {
+      setTemplateImporting(false)
     }
   }
 
@@ -2121,6 +2228,152 @@ export default function CreateBillModal({
                   
                   <p className="mt-3 text-[10px] text-gray-400">
                     提示：如果识别结果不准确，可在下一步手动修改
+                  </p>
+                </div>
+              )}
+
+              {/* 批量导入提单 - 选择运输方式后显示 */}
+              {selectedTransport && (
+                <div className="mt-6 p-4 border-2 border-dashed border-blue-200 rounded-lg bg-blue-50/50">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    批量导入提单（Excel模板导入）
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-3">
+                    下载模板 → 填写数据 → 上传导入，支持批量创建多个提单
+                  </p>
+                  
+                  {/* 操作按钮 */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* 下载模板按钮 */}
+                    <a
+                      href={`${import.meta.env.VITE_API_URL || ''}/api/data-import/templates/orders`}
+                      download
+                      className="px-3 py-2 bg-white border border-blue-300 text-blue-600 rounded hover:bg-blue-50 cursor-pointer text-xs flex items-center gap-1.5 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>下载导入模板</span>
+                    </a>
+                    
+                    {/* 上传模板按钮 */}
+                    <label className={`px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer text-xs flex items-center gap-1.5 transition-colors ${templateImporting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>上传已填模板</span>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleTemplateUpload}
+                        className="hidden"
+                        disabled={templateImporting}
+                      />
+                    </label>
+                    
+                    {/* 上传状态 */}
+                    {templateImporting && (
+                      <span className="text-xs text-blue-600 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        正在解析文件...
+                      </span>
+                    )}
+                    
+                    {templateFile && !templateImporting && (
+                      <span className="text-xs text-gray-600 flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        {templateFile.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 预览结果 */}
+                  {templatePreview && (
+                    <div className="mt-4 p-3 bg-white border border-blue-200 rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-blue-700 flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          文件解析成功
+                        </span>
+                        <button
+                          onClick={() => {
+                            setTemplatePreview(null)
+                            setTemplateFile(null)
+                          }}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 text-xs mb-3">
+                        <div className="bg-blue-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-blue-700">{templatePreview.totalRows}</div>
+                          <div className="text-gray-500">总记录数</div>
+                        </div>
+                        <div className="bg-green-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-green-700">{templatePreview.validRows}</div>
+                          <div className="text-gray-500">有效记录</div>
+                        </div>
+                        <div className="bg-yellow-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-yellow-700">{templatePreview.warningRows}</div>
+                          <div className="text-gray-500">警告记录</div>
+                        </div>
+                        <div className="bg-red-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-red-700">{templatePreview.errorRows}</div>
+                          <div className="text-gray-500">错误记录</div>
+                        </div>
+                      </div>
+                      
+                      {/* 错误信息提示 */}
+                      {templatePreview.errors && templatePreview.errors.length > 0 && (
+                        <div className="mb-3 p-2 bg-red-50 rounded text-xs text-red-700">
+                          <div className="font-medium mb-1">错误详情（前5条）:</div>
+                          {templatePreview.errors.slice(0, 5).map((err: any, idx: number) => (
+                            <div key={idx}>第{err.row}行: {err.errors?.join(', ') || err.error}</div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* 确认导入按钮 */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleConfirmTemplateImport}
+                          disabled={templateImporting || templatePreview.errorRows > 0}
+                          className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                            templatePreview.errorRows > 0
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-green-600 text-white hover:bg-green-700'
+                          }`}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          确认导入 {templatePreview.validRows} 条记录
+                        </button>
+                        {templatePreview.errorRows > 0 && (
+                          <span className="text-xs text-red-500">请先修正模板中的错误</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 导入错误 */}
+                  {templateError && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+                      <span className="text-xs text-red-700 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {templateError}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 导入成功 */}
+                  {templateSuccess && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+                      <span className="text-xs text-green-700 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        {templateSuccess}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <p className="mt-3 text-[10px] text-gray-400">
+                    提示：模板包含所有可导入字段，红色标记为必填项。导入后可在提单列表查看。
                   </p>
                 </div>
               )}

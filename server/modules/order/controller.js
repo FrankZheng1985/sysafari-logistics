@@ -258,7 +258,7 @@ async function generateNextBillNumber() {
   const now = new Date()
   const year = String(now.getFullYear()).slice(-2)
   
-  // 先检查是否需要同步序列号
+  // 先检查是否需要同步序列号（防止序列号表落后于实际数据）
   const maxSeqResult = await db.prepare(
     "SELECT MAX(order_seq) as max_seq FROM bills_of_lading"
   ).get()
@@ -277,17 +277,12 @@ async function generateNextBillNumber() {
     console.log(`🔄 序列号已同步: ${currentSeq} -> ${maxSeqInDb}`)
   }
   
-  // 获取并递增序列号
+  // 原子操作：递增并返回新序号（防止并发导致重复）
   const row = await db.prepare(
-    "SELECT current_seq FROM order_sequences WHERE business_type = 'BILL'"
+    "UPDATE order_sequences SET current_seq = current_seq + 1, updated_at = NOW() WHERE business_type = 'BILL' RETURNING current_seq"
   ).get()
   
-  const nextSeq = (row?.current_seq || 0) + 1
-  
-  // 更新序列号
-  await db.prepare(
-    "UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = 'BILL'"
-  ).run(nextSeq)
+  const nextSeq = row?.current_seq || 1
   
   // 格式化序列号: BP + 年份后两位 + 5位序号（补零）
   const seqStr = String(nextSeq).padStart(5, '0')
