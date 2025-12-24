@@ -37,6 +37,23 @@ const API_BASE_URL = getApiBaseUrl()
 const TEST_MODE_KEY = 'bp_logistics_test_mode'
 
 /**
+ * 获取存储的认证 Token
+ * 从 localStorage 中获取登录时保存的 token
+ */
+function getStoredToken(): string | null {
+  if (typeof window === 'undefined') return null
+  const testData = localStorage.getItem(TEST_MODE_KEY)
+  if (!testData) return null
+  
+  try {
+    const data = JSON.parse(testData)
+    return data.token || null
+  } catch {
+    return null
+  }
+}
+
+/**
  * 检查是否为测试模式
  * 只有当用户以测试账号（user_type='test'）登录时才返回 true
  */
@@ -70,10 +87,18 @@ async function request<T>(
 ): Promise<T> {
   const url = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint
 
+  // 获取存储的 token 用于认证
+  const token = getStoredToken()
+  const authHeaders: Record<string, string> = {}
+  if (token) {
+    authHeaders['Authorization'] = `Bearer ${token}`
+  }
+
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
       ...options.headers,
     },
   })
