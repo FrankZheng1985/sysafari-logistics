@@ -1245,7 +1245,7 @@ export default function CreateInvoice() {
                     }
                   }}
                   disabled={!formData.customerId}
-                  placeholder={formData.customerId ? "搜索提单号、集装箱号..." : "请先选择客户"}
+                  placeholder={formData.customerId ? "搜索提单号、集装箱号（支持空格分隔多个批量搜索）" : "请先选择客户"}
                   className={`w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                     !formData.customerId ? 'bg-gray-100 cursor-not-allowed' : ''
                   }`}
