@@ -327,9 +327,9 @@ export async function generateExcel(data) {
     }
   })
   
-  // 生成Buffer
-  const buffer = await workbook.xlsx.writeBuffer()
-  return buffer
+  // 生成Buffer - 确保返回 Node.js Buffer（COS SDK 需要）
+  const arrayBuffer = await workbook.xlsx.writeBuffer()
+  return Buffer.from(arrayBuffer)
 }
 
 /**
