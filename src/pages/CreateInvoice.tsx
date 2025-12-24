@@ -2221,6 +2221,20 @@ export default function CreateInvoice() {
                 </div>
               </div>
             </div>
+
+            {/* 保存按钮 */}
+            <button
+              onClick={handleSubmit}
+              disabled={loading || (formData.invoiceType === 'sales' ? !selectedBill : formData.items.length === 0)}
+              className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
+                formData.invoiceType === 'sales'
+                  ? 'bg-blue-600 text-white hover:bg-blue-700 border-2 border-blue-600'
+                  : 'bg-orange-600 text-white hover:bg-orange-700 border-2 border-orange-600'
+              }`}
+            >
+              <Save className="w-4 h-4" />
+              {loading ? '保存中...' : (isEditMode ? '更新发票' : '保存发票')}
+            </button>
           </div>
         </div>
       )}
