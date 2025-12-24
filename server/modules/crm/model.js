@@ -1593,6 +1593,9 @@ export async function updateQuotation(id, data) {
   const fields = []
   const values = []
   
+  // 日期字段列表（空字符串需要转为 null）
+  const dateFields = ['quoteDate', 'validUntil']
+  
   const fieldMap = {
     subject: 'subject',
     quoteDate: 'quote_date',
@@ -1610,7 +1613,12 @@ export async function updateQuotation(id, data) {
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
     if (data[jsField] !== undefined) {
       fields.push(`${dbField} = ?`)
-      values.push(data[jsField])
+      // 日期字段空字符串转为 null，PostgreSQL 不接受空字符串
+      let value = data[jsField]
+      if (dateFields.includes(jsField) && value === '') {
+        value = null
+      }
+      values.push(value)
     }
   })
   
