@@ -85,6 +85,7 @@ export default function InvoiceDetail() {
   const [loading, setLoading] = useState(true)
   const [showVoidConfirm, setShowVoidConfirm] = useState(false)
   const [voiding, setVoiding] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
 
   const tabs = [
     { label: '财务概览', path: '/finance' },
@@ -160,6 +161,103 @@ export default function InvoiceDetail() {
       alert('作废发票失败，请重试')
     } finally {
       setVoiding(false)
+    }
+  }
+
+  // 重新生成发票文件
+  const handleRegenerate = async () => {
+    if (!invoice) return
+    
+    setRegenerating(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/invoices/${id}/regenerate`, {
+        method: 'POST'
+      })
+      
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        alert('发票文件已重新生成')
+        // 重新加载发票数据获取新的URL
+        loadInvoice()
+      } else {
+        alert(data.msg || '重新生成失败')
+      }
+    } catch (error) {
+      console.error('重新生成发票文件失败:', error)
+      alert('重新生成失败，请重试')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  // 下载PDF（如果不存在则先重新生成）
+  const handleDownloadPDF = async () => {
+    if (!invoice) return
+    
+    if (invoice.pdfUrl) {
+      // 直接下载
+      window.open(`${API_BASE}/api/invoices/${id}/pdf`, '_blank')
+    } else {
+      // 先重新生成，再下载
+      if (confirm('PDF文件尚未生成，是否现在生成并下载？')) {
+        setRegenerating(true)
+        try {
+          const response = await fetch(`${API_BASE}/api/invoices/${id}/regenerate`, {
+            method: 'POST'
+          })
+          const data = await response.json()
+          
+          if (data.errCode === 200 && data.data?.pdfUrl) {
+            // 重新加载发票数据
+            await loadInvoice()
+            // 下载PDF
+            window.open(`${API_BASE}/api/invoices/${id}/pdf`, '_blank')
+          } else {
+            alert(data.msg || 'PDF生成失败，请稍后重试')
+          }
+        } catch (error) {
+          console.error('生成PDF失败:', error)
+          alert('PDF生成失败，请稍后重试')
+        } finally {
+          setRegenerating(false)
+        }
+      }
+    }
+  }
+
+  // 下载Excel（如果不存在则先重新生成）
+  const handleDownloadExcel = async () => {
+    if (!invoice) return
+    
+    if (invoice.excelUrl) {
+      // 直接下载
+      window.open(`${API_BASE}/api/invoices/${id}/excel`, '_blank')
+    } else {
+      // 先重新生成，再下载
+      if (confirm('Excel文件尚未生成，是否现在生成并下载？')) {
+        setRegenerating(true)
+        try {
+          const response = await fetch(`${API_BASE}/api/invoices/${id}/regenerate`, {
+            method: 'POST'
+          })
+          const data = await response.json()
+          
+          if (data.errCode === 200 && data.data?.excelUrl) {
+            // 重新加载发票数据
+            await loadInvoice()
+            // 下载Excel
+            window.open(`${API_BASE}/api/invoices/${id}/excel`, '_blank')
+          } else {
+            alert(data.msg || 'Excel生成失败，请稍后重试')
+          }
+        } catch (error) {
+          console.error('生成Excel失败:', error)
+          alert('Excel生成失败，请稍后重试')
+        } finally {
+          setRegenerating(false)
+        }
+      }
     }
   }
 
@@ -653,30 +751,30 @@ export default function InvoiceDetail() {
                 </button>
               )}
               <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                onClick={() => {
-                  if (invoice.pdfUrl) {
-                    window.open(`${API_BASE}${invoice.pdfUrl}`, '_blank')
-                  } else {
-                    alert('PDF文件未生成')
-                  }
-                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleDownloadPDF}
+                disabled={regenerating}
               >
                 <Download className="w-4 h-4 text-red-500" />
-                下载 PDF
+                {regenerating ? '生成中...' : '下载 PDF'}
+                {!invoice.pdfUrl && <span className="ml-auto text-xs text-amber-500">待生成</span>}
               </button>
               <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                onClick={() => {
-                  if (invoice.excelUrl) {
-                    window.open(`${API_BASE}${invoice.excelUrl}`, '_blank')
-                  } else {
-                    alert('Excel文件未生成')
-                  }
-                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleDownloadExcel}
+                disabled={regenerating}
               >
                 <Download className="w-4 h-4 text-green-500" />
-                下载 Excel
+                {regenerating ? '生成中...' : '下载 Excel'}
+                {!invoice.excelUrl && <span className="ml-auto text-xs text-amber-500">待生成</span>}
+              </button>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleRegenerate}
+                disabled={regenerating}
+              >
+                <RefreshCw className={`w-4 h-4 text-blue-500 ${regenerating ? 'animate-spin' : ''}`} />
+                {regenerating ? '重新生成中...' : '重新生成'}
               </button>
               {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
                 <>

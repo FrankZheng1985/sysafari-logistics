@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node --watch app.js",
     "start": "node app.js",
+    "postinstall": "npx puppeteer browsers install chrome",
     "init-production-db": "node scripts/init-production-db.js",
     "sync-to-demo": "node scripts/sync-to-demo.js",
     "add-production-users": "node scripts/add-production-users.js"
