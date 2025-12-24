@@ -32,13 +32,13 @@ router.get('/auth/pending-users', authenticate, controller.getPendingAuth0Users)
 router.post('/auth/bind-user', authenticate, controller.bindAuth0User)
 router.post('/auth/create-and-bind', authenticate, controller.createAndBindUser)
 
-// 修改当前用户密码（支持 POST 和 PUT）
-router.post('/auth/change-password', (req, res) => {
+// 修改当前用户密码（支持 POST 和 PUT）- 需要认证
+router.post('/auth/change-password', authenticate, (req, res) => {
   // 使用当前登录用户ID
   req.params.id = req.user?.id
   return controller.changePassword(req, res)
 })
-router.put('/auth/change-password', (req, res) => {
+router.put('/auth/change-password', authenticate, (req, res) => {
   // 使用当前登录用户ID
   req.params.id = req.user?.id
   return controller.changePassword(req, res)
