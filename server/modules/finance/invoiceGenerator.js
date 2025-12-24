@@ -550,13 +550,53 @@ export async function regenerateInvoiceFiles(invoiceId) {
 
   let items = []
   let invoiceData = null
+  let fees = [] // 存储原始费用记录，用于 Excel
 
   if (feeIds.length > 0) {
     // 有关联费用记录，使用费用数据
     invoiceData = await prepareInvoiceData(feeIds, invoice.customer_id)
     items = invoiceData.summarizedItems
-  } else {
-    // 没有关联费用记录，优先从 items 字段读取
+    fees = invoiceData.fees || []
+  } else if (invoice.bill_id) {
+    // fee_ids 为空但有 bill_id，直接从 fees 表获取费用
+    fees = await db.prepare(`
+      SELECT f.*, b.container_number, b.bill_number
+      FROM fees f
+      LEFT JOIN bills_of_lading b ON f.bill_id = b.id
+      WHERE f.bill_id = ?
+      ORDER BY f.fee_name
+    `).all(invoice.bill_id)
+    
+    if (fees.length > 0) {
+      // 按费用类型分组合并
+      const feeGroups = {}
+      fees.forEach(fee => {
+        const feeName = fee.fee_name || 'Other'
+        if (!feeGroups[feeName]) {
+          feeGroups[feeName] = {
+            description: feeName,
+            descriptionEn: fee.fee_name_en || null, // 保存英文名称
+            quantity: 0,
+            totalAmount: 0
+          }
+        }
+        feeGroups[feeName].quantity += 1
+        feeGroups[feeName].totalAmount += parseFloat(fee.amount) || 0
+      })
+      
+      items = Object.values(feeGroups).map(group => ({
+        description: group.description,
+        descriptionEn: group.descriptionEn, // 传递英文名称用于 PDF 翻译
+        quantity: group.quantity,
+        unitValue: group.totalAmount / group.quantity,
+        amount: group.totalAmount
+      }))
+    }
+  }
+  
+  // 如果还是没有费用数据，尝试其他方式
+  if (items.length === 0) {
+    // 尝试从 items 字段读取
     let parsedItems = []
     try {
       parsedItems = JSON.parse(invoice.items || '[]')
@@ -565,11 +605,10 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }
 
     if (parsedItems.length > 0) {
-      // 从 items 字段获取费用明细（包含实际金额）
-      // 按费用类型分组合并
+      // 从 items 字段获取费用明细
       const feeGroups = {}
       parsedItems.forEach(item => {
-        const feeName = item.description?.trim() || '费用'
+        const feeName = item.description?.trim() || item.fee_name?.trim() || '费用'
         const amount = parseFloat(item.amount) || 0
         if (!feeGroups[feeName]) {
           feeGroups[feeName] = {
@@ -588,36 +627,10 @@ export async function regenerateInvoiceFiles(invoiceId) {
         unitValue: group.totalAmount / group.quantity,
         amount: group.totalAmount
       }))
-    } else if (invoice.description) {
-      // 后备方案：从 description 字段分割，金额平均分配
-      const descriptions = invoice.description.split(';').filter(s => s.trim())
-      const total = parseFloat(invoice.total_amount) || 0
-      const amountPerItem = total / descriptions.length
-
-      // 按费用类型分组合并
-      const feeGroups = {}
-      descriptions.forEach(desc => {
-        const feeName = desc.trim()
-        if (!feeGroups[feeName]) {
-          feeGroups[feeName] = {
-            description: feeName,
-            quantity: 0,
-            totalAmount: 0
-          }
-        }
-        feeGroups[feeName].quantity += 1
-        feeGroups[feeName].totalAmount += amountPerItem
-      })
-
-      items = Object.values(feeGroups).map(group => ({
-        description: group.description,
-        quantity: group.quantity,
-        unitValue: group.totalAmount / group.quantity,
-        amount: group.totalAmount
-      }))
     } else {
+      // 最后的后备方案
       items = [{
-        description: '费用',
+        description: '服务费',
         quantity: 1,
         unitValue: parseFloat(invoice.total_amount) || 0,
         amount: parseFloat(invoice.total_amount) || 0
@@ -649,6 +662,16 @@ export async function regenerateInvoiceFiles(invoiceId) {
     if (paymentDays <= 0) paymentDays = null
   }
 
+  // 获取客户地址（如果发票中没有，从 customers 表获取）
+  let customerAddress = invoice.customer_address || ''
+  if (!customerAddress && invoice.customer_id) {
+    const customer = await db.prepare('SELECT address, city, country_code FROM customers WHERE id = ?').get(invoice.customer_id)
+    if (customer) {
+      const addressParts = [customer.address, customer.city, customer.country_code].filter(Boolean)
+      customerAddress = addressParts.join(', ')
+    }
+  }
+
   // 生成PDF
   const pdfData = {
     invoiceNumber: invoice.invoice_number,
@@ -657,7 +680,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
     paymentDays: paymentDays,
     customer: {
       name: invoice.customer_name,
-      address: invoice.customer_address || ''
+      address: customerAddress
     },
     containerNumbers,
     items,
@@ -687,22 +710,22 @@ export async function regenerateInvoiceFiles(invoiceId) {
 
   // Excel 数据也按费用类型合并
   let excelItems = []
-  if (invoiceData && invoiceData.fees) {
-    // 按费用类型分组合并
+  if (fees && fees.length > 0) {
+    // 有原始费用记录，按费用类型分组合并
     const feeGroups = {}
-    invoiceData.fees.forEach(f => {
+    fees.forEach(f => {
       const feeName = f.fee_name || 'Other'
       if (!feeGroups[feeName]) {
-        feeGroups[feeName] = 0
+        feeGroups[feeName] = {
+          containerNo: f.container_number || excelContainerNo,
+          billNumber: f.bill_number || blNumber,
+          feeName: feeName,
+          amount: 0
+        }
       }
-      feeGroups[feeName] += parseFloat(f.amount) || 0
+      feeGroups[feeName].amount += parseFloat(f.amount) || 0
     })
-    excelItems = Object.entries(feeGroups).map(([feeName, amount]) => ({
-      containerNo: excelContainerNo,
-      billNumber: blNumber,
-      feeName: feeName,
-      amount: amount
-    }))
+    excelItems = Object.values(feeGroups)
   } else {
     // 使用已合并的 items
     excelItems = items.map(item => ({
