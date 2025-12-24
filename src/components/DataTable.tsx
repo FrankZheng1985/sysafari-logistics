@@ -211,6 +211,21 @@ export default function DataTable<T extends Record<string, any>>({
     setCurrentPage(1)
   }, [searchValue])
 
+  // 同步外部传入的当前页（服务器端分页时）
+  useEffect(() => {
+    const externalPage = pagination?.current || pagination?.page
+    if (externalPage && externalPage !== currentPage) {
+      setCurrentPage(externalPage)
+    }
+  }, [pagination?.current, pagination?.page])
+
+  // 同步外部传入的 pageSize
+  useEffect(() => {
+    if (pagination?.pageSize && pagination.pageSize !== pageSize) {
+      setPageSize(pagination.pageSize)
+    }
+  }, [pagination?.pageSize])
+
   // Filter visible columns (必须在所有早期返回之前)
   const visibleCols = useMemo(() => {
     if (!visibleColumns || visibleColumns.length === 0) {
@@ -554,8 +569,14 @@ export default function DataTable<T extends Record<string, any>>({
     )
   }
 
-  const displayData = pagination ? paginatedData : sortedData
-  const total = sortedData.length
+  // 判断是否为服务器端分页：当 pagination.total 大于本地数据量时，说明是服务器端分页
+  const isServerSidePagination = pagination && pagination.total !== undefined && pagination.total > sortedData.length
+  
+  // 服务器端分页时直接使用传入的数据，客户端分页时使用切片后的数据
+  const displayData = isServerSidePagination ? sortedData : (pagination ? paginatedData : sortedData)
+  
+  // 服务器端分页时使用传入的 total，客户端分页时使用本地数据长度
+  const total = isServerSidePagination ? (pagination?.total || 0) : sortedData.length
   const totalPages = pagination ? Math.ceil(total / pageSize) : 1
 
   if (total === 0) {
@@ -719,15 +740,44 @@ export default function DataTable<T extends Record<string, any>>({
       {pagination && (
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-white">
           <div className="flex items-center gap-2">
-            {pagination.showTotal && (
+            {pagination.showTotal ? (
               <span className="text-sm text-gray-700">
                 {pagination.showTotal(total)}
               </span>
+            ) : (
+              <span className="text-sm text-gray-500">共 {total} 条</span>
             )}
           </div>
           <div className="flex items-center gap-2">
+            {pagination.showSizeChanger && (
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  const newPageSize = Number(e.target.value)
+                  setPageSize(newPageSize)
+                  setCurrentPage(1)
+                  // 服务器端分页时通知父组件
+                  if (isServerSidePagination && pagination.onChange) {
+                    pagination.onChange(1, newPageSize)
+                  }
+                }}
+                className="px-2 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                title="每页显示条数"
+              >
+                <option value={20}>20 条/页</option>
+                <option value={50}>50 条/页</option>
+                <option value={100}>100 条/页</option>
+              </select>
+            )}
             <button
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              onClick={() => {
+                const newPage = Math.max(1, currentPage - 1)
+                setCurrentPage(newPage)
+                // 服务器端分页时通知父组件
+                if (isServerSidePagination && pagination.onChange) {
+                  pagination.onChange(newPage, pageSize)
+                }
+              }}
               disabled={currentPage === 1}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -737,29 +787,19 @@ export default function DataTable<T extends Record<string, any>>({
               第 {currentPage} / {totalPages} 页
             </span>
             <button
-              onClick={() =>
-                setCurrentPage(Math.min(totalPages, currentPage + 1))
-              }
-              disabled={currentPage === totalPages}
+              onClick={() => {
+                const newPage = Math.min(totalPages, currentPage + 1)
+                setCurrentPage(newPage)
+                // 服务器端分页时通知父组件
+                if (isServerSidePagination && pagination.onChange) {
+                  pagination.onChange(newPage, pageSize)
+                }
+              }}
+              disabled={currentPage === totalPages || totalPages === 0}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               下一页
             </button>
-                {pagination.showSizeChanger && (
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value))
-                      setCurrentPage(1)
-                    }}
-                    className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                    title="每页显示条数"
-                  >
-                    <option value={20}>20 条/页</option>
-                    <option value={50}>50 条/页</option>
-                    <option value={100}>100 条/页</option>
-                  </select>
-                )}
           </div>
         </div>
       )}

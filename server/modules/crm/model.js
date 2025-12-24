@@ -964,16 +964,15 @@ export async function createCustomerTaxNumber(customerId, data) {
     `).run(customerId, data.taxType)
   }
   
-  const id = crypto.randomUUID()
-  
-  await db.prepare(`
+  // 使用 PostgreSQL SERIAL 自动生成 id，通过 RETURNING 获取生成的 id
+  const result = await db.prepare(`
     INSERT INTO customer_tax_numbers (
-      id, customer_id, tax_type, tax_number, country, 
+      customer_id, tax_type, tax_number, country, 
       company_short_name, company_name, company_address, is_verified, verified_at, verification_data,
       is_default
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
     customerId,
     data.taxType,
     data.taxNumber,
@@ -987,7 +986,7 @@ export async function createCustomerTaxNumber(customerId, data) {
     data.isDefault ? 1 : 0
   )
   
-  return { id }
+  return { id: result?.id }
 }
 
 /**

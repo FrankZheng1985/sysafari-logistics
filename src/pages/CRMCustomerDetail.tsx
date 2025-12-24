@@ -83,7 +83,7 @@ export default function CRMCustomerDetail() {
       loadOrders()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, page, searchValue])
+  }, [id, page, pageSize, searchValue])
 
   const loadCustomer = async () => {
     setLoading(true)
@@ -649,7 +649,13 @@ export default function CRMCustomerDetail() {
                 current: page,
                 pageSize,
                 total,
-                onChange: (p) => setPage(p)
+                showSizeChanger: true,
+                onChange: (p, newPageSize) => {
+                  setPage(p)
+                  if (newPageSize && newPageSize !== pageSize) {
+                    setPageSize(newPageSize)
+                  }
+                }
               }}
               emptyText="该客户暂无关联订单"
             />
