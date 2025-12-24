@@ -1113,6 +1113,18 @@ export default function CRMCustomerDetail() {
                               {account.status === 'active' ? '正常' : account.status === 'suspended' ? '已停用' : '未激活'}
                             </span>
                             <button
+                              onClick={() => {
+                                // 打开客户门户系统并携带用户名
+                                const portalUrl = `http://localhost:5174/login?username=${encodeURIComponent(account.username)}`
+                                window.open(portalUrl, '_blank')
+                              }}
+                              className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 flex items-center gap-1"
+                              title="登录到客户门户"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              登录
+                            </button>
+                            <button
                               onClick={() => handleToggleAccountStatus(account)}
                               className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600"
                               title={account.status === 'active' ? '停用账户' : '启用账户'}
