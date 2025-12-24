@@ -1,4 +1,4 @@
-import { Shield, Check, X, Edit2, Save, Loader2, Info, Plus } from 'lucide-react'
+import { Shield, Check, X, Edit2, Save, Loader2, Info, Plus, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
@@ -8,6 +8,7 @@ import {
   getPermissionList,
   getRolePermissions,
   updateRolePermissions,
+  deleteRole,
   type Role,
   type Permission
 } from '../utils/api'
@@ -22,10 +23,28 @@ const permissionGroups = [
     description: '提单的查看、创建、编辑、删除等权限'
   },
   { 
+    key: 'document', 
+    label: '单证管理', 
+    icon: '📄',
+    description: '单证创建、编辑、导入导出、数据补充、匹配记录等权限'
+  },
+  { 
+    key: 'inspection', 
+    label: '查验管理', 
+    icon: '🔍',
+    description: '查验流程的查看、操作、放行等权限'
+  },
+  { 
+    key: 'cmr', 
+    label: 'TMS运输', 
+    icon: '🚚',
+    description: 'TMS运输跟踪、CMR派送、运费管理、条件管理、最后里程等权限'
+  },
+  { 
     key: 'crm', 
     label: 'CRM客户管理', 
     icon: '👥',
-    description: '客户、商机、报价等CRM功能权限'
+    description: '客户、商机、报价、合同、客户反馈等CRM功能权限'
   },
   { 
     key: 'supplier', 
@@ -40,40 +59,22 @@ const permissionGroups = [
     description: '发票、收付款、费用、财务报表等权限'
   },
   { 
-    key: 'document', 
-    label: '单证管理', 
-    icon: '📄',
-    description: '单证创建、编辑、导入导出等权限'
-  },
-  { 
     key: 'product', 
     label: '产品定价', 
     icon: '🏷️',
     description: '产品和定价管理权限'
   },
   { 
-    key: 'inspection', 
-    label: '查验管理', 
-    icon: '🔍',
-    description: '查验流程的查看和操作权限'
-  },
-  { 
-    key: 'cmr', 
-    label: 'TMS运输', 
-    icon: '🚚',
-    description: 'TMS运输跟踪、CMR派送的查看和操作权限'
-  },
-  { 
     key: 'tool', 
     label: '工具箱', 
     icon: '🔧',
-    description: '报价、关税计算等工具的访问权限'
+    description: '报价、关税计算、共享税号库等工具的访问权限'
   },
   { 
     key: 'system', 
     label: '系统管理', 
     icon: '⚙️',
-    description: '用户管理、基础数据、系统设置、审批管理等权限'
+    description: '系统概览、用户管理、基础数据、安全设置、API对接、审批管理等权限'
   },
 ]
 
@@ -101,6 +102,7 @@ export default function RolePermissions() {
   const [editingRole, setEditingRole] = useState<string | null>(null)
   const [tempPermissions, setTempPermissions] = useState<string[]>([])
   const [roleModalVisible, setRoleModalVisible] = useState(false)
+  const [deletingRole, setDeletingRole] = useState<string | null>(null)
 
   const loadData = async () => {
     setLoading(true)
@@ -259,6 +261,36 @@ export default function RolePermissions() {
     loadData()
   }
 
+  // 删除角色
+  const handleDeleteRole = async (roleCode: string, roleName: string) => {
+    // 系统角色不能删除
+    const systemRoles = ['admin', 'manager', 'operator', 'viewer']
+    if (systemRoles.includes(roleCode)) {
+      alert('系统内置角色不能删除')
+      return
+    }
+
+    if (!confirm(`确定要删除角色「${roleName}」吗？\n\n注意：删除后无法恢复，该角色下的所有权限配置也将被清除。`)) {
+      return
+    }
+
+    setDeletingRole(roleCode)
+    try {
+      const response = await deleteRole(roleCode)
+      if (response.errCode === 200) {
+        // 刷新数据
+        loadData()
+      } else {
+        alert(response.msg || '删除失败')
+      }
+    } catch (error: any) {
+      console.error('删除角色失败:', error)
+      alert(error.message || '删除失败')
+    } finally {
+      setDeletingRole(null)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col">
       <PageHeader
@@ -350,27 +382,48 @@ export default function RolePermissions() {
                   <th className="text-left px-3 py-1.5 text-xs font-semibold text-gray-700 w-44 sticky left-0 bg-gray-50/50 z-10">
                     权限 / 角色
                   </th>
-                  {roles.map(role => (
-                    <th key={role.roleCode} className="text-center px-3 py-1.5 min-w-24">
-                      {editingRole && role.roleCode !== 'admin' ? (
-                        <button
-                          onClick={() => handleEdit(role.roleCode)}
-                          className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all ${
-                            editingRole === role.roleCode 
-                              ? 'ring-2 ring-primary-500 ring-offset-1 ' + getRoleColor(role.roleCode)
-                              : getRoleColor(role.roleCode) + ' opacity-60 hover:opacity-100'
-                          }`}
-                          title={editingRole === role.roleCode ? '正在编辑' : '点击切换编辑此角色'}
-                        >
-                          {role.roleName}
-                        </button>
-                      ) : (
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${getRoleColor(role.roleCode)}`}>
-                          {role.roleName}
-                        </span>
-                      )}
-                    </th>
-                  ))}
+                  {roles.map(role => {
+                    const isSystemRole = ['admin', 'manager', 'operator', 'viewer'].includes(role.roleCode)
+                    const canDelete = hasPermission('system:user') && !isSystemRole
+                    
+                    return (
+                      <th key={role.roleCode} className="text-center px-3 py-1.5 min-w-24">
+                        <div className="flex flex-col items-center gap-1">
+                          {editingRole && role.roleCode !== 'admin' ? (
+                            <button
+                              onClick={() => handleEdit(role.roleCode)}
+                              className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all ${
+                                editingRole === role.roleCode 
+                                  ? 'ring-2 ring-primary-500 ring-offset-1 ' + getRoleColor(role.roleCode)
+                                  : getRoleColor(role.roleCode) + ' opacity-60 hover:opacity-100'
+                              }`}
+                              title={editingRole === role.roleCode ? '正在编辑' : '点击切换编辑此角色'}
+                            >
+                              {role.roleName}
+                            </button>
+                          ) : (
+                            <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${getRoleColor(role.roleCode)}`}>
+                              {role.roleName}
+                            </span>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteRole(role.roleCode, role.roleName)}
+                              disabled={deletingRole === role.roleCode}
+                              className="p-0.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                              title="删除角色"
+                            >
+                              {deletingRole === role.roleCode ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </th>
+                    )
+                  })}
                 </tr>
               </thead>
 

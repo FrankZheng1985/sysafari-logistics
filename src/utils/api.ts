@@ -412,6 +412,19 @@ export async function updateRolePermissions(
 }
 
 /**
+ * 删除角色
+ * @param roleCode 角色代码
+ * @returns 删除结果
+ * 
+ * 接口地址: DELETE /api/roles/:roleCode
+ */
+export async function deleteRole(roleCode: string): Promise<ApiResponse<void>> {
+  return request<ApiResponse<void>>(`/api/roles/${roleCode}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
  * 获取操作员列表（用于分配订单）
  * @returns 操作员列表
  * 
