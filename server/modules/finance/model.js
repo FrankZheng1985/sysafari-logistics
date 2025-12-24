@@ -1322,6 +1322,36 @@ async function generatePaymentNumber(type) {
 // ==================== 数据转换函数 ====================
 
 export function convertInvoiceToCamelCase(row) {
+  // 解析 items JSON 字符串
+  let parsedItems = []
+  if (row.items) {
+    try {
+      parsedItems = JSON.parse(row.items)
+    } catch {
+      parsedItems = []
+    }
+  }
+  
+  // 解析 fee_ids JSON 字符串
+  let parsedFeeIds = []
+  if (row.fee_ids) {
+    try {
+      parsedFeeIds = JSON.parse(row.fee_ids)
+    } catch {
+      parsedFeeIds = []
+    }
+  }
+  
+  // 解析 container_numbers JSON 字符串
+  let parsedContainerNumbers = []
+  if (row.container_numbers) {
+    try {
+      parsedContainerNumbers = JSON.parse(row.container_numbers)
+    } catch {
+      parsedContainerNumbers = []
+    }
+  }
+  
   return {
     id: row.id,
     invoiceNumber: row.invoice_number,
@@ -1331,7 +1361,7 @@ export function convertInvoiceToCamelCase(row) {
     customerId: row.customer_id,
     customerName: row.customer_name,
     customerAddress: row.customer_address,
-    containerNumbers: row.container_numbers,
+    containerNumbers: parsedContainerNumbers,
     billId: row.bill_id,
     billNumber: row.bill_number,
     subtotal: row.subtotal,
@@ -1340,8 +1370,8 @@ export function convertInvoiceToCamelCase(row) {
     paidAmount: row.paid_amount,
     currency: row.currency,
     exchangeRate: row.exchange_rate,
-    items: row.items,
-    feeIds: row.fee_ids,
+    items: parsedItems,
+    feeIds: parsedFeeIds,
     description: row.description,
     notes: row.notes,
     status: row.status,

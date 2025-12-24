@@ -11,6 +11,20 @@ import fs from 'fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
+// 获取中文字体的Base64编码（用于PDF渲染支持中文）
+function getChineseFontBase64() {
+  try {
+    const fontPath = join(__dirname, '../../assets/fonts/NotoSansSC-Regular.ttf')
+    if (fs.existsSync(fontPath)) {
+      const fontBuffer = fs.readFileSync(fontPath)
+      return fontBuffer.toString('base64')
+    }
+  } catch (error) {
+    console.error('读取中文字体失败:', error)
+  }
+  return null
+}
+
 // 公司信息配置
 export const COMPANY_INFO = {
   name: 'Xianfeng International Logistics',
@@ -148,6 +162,7 @@ export function generateInvoiceHTML(data) {
 
   const logoBase64 = getLogoBase64()
   const stampBase64 = getStampBase64()
+  const chineseFontBase64 = getChineseFontBase64()
   const formattedDate = formatInvoiceDate(invoiceDate)
   const formattedDueDate = formatInvoiceDate(dueDate)
   
@@ -156,19 +171,34 @@ export function generateInvoiceHTML(data) {
     ? `Exchange Rate: 1 ${currency} = ${exchangeRate.toFixed(4)} CNY`
     : ''
 
+  // 字体样式：如果有中文字体则使用，否则使用系统字体
+  const fontFaceCSS = chineseFontBase64 ? `
+    @font-face {
+      font-family: 'NotoSansSC';
+      src: url(data:font/truetype;base64,${chineseFontBase64}) format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }
+  ` : ''
+  
+  const fontFamily = chineseFontBase64 
+    ? "'NotoSansSC', 'Microsoft YaHei', 'SimHei', Arial, sans-serif"
+    : "'Microsoft YaHei', 'SimHei', Arial, sans-serif"
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <style>
+    ${fontFaceCSS}
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
     body {
-      font-family: Arial, sans-serif;
+      font-family: ${fontFamily};
       font-size: 12px;
       color: #333;
       padding: 15px 40px 40px 40px;
@@ -232,12 +262,10 @@ export function generateInvoiceHTML(data) {
     .bill-to-name {
       font-size: 14px;
       font-weight: bold;
-      font-family: 'Courier New', monospace;
       margin-bottom: 5px;
     }
     .bill-to-address {
       font-size: 11px;
-      font-family: 'Courier New', monospace;
       color: ${COLORS.secondary};
       margin-bottom: 10px;
     }
