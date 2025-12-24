@@ -45,16 +45,21 @@ import quotationCenterRoutes from './modules/quotation-center/routes.js'
 // 新增：从 index.js 合并的路由
 import clearanceRoutes from './modules/clearance/routes.js'
 import taricRoutes from './modules/taric/routes.js'
+import tariffRatesRoutes from './modules/tariff-rates/routes.js'
 import cargoRoutes from './modules/cargo/routes.js'
 import ocrRoutes from './modules/ocr/routes.js'
 import trackingRoutes from './modules/tracking/routes.js'
 import commissionRoutes from './modules/commission/routes.js'
 import contractTemplateRoutes from './modules/contract-template/routes.js'
 import dataImportRoutes from './modules/data-import/routes.js'
+import helpVideoRoutes from './modules/help-video/routes.js'
 import { initSocketServer } from './modules/chat/socket.js'
 
 // 供应商模块初始化
 import { initSupplierTable } from './modules/supplier/model.js'
+
+// 帮助视频模块初始化
+import { initHelpVideoTable } from './modules/help-video/model.js'
 
 // 定时任务
 import { startScheduler as startAlertScheduler } from './jobs/alertScheduler.js'
@@ -176,6 +181,11 @@ app.use('/api', clearanceRoutes)
 // TARIC海关编码模块
 app.use('/api/taric', taricRoutes)
 
+// 税率管理模块（前端使用的接口）
+console.log('🔧 [DEBUG] 注册 tariff-rates 路由, tariffRatesRoutes:', typeof tariffRatesRoutes)
+app.use('/api/tariff-rates', tariffRatesRoutes)
+console.log('✅ [DEBUG] tariff-rates 路由注册成功')
+
 // 货物/商品管理模块
 app.use('/api/cargo', cargoRoutes)
 
@@ -193,6 +203,9 @@ app.use('/api/contract-template', contractTemplateRoutes)
 
 // 数据导入模块
 app.use('/api/data-import', dataImportRoutes)
+
+// 帮助视频模块
+app.use('/api/help-videos', helpVideoRoutes)
 
 // ==================== 错误处理 ====================
 
@@ -225,6 +238,13 @@ async function initializeDatabase() {
   
   // 初始化供应商表
   initSupplierTable()
+  
+  // 初始化帮助视频表
+  try {
+    await initHelpVideoTable()
+  } catch (err) {
+    console.error('初始化帮助视频表失败:', err.message)
+  }
   
   // 启动预警定时任务（每24小时检查一次）
   startAlertScheduler(24)
