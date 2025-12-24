@@ -1716,10 +1716,58 @@ export async function runMigrations() {
         completed_at TIMESTAMP,
         error_message TEXT,
         created_by TEXT DEFAULT 'system',
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        cos_key TEXT,
+        cos_url TEXT,
+        is_cloud_synced INTEGER DEFAULT 0,
+        file_name TEXT,
+        description TEXT,
+        restored_at TIMESTAMP,
+        restore_count INTEGER DEFAULT 0
       )
     `)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_backup_status ON backup_records(backup_status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_backup_cloud_synced ON backup_records(is_cloud_synced)`)
+    
+    // 为现有表添加 COS 相关字段（兼容已有数据库）
+    const backupCosColumns = [
+      { name: 'cos_key', type: 'TEXT' },
+      { name: 'cos_url', type: 'TEXT' },
+      { name: 'is_cloud_synced', type: 'INTEGER DEFAULT 0' },
+      { name: 'file_name', type: 'TEXT' },
+      { name: 'description', type: 'TEXT' },
+      { name: 'restored_at', type: 'TIMESTAMP' },
+      { name: 'restore_count', type: 'INTEGER DEFAULT 0' }
+    ]
+    for (const col of backupCosColumns) {
+      try {
+        await client.query(`ALTER TABLE backup_records ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`)
+      } catch (e) {
+        // 忽略已存在的列
+      }
+    }
+    
+    // 创建恢复记录表
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS restore_records (
+        id SERIAL PRIMARY KEY,
+        backup_id INTEGER NOT NULL,
+        backup_name TEXT,
+        restore_type TEXT DEFAULT 'full',
+        restore_status TEXT DEFAULT 'running',
+        started_at TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP,
+        error_message TEXT,
+        tables_restored TEXT,
+        rows_affected INTEGER DEFAULT 0,
+        restored_by TEXT,
+        restored_by_name TEXT,
+        ip_address TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_restore_backup_id ON restore_records(backup_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_restore_status ON restore_records(restore_status)`)
     console.log('  ✅ 安全管理模块表就绪')
 
     // ==================== 罚款规则模块 ====================
@@ -1920,6 +1968,35 @@ export async function runMigrations() {
     // 为 supervisor_id 创建索引
     await client.query(`CREATE INDEX IF NOT EXISTS idx_users_supervisor_id ON users(supervisor_id)`)
     console.log('  ✅ users 表字段就绪')
+
+    // ==================== Roles 表字段补充 ====================
+    const roleColumns = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'roles' AND column_name IN ('role_level', 'can_manage_team', 'can_approve')
+    `)
+    const existingRoleCols = roleColumns.rows.map(r => r.column_name)
+    
+    if (!existingRoleCols.includes('role_level')) {
+      await client.query(`ALTER TABLE roles ADD COLUMN role_level INTEGER DEFAULT 99`)
+      console.log('  ✅ roles.role_level 字段已添加')
+    }
+    if (!existingRoleCols.includes('can_manage_team')) {
+      await client.query(`ALTER TABLE roles ADD COLUMN can_manage_team INTEGER DEFAULT 0`)
+      console.log('  ✅ roles.can_manage_team 字段已添加')
+    }
+    if (!existingRoleCols.includes('can_approve')) {
+      await client.query(`ALTER TABLE roles ADD COLUMN can_approve INTEGER DEFAULT 0`)
+      console.log('  ✅ roles.can_approve 字段已添加')
+    }
+    
+    // 更新各角色的权限设置
+    await client.query(`UPDATE roles SET role_level = 1, can_manage_team = 1, can_approve = 1 WHERE role_code = 'admin'`)
+    await client.query(`UPDATE roles SET role_level = 2, can_manage_team = 1, can_approve = 1 WHERE role_code = 'boss'`)
+    await client.query(`UPDATE roles SET role_level = 3, can_manage_team = 1, can_approve = 1 WHERE role_code = 'manager'`)
+    await client.query(`UPDATE roles SET role_level = 3, can_manage_team = 1, can_approve = 1 WHERE role_code = 'finance_director'`)
+    await client.query(`UPDATE roles SET role_level = 4, can_manage_team = 0, can_approve = 0 WHERE role_code IN ('doc_clerk', 'doc_officer', 'finance_assistant', 'operator')`)
+    await client.query(`UPDATE roles SET role_level = 5, can_manage_team = 0, can_approve = 0 WHERE role_code = 'viewer'`)
+    console.log('  ✅ roles 表字段就绪')
 
     console.log('✅ 数据库迁移完成！')
     return true
