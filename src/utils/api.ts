@@ -5354,3 +5354,244 @@ export async function getSupportedCarriers(): Promise<ApiResponse<SupportedCarri
   }
 }
 
+// ==================== 客户门户账户管理 API ====================
+
+/**
+ * 客户门户账户类型
+ */
+export interface CustomerAccount {
+  id: number
+  customerId: string
+  customerName?: string
+  username: string
+  email: string | null
+  status: 'active' | 'inactive' | 'suspended'
+  lastLoginAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 获取客户门户账户列表
+ */
+export async function getCustomerAccounts(params?: {
+  customerId?: string
+  status?: string
+  search?: string
+  page?: number
+  pageSize?: number
+}): Promise<ApiResponse<{ list: CustomerAccount[]; total: number }>> {
+  try {
+    const searchParams = new URLSearchParams()
+    if (params?.customerId) searchParams.append('customerId', params.customerId)
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.search) searchParams.append('search', params.search)
+    if (params?.page) searchParams.append('page', String(params.page))
+    if (params?.pageSize) searchParams.append('pageSize', String(params.pageSize))
+    
+    const queryString = searchParams.toString()
+    const url = `${API_BASE_URL}/api/customer-accounts${queryString ? '?' + queryString : ''}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取客户账户列表失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 创建客户门户账户
+ */
+export async function createCustomerAccount(data: {
+  customerId: string
+  username: string
+  password: string
+  email?: string
+}): Promise<ApiResponse<CustomerAccount>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customer-accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.errMessage || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('创建客户账户失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 更新客户门户账户
+ */
+export async function updateCustomerAccount(id: number, data: {
+  email?: string
+  status?: 'active' | 'inactive' | 'suspended'
+}): Promise<ApiResponse<CustomerAccount>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customer-accounts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('更新客户账户失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 重置客户账户密码
+ */
+export async function resetCustomerAccountPassword(id: number, newPassword: string): Promise<ApiResponse<null>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customer-accounts/${id}/reset-password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword })
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('重置账户密码失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 删除客户门户账户
+ */
+export async function deleteCustomerAccount(id: number): Promise<ApiResponse<null>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customer-accounts/${id}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('删除客户账户失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 客户 API 密钥类型
+ */
+export interface CustomerApiKey {
+  id: number
+  customerId: string
+  keyName: string
+  apiKey: string
+  permissions: string[]
+  ipWhitelist: string[] | null
+  rateLimit: number
+  isActive: boolean
+  lastUsedAt: string | null
+  expiresAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 获取客户的 API 密钥列表
+ */
+export async function getCustomerApiKeys(customerId: string): Promise<ApiResponse<CustomerApiKey[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/api-keys`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取API密钥列表失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 创建 API 密钥
+ */
+export async function createCustomerApiKey(customerId: string, data: {
+  keyName: string
+  permissions?: string[]
+  ipWhitelist?: string[]
+  rateLimit?: number
+  expiresAt?: string
+}): Promise<ApiResponse<{ apiKey: string; apiSecret: string }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/api-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('创建API密钥失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 更新 API 密钥
+ */
+export async function updateCustomerApiKey(id: number, data: {
+  keyName?: string
+  permissions?: string[]
+  ipWhitelist?: string[]
+  rateLimit?: number
+  isActive?: boolean
+  expiresAt?: string
+}): Promise<ApiResponse<CustomerApiKey>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/api-keys/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('更新API密钥失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 删除 API 密钥
+ */
+export async function deleteCustomerApiKey(id: number): Promise<ApiResponse<null>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/api-keys/${id}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('删除API密钥失败:', error)
+    throw error
+  }
+}
+

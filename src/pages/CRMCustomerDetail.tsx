@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Building, Building2, User, Phone, Mail, MapPin,
   Package, TrendingUp, Ship, Plus, Trash2, Star,
-  Edit, ExternalLink, RefreshCw, FileText, X, CheckCircle, ChevronDown, Copy
+  Edit, ExternalLink, RefreshCw, FileText, X, CheckCircle, ChevronDown, Copy,
+  Key, Eye, EyeOff, UserCheck, Shield
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -12,7 +13,9 @@ import {
   getCustomerById, getCustomerOrders, getCustomerOrderStats, 
   getCustomerAddresses, createCustomerAddress, updateCustomerAddress, deleteCustomerAddress,
   getCustomerTaxNumbers, createCustomerTaxNumber, updateCustomerTaxNumber, deleteCustomerTaxNumber,
-  type Customer, type CustomerAddress, type CustomerTaxNumber 
+  getCustomerAccounts, createCustomerAccount, updateCustomerAccount, deleteCustomerAccount, resetCustomerAccountPassword,
+  getCustomerApiKeys, createCustomerApiKey, updateCustomerApiKey, deleteCustomerApiKey,
+  type Customer, type CustomerAddress, type CustomerTaxNumber, type CustomerAccount, type CustomerApiKey
 } from '../utils/api'
 
 interface CustomerOrder {
@@ -65,7 +68,30 @@ export default function CRMCustomerDetail() {
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null)
   const [editingTax, setEditingTax] = useState<CustomerTaxNumber | null>(null)
   const [editingCompanyTaxes, setEditingCompanyTaxes] = useState<CustomerTaxNumber[] | null>(null)
-  const [activeInfoTab, setActiveInfoTab] = useState<'orders' | 'addresses' | 'tax'>('orders')
+  const [activeInfoTab, setActiveInfoTab] = useState<'orders' | 'addresses' | 'tax' | 'portal'>('orders')
+  
+  // 门户账户相关状态
+  const [portalAccounts, setPortalAccounts] = useState<CustomerAccount[]>([])
+  const [apiKeys, setApiKeys] = useState<CustomerApiKey[]>([])
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [showAccountModal, setShowAccountModal] = useState(false)
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [editingAccount, setEditingAccount] = useState<CustomerAccount | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showApiSecret, setShowApiSecret] = useState(false)
+  const [newApiSecret, setNewApiSecret] = useState<string | null>(null)
+  const [accountForm, setAccountForm] = useState({
+    username: '',
+    password: '',
+    email: ''
+  })
+  const [apiKeyForm, setApiKeyForm] = useState({
+    keyName: '',
+    permissions: ['order:read'],
+    rateLimit: 100
+  })
 
    
   useEffect(() => {
