@@ -59,6 +59,9 @@ router.put('/users/:id/status', controller.updateUserStatus)
 // 修改用户密码（管理员操作）
 router.put('/users/:id/password', controller.changePassword)
 
+// 重置用户密码（管理员操作，不需要旧密码）
+router.post('/users/:id/reset-password', controller.resetPassword)
+
 // 删除用户
 router.delete('/users/:id', controller.deleteUser)
 

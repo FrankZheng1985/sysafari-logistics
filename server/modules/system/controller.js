@@ -236,6 +236,38 @@ export async function changePassword(req, res) {
   }
 }
 
+/**
+ * 重置用户密码（管理员操作，不需要旧密码）
+ */
+export async function resetPassword(req, res) {
+  try {
+    const { id } = req.params
+    const { newPassword } = req.body
+    
+    const user = await model.getUserById(id)
+    if (!user) {
+      return notFound(res, '用户不存在')
+    }
+    
+    // 使用传入的密码或默认密码
+    const password = newPassword || 'password123'
+    
+    // 验证新密码强度（如果是自定义密码）
+    if (newPassword) {
+      const passwordValidation = validatePassword(newPassword)
+      if (!passwordValidation.valid) {
+        return badRequest(res, passwordValidation.errors.join('; '))
+      }
+    }
+    
+    await model.changePassword(id, password)
+    return success(res, { newPassword: password }, '密码重置成功')
+  } catch (error) {
+    console.error('重置密码失败:', error)
+    return serverError(res, '重置密码失败')
+  }
+}
+
 // ==================== 认证相关 ====================
 
 /**
