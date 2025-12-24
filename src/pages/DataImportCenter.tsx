@@ -7,12 +7,17 @@ import { useState, useCallback } from 'react'
 import { 
   Upload, FileSpreadsheet, Download, CheckCircle, XCircle, 
   AlertTriangle, Loader2, RefreshCw, FileText, Users, 
-  Truck, Package, Database, TrendingUp, TrendingDown
+  Truck, Package, TrendingUp, TrendingDown, User
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
+
+// 获取认证 Token
+const getAuthToken = () => {
+  return localStorage.getItem('token') || ''
+}
 
 // 导入类型配置
 const IMPORT_TYPES = [
@@ -84,7 +89,11 @@ export default function DataImportCenter() {
   // 下载模板
   const downloadTemplate = async (type: string) => {
     try {
-      const response = await fetch(`${API_BASE}/api/data-import/templates/${type}`)
+      const response = await fetch(`${API_BASE}/api/data-import/templates/${type}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`
+        }
+      })
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -119,6 +128,9 @@ export default function DataImportCenter() {
 
       const response = await fetch(`${API_BASE}/api/data-import/preview/${selectedType}`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`
+        },
         body: formData
       })
 
@@ -169,7 +181,10 @@ export default function DataImportCenter() {
       
       const response = await fetch(`${API_BASE}/api/data-import/confirm/${selectedType}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`
+        },
         body: JSON.stringify({
           previewId: previewData.previewId,
           skipErrors
@@ -511,6 +526,14 @@ export default function DataImportCenter() {
           <h2 className="text-xl font-bold text-gray-900 mb-2">
             {importResult.errorCount === 0 ? '导入成功！' : '部分导入成功'}
           </h2>
+          
+          {/* 导入者信息 */}
+          {importResult.importedBy && (
+            <div className="flex items-center justify-center gap-2 text-gray-500 mb-4">
+              <User className="w-4 h-4" />
+              <span className="text-sm">导入者: {importResult.importedBy}</span>
+            </div>
+          )}
           
           <div className="flex items-center justify-center gap-8 my-6">
             <div>

@@ -120,7 +120,7 @@ export async function runMigrations() {
     // 检查并添加数据导入需要的字段
     const importRecordsCols = await client.query(`
       SELECT column_name FROM information_schema.columns 
-      WHERE table_name = 'import_records' AND column_name IN ('import_type', 'total_rows', 'success_rows', 'error_rows')
+      WHERE table_name = 'import_records' AND column_name IN ('import_type', 'total_rows', 'success_rows', 'error_rows', 'created_by_name')
     `)
     const existingImportCols = importRecordsCols.rows.map(r => r.column_name)
     
@@ -140,6 +140,23 @@ export async function runMigrations() {
       await client.query(`ALTER TABLE import_records ADD COLUMN error_rows INTEGER DEFAULT 0`)
       console.log('  ✅ import_records.error_rows 字段已添加')
     }
+    // 导入者追踪字段（2025-12-24新增）
+    if (!existingImportCols.includes('created_by_name')) {
+      await client.query(`ALTER TABLE import_records ADD COLUMN created_by_name TEXT`)
+      console.log('  ✅ import_records.created_by_name 字段已添加')
+    }
+    // 确保 created_by 字段存在（原有字段可能是 TEXT，兼容旧数据）
+    const createdByCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'import_records' AND column_name = 'created_by'
+    `)
+    if (createdByCheck.rows.length === 0) {
+      await client.query(`ALTER TABLE import_records ADD COLUMN created_by INTEGER`)
+      console.log('  ✅ import_records.created_by 字段已添加')
+    }
+    
+    // 创建导入者索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_import_records_created_by ON import_records(created_by)`)
     
     console.log('  ✅ import_records 表就绪')
 
@@ -1141,7 +1158,11 @@ export async function runMigrations() {
       { name: 'description', type: 'TEXT', default: null },
       { name: 'void_by', type: 'TEXT', default: null },
       { name: 'remark', type: 'TEXT', default: null },
-      { name: 'operator', type: 'TEXT', default: null }
+      { name: 'operator', type: 'TEXT', default: null },
+      // 导入者追踪字段（2025-12-24新增）
+      { name: 'imported_by', type: 'INTEGER', default: null },
+      { name: 'imported_by_name', type: 'TEXT', default: null },
+      { name: 'import_time', type: 'TIMESTAMP', default: null }
     ]
     
     for (const col of billColumns) {
@@ -2006,6 +2027,21 @@ export async function runMigrations() {
     await client.query(`UPDATE roles SET role_level = 4, can_manage_team = 0, can_approve = 0 WHERE role_code IN ('doc_clerk', 'doc_officer', 'finance_assistant', 'operator')`)
     await client.query(`UPDATE roles SET role_level = 5, can_manage_team = 0, can_approve = 0 WHERE role_code = 'viewer'`)
     console.log('  ✅ roles 表字段就绪')
+
+    // ==================== 重置 SERIAL 序列 ====================
+    // 修复 customer_tax_numbers 表的序列值（避免主键冲突）
+    try {
+      const seqResult = await client.query(`
+        SELECT setval('customer_tax_numbers_id_seq', 
+          COALESCE((SELECT MAX(id) FROM customer_tax_numbers), 0) + 1, 
+          false
+        )
+      `)
+      console.log('  ✅ customer_tax_numbers 序列已重置')
+    } catch (seqErr) {
+      // 序列可能不存在（表还未创建），忽略错误
+      console.log('  ⏭️ customer_tax_numbers 序列重置跳过:', seqErr.message)
+    }
 
     console.log('✅ 数据库迁移完成！')
     return true

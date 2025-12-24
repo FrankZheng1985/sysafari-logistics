@@ -160,13 +160,27 @@ export async function confirmImport(req, res) {
     const parser = PARSERS[type]
     const db = getDatabase()
     
-    // 执行导入
-    const importResult = await parser.importData(previewData.data, { skipErrors })
+    // 获取当前登录用户信息
+    const importerInfo = {
+      userId: req.user?.id || null,
+      userName: req.user?.name || req.user?.username || '未知用户'
+    }
     
-    // 记录导入历史（id 为 SERIAL 自增，使用 RETURNING 获取）
+    console.log(`[数据导入] 用户 ${importerInfo.userName}(ID:${importerInfo.userId}) 正在导入 ${TYPE_NAMES[type]}`)
+    
+    // 执行导入（传入导入者信息）
+    const importResult = await parser.importData(previewData.data, { 
+      skipErrors,
+      importer: importerInfo  // 传入导入者信息
+    })
+    
+    // 记录导入历史（包含导入者信息）
     const insertResult = await db.prepare(`
-      INSERT INTO import_records (import_type, file_name, total_rows, success_rows, error_rows, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, NOW())
+      INSERT INTO import_records (
+        import_type, file_name, total_rows, success_rows, error_rows, 
+        status, created_by, created_by_name, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
       RETURNING id
     `).get(
       type,
@@ -174,9 +188,13 @@ export async function confirmImport(req, res) {
       previewData.data.length,
       importResult.successCount,
       importResult.errorCount,
-      importResult.errorCount === 0 ? 'completed' : 'partial'
+      importResult.errorCount === 0 ? 'completed' : 'partial',
+      importerInfo.userId,
+      importerInfo.userName
     )
     const historyId = insertResult?.id
+    
+    console.log(`[数据导入] 导入完成，记录ID: ${historyId}，成功: ${importResult.successCount}，失败: ${importResult.errorCount}`)
     
     // 清理缓存
     delete global.importPreviewCache[previewId]
@@ -186,7 +204,8 @@ export async function confirmImport(req, res) {
       totalRows: previewData.data.length,
       successCount: importResult.successCount,
       errorCount: importResult.errorCount,
-      errors: importResult.errors.slice(0, 50)
+      errors: importResult.errors.slice(0, 50),
+      importedBy: importerInfo.userName  // 返回导入者信息
     })
     
   } catch (err) {

@@ -6,8 +6,12 @@
 import express from 'express'
 import multer from 'multer'
 import * as controller from './controller.js'
+import { authenticate } from '../../middleware/auth.js'
 
 const router = express.Router()
+
+// 所有导入相关路由都需要认证
+router.use(authenticate)
 
 // 配置文件上传
 const storage = multer.memoryStorage()
