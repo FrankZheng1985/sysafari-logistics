@@ -77,11 +77,6 @@ export default function FinanceInvoices() {
     setFilterStatus(status)
   }, [searchParams])
   
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [modalVisible, setModalVisible] = useState(false) // modalVisible reserved for edit functionality
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null) // editingInvoice reserved for edit functionality
-
   const tabs = [
     { label: '财务概览', path: '/finance' },
     { label: '发票管理', path: '/finance/invoices' },
@@ -103,11 +98,13 @@ export default function FinanceInvoices() {
   const fetchInvoices = async () => {
     try {
       setLoading(true)
+      // 默认排除已收款和已取消的发票，这些显示在历史记录页面
+      const defaultStatus = 'draft,pending,partial,overdue'
       const params = new URLSearchParams({
         page: page.toString(),
         pageSize: pageSize.toString(),
         ...(filterType && { type: filterType }),
-        ...(filterStatus && { status: filterStatus }),
+        status: filterStatus || defaultStatus, // 未选择状态时排除已收款/已取消
         ...(searchValue && { search: searchValue }),
       })
       
@@ -267,9 +264,7 @@ export default function FinanceInvoices() {
         { text: '草稿', value: 'draft' },
         { text: '待付款', value: 'pending' },
         { text: '部分付款', value: 'partial' },
-        { text: '已付款', value: 'paid' },
         { text: '已逾期', value: 'overdue' },
-        { text: '已取消', value: 'cancelled' },
       ],
       onFilter: (value, record) => record.status === value,
       render: (_value, record) => {
@@ -343,10 +338,7 @@ export default function FinanceInvoices() {
             </button>
           )}
           <button
-            onClick={() => {
-              setEditingInvoice(record)
-              setModalVisible(true)
-            }}
+            onClick={() => navigate(`/finance/invoices/${record.id}/edit`)}
             className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
             title="编辑"
             disabled={record.status === 'paid'}
@@ -453,18 +445,17 @@ export default function FinanceInvoices() {
             <option value="purchase">采购发票</option>
           </select>
 
-          {/* 状态筛选 */}
+          {/* 状态筛选 - 已收款的发票在历史记录页面查看 */}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             title="筛选发票状态"
           >
-            <option value="">全部状态</option>
+            <option value="">待处理</option>
             <option value="draft">草稿</option>
             <option value="pending">待付款</option>
             <option value="partial">部分付款</option>
-            <option value="paid">已付款</option>
             <option value="overdue">已逾期</option>
           </select>
         </div>
