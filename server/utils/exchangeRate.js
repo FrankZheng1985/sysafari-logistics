@@ -3,10 +3,23 @@
  * 获取中国银行外汇牌价
  */
 
-// 缓存汇率数据（每天更新一次）
+// 缓存汇率数据（每小时更新一次）
 let rateCache = {
-  date: null,
+  hourKey: null,  // 格式: YYYY-MM-DD-HH
   rates: {}
+}
+
+/**
+ * 获取当前小时的缓存键
+ * @returns {string} 格式: YYYY-MM-DD-HH
+ */
+function getCurrentHourKey() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hour = String(now.getHours()).padStart(2, '0')
+  return `${year}-${month}-${day}-${hour}`
 }
 
 /**
@@ -16,12 +29,18 @@ let rateCache = {
  * @returns {Promise<number>} 汇率
  */
 export async function getBOCExchangeRate(fromCurrency = 'EUR', toCurrency = 'CNY') {
-  const today = new Date().toISOString().split('T')[0]
+  const currentHourKey = getCurrentHourKey()
   
-  // 检查缓存是否有效（同一天）
-  if (rateCache.date === today && rateCache.rates[fromCurrency]) {
-    console.log(`[汇率] 使用缓存: ${fromCurrency} -> ${toCurrency} = ${rateCache.rates[fromCurrency]}`)
+  // 检查缓存是否有效（同一小时内）
+  if (rateCache.hourKey === currentHourKey && rateCache.rates[fromCurrency]) {
+    console.log(`[汇率] 使用缓存(${currentHourKey}): ${fromCurrency} -> ${toCurrency} = ${rateCache.rates[fromCurrency]}`)
     return rateCache.rates[fromCurrency]
+  }
+
+  // 小时变更，清空旧缓存
+  if (rateCache.hourKey !== currentHourKey) {
+    rateCache = { hourKey: currentHourKey, rates: {} }
+    console.log(`[汇率] 缓存已过期，开始获取新汇率 (${currentHourKey})`)
   }
 
   try {
@@ -38,10 +57,10 @@ export async function getBOCExchangeRate(fromCurrency = 'EUR', toCurrency = 'CNY
       const rate = data.rates[toCurrency]
       
       // 更新缓存
-      rateCache.date = today
+      rateCache.hourKey = currentHourKey
       rateCache.rates[fromCurrency] = rate
       
-      console.log(`[汇率] 获取成功: ${fromCurrency} -> ${toCurrency} = ${rate}`)
+      console.log(`[汇率] 获取成功(${currentHourKey}): ${fromCurrency} -> ${toCurrency} = ${rate}`)
       return rate
     }
 
@@ -88,7 +107,7 @@ export async function getMultipleRates(currencies = ['EUR', 'USD', 'GBP']) {
  * 清除汇率缓存
  */
 export function clearRateCache() {
-  rateCache = { date: null, rates: {} }
+  rateCache = { hourKey: null, rates: {} }
   console.log('[汇率] 缓存已清除')
 }
 
