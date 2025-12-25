@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   ArrowLeft, Save, FileText, Plus, Trash2, 
   Search, Calculator, AlertCircle, Package, Check, Upload,
-  Building2, FileCheck, Eye, X
+  Building2, FileCheck, Eye, X, RefreshCw
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
@@ -2117,13 +2117,40 @@ export default function CreateInvoice() {
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       汇率
                     </label>
-                    <div className="px-2 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded-md text-blue-700 h-8 flex items-center">
-                      {formData.currency === 'CNY' ? (
-                        <span className="text-gray-500">无需换算</span>
-                      ) : (
-                        <span>1 {formData.currency} = <span className="font-semibold">{Number(formData.exchangeRate || 1).toFixed(4)}</span> CNY</span>
-                      )}
-                    </div>
+                    {formData.currency === 'CNY' ? (
+                      <div className="px-2 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-md text-gray-500 h-8 flex items-center">
+                        无需换算
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-600 whitespace-nowrap">1 {formData.currency} =</span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          min="0"
+                          value={formData.exchangeRate || ''}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value)
+                            if (!isNaN(value) && value > 0) {
+                              setFormData(prev => ({ ...prev, exchangeRate: value }))
+                            } else if (e.target.value === '') {
+                              setFormData(prev => ({ ...prev, exchangeRate: 0 }))
+                            }
+                          }}
+                          className="w-20 px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-center h-7"
+                          title="手动输入汇率"
+                        />
+                        <span className="text-xs text-gray-600">CNY</span>
+                        <button
+                          type="button"
+                          onClick={() => fetchExchangeRate(formData.currency)}
+                          title="刷新获取最新汇率"
+                          className="p-1 hover:bg-blue-50 rounded text-blue-600 hover:text-blue-700 transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
