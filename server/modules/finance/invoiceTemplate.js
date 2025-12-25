@@ -167,6 +167,9 @@ export function generateInvoiceHTML(data) {
   // 使用 Google Fonts 加载中文字体（避免 Base64 嵌入导致 HTML 过大）
   const fontFamily = "'Noto Sans SC', 'Microsoft YaHei', 'SimHei', Arial, sans-serif"
 
+  // 检查是否有多个集装箱合并（任意项的 quantity > 1 表示是合并发票）
+  const isMultiContainerInvoice = items.some(item => item.quantity > 1)
+
   return `
 <!DOCTYPE html>
 <html>
@@ -181,9 +184,9 @@ export function generateInvoiceHTML(data) {
     }
     body {
       font-family: ${fontFamily};
-      font-size: 12px;
+      font-size: 11px;
       color: #333;
-      padding: 15px 40px 40px 40px;
+      padding: 8px 30px 15px 30px;
       max-width: 800px;
       margin: 0 auto;
     }
@@ -193,9 +196,9 @@ export function generateInvoiceHTML(data) {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 15px;
+      margin-bottom: 10px;
       border-bottom: 2px solid ${COLORS.primary};
-      padding-bottom: 10px;
+      padding-bottom: 8px;
     }
     .header-left {
       display: flex;
@@ -203,35 +206,35 @@ export function generateInvoiceHTML(data) {
       gap: 15px;
     }
     .logo {
-      width: 80px;
-      height: 80px;
+      width: 70px;
+      height: 70px;
     }
     .company-info {
       text-align: right;
     }
     .company-name {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: bold;
       color: ${COLORS.primary};
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
     .company-slogan {
-      font-size: 10px;
+      font-size: 9px;
       font-style: italic;
       color: ${COLORS.light};
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
     .company-detail {
-      font-size: 10px;
+      font-size: 9px;
       color: ${COLORS.light};
-      margin-bottom: 2px;
+      margin-bottom: 1px;
     }
     
     /* 客户和发票信息区域 */
     .info-section {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
     .bill-to {
       flex: 1;
@@ -263,15 +266,15 @@ export function generateInvoiceHTML(data) {
       text-align: right;
     }
     .invoice-title {
-      font-size: 36px;
+      font-size: 28px;
       font-weight: bold;
       color: ${COLORS.primary};
-      margin-bottom: 15px;
+      margin-bottom: 8px;
     }
     .invoice-detail {
-      font-size: 11px;
+      font-size: 10px;
       color: ${COLORS.secondary};
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
     .invoice-detail span {
       font-weight: normal;
@@ -281,20 +284,20 @@ export function generateInvoiceHTML(data) {
     .items-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
     .items-table th {
       background-color: ${COLORS.headerBg};
       border: 1px solid ${COLORS.border};
-      padding: 10px;
+      padding: 6px 8px;
       text-align: left;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: bold;
     }
     .items-table td {
       border: 1px solid ${COLORS.border};
-      padding: 10px;
-      font-size: 11px;
+      padding: 5px 8px;
+      font-size: 10px;
     }
     .items-table .amount {
       text-align: right;
@@ -308,11 +311,11 @@ export function generateInvoiceHTML(data) {
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
-      margin-bottom: 30px;
+      margin-bottom: 15px;
     }
     .stamp {
-      width: 100px;
-      height: 100px;
+      width: 80px;
+      height: 80px;
       opacity: 0.8;
     }
     .totals {
@@ -321,24 +324,26 @@ export function generateInvoiceHTML(data) {
     .subtotal-row, .total-row {
       display: flex;
       justify-content: flex-end;
-      gap: 50px;
-      margin-bottom: 5px;
+      gap: 40px;
+      margin-bottom: 3px;
+      font-size: 10px;
     }
     .total-row {
-      font-size: 16px;
+      font-size: 13px;
       font-weight: bold;
       border-top: 2px solid ${COLORS.secondary};
-      padding-top: 10px;
-      margin-top: 10px;
+      padding-top: 6px;
+      margin-top: 6px;
     }
     
     /* 付款提示 */
     .payment-notice {
-      border-left: 4px solid ${COLORS.warning};
-      padding-left: 15px;
-      margin-bottom: 30px;
+      border-left: 3px solid ${COLORS.warning};
+      padding-left: 10px;
+      margin-bottom: 15px;
       color: ${COLORS.warning};
       font-weight: bold;
+      font-size: 10px;
     }
     
     /* 底部信息 */
@@ -346,12 +351,12 @@ export function generateInvoiceHTML(data) {
       display: flex;
       justify-content: space-between;
       border-top: 1px solid ${COLORS.border};
-      padding-top: 20px;
-      font-size: 10px;
+      padding-top: 10px;
+      font-size: 9px;
       color: ${COLORS.secondary};
     }
     .footer-left, .footer-right {
-      line-height: 1.8;
+      line-height: 1.6;
     }
     .footer-label {
       font-weight: bold;
@@ -398,10 +403,10 @@ export function generateInvoiceHTML(data) {
   <table class="items-table">
     <thead>
       <tr>
-        <th style="width: 40%">Service Description</th>
-        <th style="width: 15%" class="quantity">Quantity</th>
-        <th style="width: 20%" class="amount">Unit Value</th>
-        <th style="width: 25%" class="amount">Amount ${currency}</th>
+        <th style="width: ${isMultiContainerInvoice ? '55%' : '40%'}">Service Description</th>
+        <th style="width: ${isMultiContainerInvoice ? '15%' : '15%'}" class="quantity">Quantity</th>
+        ${isMultiContainerInvoice ? '' : '<th style="width: 20%" class="amount">Unit Value</th>'}
+        <th style="width: ${isMultiContainerInvoice ? '30%' : '25%'}" class="amount">Amount ${currency}</th>
       </tr>
     </thead>
     <tbody>
@@ -409,7 +414,7 @@ export function generateInvoiceHTML(data) {
       <tr>
         <td>${getFeeNameEnglish(item.description, item.descriptionEn)}</td>
         <td class="quantity">${item.quantity}</td>
-        <td class="amount">${formatNumber(item.unitValue)}</td>
+        ${isMultiContainerInvoice ? '' : `<td class="amount">${formatNumber(item.unitValue)}</td>`}
         <td class="amount">${formatNumber(item.amount)}</td>
       </tr>
       `).join('')}

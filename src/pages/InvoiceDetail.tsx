@@ -82,6 +82,7 @@ export default function InvoiceDetail() {
   const navigate = useNavigate()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [billInfo, setBillInfo] = useState<BillInfo | null>(null)
+  const [relatedBills, setRelatedBills] = useState<BillInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [showVoidConfirm, setShowVoidConfirm] = useState(false)
   const [voiding, setVoiding] = useState(false)
@@ -110,8 +111,12 @@ export default function InvoiceDetail() {
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
         setInvoice(data.data)
-        // 如果有关联订单，获取订单详情
-        if (data.data.billId) {
+        // 如果有关联订单列表（多个提单），使用它
+        if (data.data.relatedBills && data.data.relatedBills.length > 0) {
+          setRelatedBills(data.data.relatedBills)
+          setBillInfo(data.data.relatedBills[0])  // 兼容旧逻辑
+        } else if (data.data.billId) {
+          // 兼容旧逻辑：如果没有 relatedBills，获取单个订单详情
           loadBillInfo(data.data.billId)
         }
       }
@@ -495,44 +500,59 @@ export default function InvoiceDetail() {
             )}
           </div>
 
-          {/* 关联订单信息 - 放在发票信息前面 */}
-          {billInfo && (
+          {/* 关联订单信息 - 支持显示多个集装箱 */}
+          {(relatedBills.length > 0 || billInfo) && (
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-medium text-gray-900 flex items-center gap-2">
                   <Ship className="w-4 h-4 text-gray-400" />
                   关联订单信息
+                  {relatedBills.length > 1 && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                      {relatedBills.length} 个集装箱
+                    </span>
+                  )}
                 </h2>
+              </div>
+              
+              {/* 显示所有关联订单 */}
+              <div className="space-y-4">
+                {(relatedBills.length > 0 ? relatedBills : (billInfo ? [billInfo] : [])).map((bill, index) => (
+                  <div key={bill.id || index} className={`${index > 0 ? 'pt-4 border-t border-gray-100' : ''}`}>
+                    {/* 订单头部信息 */}
+                    <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-primary-600" />
-                  {(billInfo.orderNumber || invoice.orderNumber) ? (
+                        {bill.orderNumber ? (
                     <button 
-                      onClick={() => navigate(`/bookings/bill/${invoice.billId}`)}
+                            onClick={() => navigate(`/bookings/bill/${bill.id}`)}
                       className="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
                     >
-                      {billInfo.orderNumber || invoice.orderNumber}
+                            {bill.orderNumber}
                     </button>
-                  ) : '-'}
+                        ) : (
+                          <span className="text-sm text-gray-500">-</span>
+                        )}
                   <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                    {billInfo.deliveryStatus || billInfo.status || '已完成'}
+                          {bill.deliveryStatus || bill.status || '已送达'}
                   </span>
                 </div>
               </div>
               
-              <div className="space-y-3 text-xs">
+                    <div className="space-y-2 text-xs">
                 {/* 基本信息 */}
                 <div className="flex items-center gap-4 flex-wrap">
                   <div className="flex gap-1">
-                    <span className="text-gray-500">{invoice.invoiceType === 'sales' ? '客户' : '供应商'}:</span>
-                    <span className="text-gray-900 font-medium">{billInfo.customerName || billInfo.consignee || invoice.customerName || '-'}</span>
+                          <span className="text-gray-500">{invoice?.invoiceType === 'sales' ? '客户' : '供应商'}:</span>
+                          <span className="text-gray-900 font-medium">{bill.customerName || bill.consignee || '-'}</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">提单号:</span>
-                    <span className="text-gray-900 font-medium font-mono">{billInfo.billNumber || invoice.billNumber || '-'}</span>
+                          <span className="text-gray-900 font-medium font-mono">{bill.billNumber || '-'}</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">集装箱号:</span>
-                    <span className="text-gray-900 font-medium font-mono">{billInfo.containerNumber || '-'}</span>
+                          <span className="text-gray-900 font-medium font-mono">{bill.containerNumber || '-'}</span>
                   </div>
                 </div>
                 
@@ -540,37 +560,42 @@ export default function InvoiceDetail() {
                 <div className="flex items-center gap-4 flex-wrap">
                   <div className="flex gap-1">
                     <span className="text-gray-500">件数:</span>
-                    <span className="text-gray-900">{billInfo.pieces || '-'} 件</span>
+                          <span className="text-gray-900">{bill.pieces || '-'} 件</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">毛重:</span>
-                    <span className="text-gray-900">{billInfo.weight || '-'} KG</span>
+                          <span className="text-gray-900">{bill.weight || '-'} KG</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">体积:</span>
-                    <span className="text-gray-900">{billInfo.volume || '-'} CBM</span>
+                          <span className="text-gray-900">{bill.volume || '-'} CBM</span>
                   </div>
                 </div>
                 
-                {/* 运输信息 */}
+                      {/* 运输信息 - 只在第一个订单显示，因为多个柜子通常是同一批次 */}
+                      {index === 0 && (
                 <div className="flex items-center gap-4 flex-wrap">
                   <div className="flex gap-1">
                     <span className="text-gray-500">ATA:</span>
-                    <span className="text-gray-900">{billInfo.ata || '-'}</span>
+                            <span className="text-gray-900">{bill.ata || '-'}</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">ETA:</span>
-                    <span className="text-gray-900">{billInfo.eta || '-'}</span>
+                            <span className="text-gray-900">{bill.eta || '-'}</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">起运港:</span>
-                    <span className="text-gray-900">{billInfo.portOfLoading || '-'}</span>
+                            <span className="text-gray-900">{bill.portOfLoading || '-'}</span>
                   </div>
                   <div className="flex gap-1">
                     <span className="text-gray-500">目的港:</span>
-                    <span className="text-gray-900">{billInfo.portOfDischarge || '-'}</span>
+                            <span className="text-gray-900">{bill.portOfDischarge || '-'}</span>
                   </div>
                 </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -606,7 +631,7 @@ export default function InvoiceDetail() {
               <div>
                 <div className="text-xs text-gray-500 mb-1">明细项数</div>
                 <div className="text-sm font-medium text-gray-900">
-                  {invoice.description ? invoice.description.split(';').filter(s => s.trim()).length : 0} 项
+                  {invoice.items?.length || (invoice.description ? invoice.description.split(';').filter(s => s.trim()).length : 0)} 项
                 </div>
               </div>
               <div>
@@ -672,15 +697,16 @@ export default function InvoiceDetail() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">序号</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-600 w-12">序号</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-600 w-32">集装箱号</th>
                       <th className="text-left py-2 px-3 font-medium text-gray-600">描述</th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-600">金额</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-600 w-28">金额</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(() => {
                       // 优先从 items 字段读取（包含金额），否则从 description 读取
-                      let parsedItems: Array<{description: string, amount: number}> = []
+                      let parsedItems: Array<{description: string, amount: number, containerNumber?: string}> = []
                       if (invoice.items && typeof invoice.items === 'string') {
                         try {
                           parsedItems = JSON.parse(invoice.items)
@@ -692,21 +718,42 @@ export default function InvoiceDetail() {
                       }
                       
                       if (parsedItems.length > 0) {
-                        return parsedItems.map((item, index) => (
+                        // 计算 items 的实际合计
+                        const itemsTotal = parsedItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+                        // 使用数据库中的 totalAmount（应该是正确的）
+                        const displayTotal = Number(invoice.totalAmount)
+                        
+                        return (
+                          <>
+                            {parsedItems.map((item, index) => (
                           <tr key={index} className="border-b border-gray-100">
                             <td className="py-2 px-3 text-gray-500">{index + 1}</td>
+                                <td className="py-2 px-3 text-gray-600 text-xs font-mono">
+                                  {item.containerNumber || '-'}
+                                </td>
                             <td className="py-2 px-3 text-gray-900">{item.description}</td>
                             <td className="py-2 px-3 text-right text-gray-900">
                               {formatCurrency(Number(item.amount), invoice.currency)}
                             </td>
                           </tr>
-                        ))
+                            ))}
+                            {/* 如果 items 合计与 totalAmount 不一致，显示警告 */}
+                            {Math.abs(itemsTotal - displayTotal) > 0.01 && (
+                              <tr className="bg-amber-50">
+                                <td colSpan={4} className="py-1 px-3 text-xs text-amber-600">
+                                  ⚠️ 明细合计 ({formatCurrency(itemsTotal, invoice.currency)}) 与发票总额不一致
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        )
                       } else if (invoice.description) {
                         // 后备方案：从 description 字符串分割，金额显示为 "-"
                         const items = invoice.description.split(';').filter(s => s.trim())
                         return items.map((item, index) => (
                           <tr key={index} className="border-b border-gray-100">
                             <td className="py-2 px-3 text-gray-500">{index + 1}</td>
+                            <td className="py-2 px-3 text-gray-500">-</td>
                             <td className="py-2 px-3 text-gray-900">{item.trim()}</td>
                             <td className="py-2 px-3 text-right text-gray-500">-</td>
                           </tr>
@@ -717,7 +764,7 @@ export default function InvoiceDetail() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-gray-300 bg-gray-50 font-medium">
-                      <td colSpan={2} className="py-2 px-3 text-right text-gray-700">合计</td>
+                      <td colSpan={3} className="py-2 px-3 text-right text-gray-700">合计</td>
                       <td className="py-2 px-3 text-right text-gray-900 font-semibold">
                         {formatCurrency(Number(invoice.totalAmount), invoice.currency)}
                       </td>

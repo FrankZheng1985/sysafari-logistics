@@ -91,9 +91,44 @@ export default function EditInvoice() {
       if (data.errCode === 200 && data.data) {
         const invoice = data.data
         
-        // 解析明细项目
+        // 解析明细项目 - 优先从 items 字段读取（包含正确的金额）
         let items: InvoiceItem[] = []
-        if (invoice.description) {
+        
+        // 尝试从 items 字段解析
+        let parsedItems: Array<{description: string, amount: number, quantity?: number, unitPrice?: number, taxRate?: number}> = []
+        if (invoice.items && typeof invoice.items === 'string') {
+          try {
+            parsedItems = JSON.parse(invoice.items)
+          } catch (e) {
+            parsedItems = []
+          }
+        } else if (Array.isArray(invoice.items)) {
+          parsedItems = invoice.items
+        }
+        
+        if (parsedItems.length > 0) {
+          // 使用 items 字段的数据（包含正确的金额）
+          items = parsedItems.map((item, index) => {
+            const amount = Number(item.amount) || 0
+            const quantity = item.quantity || 1
+            // 如果有 unitPrice 就用 unitPrice，否则用 amount/quantity 计算
+            const unitPrice = item.unitPrice || (quantity > 0 ? amount / quantity : amount)
+            return {
+              id: (index + 1).toString(),
+              description: item.description || '',
+              quantity: quantity,
+              unitPrice: unitPrice,
+              currency: invoice.currency || 'EUR',
+              amount: amount,
+              taxRate: item.taxRate || 0,
+              taxAmount: 0,
+              discountPercent: 0,
+              discountAmount: 0,
+              finalAmount: amount
+            }
+          })
+        } else if (invoice.description) {
+          // 后备方案：从 description 字段分割（旧数据兼容）
           const descriptions = invoice.description.split(';').filter((s: string) => s.trim())
           items = descriptions.map((desc: string, index: number) => ({
             id: (index + 1).toString(),
@@ -387,9 +422,9 @@ export default function EditInvoice() {
           <h2 className="text-sm font-medium text-gray-900">发票信息</h2>
         </div>
 
-        <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-wrap items-end gap-6">
           {/* 发票日期 */}
-          <div className="w-36">
+          <div className="w-44">
             <label className="block text-xs font-medium text-gray-700 mb-1">
               发票日期 <span className="text-red-500">*</span>
             </label>
@@ -404,15 +439,13 @@ export default function EditInvoice() {
             <label className="block text-xs font-medium text-gray-700 mb-1">
               账期天数
             </label>
-            <div className="flex items-center gap-1">
               <input
                 type="number"
                 value={paymentDays}
                 onChange={(e) => handlePaymentDaysChange(e.target.value ? parseInt(e.target.value) : '')}
                 min="0"
-                className="w-[100px] px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-            </div>
           </div>
 
           {/* 到期日期显示 */}
@@ -422,49 +455,34 @@ export default function EditInvoice() {
             </div>
           )}
 
-          {/* 客户/供应商 */}
-          <div className="w-48">
+          {/* 客户/供应商（只读） */}
+          <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               {formData.invoiceType === 'sales' ? '客户' : '供应商'}
             </label>
-            <input
-              type="text"
-              value={formData.customerName}
-              onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder={`输入${formData.invoiceType === 'sales' ? '客户' : '供应商'}名称`}
-            />
+            <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 min-w-[120px]">
+              {formData.customerName || '-'}
+          </div>
           </div>
 
-          {/* 货币 */}
-          <div className="w-[100px]">
-            <label className="block text-xs font-medium text-gray-700 mb-1">货币</label>
-            <select
-              value={formData.currency}
-              onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
-              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="EUR">EUR</option>
-              <option value="USD">USD</option>
-              <option value="CNY">CNY</option>
-              <option value="GBP">GBP</option>
-            </select>
-          </div>
-
-          {/* 状态 */}
-          <div className="w-32">
+          {/* 状态（只读） */}
+          <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">状态</label>
-            <select
-              value={formData.status}
-              onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="pending">待处理</option>
-              <option value="issued">已开具</option>
-              <option value="sent">已发送</option>
-              <option value="partial">部分付款</option>
-              <option value="paid">已付款</option>
-            </select>
+            <div className="flex items-center h-[38px]">
+              <span className={`inline-flex items-center px-2.5 py-1 rounded text-xs font-medium ${
+                formData.status === 'paid' ? 'bg-green-100 text-green-700' :
+                formData.status === 'partial' ? 'bg-blue-100 text-blue-700' :
+                formData.status === 'sent' ? 'bg-amber-100 text-amber-700' :
+                formData.status === 'issued' ? 'bg-purple-100 text-purple-700' :
+                'bg-gray-100 text-gray-600'
+              }`}>
+                {formData.status === 'paid' ? (formData.invoiceType === 'sales' ? '已收款' : '已付款') :
+                 formData.status === 'partial' ? (formData.invoiceType === 'sales' ? '部分收款' : '部分付款') :
+                 formData.status === 'sent' ? '已发送' :
+                 formData.status === 'issued' ? '已开具' :
+                 '待处理'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -503,21 +521,22 @@ export default function EditInvoice() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-600 text-xs">
-                  <th className="py-2 px-1.5 text-left w-8">#</th>
-                  <th className="py-2 px-1.5 text-left">费用类型</th>
-                  <th className="py-2 px-1.5 text-center w-16">数量</th>
-                  <th className="py-2 px-1.5 text-right w-24">单价</th>
-                  <th className="py-2 px-1.5 text-right w-24">金额</th>
-                  <th className="py-2 px-1.5 text-center w-16">税率%</th>
-                  <th className="py-2 px-1.5 text-right w-20">税额</th>
-                  <th className="py-2 px-1.5 text-center w-10">操作</th>
+                  <th className="py-2 px-2 text-left w-10">#</th>
+                  <th className="py-2 px-2 text-left min-w-[180px]">费用类型</th>
+                  <th className="py-2 px-2 text-center w-16">数量</th>
+                  <th className="py-2 px-2 text-right w-[120px]">单价</th>
+                  <th className="py-2 px-2 text-center w-[76px]">货币</th>
+                  <th className="py-2 px-2 text-right w-[110px]">金额</th>
+                  <th className="py-2 px-2 text-center w-[70px]">税率%</th>
+                  <th className="py-2 px-2 text-right w-24">税额</th>
+                  <th className="py-2 px-1 text-center w-10 whitespace-nowrap">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {formData.items.map((item, index) => (
                   <tr key={item.id} className="border-b border-gray-100">
-                    <td className="py-1.5 px-1.5 text-gray-500">{index + 1}</td>
-                    <td className="py-1.5 px-1.5">
+                    <td className="py-2 px-2 text-gray-500">{index + 1}</td>
+                    <td className="py-2 px-2">
                       <input
                         type="text"
                         value={item.description}
@@ -526,7 +545,7 @@ export default function EditInvoice() {
                         placeholder="费用描述"
                       />
                     </td>
-                    <td className="py-1.5 px-1.5">
+                    <td className="py-2 px-2">
                       <input
                         type="number"
                         value={item.quantity}
@@ -536,7 +555,7 @@ export default function EditInvoice() {
                         className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </td>
-                    <td className="py-1.5 px-1.5">
+                    <td className="py-2 px-2">
                       <input
                         type="number"
                         value={item.unitPrice}
@@ -546,10 +565,22 @@ export default function EditInvoice() {
                         className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </td>
-                    <td className="py-1.5 px-1.5 text-right text-gray-900 whitespace-nowrap">
+                    <td className="py-2 px-2">
+                      <select
+                        value={item.currency || formData.currency}
+                        onChange={(e) => updateItem(item.id, 'currency', e.target.value)}
+                        className="w-full px-1 py-1.5 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      >
+                        <option value="EUR">EUR</option>
+                        <option value="USD">USD</option>
+                        <option value="CNY">CNY</option>
+                        <option value="GBP">GBP</option>
+                      </select>
+                    </td>
+                    <td className="py-2 px-2 text-right text-gray-900 whitespace-nowrap">
                       {formatCurrency(item.amount)}
                     </td>
-                    <td className="py-1.5 px-1.5">
+                    <td className="py-2 px-2">
                       <input
                         type="number"
                         value={item.taxRate}
@@ -560,32 +591,32 @@ export default function EditInvoice() {
                         className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </td>
-                    <td className="py-1.5 px-1.5 text-right text-gray-900 whitespace-nowrap">
+                    <td className="py-2 px-2 text-right text-gray-900 whitespace-nowrap">
                       {formatCurrency(item.taxAmount)}
                     </td>
-                    <td className="py-1.5 px-1.5 text-center">
+                    <td className="py-2 px-2 text-center">
                       <button
                         type="button"
                         onClick={() => removeItem(item.id)}
                         disabled={formData.items.length <= 1}
-                        className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         title="删除"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>
                 ))}
                 {/* 合计行 */}
                 <tr className="bg-gray-50 font-medium">
-                  <td colSpan={4} className="py-2 px-1.5 text-right text-gray-600">
+                  <td colSpan={5} className="py-2 px-2 text-right text-gray-600">
                     合计
                   </td>
-                  <td className="py-2 px-1.5 text-right text-gray-900 font-semibold whitespace-nowrap">
+                  <td className="py-2 px-2 text-right text-gray-900 font-semibold whitespace-nowrap">
                     {formatCurrency(formData.items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0))}
                   </td>
-                  <td className="py-2 px-1.5 text-center text-gray-500">-</td>
-                  <td className="py-2 px-1.5 text-right text-gray-900 font-semibold whitespace-nowrap">
+                  <td className="py-2 px-2 text-center text-gray-500">-</td>
+                  <td className="py-2 px-2 text-right text-gray-900 font-semibold whitespace-nowrap">
                     {formatCurrency(formData.items.reduce((sum, item) => sum + (Number(item.taxAmount) || 0), 0))}
                   </td>
                   <td></td>

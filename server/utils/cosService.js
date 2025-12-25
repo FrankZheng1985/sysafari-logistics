@@ -1,6 +1,11 @@
 /**
  * 腾讯云 COS 对象存储服务
  * 支持文档管理、报价单PDF等文件的上传和管理
+ * 
+ * 环境隔离：
+ * - 生产环境 (NODE_ENV=production): 文件存储在 prod/ 前缀下
+ * - 开发环境 (NODE_ENV=development): 文件存储在 dev/ 前缀下
+ * - 可通过 COS_PATH_PREFIX 环境变量自定义前缀
  */
 
 import COS from 'cos-nodejs-sdk-v5'
@@ -16,6 +21,20 @@ const cosConfig = {
   SecretKey: process.env.COS_SECRET_KEY || process.env.TENCENT_SECRET_KEY,
   Bucket: process.env.COS_BUCKET || process.env.TENCENT_COS_BUCKET,
   Region: process.env.COS_REGION || process.env.TENCENT_COS_REGION || 'ap-guangzhou'
+}
+
+/**
+ * 获取环境路径前缀
+ * 用于区分开发和生产环境的文件存储
+ */
+function getEnvPrefix() {
+  // 优先使用自定义前缀
+  if (process.env.COS_PATH_PREFIX) {
+    return process.env.COS_PATH_PREFIX
+  }
+  // 根据环境自动选择前缀
+  const isProduction = process.env.NODE_ENV === 'production'
+  return isProduction ? 'prod' : 'dev'
 }
 
 // 创建 COS 实例
@@ -109,16 +128,18 @@ export function generateUniqueFileName(originalName) {
 
 /**
  * 构建文档存储路径
- * 目录结构: /orders/{bill_number}/documents/{document_type}/{filename}
+ * 目录结构: /{env}/orders/{bill_number}/documents/{document_type}/{filename}
+ * 环境前缀会自动根据 NODE_ENV 添加
  */
 export function buildDocumentKey(options) {
   const { billNumber, documentType, fileName } = options
   const safeFileName = generateUniqueFileName(fileName)
+  const envPrefix = getEnvPrefix()
   
   if (billNumber) {
-    return `orders/${billNumber}/documents/${documentType || 'other'}/${safeFileName}`
+    return `${envPrefix}/orders/${billNumber}/documents/${documentType || 'other'}/${safeFileName}`
   }
-  return `documents/${documentType || 'other'}/${safeFileName}`
+  return `${envPrefix}/documents/${documentType || 'other'}/${safeFileName}`
 }
 
 // ==================== 通用文档上传功能 ====================
@@ -298,7 +319,8 @@ export async function getOrderDocuments(billNumber) {
     throw new Error('COS 未配置，请检查环境变量')
   }
   
-  const prefix = `orders/${billNumber}/documents/`
+  const envPrefix = getEnvPrefix()
+  const prefix = `${envPrefix}/orders/${billNumber}/documents/`
   
   return new Promise((resolve, reject) => {
     client.getBucket({
@@ -512,7 +534,8 @@ export function getPublicUrl(key) {
  * @returns {Promise<Object>} - 上传结果，包含文件URL
  */
 export async function uploadQuotationPdf({ customerId, quoteNumber, pdfBuffer }) {
-  const key = `quotations/${customerId}/${quoteNumber}.pdf`
+  const envPrefix = getEnvPrefix()
+  const key = `${envPrefix}/quotations/${customerId}/${quoteNumber}.pdf`
   
   return uploadDocument({
     body: pdfBuffer,
@@ -528,7 +551,8 @@ export async function uploadQuotationPdf({ customerId, quoteNumber, pdfBuffer })
  * @returns {Promise<Object|null>} - 最新报价单信息
  */
 export async function getLatestQuotationPdf(customerId) {
-  const files = await listByPrefix(`quotations/${customerId}/`, 100)
+  const envPrefix = getEnvPrefix()
+  const files = await listByPrefix(`${envPrefix}/quotations/${customerId}/`, 100)
   
   if (files.length === 0) {
     return null
@@ -552,7 +576,8 @@ export async function getLatestQuotationPdf(customerId) {
  * @returns {Promise<Array>} - 报价单列表
  */
 export async function getQuotationHistory(customerId) {
-  const files = await listByPrefix(`quotations/${customerId}/`, 1000)
+  const envPrefix = getEnvPrefix()
+  const files = await listByPrefix(`${envPrefix}/quotations/${customerId}/`, 1000)
   
   return files.map(file => {
     const fileName = file.key.split('/').pop()

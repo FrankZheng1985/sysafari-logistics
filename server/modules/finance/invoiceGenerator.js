@@ -376,8 +376,19 @@ export async function prepareInvoiceData(feeIds, customerId) {
   // 提取柜号列表
   const containerNumbers = [...new Set(fees.map(f => f.container_number).filter(Boolean))]
   
-  // 汇总费用
+  // 汇总费用（用于PDF显示）
   const summarizedItems = summarizeFees(fees)
+  
+  // 原始费用明细（不合并，每个费用一行，用于发票详情显示）
+  const originalItems = fees.map(fee => ({
+    description: fee.fee_name || fee.feeName || 'Other',
+    descriptionEn: fee.fee_name_en || fee.feeNameEn || null,
+    quantity: 1,
+    unitValue: parseFloat(fee.amount) || 0,
+    amount: parseFloat(fee.amount) || 0,
+    containerNumber: fee.container_number,
+    billNumber: fee.bill_number
+  }))
   
   // 计算总金额
   const total = fees.reduce((sum, f) => sum + (parseFloat(f.amount) || 0), 0)
@@ -385,12 +396,14 @@ export async function prepareInvoiceData(feeIds, customerId) {
   return {
     customer: {
       id: customer?.id,
-      name: customer?.customer_name || customer?.company_name || fees[0].customer_name || '',
+      // 发票优先使用公司全称(company_name)，如果没有则使用客户名称(customer_name)
+      name: customer?.company_name || customer?.customer_name || fees[0].customer_name || '',
       address: customer?.address || ''
     },
     containerNumbers,
     fees,
     summarizedItems,
+    originalItems,
     total,
     currency: fees[0]?.currency || 'EUR'
   }
@@ -501,7 +514,7 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
     invoiceData.total,
     invoiceData.total,
     invoiceData.currency,
-    JSON.stringify(invoiceData.summarizedItems),
+    JSON.stringify(invoiceData.originalItems),
     JSON.stringify(feeIds),
     pdfUrl,
     excelUrl,
@@ -530,7 +543,7 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
     invoiceDate,
     customer: invoiceData.customer,
     containerNumbers: invoiceData.containerNumbers,
-    items: invoiceData.summarizedItems,
+    items: invoiceData.originalItems,
     feeDetails: invoiceData.fees,
     total: invoiceData.total,
     currency: invoiceData.currency,
@@ -589,27 +602,50 @@ export async function regenerateInvoiceFiles(invoiceId) {
       items = summarizeFees(fees)
     }
     console.log(`[regenerateInvoiceFiles] 从 fee_ids 获取到 ${fees.length} 条${targetFeeType}费用`)
+  } else if (invoice.bill_number || invoice.bill_id) {
+    // fee_ids 为空，从关联的提单获取费用
+    // 支持多个提单（bill_number 逗号分隔）
+    let billIds = []
+    
+    if (invoice.bill_number && invoice.bill_number.includes(',')) {
+      // 多个提单号，需要查找对应的 billId
+      const billNumbers = invoice.bill_number.split(',').map(bn => bn.trim()).filter(Boolean)
+      console.log(`[regenerateInvoiceFiles] 发票关联多个提单: ${billNumbers.join(', ')}`)
+      
+      for (const billNumber of billNumbers) {
+        const bill = await db.prepare('SELECT id FROM bills_of_lading WHERE bill_number = ?').get(billNumber)
+        if (bill) {
+          billIds.push(bill.id)
+        }
+      }
+      console.log(`[regenerateInvoiceFiles] 找到 ${billIds.length} 个有效的 billId`)
   } else if (invoice.bill_id) {
-    // fee_ids 为空但有 bill_id，直接从 fees 表获取费用（过滤费用类型）
+      billIds = [invoice.bill_id]
+    }
+    
+    // 从所有关联的 billId 获取费用
+    if (billIds.length > 0) {
+      const placeholders = billIds.map(() => '?').join(',')
     fees = await db.prepare(`
       SELECT f.*, b.container_number, b.bill_number
       FROM fees f
       LEFT JOIN bills_of_lading b ON f.bill_id = b.id
-      WHERE f.bill_id = ? 
+        WHERE f.bill_id IN (${placeholders}) 
         AND (f.fee_type = ? OR f.fee_type IS NULL)
       ORDER BY f.fee_name
-    `).all(invoice.bill_id, targetFeeType)
-    console.log(`[regenerateInvoiceFiles] 从 bill_id 获取到 ${fees.length} 条${targetFeeType}费用`)
+      `).all(...billIds, targetFeeType)
+      console.log(`[regenerateInvoiceFiles] 从 ${billIds.length} 个 billId 获取到 ${fees.length} 条${targetFeeType}费用`)
+    }
     
     if (fees.length > 0) {
-      // 按费用类型分组合并
+      // 按费用类型分组合并（用于 PDF 显示）
       const feeGroups = {}
       fees.forEach(fee => {
         const feeName = fee.fee_name || 'Other'
         if (!feeGroups[feeName]) {
           feeGroups[feeName] = {
             description: feeName,
-            descriptionEn: fee.fee_name_en || null, // 保存英文名称
+            descriptionEn: fee.fee_name_en || null,
             quantity: 0,
             totalAmount: 0
           }
@@ -620,7 +656,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
       
       items = Object.values(feeGroups).map(group => ({
         description: group.description,
-        descriptionEn: group.descriptionEn, // 传递英文名称用于 PDF 翻译
+        descriptionEn: group.descriptionEn,
         quantity: group.quantity,
         unitValue: group.totalAmount / group.quantity,
         amount: group.totalAmount
@@ -696,13 +732,20 @@ export async function regenerateInvoiceFiles(invoiceId) {
     if (paymentDays <= 0) paymentDays = null
   }
 
-  // 获取客户地址（如果发票中没有，从 customers 表获取）
+  // 获取客户信息（如果发票中没有，从 customers 表获取）
   let customerAddress = invoice.customer_address || ''
-  if (!customerAddress && invoice.customer_id) {
-    const customer = await db.prepare('SELECT address, city, country_code FROM customers WHERE id = ?').get(invoice.customer_id)
+  let customerName = invoice.customer_name || ''
+  if (invoice.customer_id) {
+    const customer = await db.prepare('SELECT company_name, customer_name, address, city, country_code FROM customers WHERE id = ?').get(invoice.customer_id)
     if (customer) {
-      const addressParts = [customer.address, customer.city, customer.country_code].filter(Boolean)
-      customerAddress = addressParts.join(', ')
+      // 优先使用公司全称
+      if (!customerName || customerName === customer.customer_name) {
+        customerName = customer.company_name || customer.customer_name || customerName
+      }
+      if (!customerAddress) {
+        const addressParts = [customer.address, customer.city, customer.country_code].filter(Boolean)
+        customerAddress = addressParts.join(', ')
+      }
     }
   }
 
@@ -713,7 +756,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
     dueDate: invoice.due_date || null,
     paymentDays: paymentDays,
     customer: {
-      name: invoice.customer_name,
+      name: customerName,
       address: customerAddress
     },
     containerNumbers,
@@ -730,45 +773,26 @@ export async function regenerateInvoiceFiles(invoiceId) {
   console.log(`[regenerateInvoiceFiles] PDF 生成成功, 大小: ${pdfBuffer?.length || 0} bytes`)
 
   // 生成Excel
-  // 获取集装箱号
-  let excelContainerNo = ''
-  if (containerNumbers && containerNumbers.length > 0) {
-    excelContainerNo = containerNumbers[0]
-  }
-
-  // 获取提单号
-  let blNumber = ''
-  if (invoice.bill_id) {
-    const billInfo = await db.prepare('SELECT bill_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
-    if (billInfo) {
-      blNumber = billInfo.bill_number || ''
-    }
-  }
-
-  // Excel 数据也按费用类型合并
+  // Excel 显示所有原始费用（不合并），每项都有自己的集装箱号和提单号
   let excelItems = []
   if (fees && fees.length > 0) {
-    // 有原始费用记录，按费用类型分组合并
-    const feeGroups = {}
-    fees.forEach(f => {
-      const feeName = f.fee_name || 'Other'
-      if (!feeGroups[feeName]) {
-        feeGroups[feeName] = {
-          containerNo: f.container_number || excelContainerNo,
-          billNumber: f.bill_number || blNumber,
-          feeName: feeName,
-          amount: 0
-        }
-      }
-      feeGroups[feeName].amount += parseFloat(f.amount) || 0
-    })
-    excelItems = Object.values(feeGroups)
+    // 有原始费用记录，显示所有费用明细（按集装箱号排序）
+    excelItems = fees.map(f => ({
+      containerNumber: f.container_number || '',
+      billNumber: f.bill_number || '',
+      feeName: f.fee_name || 'Other',
+      feeNameEn: f.fee_name_en || null,
+      amount: parseFloat(f.amount) || 0
+    }))
+    // 按集装箱号排序，让同一个柜子的费用显示在一起
+    excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
   } else {
-    // 使用已合并的 items
+    // 使用 items 字段（可能包含 containerNumber）
     excelItems = items.map(item => ({
-      containerNo: excelContainerNo,
-      billNumber: blNumber,
+      containerNumber: item.containerNumber || '',
+      billNumber: item.billNumber || '',
       feeName: item.description,
+      feeNameEn: item.descriptionEn || null,
       amount: item.amount
     }))
   }
@@ -776,7 +800,6 @@ export async function regenerateInvoiceFiles(invoiceId) {
   const excelData = {
     customerName: invoice.customer_name || '',
     date: invoice.invoice_date,
-    containerNo: excelContainerNo,
     items: excelItems,
     total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
     currency: invoice.currency || 'EUR'

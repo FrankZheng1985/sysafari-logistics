@@ -9,6 +9,7 @@ import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../compo
 import { getBillsList, type BillOfLading } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
 import { copyToClipboard } from '../components/Toast'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
 
 type CompletedBillOfLading = BillOfLading & {
   completeTime: string
@@ -198,11 +199,11 @@ export default function BPHistory() {
       },
       render: (_value, record: CompletedBillOfLading) => (
         <div className="text-xs">
-          <span>{record.eta}</span>
+          <span>{formatDateTimeShort(record.eta)}</span>
           {record.ata && (
             <>
               <span className="mx-0.5 text-gray-400">/</span>
-              <span className="text-green-600">{record.ata}</span>
+              <span className="text-green-600">{formatDateTimeShort(record.ata)}</span>
             </>
           )}
         </div>
@@ -279,7 +280,7 @@ export default function BPHistory() {
       render: (_value, record: CompletedBillOfLading) => (
         <div className="text-xs">
           <div className="text-gray-900">{record.creator}</div>
-          <div className="text-[10px] text-gray-500">{record.createTime}</div>
+          <div className="text-[10px] text-gray-500">{formatDate(record.createTime)}</div>
         </div>
       ),
     },

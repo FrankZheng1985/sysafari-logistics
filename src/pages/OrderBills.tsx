@@ -10,7 +10,7 @@ import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../compo
 import { getBillsList, voidBill, restoreBill, publishDraft, type BillOfLading, type BillStats, getApiBaseUrl } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
 import { copyToClipboard } from '../components/Toast'
-import { formatDate } from '../utils/dateFormat'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -657,7 +657,7 @@ export default function OrderBills() {
       dateFilterable: true,
       dateField: 'etd',
       render: (_value, record: BillOfLading) => (
-        <span className={textPrimary}>{record.etd || '-'}</span>
+        <span className={textPrimary}>{formatDateTimeShort(record.etd)}</span>
       ),
     },
     {
@@ -676,9 +676,9 @@ export default function OrderBills() {
       dateField: 'eta',
       render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
-          <div className={textPrimary}>{record.eta || '-'}</div>
+          <div className={textPrimary}>{formatDateTimeShort(record.eta)}</div>
           {record.ata && (
-            <div className="text-green-600 text-xs">{record.ata}</div>
+            <div className="text-green-600 text-xs">{formatDateTimeShort(record.ata)}</div>
           )}
         </div>
       ),
@@ -699,7 +699,7 @@ export default function OrderBills() {
       dateField: 'customsReleaseTime',
       render: (_value, record: BillOfLading) => (
         <span className={record.customsReleaseTime ? textPrimary : textMuted}>
-          {record.customsReleaseTime || '-'}
+          {formatDateTimeShort(record.customsReleaseTime)}
         </span>
       ),
     },
@@ -719,7 +719,7 @@ export default function OrderBills() {
       dateField: 'cmrUnloadingCompleteTime',
       render: (_value, record: BillOfLading) => (
         <span className={record.cmrUnloadingCompleteTime ? textPrimary : textMuted}>
-          {record.cmrUnloadingCompleteTime || '-'}
+          {formatDateTimeShort(record.cmrUnloadingCompleteTime)}
         </span>
       ),
     },

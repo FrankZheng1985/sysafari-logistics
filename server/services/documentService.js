@@ -1,10 +1,29 @@
 /**
  * 统一文档上传服务
  * 所有模块的文件上传都通过此服务，自动存储到COS并记录到documents表
+ * 
+ * 环境隔离：
+ * - 生产环境 (NODE_ENV=production): 文件存储在 prod/ 前缀下
+ * - 开发环境 (NODE_ENV=development): 文件存储在 dev/ 前缀下
+ * - 可通过 COS_PATH_PREFIX 环境变量自定义前缀
  */
 
 import * as cosService from '../utils/cosService.js'
 import * as documentModel from '../modules/document/model.js'
+
+/**
+ * 获取环境路径前缀
+ * 用于区分开发和生产环境的文件存储
+ */
+function getEnvPrefix() {
+  // 优先使用自定义前缀
+  if (process.env.COS_PATH_PREFIX) {
+    return process.env.COS_PATH_PREFIX
+  }
+  // 根据环境自动选择前缀
+  const isProduction = process.env.NODE_ENV === 'production'
+  return isProduction ? 'prod' : 'dev'
+}
 
 /**
  * 统一文档上传
@@ -115,10 +134,11 @@ export async function uploadPaymentReceipt(options) {
     user
   } = options
 
-  // 自定义COS路径
+  // 自定义COS路径（带环境前缀）
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
   const ext = fileName.split('.').pop()?.toLowerCase() || 'pdf'
-  const customKey = `payments/${year}/${paymentNumber}_receipt.${ext}`
+  const customKey = `${envPrefix}/payments/${year}/${paymentNumber}_receipt.${ext}`
 
   return uploadDocument({
     fileBuffer,
@@ -158,10 +178,11 @@ export async function uploadContract(options) {
     user
   } = options
 
-  // 自定义COS路径
+  // 自定义COS路径（带环境前缀）
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
   const ext = fileName.split('.').pop()?.toLowerCase() || 'pdf'
-  const customKey = `contracts/${year}/${contractNumber}_${contractType}.${ext}`
+  const customKey = `${envPrefix}/contracts/${year}/${contractNumber}_${contractType}.${ext}`
 
   return uploadDocument({
     fileBuffer,
@@ -201,10 +222,11 @@ export async function uploadInvoice(options) {
     user
   } = options
 
-  // 自定义COS路径
+  // 自定义COS路径（带环境前缀）
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
   const ext = fileName.split('.').pop()?.toLowerCase() || 'pdf'
-  const customKey = `invoices/${year}/${invoiceNumber}.${ext}`
+  const customKey = `${envPrefix}/invoices/${year}/${invoiceNumber}.${ext}`
 
   return uploadDocument({
     fileBuffer,
@@ -246,10 +268,11 @@ export async function uploadCustomsDocument(options) {
     user
   } = options
 
-  // 自定义COS路径
+  // 自定义COS路径（带环境前缀）
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
   const month = String(new Date().getMonth() + 1).padStart(2, '0')
-  const customKey = `customs/${year}/${month}/${importId}_tax_confirm.pdf`
+  const customKey = `${envPrefix}/customs/${year}/${month}/${importId}_tax_confirm.pdf`
 
   return uploadDocument({
     fileBuffer,
@@ -287,11 +310,12 @@ export async function uploadDeliveryNote(options) {
     user
   } = options
 
-  // 自定义COS路径
+  // 自定义COS路径（带环境前缀）
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
   const month = String(new Date().getMonth() + 1).padStart(2, '0')
   const ext = fileName.split('.').pop()?.toLowerCase() || 'pdf'
-  const customKey = `delivery/${year}/${month}/${cmrNumber}.${ext}`
+  const customKey = `${envPrefix}/delivery/${year}/${month}/${cmrNumber}.${ext}`
 
   return uploadDocument({
     fileBuffer,
@@ -325,10 +349,11 @@ export async function uploadQuotation(options) {
     user
   } = options
 
-  // 自定义COS路径
+  // 自定义COS路径（带环境前缀）
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
   const timestamp = Date.now()
-  const customKey = `quotations/${year}/${quotationNumber}_${timestamp}.pdf`
+  const customKey = `${envPrefix}/quotations/${year}/${quotationNumber}_${timestamp}.pdf`
 
   return uploadDocument({
     fileBuffer,

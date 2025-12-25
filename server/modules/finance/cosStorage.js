@@ -2,12 +2,31 @@
  * 腾讯云COS存储服务
  * 
  * 用于上传和管理发票文件
+ * 
+ * 环境隔离：
+ * - 生产环境 (NODE_ENV=production): 文件存储在 prod/ 前缀下
+ * - 开发环境 (NODE_ENV=development): 文件存储在 dev/ 前缀下
+ * - 可通过 COS_PATH_PREFIX 环境变量自定义前缀
  */
 
 import COS from 'cos-nodejs-sdk-v5'
 
 // COS客户端实例
 let cosClient = null
+
+/**
+ * 获取环境路径前缀
+ * 用于区分开发和生产环境的文件存储
+ */
+function getEnvPrefix() {
+  // 优先使用自定义前缀
+  if (process.env.COS_PATH_PREFIX) {
+    return process.env.COS_PATH_PREFIX
+  }
+  // 根据环境自动选择前缀
+  const isProduction = process.env.NODE_ENV === 'production'
+  return isProduction ? 'prod' : 'dev'
+}
 
 /**
  * 获取COS客户端
@@ -81,8 +100,10 @@ export async function uploadFile(buffer, key, contentType) {
  * @returns {Promise<string>} PDF文件URL
  */
 export async function uploadInvoicePDF(pdfBuffer, invoiceNumber) {
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
-  const key = `invoices/${year}/${invoiceNumber}.pdf`
+  const key = `${envPrefix}/invoices/${year}/${invoiceNumber}.pdf`
+  console.log(`[COS] 上传发票PDF到: ${key} (环境: ${envPrefix})`)
   return uploadFile(pdfBuffer, key, 'application/pdf')
 }
 
@@ -93,8 +114,10 @@ export async function uploadInvoicePDF(pdfBuffer, invoiceNumber) {
  * @returns {Promise<string>} Excel文件URL
  */
 export async function uploadStatementExcel(excelBuffer, invoiceNumber) {
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
-  const key = `invoices/${year}/${invoiceNumber}_statement.xlsx`
+  const key = `${envPrefix}/invoices/${year}/${invoiceNumber}_statement.xlsx`
+  console.log(`[COS] 上传对账单Excel到: ${key} (环境: ${envPrefix})`)
   return uploadFile(excelBuffer, key, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 }
 
@@ -106,9 +129,11 @@ export async function uploadStatementExcel(excelBuffer, invoiceNumber) {
  * @returns {Promise<string>} 文件URL
  */
 export async function uploadPaymentReceipt(fileBuffer, paymentNumber, originalFilename) {
+  const envPrefix = getEnvPrefix()
   const year = new Date().getFullYear()
   const ext = originalFilename.split('.').pop()?.toLowerCase() || 'pdf'
-  const key = `payments/${year}/${paymentNumber}_receipt.${ext}`
+  const key = `${envPrefix}/payments/${year}/${paymentNumber}_receipt.${ext}`
+  console.log(`[COS] 上传付款凭证到: ${key} (环境: ${envPrefix})`)
   
   // 根据扩展名确定 MIME 类型
   const mimeTypes = {

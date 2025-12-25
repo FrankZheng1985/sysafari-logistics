@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Search, ArrowUpRight, ArrowDownRight, Trash2,
-  CreditCard, Building2, Banknote, Wallet, X, FileText, Loader2
+  CreditCard, Building2, Banknote, Wallet, X, FileText, Loader2, CheckSquare, Square
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -54,6 +54,18 @@ export default function FinancePayments() {
   const [invoices, setInvoices] = useState<any[]>([])
   const [invoiceLoading, setInvoiceLoading] = useState(false)
   const [invoiceSearch, setInvoiceSearch] = useState('')
+  
+  // 多选核销状态
+  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([])
+  const [showBatchPayment, setShowBatchPayment] = useState(false)
+  const [batchPaymentData, setBatchPaymentData] = useState({
+    paymentMethod: 'bank_transfer',
+    paymentDate: new Date().toISOString().split('T')[0],
+    referenceNumber: '',
+    bankAccount: '',
+    description: ''
+  })
+  const [batchPaymentLoading, setBatchPaymentLoading] = useState(false)
 
   const tabs = [
     { label: '财务概览', path: '/finance' },
@@ -129,6 +141,7 @@ export default function FinancePayments() {
   const handleOpenPaymentModal = (mode: 'income' | 'expense') => {
     setPaymentMode(mode)
     setInvoiceSearch('')
+    setSelectedInvoices([])  // 清空选择
     setShowInvoiceSelector(true)
     // 收款 -> 销售发票; 付款 -> 采购发票
     fetchInvoices(mode === 'income' ? 'sales' : 'purchase')
@@ -137,6 +150,99 @@ export default function FinancePayments() {
   const handleSelectInvoice = (invoiceId: string) => {
     setShowInvoiceSelector(false)
     navigate(`/finance/invoices/${invoiceId}/payment`)
+  }
+
+  // 多选相关函数
+  const handleToggleInvoice = (invoiceId: string) => {
+    setSelectedInvoices(prev => 
+      prev.includes(invoiceId) 
+        ? prev.filter(id => id !== invoiceId)
+        : [...prev, invoiceId]
+    )
+  }
+
+  const handleSelectAll = () => {
+    if (selectedInvoices.length === filteredInvoices.length) {
+      setSelectedInvoices([])
+    } else {
+      setSelectedInvoices(filteredInvoices.map(inv => inv.id))
+    }
+  }
+
+  const getSelectedInvoicesTotal = () => {
+    return filteredInvoices
+      .filter(inv => selectedInvoices.includes(inv.id))
+      .reduce((sum, inv) => sum + (Number(inv.totalAmount || 0) - Number(inv.paidAmount || 0)), 0)
+  }
+
+  const getSelectedInvoicesCurrency = () => {
+    const selected = filteredInvoices.find(inv => selectedInvoices.includes(inv.id))
+    return selected?.currency || 'EUR'
+  }
+
+  const handleOpenBatchPayment = () => {
+    if (selectedInvoices.length === 0) {
+      alert('请先选择要核销的发票')
+      return
+    }
+    setShowBatchPayment(true)
+    setBatchPaymentData({
+      paymentMethod: 'bank_transfer',
+      paymentDate: new Date().toISOString().split('T')[0],
+      referenceNumber: '',
+      bankAccount: '',
+      description: `批量${paymentMode === 'income' ? '收款' : '付款'} - ${selectedInvoices.length} 张发票`
+    })
+  }
+
+  const handleBatchPaymentSubmit = async () => {
+    if (selectedInvoices.length === 0) return
+    
+    setBatchPaymentLoading(true)
+    try {
+      // 逐个为选中的发票创建收款记录
+      const selectedInvoiceData = filteredInvoices.filter(inv => selectedInvoices.includes(inv.id))
+      
+      for (const invoice of selectedInvoiceData) {
+        const unpaidAmount = Number(invoice.totalAmount || 0) - Number(invoice.paidAmount || 0)
+        
+        const paymentData = {
+          paymentType: paymentMode,
+          invoiceId: invoice.id,
+          customerId: invoice.customerId,
+          amount: unpaidAmount,
+          currency: invoice.currency || 'EUR',
+          paymentMethod: batchPaymentData.paymentMethod,
+          paymentDate: batchPaymentData.paymentDate,
+          referenceNumber: batchPaymentData.referenceNumber,
+          bankAccount: batchPaymentData.bankAccount,
+          description: batchPaymentData.description || `核销发票 ${invoice.invoiceNumber}`
+        }
+        
+        const response = await fetch(`${API_BASE}/api/payments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(paymentData)
+        })
+        
+        const data = await response.json()
+        if (data.errCode !== 200) {
+          throw new Error(`发票 ${invoice.invoiceNumber} 核销失败: ${data.msg}`)
+        }
+      }
+      
+      alert(`成功核销 ${selectedInvoices.length} 张发票`)
+      setShowBatchPayment(false)
+      setShowInvoiceSelector(false)
+      setSelectedInvoices([])
+      fetchPayments()
+      fetchStats()
+    } catch (error: any) {
+      console.error('批量核销失败:', error)
+      alert(error.message || '批量核销失败')
+    } finally {
+      setBatchPaymentLoading(false)
+    }
   }
 
   const filteredInvoices = invoices.filter(inv => {
@@ -478,7 +584,7 @@ export default function FinancePayments() {
       {showInvoiceSelector && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setShowInvoiceSelector(false)} />
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden">
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
             {/* 标题栏 */}
             <div className={`flex items-center justify-between px-4 py-3 border-b ${
               paymentMode === 'income' ? 'bg-green-50' : 'bg-red-50'
@@ -504,9 +610,10 @@ export default function FinancePayments() {
               </button>
             </div>
 
-            {/* 搜索框 */}
+            {/* 搜索框和全选 */}
             <div className="p-4 border-b border-gray-100">
-              <div className="relative">
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
@@ -516,10 +623,41 @@ export default function FinancePayments() {
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 />
               </div>
+                {filteredInvoices.length > 0 && (
+                  <button
+                    onClick={handleSelectAll}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                  >
+                    {selectedInvoices.length === filteredInvoices.length ? (
+                      <CheckSquare className="w-4 h-4" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                    全选
+                  </button>
+                )}
+              </div>
+              {/* 已选统计 */}
+              {selectedInvoices.length > 0 && (
+                <div className={`mt-3 flex items-center justify-between p-2 rounded-lg ${
+                  paymentMode === 'income' ? 'bg-green-100' : 'bg-red-100'
+                }`}>
+                  <span className={`text-sm font-medium ${
+                    paymentMode === 'income' ? 'text-green-700' : 'text-red-700'
+                  }`}>
+                    已选 {selectedInvoices.length} 张发票
+                  </span>
+                  <span className={`text-sm font-bold ${
+                    paymentMode === 'income' ? 'text-green-700' : 'text-red-700'
+                  }`}>
+                    合计: {formatCurrency(getSelectedInvoicesTotal(), getSelectedInvoicesCurrency())}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* 发票列表 */}
-            <div className="overflow-y-auto max-h-[50vh] p-4">
+            <div className="overflow-y-auto max-h-[45vh] p-4">
               {invoiceLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
@@ -529,11 +667,36 @@ export default function FinancePayments() {
                 <div className="space-y-2">
                   {filteredInvoices.map(invoice => {
                     const unpaid = Number(invoice.totalAmount || 0) - Number(invoice.paidAmount || 0)
+                    const isSelected = selectedInvoices.includes(invoice.id)
                     return (
-                      <button
+                      <div
                         key={invoice.id}
-                        onClick={() => handleSelectInvoice(invoice.id)}
-                        className="w-full text-left px-4 py-3 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50 transition-colors"
+                        className={`flex items-center gap-3 px-4 py-3 border rounded-lg transition-colors cursor-pointer ${
+                          isSelected 
+                            ? paymentMode === 'income' 
+                              ? 'border-green-400 bg-green-50' 
+                              : 'border-red-400 bg-red-50'
+                            : 'border-gray-200 hover:border-primary-300 hover:bg-primary-50'
+                        }`}
+                      >
+                        {/* 复选框 */}
+                        <button
+                          onClick={() => handleToggleInvoice(invoice.id)}
+                          className="flex-shrink-0"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className={`w-5 h-5 ${
+                              paymentMode === 'income' ? 'text-green-600' : 'text-red-600'
+                            }`} />
+                          ) : (
+                            <Square className="w-5 h-5 text-gray-400" />
+                          )}
+                        </button>
+                        
+                        {/* 发票信息 */}
+                        <div 
+                          className="flex-1 min-w-0"
+                          onClick={() => handleToggleInvoice(invoice.id)}
                       >
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
@@ -550,7 +713,19 @@ export default function FinancePayments() {
                           <span>{invoice.customerName || invoice.supplierName || '-'}</span>
                           <span>总额: {formatCurrency(invoice.totalAmount, invoice.currency)}</span>
                         </div>
+                        </div>
+                        
+                        {/* 单独核销按钮 */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSelectInvoice(invoice.id)
+                          }}
+                          className="flex-shrink-0 px-2 py-1 text-xs text-primary-600 hover:bg-primary-100 rounded transition-colors"
+                        >
+                          单独核销
                       </button>
+                      </div>
                     )
                   })}
                 </div>
@@ -567,11 +742,161 @@ export default function FinancePayments() {
               )}
             </div>
 
-            {/* 底部提示 */}
-            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
-              <p className="text-xs text-gray-500 text-center">
-                选择一张发票后，将跳转到收款登记页面
+            {/* 底部操作栏 */}
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                点击复选框多选，或点击"单独核销"处理单张发票
               </p>
+              {selectedInvoices.length > 0 && (
+                <button
+                  onClick={handleOpenBatchPayment}
+                  className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+                    paymentMode === 'income' 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  批量核销 ({selectedInvoices.length})
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 批量核销模态框 */}
+      {showBatchPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowBatchPayment(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* 标题栏 */}
+            <div className={`flex items-center justify-between px-4 py-3 border-b ${
+              paymentMode === 'income' ? 'bg-green-50' : 'bg-red-50'
+            }`}>
+              <div className="flex items-center gap-2">
+                <CheckSquare className={`w-5 h-5 ${
+                  paymentMode === 'income' ? 'text-green-600' : 'text-red-600'
+                }`} />
+                <h3 className={`text-base font-semibold ${
+                  paymentMode === 'income' ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  批量{paymentMode === 'income' ? '收款' : '付款'}核销
+                </h3>
+              </div>
+              <button 
+                onClick={() => setShowBatchPayment(false)}
+                className="p-1 hover:bg-white/50 rounded transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* 核销信息 */}
+            <div className="p-4 space-y-4">
+              {/* 汇总信息 */}
+              <div className={`p-3 rounded-lg ${
+                paymentMode === 'income' ? 'bg-green-50' : 'bg-red-50'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">核销发票数</span>
+                  <span className="font-semibold">{selectedInvoices.length} 张</span>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-sm text-gray-600">
+                    {paymentMode === 'income' ? '收款' : '付款'}总额
+                  </span>
+                  <span className={`text-lg font-bold ${
+                    paymentMode === 'income' ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formatCurrency(getSelectedInvoicesTotal(), getSelectedInvoicesCurrency())}
+                  </span>
+                </div>
+              </div>
+
+              {/* 支付方式 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">支付方式</label>
+                <select
+                  value={batchPaymentData.paymentMethod}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="bank_transfer">银行转账</option>
+                  <option value="cash">现金</option>
+                  <option value="check">支票</option>
+                  <option value="credit_card">信用卡</option>
+                  <option value="wechat">微信支付</option>
+                  <option value="alipay">支付宝</option>
+                </select>
+              </div>
+
+              {/* 付款日期 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {paymentMode === 'income' ? '收款' : '付款'}日期
+                </label>
+                <input
+                  type="date"
+                  value={batchPaymentData.paymentDate}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, paymentDate: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              {/* 参考号 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">参考号/流水号</label>
+                <input
+                  type="text"
+                  value={batchPaymentData.referenceNumber}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, referenceNumber: e.target.value }))}
+                  placeholder="可选，如银行流水号"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              {/* 备注 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <textarea
+                  value={batchPaymentData.description}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                />
+              </div>
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowBatchPayment(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleBatchPaymentSubmit}
+                disabled={batchPaymentLoading}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 ${
+                  paymentMode === 'income' 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {batchPaymentLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    处理中...
+                  </>
+                ) : (
+                  <>
+                    <CheckSquare className="w-4 h-4" />
+                    确认核销
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

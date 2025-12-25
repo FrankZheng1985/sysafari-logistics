@@ -196,15 +196,15 @@ export default function DatePicker({
         type="button"
         id={id}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full h-8 flex items-center justify-between gap-2 px-2 border border-gray-200 rounded-md text-xs bg-white text-gray-900 hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+        className="w-full h-[38px] flex items-center justify-between gap-2 px-3 border border-gray-200 !rounded-lg text-sm leading-5 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
       >
         <span className="flex items-center gap-2">
-          <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <span className="text-left">
             {formatDisplayDate(selectedDate) || placeholder}
           </span>
         </span>
-        <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
       </button>
 
       {/* 日期选择器弹窗 */}

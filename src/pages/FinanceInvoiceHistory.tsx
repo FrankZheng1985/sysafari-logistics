@@ -21,6 +21,7 @@ interface Invoice {
   customerName: string
   billId: string | null
   billNumber: string
+  containerNumbers?: string[]
   subtotal: number
   taxAmount: number
   totalAmount: number
@@ -126,9 +127,10 @@ export default function FinanceInvoiceHistory() {
     }).format(amount)
   }
 
-  const getStatusConfig = (status: string) => {
+  const getStatusConfig = (status: string, invoiceType?: string) => {
+    const isSales = invoiceType === 'sales'
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof CheckCircle }> = {
-      paid: { label: '已付款', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
+      paid: { label: isSales ? '已收款' : '已付款', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
       cancelled: { label: '已取消', color: 'text-gray-400', bg: 'bg-gray-100', icon: XCircle },
     }
     return configs[status] || { label: status, color: 'text-gray-600', bg: 'bg-gray-100', icon: FileText }
@@ -171,8 +173,8 @@ export default function FinanceInvoiceHistory() {
       render: (_value, record) => (
         <div>
           <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
-          {record.billNumber && (
-            <div className="text-xs text-gray-400">提单: {record.billNumber}</div>
+          {record.containerNumbers && record.containerNumbers.length > 0 && (
+            <div className="text-xs text-gray-400">柜号: {record.containerNumbers.join(', ')}</div>
           )}
         </div>
       )
@@ -212,7 +214,7 @@ export default function FinanceInvoiceHistory() {
       width: 100,
       sorter: true,
       render: (_value, record) => {
-        const config = getStatusConfig(record.status)
+        const config = getStatusConfig(record.status, record.invoiceType)
         const Icon = config.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
@@ -294,7 +296,7 @@ export default function FinanceInvoiceHistory() {
             <div className="text-lg font-semibold text-gray-900">{stats?.totalCount || 0} 张</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">已付款发票</div>
+            <div className="text-xs text-gray-500">已结清发票</div>
             <div className="text-lg font-semibold text-green-600">{stats?.paidCount || 0} 张</div>
           </div>
           <div>
@@ -343,7 +345,7 @@ export default function FinanceInvoiceHistory() {
             title="筛选发票状态"
           >
             <option value="">全部状态</option>
-            <option value="paid">已付款</option>
+            <option value="paid">{filterType === 'sales' ? '已收款' : filterType === 'purchase' ? '已付款' : '已收/付款'}</option>
             <option value="cancelled">已取消</option>
           </select>
         </div>

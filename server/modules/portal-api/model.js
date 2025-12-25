@@ -14,6 +14,8 @@ export async function getCustomerOrders(customerId, params = {}) {
   const db = getDatabase()
   const { 
     status, 
+    customsStatus,
+    deliveryStatus,
     billNumber, 
     startDate, 
     endDate, 
@@ -23,31 +25,48 @@ export async function getCustomerOrders(customerId, params = {}) {
   
   let sql = `
     SELECT 
-      b.id, b.bill_number, b.container_number, b.mawb_number,
+      b.id, b.order_number, b.bill_number, b.container_number,
       b.shipper, b.consignee, b.port_of_loading, b.port_of_discharge,
-      b.place_of_delivery, b.transport_method, b.cargo_type,
+      b.place_of_delivery, b.transport_method, b.container_type,
       b.pieces, b.weight, b.volume, b.status, b.ship_status,
+      b.customs_status, b.delivery_status,
       b.etd, b.eta, b.ata, b.external_order_no,
+      b.customer_name, b.customer_code,
       b.created_at, b.updated_at
     FROM bills_of_lading b
-    WHERE b.customer_id = ?
+    WHERE b.customer_id = $1
   `
   const conditions = [customerId]
+  let paramIndex = 2
   
   if (status) {
-    sql += ` AND b.status = ?`
+    sql += ` AND b.status = $${paramIndex++}`
     conditions.push(status)
   }
+  
+  // 清关状态筛选
+  if (customsStatus === 'clearing') {
+    sql += ` AND (b.customs_status = '清关中' OR b.customs_status = '查验中')`
+  }
+  
+  // 派送状态筛选
+  if (deliveryStatus === 'delivering') {
+    sql += ` AND (b.delivery_status = '派送中' OR b.delivery_status = '待派送')`
+  } else if (deliveryStatus === 'delivered') {
+    sql += ` AND (b.delivery_status = '已送达' OR b.status = '已完成')`
+  }
+  
   if (billNumber) {
-    sql += ` AND (b.bill_number LIKE ? OR b.container_number LIKE ?)`
-    conditions.push(`%${billNumber}%`, `%${billNumber}%`)
+    sql += ` AND (b.bill_number LIKE $${paramIndex} OR b.container_number LIKE $${paramIndex + 1} OR b.order_number LIKE $${paramIndex + 2})`
+    conditions.push(`%${billNumber}%`, `%${billNumber}%`, `%${billNumber}%`)
+    paramIndex += 3
   }
   if (startDate) {
-    sql += ` AND b.created_at >= ?`
+    sql += ` AND b.created_at >= $${paramIndex++}`
     conditions.push(startDate)
   }
   if (endDate) {
-    sql += ` AND b.created_at <= ?`
+    sql += ` AND b.created_at <= $${paramIndex++}`
     conditions.push(endDate)
   }
   
@@ -56,7 +75,7 @@ export async function getCustomerOrders(customerId, params = {}) {
   const countResult = await db.prepare(countSql).get(...conditions)
   
   // 分页
-  sql += ` ORDER BY b.created_at DESC LIMIT ? OFFSET ?`
+  sql += ` ORDER BY b.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`
   conditions.push(pageSize, (page - 1) * pageSize)
   
   const rows = await db.prepare(sql).all(...conditions)
@@ -76,34 +95,143 @@ export async function getCustomerOrderById(customerId, orderId) {
   const db = getDatabase()
   const row = await db.prepare(`
     SELECT 
-      b.*,
-      c.customer_name, c.customer_code
+      b.id, b.order_number, b.bill_number, b.container_number,
+      b.shipper, b.consignee, b.notify_party,
+      b.port_of_loading, b.port_of_discharge, b.place_of_delivery,
+      b.transport_method, b.container_type,
+      b.pieces, b.weight, b.volume, b.description,
+      b.status, b.ship_status, b.customs_status, b.delivery_status,
+      b.doc_swap_status, b.doc_swap_time,
+      b.customs_release_time, b.actual_arrival_date,
+      b.etd, b.eta, b.ata,
+      b.vessel, b.voyage,
+      b.external_order_no, b.remark,
+      b.customer_name, b.customer_code,
+      b.created_at, b.updated_at
     FROM bills_of_lading b
-    LEFT JOIN customers c ON b.customer_id = c.id
-    WHERE b.id = ? AND b.customer_id = ?
+    WHERE b.id = $1 AND b.customer_id = $2
   `).get(orderId, customerId)
   
   if (!row) return null
   
-  // 获取货物明细
-  const cargoItems = await db.prepare(`
-    SELECT * FROM cargo_import_items 
-    WHERE order_id = ?
-    ORDER BY serial_no
-  `).all(orderId)
+  return convertOrderDetailToCamelCase(row)
+}
+
+/**
+ * 转换订单详情为驼峰格式
+ */
+function convertOrderDetailToCamelCase(row) {
+  // 状态标准化
+  let displayStatus = row.status
+  if (row.status === 'pending') {
+    displayStatus = '进行中'
+  }
   
-  // 获取物流跟踪记录
-  const trackingHistory = await db.prepare(`
-    SELECT * FROM tracking_history 
-    WHERE bill_id = ?
-    ORDER BY created_at DESC
-  `).all(orderId)
+  // 构建进度节点
+  const progressSteps = buildProgressSteps(row)
   
   return {
-    ...convertOrderToCamelCase(row),
-    cargoItems: cargoItems.map(convertCargoItemToCamelCase),
-    trackingHistory: trackingHistory.map(convertTrackingToCamelCase)
+    id: row.id,
+    orderNumber: row.order_number,
+    billNumber: row.bill_number,
+    containerNumber: row.container_number,
+    externalOrderNo: row.external_order_no,
+    shipper: row.shipper,
+    consignee: row.consignee,
+    notifyParty: row.notify_party,
+    portOfLoading: row.port_of_loading,
+    portOfDischarge: row.port_of_discharge,
+    placeOfDelivery: row.place_of_delivery,
+    transportMethod: row.transport_method,
+    containerType: row.container_type,
+    pieces: row.pieces,
+    weight: row.weight,
+    volume: row.volume,
+    description: row.description,
+    status: displayStatus,
+    rawStatus: row.status,
+    shipStatus: row.ship_status,
+    customsStatus: row.customs_status,
+    deliveryStatus: row.delivery_status,
+    docSwapStatus: row.doc_swap_status,
+    docSwapTime: row.doc_swap_time,
+    customsReleaseTime: row.customs_release_time,
+    actualArrivalDate: row.actual_arrival_date,
+    vessel: row.vessel,
+    voyage: row.voyage,
+    etd: row.etd,
+    eta: row.eta,
+    ata: row.ata,
+    remark: row.remark,
+    customerName: row.customer_name,
+    customerCode: row.customer_code,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    progressSteps
   }
+}
+
+/**
+ * 构建订单进度节点
+ */
+function buildProgressSteps(row) {
+  const steps = []
+  
+  // 1. 已接单
+  steps.push({
+    key: 'accepted',
+    label: '已接单',
+    completed: true,
+    time: row.created_at
+  })
+  
+  // 2. 已发运
+  const isShipped = ['已发运', '运输中', '已到港'].includes(row.ship_status) || 
+                    row.status === '已完成'
+  steps.push({
+    key: 'shipped',
+    label: '已发运',
+    completed: isShipped,
+    time: row.etd
+  })
+  
+  // 3. 已到港
+  const isArrived = row.ship_status === '已到港' || row.status === '已完成'
+  steps.push({
+    key: 'arrived',
+    label: '已到港',
+    completed: isArrived,
+    time: row.ata || row.actual_arrival_date
+  })
+  
+  // 4. 换单完成
+  const isDocSwapped = row.doc_swap_status === '已换单' || row.status === '已完成'
+  steps.push({
+    key: 'doc_swap',
+    label: '换单完成',
+    completed: isDocSwapped,
+    time: row.doc_swap_time
+  })
+  
+  // 5. 清关放行
+  const isCustomsCleared = row.customs_status === '已放行' || row.status === '已完成'
+  steps.push({
+    key: 'customs',
+    label: '清关放行',
+    completed: isCustomsCleared,
+    time: row.customs_release_time
+  })
+  
+  // 6. 已送达
+  const isDelivered = row.delivery_status === '已送达' || row.status === '已完成'
+  steps.push({
+    key: 'delivered',
+    label: '已送达',
+    completed: isDelivered,
+    time: null
+  })
+  
+  return steps
 }
 
 /**
@@ -115,16 +243,19 @@ export async function getCustomerOrderStats(customerId) {
   const stats = await db.prepare(`
     SELECT
       COUNT(*) as total,
-      COUNT(CASE WHEN status = '草稿' THEN 1 END) as draft,
-      COUNT(CASE WHEN status = '待发运' THEN 1 END) as pending,
-      COUNT(CASE WHEN status IN ('已发运', '运输中') THEN 1 END) as shipping,
-      COUNT(CASE WHEN status = '已到港' THEN 1 END) as arrived,
-      COUNT(CASE WHEN status = '已签收' THEN 1 END) as completed
+      COUNT(CASE WHEN customs_status = '清关中' OR customs_status = '查验中' THEN 1 END) as customs_clearing,
+      COUNT(CASE WHEN delivery_status = '派送中' OR delivery_status = '待派送' THEN 1 END) as delivering,
+      COUNT(CASE WHEN delivery_status = '已送达' OR status = '已完成' THEN 1 END) as delivered
     FROM bills_of_lading
-    WHERE customer_id = ?
+    WHERE customer_id = $1
   `).get(customerId)
   
-  return stats
+  return {
+    total: parseInt(stats?.total) || 0,
+    customsClearing: parseInt(stats?.customs_clearing) || 0,
+    delivering: parseInt(stats?.delivering) || 0,
+    delivered: parseInt(stats?.delivered) || 0
+  }
 }
 
 // ==================== 账单查询 ====================
@@ -140,8 +271,11 @@ export async function getCustomerInvoices(customerId, params = {}) {
     SELECT 
       i.id, i.invoice_number, i.invoice_date, i.due_date,
       i.subtotal, i.tax_amount, i.total_amount, i.currency,
-      i.status, i.paid_amount, i.balance,
-      i.bill_id, b.bill_number,
+      i.status, i.paid_amount, 
+      COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0) as balance,
+      i.bill_id, i.container_numbers, i.pdf_url, i.excel_url,
+      i.items, i.notes,
+      b.bill_number,
       i.created_at
     FROM invoices i
     LEFT JOIN bills_of_lading b ON i.bill_id = b.id
@@ -188,26 +322,21 @@ export async function getCustomerInvoiceById(customerId, invoiceId) {
   
   const invoice = await db.prepare(`
     SELECT 
-      i.*,
-      b.bill_number, b.container_number
+      i.id, i.invoice_number, i.invoice_date, i.due_date,
+      i.subtotal, i.tax_amount, i.total_amount, i.currency,
+      i.status, i.paid_amount, 
+      COALESCE(i.total_amount, 0) - COALESCE(i.paid_amount, 0) as balance,
+      i.bill_id, i.container_numbers, i.pdf_url, i.excel_url,
+      i.items, i.notes, i.created_at,
+      b.bill_number
     FROM invoices i
     LEFT JOIN bills_of_lading b ON i.bill_id = b.id
-    WHERE i.id = ? AND i.customer_id = ?
+    WHERE i.id = $1 AND i.customer_id = $2
   `).get(invoiceId, customerId)
   
   if (!invoice) return null
   
-  // 获取费用明细
-  const feeItems = await db.prepare(`
-    SELECT * FROM invoice_items 
-    WHERE invoice_id = ?
-    ORDER BY sort_order
-  `).all(invoiceId)
-  
-  return {
-    ...convertInvoiceToCamelCase(invoice),
-    feeItems: feeItems.map(convertFeeItemToCamelCase)
-  }
+  return convertInvoiceToCamelCase(invoice)
 }
 
 // ==================== 应付账款 ====================
@@ -218,42 +347,42 @@ export async function getCustomerInvoiceById(customerId, invoiceId) {
 export async function getCustomerPayables(customerId) {
   const db = getDatabase()
   
-  // 获取应付账款汇总
+  // 获取应付账款汇总（计算 balance = total_amount - paid_amount）
   const summary = await db.prepare(`
     SELECT
       COUNT(*) as total_invoices,
-      SUM(total_amount) as total_amount,
-      SUM(paid_amount) as paid_amount,
-      SUM(balance) as balance,
-      COUNT(CASE WHEN status = 'unpaid' THEN 1 END) as unpaid_count,
-      COUNT(CASE WHEN status = 'partial' THEN 1 END) as partial_count,
-      COUNT(CASE WHEN due_date < date('now') AND status != 'paid' THEN 1 END) as overdue_count,
-      SUM(CASE WHEN due_date < date('now') AND status != 'paid' THEN balance ELSE 0 END) as overdue_amount
+      COALESCE(SUM(total_amount), 0) as total_amount,
+      COALESCE(SUM(paid_amount), 0) as paid_amount,
+      COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as balance,
+      COUNT(CASE WHEN status = 'unpaid' OR status = '未付款' THEN 1 END) as unpaid_count,
+      COUNT(CASE WHEN status = 'partial' OR status = '部分付款' THEN 1 END) as partial_count,
+      COUNT(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', '已付款') THEN 1 END) as overdue_count,
+      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', '已付款') THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as overdue_amount
     FROM invoices
-    WHERE customer_id = ? AND status != 'cancelled'
+    WHERE customer_id = ? AND status NOT IN ('cancelled', '已取消')
   `).get(customerId)
   
   // 获取账龄分析
   const aging = await db.prepare(`
     SELECT
-      SUM(CASE WHEN due_date >= date('now') THEN balance ELSE 0 END) as current,
-      SUM(CASE WHEN due_date < date('now') AND due_date >= date('now', '-30 days') THEN balance ELSE 0 END) as days_1_30,
-      SUM(CASE WHEN due_date < date('now', '-30 days') AND due_date >= date('now', '-60 days') THEN balance ELSE 0 END) as days_31_60,
-      SUM(CASE WHEN due_date < date('now', '-60 days') AND due_date >= date('now', '-90 days') THEN balance ELSE 0 END) as days_61_90,
-      SUM(CASE WHEN due_date < date('now', '-90 days') THEN balance ELSE 0 END) as days_over_90
+      COALESCE(SUM(CASE WHEN due_date >= CURRENT_DATE THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as current,
+      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE AND due_date >= CURRENT_DATE - INTERVAL '30 days' THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_1_30,
+      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE - INTERVAL '30 days' AND due_date >= CURRENT_DATE - INTERVAL '60 days' THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_31_60,
+      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE - INTERVAL '60 days' AND due_date >= CURRENT_DATE - INTERVAL '90 days' THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_61_90,
+      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE - INTERVAL '90 days' THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_over_90
     FROM invoices
-    WHERE customer_id = ? AND status != 'paid' AND status != 'cancelled'
+    WHERE customer_id = ? AND status NOT IN ('paid', '已付款', 'cancelled', '已取消')
   `).get(customerId)
   
   return {
     summary: {
-      totalInvoices: summary?.total_invoices || 0,
+      totalInvoices: parseInt(summary?.total_invoices) || 0,
       totalAmount: parseFloat(summary?.total_amount || 0),
       paidAmount: parseFloat(summary?.paid_amount || 0),
       balance: parseFloat(summary?.balance || 0),
-      unpaidCount: summary?.unpaid_count || 0,
-      partialCount: summary?.partial_count || 0,
-      overdueCount: summary?.overdue_count || 0,
+      unpaidCount: parseInt(summary?.unpaid_count) || 0,
+      partialCount: parseInt(summary?.partial_count) || 0,
+      overdueCount: parseInt(summary?.overdue_count) || 0,
       overdueAmount: parseFloat(summary?.overdue_amount || 0)
     },
     aging: {
@@ -411,11 +540,17 @@ async function generateOrderNumber(db) {
 // ==================== 数据转换函数 ====================
 
 function convertOrderToCamelCase(row) {
+  // 状态标准化：pending -> 进行中
+  let displayStatus = row.status
+  if (row.status === 'pending') {
+    displayStatus = '进行中'
+  }
+  
   return {
     id: row.id,
+    orderNumber: row.order_number,
     billNumber: row.bill_number,
     containerNumber: row.container_number,
-    mawbNumber: row.mawb_number,
     externalOrderNo: row.external_order_no,
     shipper: row.shipper,
     consignee: row.consignee,
@@ -423,59 +558,60 @@ function convertOrderToCamelCase(row) {
     portOfDischarge: row.port_of_discharge,
     placeOfDelivery: row.place_of_delivery,
     transportMethod: row.transport_method,
-    cargoType: row.cargo_type,
+    containerType: row.container_type,
     pieces: row.pieces,
     weight: row.weight,
     volume: row.volume,
-    status: row.status,
+    status: displayStatus,
+    rawStatus: row.status,
     shipStatus: row.ship_status,
+    customsStatus: row.customs_status,
+    deliveryStatus: row.delivery_status,
     etd: row.etd,
     eta: row.eta,
     ata: row.ata,
+    customerName: row.customer_name,
+    customerCode: row.customer_code,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
 }
 
-function convertCargoItemToCamelCase(row) {
-  return {
-    id: row.id,
-    serialNo: row.serial_no,
-    productCode: row.product_code,
-    productName: row.product_name,
-    productNameEn: row.product_name_en,
-    hsCode: row.hs_code,
-    material: row.material,
-    materialEn: row.material_en,
-    originCountry: row.origin_country,
-    quantity: row.quantity,
-    unit: row.unit,
-    cartonCount: row.carton_count,
-    palletCount: row.pallet_count,
-    unitPrice: row.unit_price,
-    totalValue: row.total_value,
-    grossWeight: row.gross_weight,
-    netWeight: row.net_weight,
-    referenceNo: row.reference_no,
-    productImage: row.product_image,
-    remark: row.remark,
-    status: row.status
-  }
-}
-
-function convertTrackingToCamelCase(row) {
-  return {
-    id: row.id,
-    time: row.tracking_time || row.created_at,
-    status: row.status,
-    description: row.description,
-    location: row.location,
-    carrier: row.carrier,
-    trackingNumber: row.tracking_number
-  }
-}
-
 function convertInvoiceToCamelCase(row) {
+  // 解析 container_numbers
+  let containerNumbers = []
+  try {
+    if (row.container_numbers) {
+      containerNumbers = typeof row.container_numbers === 'string' 
+        ? JSON.parse(row.container_numbers) 
+        : row.container_numbers
+    }
+  } catch (e) {
+    // 解析失败则保持为空数组
+  }
+
+  // 解析并标准化 items 数据结构
+  let items = []
+  try {
+    if (row.items) {
+      const rawItems = typeof row.items === 'string' 
+        ? JSON.parse(row.items) 
+        : row.items
+      
+      // 标准化数据结构（兼容两种格式）
+      items = rawItems.map(item => ({
+        feeName: item.description || item.fee_name || item.feeName || '费用',
+        feeNameEn: item.descriptionEn || item.fee_name_en || item.feeNameEn || null,
+        quantity: item.quantity || 1,
+        unitPrice: parseFloat(item.unitValue || item.unit_price || item.unitPrice || 0),
+        amount: parseFloat(item.amount || 0),
+        unit: item.unit || '项'
+      }))
+    }
+  } catch (e) {
+    // 解析失败则保持为空数组
+  }
+
   return {
     id: row.id,
     invoiceNumber: row.invoice_number,
@@ -490,6 +626,11 @@ function convertInvoiceToCamelCase(row) {
     balance: parseFloat(row.balance || 0),
     billId: row.bill_id,
     billNumber: row.bill_number,
+    containerNumbers,
+    items,
+    pdfUrl: row.pdf_url,
+    excelUrl: row.excel_url,
+    notes: row.notes,
     createdAt: row.created_at
   }
 }

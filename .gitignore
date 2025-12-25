@@ -47,3 +47,7 @@ server/uploads/invoices/*.pdf
 server/uploads/invoices/*.xlsx
 server/uploads/reports/
 server/uploads/tax-confirms/
+
+# Puppeteer Chrome cache
+server/.puppeteer/
+.puppeteer/

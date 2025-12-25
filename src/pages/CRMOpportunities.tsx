@@ -8,6 +8,7 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -470,7 +471,7 @@ export default function CRMOpportunities() {
       },
       render: (_value, record) => (
         <span className="text-xs text-gray-500">
-          {record.expectedCloseDate || '-'}
+          {formatDate(record.expectedCloseDate)}
         </span>
       )
     },
@@ -1007,11 +1008,11 @@ export default function CRMOpportunities() {
                             </span>
                             <span className="text-[10px] text-gray-400">{record.createdBy}</span>
                           </div>
-                          <span className="text-[10px] text-gray-400">{record.createTime}</span>
+                          <span className="text-[10px] text-gray-400">{formatDate(record.createTime)}</span>
                         </div>
                         <p className="text-xs text-gray-700">{record.content}</p>
                         {record.nextFollowUpDate && (
-                          <p className="text-[10px] text-amber-600 mt-2">下次跟进: {record.nextFollowUpDate}</p>
+                          <p className="text-[10px] text-amber-600 mt-2">下次跟进: {formatDate(record.nextFollowUpDate)}</p>
                         )}
                       </div>
                     ))}

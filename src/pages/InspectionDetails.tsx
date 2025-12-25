@@ -7,6 +7,7 @@ import InspectionModal, { type InspectionDetail } from '../components/Inspection
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { getInspectionsList, updateBillInspection, type BillOfLading, type InspectionDetailData } from '../utils/api'
 import { copyToClipboard } from '../components/Toast'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
 
 export default function InspectionDetails() {
   const navigate = useNavigate()
@@ -212,11 +213,11 @@ export default function InspectionDetails() {
       },
       render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <span>{record.eta || '-'}</span>
+          <span>{formatDateTimeShort(record.eta)}</span>
           {record.ata && (
             <>
               <span className="mx-0.5">/</span>
-              <span>{record.ata}</span>
+              <span>{formatDateTimeShort(record.ata)}</span>
             </>
           )}
         </div>
@@ -266,7 +267,7 @@ export default function InspectionDetails() {
       render: (_value, record: BillOfLading) => (
         <div className="text-xs">
           <div>{record.creator}</div>
-          <div className="text-[10px] text-gray-500">{record.createTime}</div>
+          <div className="text-[10px] text-gray-500">{formatDate(record.createTime)}</div>
         </div>
       ),
     },

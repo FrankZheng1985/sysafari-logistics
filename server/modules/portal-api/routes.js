@@ -5,6 +5,7 @@
 
 import express from 'express'
 import * as controller from './controller.js'
+import inquiryController from '../inquiry/controller.js'
 
 const router = express.Router()
 
@@ -12,6 +13,13 @@ const router = express.Router()
 
 // 客户登录
 router.post('/auth/login', controller.login)
+
+// 卡车类型查询（公开接口）
+router.get('/truck-types', inquiryController.getTruckTypes)
+router.get('/truck-types/recommend', inquiryController.recommendTruckType)
+
+// 地理编码（公开接口）
+router.get('/geocode', inquiryController.geocodeAddress)
 
 // ==================== 受保护接口（需要认证） ====================
 
@@ -49,6 +57,12 @@ router.get('/invoices', controller.getInvoices)
 // 获取账单详情
 router.get('/invoices/:id', controller.getInvoiceById)
 
+// 下载发票PDF
+router.get('/invoices/:id/pdf', controller.downloadInvoicePdf)
+
+// 下载账单明细Excel
+router.get('/invoices/:id/excel', controller.downloadInvoiceExcel)
+
 // ==================== 应付账款接口 ====================
 
 // 获取应付账款汇总
@@ -70,6 +84,29 @@ router.delete('/api-keys/:id', controller.deleteMyApiKey)
 
 // 获取 API 调用日志
 router.get('/api-logs', controller.getMyApiLogs)
+
+// ==================== 询价接口 ====================
+
+// 计算运输费用
+router.post('/transport/calculate', inquiryController.calculateTransport)
+
+// 估算清关费用
+router.post('/clearance/estimate', inquiryController.estimateClearance)
+
+// 创建询价
+router.post('/inquiries', inquiryController.createInquiry)
+
+// 获取询价列表
+router.get('/inquiries', inquiryController.getInquiries)
+
+// 获取询价详情
+router.get('/inquiries/:id', inquiryController.getInquiryById)
+
+// 接受报价
+router.post('/inquiries/:id/accept', inquiryController.acceptQuote)
+
+// 拒绝报价
+router.post('/inquiries/:id/reject', inquiryController.rejectQuote)
 
 export default router
 

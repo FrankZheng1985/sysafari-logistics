@@ -6,6 +6,7 @@
 import { getDatabase, generateId } from '../../config/database.js'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { translateText } from '../../utils/translate.js'
 
 // ==================== 常量定义 ====================
 
@@ -260,21 +261,34 @@ export async function createCustomer(data) {
   // 自动生成客户编码（如果没有提供）
   const customerCode = data.customerCode || await generateCustomerCode()
   
+  // 自动翻译公司中文全称为英文（如果有中文名称且没有提供英文名称）
+  let companyNameEn = data.companyNameEn || ''
+  if (data.companyName && !companyNameEn) {
+    try {
+      companyNameEn = await translateText(data.companyName, 'zh-CN', 'en')
+      console.log(`[客户创建] 自动翻译公司名称: ${data.companyName} -> ${companyNameEn}`)
+    } catch (error) {
+      console.error('[客户创建] 翻译公司名称失败:', error.message)
+      companyNameEn = '' // 翻译失败时保持为空
+    }
+  }
+  
   const result = await db.prepare(`
     INSERT INTO customers (
-      id, customer_code, customer_name, company_name, customer_type,
+      id, customer_code, customer_name, company_name, company_name_en, customer_type,
       customer_level, customer_region, country_code, province, city, address, postal_code,
       contact_person, contact_phone, contact_email, tax_number,
       legal_person, registered_capital, establishment_date, business_scope,
       bank_name, bank_account, credit_limit, payment_terms,
       assigned_to, assigned_name, tags, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     customerCode,
     data.customerName,
     data.companyName || '',
+    companyNameEn,
     data.customerType || 'shipper',
     data.customerLevel || 'normal',
     data.customerRegion || 'china',
@@ -313,9 +327,22 @@ export async function updateCustomer(id, data) {
   const fields = []
   const values = []
   
+  // 如果更新了公司中文名称，自动重新翻译英文名称
+  if (data.companyName !== undefined && data.companyName) {
+    try {
+      const companyNameEn = await translateText(data.companyName, 'zh-CN', 'en')
+      console.log(`[客户更新] 自动翻译公司名称: ${data.companyName} -> ${companyNameEn}`)
+      data.companyNameEn = companyNameEn
+    } catch (error) {
+      console.error('[客户更新] 翻译公司名称失败:', error.message)
+      // 翻译失败不影响其他字段更新
+    }
+  }
+  
   const fieldMap = {
     customerName: 'customer_name',
     companyName: 'company_name',
+    companyNameEn: 'company_name_en',
     customerType: 'customer_type',
     customerLevel: 'customer_level',
     customerRegion: 'customer_region',
@@ -2593,6 +2620,7 @@ export function convertCustomerToCamelCase(row) {
     customerCode: row.customer_code,
     customerName: row.customer_name,
     companyName: row.company_name,
+    companyNameEn: row.company_name_en,
     customerType: row.customer_type,
     customerLevel: row.customer_level,
     customerRegion: row.customer_region || 'china',
@@ -2977,12 +3005,16 @@ export async function deleteCustomerAccount(id) {
  */
 export async function verifyCustomerLogin(username, password) {
   const db = getDatabase()
+  console.log('🔍 查询账户:', username)
+  
   const account = await db.prepare(`
     SELECT ca.*, c.customer_name, c.customer_code
     FROM customer_accounts ca
     LEFT JOIN customers c ON ca.customer_id = c.id
     WHERE ca.username = ?
   `).get(username)
+  
+  console.log('🔍 查询结果:', account ? { id: account.id, username: account.username, hasPasswordHash: !!account.password_hash, status: account.status } : null)
   
   if (!account) {
     return { success: false, error: '账户不存在' }

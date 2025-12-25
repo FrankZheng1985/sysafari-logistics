@@ -20,12 +20,16 @@ export async function login(req, res) {
   try {
     const { username, password } = req.body
     
+    console.log('🔐 客户登录请求:', { username, hasPassword: !!password })
+    
     if (!username || !password) {
       return badRequest(res, '用户名和密码不能为空')
     }
     
     // 验证登录
     const result = await crmModel.verifyCustomerLogin(username, password)
+    
+    console.log('🔐 登录验证结果:', { success: result.success, error: result.error })
     
     if (!result.success) {
       return unauthorized(res, result.error)
@@ -174,10 +178,12 @@ export async function changePassword(req, res) {
 export async function getOrders(req, res) {
   try {
     const customerId = req.customer.customerId
-    const { status, billNumber, startDate, endDate, page, pageSize } = req.query
+    const { status, customsStatus, deliveryStatus, billNumber, startDate, endDate, page, pageSize } = req.query
     
     const result = await model.getCustomerOrders(customerId, {
       status,
+      customsStatus,
+      deliveryStatus,
       billNumber,
       startDate,
       endDate,
@@ -259,6 +265,11 @@ export async function createOrder(req, res) {
  */
 export async function getInvoices(req, res) {
   try {
+    // 禁用缓存，确保每次都返回最新数据
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+    
     const customerId = req.customer.customerId
     const { status, startDate, endDate, page, pageSize } = req.query
     
@@ -298,6 +309,84 @@ export async function getInvoiceById(req, res) {
   } catch (error) {
     console.error('获取账单详情失败:', error)
     return serverError(res, '获取账单详情失败')
+  }
+}
+
+/**
+ * 下载账单PDF
+ */
+export async function downloadInvoicePdf(req, res) {
+  try {
+    const customerId = req.customer.customerId
+    const { id } = req.params
+    
+    const invoice = await model.getCustomerInvoiceById(customerId, id)
+    if (!invoice) {
+      return notFound(res, '账单不存在')
+    }
+    
+    if (!invoice.pdfUrl) {
+      return badRequest(res, 'PDF文件尚未生成')
+    }
+    
+    // 从URL提取Key并生成签名URL
+    const { extractKeyFromUrl, getSignedUrl } = await import('../finance/cosStorage.js')
+    const key = extractKeyFromUrl(invoice.pdfUrl)
+    
+    if (!key) {
+      return badRequest(res, 'PDF文件路径无效')
+    }
+    
+    // 生成2小时有效的签名URL
+    const signedUrl = await getSignedUrl(key, 7200)
+    
+    return success(res, {
+      pdfUrl: signedUrl,
+      invoiceNumber: invoice.invoiceNumber,
+      fileName: `发票_${invoice.invoiceNumber}.pdf`
+    })
+  } catch (error) {
+    console.error('获取发票PDF失败:', error)
+    return serverError(res, '获取发票PDF失败')
+  }
+}
+
+/**
+ * 下载账单Excel
+ */
+export async function downloadInvoiceExcel(req, res) {
+  try {
+    const customerId = req.customer.customerId
+    const { id } = req.params
+    
+    const invoice = await model.getCustomerInvoiceById(customerId, id)
+    if (!invoice) {
+      return notFound(res, '账单不存在')
+    }
+    
+    if (!invoice.excelUrl) {
+      return badRequest(res, 'Excel文件尚未生成')
+    }
+    
+    // 从URL提取Key并生成签名URL
+    const { extractKeyFromUrl, getSignedUrl } = await import('../finance/cosStorage.js')
+    const key = extractKeyFromUrl(invoice.excelUrl)
+    
+    if (!key) {
+      return badRequest(res, 'Excel文件路径无效')
+    }
+    
+    // 生成2小时有效的签名URL
+    const signedUrl = await getSignedUrl(key, 7200)
+    
+    return success(res, {
+      excelUrl: signedUrl,
+      invoiceNumber: invoice.invoiceNumber,
+      fileName: `账单明细_${invoice.invoiceNumber}.xlsx`
+    })
+  } catch (error) {
+    console.error('获取账单Excel失败:', error)
+    return serverError(res, '获取账单Excel失败')
   }
 }
 
@@ -516,6 +605,8 @@ export default {
   // 账单
   getInvoices,
   getInvoiceById,
+  downloadInvoicePdf,
+  downloadInvoiceExcel,
   
   // 应付账款
   getPayables,

@@ -7,6 +7,7 @@ import ColumnSettingsModal from '../components/ColumnSettingsModal'
 import { StatsCard, PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
 import { getBillsList, type BillOfLading } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -85,7 +86,7 @@ export default function Dashboard() {
       key: 'eta', 
       label: 'ETA/ATA',
       render: (_value, record: BillOfLading) => (
-        <span className="text-xs">{record.eta}{record.ata ? ` / ${record.ata}` : ''}</span>
+        <span className="text-xs">{formatDateTimeShort(record.eta)}{record.ata ? ` / ${formatDateTimeShort(record.ata)}` : ''}</span>
       ),
     },
     {
@@ -118,7 +119,7 @@ export default function Dashboard() {
       render: (_value, record: BillOfLading) => (
         <div className="text-xs">
           <div className="text-gray-900">{record.creator}</div>
-          <div className="text-[10px] text-gray-500">{record.createTime}</div>
+          <div className="text-[10px] text-gray-500">{formatDate(record.createTime)}</div>
         </div>
       ),
     },

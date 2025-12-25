@@ -27,7 +27,7 @@ export function formatDate(dateStr: string | null | undefined): string {
 
 /**
  * 格式化日期时间 - 显示年月日时分秒
- * 输出格式: 2025-11-03 00:00:00
+ * 输出格式: 2025-11-03T00:00:00
  */
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
@@ -42,7 +42,7 @@ export function formatDateTime(dateStr: string | null | undefined): string {
     const minutes = String(date.getMinutes()).padStart(2, '0')
     const seconds = String(date.getSeconds()).padStart(2, '0')
     
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
   } catch {
     return '-'
   }
@@ -50,7 +50,7 @@ export function formatDateTime(dateStr: string | null | undefined): string {
 
 /**
  * 格式化日期时间 - 只显示时分（用于简短显示）
- * 输出格式: 2025-11-03 00:00
+ * 输出格式: 2025-11-03T00:00
  */
 export function formatDateTimeShort(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
@@ -64,7 +64,7 @@ export function formatDateTimeShort(dateStr: string | null | undefined): string 
     const hours = String(date.getHours()).padStart(2, '0')
     const minutes = String(date.getMinutes()).padStart(2, '0')
     
-    return `${year}-${month}-${day} ${hours}:${minutes}`
+    return `${year}-${month}-${day}T${hours}:${minutes}`
   } catch {
     return '-'
   }

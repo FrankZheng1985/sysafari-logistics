@@ -1,0 +1,399 @@
+/**
+ * HERE Routing API 服务
+ * 用于计算欧洲卡车运输路线和费用
+ * 
+ * 文档: https://developer.here.com/documentation/routing-api/dev_guide/index.html
+ */
+
+import fetch from 'node-fetch'
+
+// HERE API 配置
+const HERE_API_KEY = process.env.HERE_API_KEY || ''
+const HERE_ROUTING_URL = 'https://router.hereapi.com/v8/routes'
+const HERE_GEOCODING_URL = 'https://geocode.search.hereapi.com/v1/geocode'
+
+// 欧洲国家通行费率（EUR/km，估算值）
+const TOLL_RATES = {
+  DE: 0.15,   // 德国
+  FR: 0.12,   // 法国
+  IT: 0.10,   // 意大利
+  ES: 0.08,   // 西班牙
+  AT: 0.18,   // 奥地利
+  CH: 0.25,   // 瑞士
+  BE: 0.10,   // 比利时
+  NL: 0.08,   // 荷兰
+  PL: 0.06,   // 波兰
+  CZ: 0.08,   // 捷克
+  HU: 0.07,   // 匈牙利
+  DEFAULT: 0.10
+}
+
+// 燃油附加费率（根据距离）
+const FUEL_SURCHARGE_RATE = 0.15 // EUR/km
+
+/**
+ * 地理编码 - 将地址转换为坐标
+ */
+export async function geocodeAddress(address) {
+  if (!HERE_API_KEY) {
+    console.warn('HERE API Key 未配置，使用模拟数据')
+    return mockGeocode(address)
+  }
+  
+  try {
+    const url = `${HERE_GEOCODING_URL}?q=${encodeURIComponent(address)}&apiKey=${HERE_API_KEY}`
+    const response = await fetch(url)
+    const data = await response.json()
+    
+    if (data.items && data.items.length > 0) {
+      const item = data.items[0]
+      return {
+        lat: item.position.lat,
+        lng: item.position.lng,
+        address: item.address.label,
+        country: item.address.countryCode,
+        city: item.address.city,
+        postalCode: item.address.postalCode
+      }
+    }
+    
+    return null
+  } catch (error) {
+    console.error('地理编码失败:', error)
+    return null
+  }
+}
+
+/**
+ * 计算卡车路线
+ * @param {Object} params
+ * @param {Object} params.origin - 起点 {lat, lng} 或 {address}
+ * @param {Object} params.destination - 终点 {lat, lng} 或 {address}
+ * @param {Array} params.waypoints - 途经点（多点卸货）
+ * @param {Object} params.truck - 卡车参数
+ */
+export async function calculateTruckRoute(params) {
+  const { origin, destination, waypoints = [], truck = {} } = params
+  
+  // 处理地址到坐标的转换
+  let originCoords = origin.lat ? origin : await geocodeAddress(origin.address)
+  let destCoords = destination.lat ? destination : await geocodeAddress(destination.address)
+  
+  if (!originCoords || !destCoords) {
+    throw new Error('无法解析起点或终点地址')
+  }
+  
+  // 处理途经点
+  const waypointCoords = []
+  for (const wp of waypoints) {
+    const coords = wp.lat ? wp : await geocodeAddress(wp.address)
+    if (coords) {
+      waypointCoords.push(coords)
+    }
+  }
+  
+  if (!HERE_API_KEY) {
+    console.warn('HERE API Key 未配置，使用模拟路线数据')
+    return mockRouteCalculation(originCoords, destCoords, waypointCoords, truck)
+  }
+  
+  try {
+    // 构建 HERE API 请求
+    let url = `${HERE_ROUTING_URL}?`
+    url += `transportMode=truck`
+    url += `&origin=${originCoords.lat},${originCoords.lng}`
+    url += `&destination=${destCoords.lat},${destCoords.lng}`
+    
+    // 添加途经点
+    waypointCoords.forEach((wp, i) => {
+      url += `&via=${wp.lat},${wp.lng}`
+    })
+    
+    // 卡车参数
+    if (truck.grossWeight) {
+      url += `&truck[grossWeight]=${truck.grossWeight}`
+    }
+    if (truck.height) {
+      url += `&truck[height]=${Math.round(truck.height * 100)}` // 转换为厘米
+    }
+    if (truck.width) {
+      url += `&truck[width]=${Math.round(truck.width * 100)}`
+    }
+    if (truck.length) {
+      url += `&truck[length]=${Math.round(truck.length * 100)}`
+    }
+    if (truck.axleCount) {
+      url += `&truck[axleCount]=${truck.axleCount}`
+    }
+    
+    // 返回详细信息
+    url += `&return=summary,polyline,actions,turnByTurnActions`
+    url += `&apiKey=${HERE_API_KEY}`
+    
+    const response = await fetch(url)
+    const data = await response.json()
+    
+    if (data.routes && data.routes.length > 0) {
+      return parseHereRouteResponse(data.routes[0], originCoords, destCoords, waypointCoords, truck)
+    }
+    
+    throw new Error('未找到可用路线')
+  } catch (error) {
+    console.error('HERE API 调用失败:', error)
+    // 失败时返回模拟数据
+    return mockRouteCalculation(originCoords, destCoords, waypointCoords, truck)
+  }
+}
+
+/**
+ * 解析 HERE API 返回的路线数据
+ */
+function parseHereRouteResponse(route, origin, destination, waypoints, truck) {
+  const section = route.sections[0]
+  const summary = section.summary
+  
+  // 计算总距离和时间
+  const totalDistance = summary.length / 1000 // 转换为公里
+  const totalDuration = summary.duration / 60 // 转换为分钟
+  
+  // 估算通行费（基于距离和国家）
+  const estimatedTolls = estimateTolls(totalDistance, origin.country, destination.country)
+  
+  // 估算燃油附加费
+  const fuelSurcharge = totalDistance * FUEL_SURCHARGE_RATE
+  
+  return {
+    origin: {
+      lat: origin.lat,
+      lng: origin.lng,
+      address: origin.address,
+      country: origin.country
+    },
+    destination: {
+      lat: destination.lat,
+      lng: destination.lng,
+      address: destination.address,
+      country: destination.country
+    },
+    waypoints: waypoints.map(wp => ({
+      lat: wp.lat,
+      lng: wp.lng,
+      address: wp.address
+    })),
+    route: {
+      distance: Math.round(totalDistance),
+      duration: Math.round(totalDuration),
+      durationFormatted: formatDuration(totalDuration),
+      polyline: section.polyline
+    },
+    costs: {
+      tolls: Math.round(estimatedTolls * 100) / 100,
+      fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+      currency: 'EUR'
+    },
+    truck: truck
+  }
+}
+
+/**
+ * 估算通行费
+ */
+function estimateTolls(distance, originCountry, destCountry) {
+  // 简化计算：使用平均费率
+  const originRate = TOLL_RATES[originCountry] || TOLL_RATES.DEFAULT
+  const destRate = TOLL_RATES[destCountry] || TOLL_RATES.DEFAULT
+  const avgRate = (originRate + destRate) / 2
+  
+  // 假设约60%的路程需要付费
+  return distance * avgRate * 0.6
+}
+
+/**
+ * 格式化时间
+ */
+function formatDuration(minutes) {
+  const hours = Math.floor(minutes / 60)
+  const mins = Math.round(minutes % 60)
+  
+  if (hours > 0) {
+    return `${hours}小时${mins > 0 ? mins + '分钟' : ''}`
+  }
+  return `${mins}分钟`
+}
+
+/**
+ * 计算运输费用
+ */
+export function calculateTransportCost(routeData, truckType) {
+  const { distance } = routeData.route
+  const { tolls, fuelSurcharge } = routeData.costs
+  
+  // 基础运费 = 距离 × 费率
+  const baseCost = distance * truckType.baseRatePerKm
+  
+  // 应用最低收费
+  const transportCost = Math.max(baseCost, truckType.minCharge)
+  
+  // 总费用 = 运费 + 通行费 + 燃油附加费
+  const totalCost = transportCost + tolls + fuelSurcharge
+  
+  return {
+    baseCost: Math.round(baseCost * 100) / 100,
+    transportCost: Math.round(transportCost * 100) / 100,
+    tolls: Math.round(tolls * 100) / 100,
+    fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+    totalCost: Math.round(totalCost * 100) / 100,
+    currency: 'EUR',
+    breakdown: {
+      distance,
+      ratePerKm: truckType.baseRatePerKm,
+      minCharge: truckType.minCharge,
+      truckType: truckType.name
+    }
+  }
+}
+
+// ==================== 模拟数据（用于测试和API未配置时） ====================
+
+/**
+ * 模拟地理编码
+ */
+function mockGeocode(address) {
+  // 一些常见的欧洲城市坐标
+  const mockLocations = {
+    'hamburg': { lat: 53.5511, lng: 9.9937, country: 'DE', city: 'Hamburg' },
+    'rotterdam': { lat: 51.9244, lng: 4.4777, country: 'NL', city: 'Rotterdam' },
+    'antwerp': { lat: 51.2194, lng: 4.4025, country: 'BE', city: 'Antwerp' },
+    'paris': { lat: 48.8566, lng: 2.3522, country: 'FR', city: 'Paris' },
+    'berlin': { lat: 52.5200, lng: 13.4050, country: 'DE', city: 'Berlin' },
+    'munich': { lat: 48.1351, lng: 11.5820, country: 'DE', city: 'Munich' },
+    'frankfurt': { lat: 50.1109, lng: 8.6821, country: 'DE', city: 'Frankfurt' },
+    'amsterdam': { lat: 52.3676, lng: 4.9041, country: 'NL', city: 'Amsterdam' },
+    'brussels': { lat: 50.8503, lng: 4.3517, country: 'BE', city: 'Brussels' },
+    'milan': { lat: 45.4642, lng: 9.1900, country: 'IT', city: 'Milan' },
+    'vienna': { lat: 48.2082, lng: 16.3738, country: 'AT', city: 'Vienna' },
+    'warsaw': { lat: 52.2297, lng: 21.0122, country: 'PL', city: 'Warsaw' },
+    'prague': { lat: 50.0755, lng: 14.4378, country: 'CZ', city: 'Prague' }
+  }
+  
+  const lowerAddress = address.toLowerCase()
+  
+  for (const [key, location] of Object.entries(mockLocations)) {
+    if (lowerAddress.includes(key)) {
+      return {
+        ...location,
+        address: address,
+        postalCode: '00000'
+      }
+    }
+  }
+  
+  // 默认返回汉堡港（假设从港口出发）
+  return {
+    lat: 53.5511,
+    lng: 9.9937,
+    address: address,
+    country: 'DE',
+    city: 'Hamburg',
+    postalCode: '20457'
+  }
+}
+
+/**
+ * 模拟路线计算
+ */
+function mockRouteCalculation(origin, destination, waypoints, truck) {
+  // 使用 Haversine 公式计算直线距离，然后乘以1.3作为道路距离估算
+  const directDistance = haversineDistance(
+    origin.lat, origin.lng,
+    destination.lat, destination.lng
+  )
+  
+  // 加上途经点的额外距离
+  let waypointDistance = 0
+  let prevPoint = origin
+  for (const wp of waypoints) {
+    waypointDistance += haversineDistance(
+      prevPoint.lat, prevPoint.lng,
+      wp.lat, wp.lng
+    )
+    prevPoint = wp
+  }
+  waypointDistance += haversineDistance(
+    prevPoint.lat, prevPoint.lng,
+    destination.lat, destination.lng
+  )
+  
+  const totalDirectDistance = waypoints.length > 0 ? waypointDistance : directDistance
+  const roadDistance = Math.round(totalDirectDistance * 1.3) // 道路距离约为直线距离的1.3倍
+  
+  // 估算时间（平均速度70km/h）
+  const duration = Math.round((roadDistance / 70) * 60)
+  
+  // 估算通行费
+  const estimatedTolls = estimateTolls(roadDistance, origin.country, destination.country)
+  
+  // 燃油附加费
+  const fuelSurcharge = roadDistance * FUEL_SURCHARGE_RATE
+  
+  return {
+    origin: {
+      lat: origin.lat,
+      lng: origin.lng,
+      address: origin.address,
+      country: origin.country || 'DE'
+    },
+    destination: {
+      lat: destination.lat,
+      lng: destination.lng,
+      address: destination.address,
+      country: destination.country || 'DE'
+    },
+    waypoints: waypoints.map(wp => ({
+      lat: wp.lat,
+      lng: wp.lng,
+      address: wp.address
+    })),
+    route: {
+      distance: roadDistance,
+      duration: duration,
+      durationFormatted: formatDuration(duration),
+      polyline: null // 模拟数据没有路线
+    },
+    costs: {
+      tolls: Math.round(estimatedTolls * 100) / 100,
+      fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+      currency: 'EUR'
+    },
+    truck: truck,
+    isMockData: true
+  }
+}
+
+/**
+ * Haversine 公式计算两点间距离（公里）
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371 // 地球半径（公里）
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function toRad(deg) {
+  return deg * (Math.PI / 180)
+}
+
+export default {
+  geocodeAddress,
+  calculateTruckRoute,
+  calculateTransportCost,
+  TOLL_RATES,
+  FUEL_SURCHARGE_RATE
+}
+

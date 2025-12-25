@@ -76,8 +76,8 @@ export async function getInvoices(params = {}) {
       // 逾期：due_date < 当前日期 且 status 不是 paid/cancelled
       query += ` AND due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled')`
     } else if (status === 'unpaid_all') {
-      // 所有未付清的发票（包括逾期的）- issued、unpaid、partial 都算未付清
-      query += ` AND status IN ('issued', 'unpaid', 'partial')`
+      // 所有未付清的发票（包括逾期的）- pending、issued、unpaid、partial 都算未付清
+      query += ` AND status IN ('pending', 'issued', 'unpaid', 'partial')`
     } else if (status.includes(',')) {
       // 支持多个状态值（逗号分隔），用于历史记录页面查询 paid,cancelled
       const statuses = status.split(',').map(s => s.trim()).filter(s => s)
@@ -157,8 +157,8 @@ export async function getInvoiceStats(params = {}) {
   }
   
   // 销售发票统计
-  // 状态说明: paid=已收, unpaid=未收, partial=部分收款, cancelled=已取消
-  // 待收 = unpaid + partial (不含逾期)
+  // 状态说明: paid=已收, unpaid=未收, partial=部分收款, pending=待处理, cancelled=已取消
+  // 待收 = pending + unpaid + partial (不含逾期)
   // 逾期 = due_date < 当前日期 且 status 不是 paid/cancelled
   const salesStats = await db.prepare(`
     SELECT 
@@ -166,7 +166,7 @@ export async function getInvoiceStats(params = {}) {
       COALESCE(SUM(total_amount), 0) as total_amount,
       COALESCE(SUM(paid_amount), 0) as paid_amount,
       COALESCE(SUM(total_amount - paid_amount), 0) as unpaid_amount,
-      SUM(CASE WHEN status IN ('unpaid', 'partial') AND (due_date IS NULL OR due_date >= CURRENT_DATE) THEN 1 ELSE 0 END) as pending_count,
+      SUM(CASE WHEN status IN ('pending', 'unpaid', 'partial') AND (due_date IS NULL OR due_date >= CURRENT_DATE) THEN 1 ELSE 0 END) as pending_count,
       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
       SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled') THEN 1 ELSE 0 END) as overdue_count
     FROM invoices 
@@ -174,8 +174,8 @@ export async function getInvoiceStats(params = {}) {
   `).get(...queryParams)
   
   // 采购发票统计
-  // 状态说明: paid=已付, unpaid=未付, partial=部分付款, cancelled=已取消
-  // 待付 = unpaid + partial (不含逾期)
+  // 状态说明: paid=已付, unpaid=未付, partial=部分付款, pending=待处理, cancelled=已取消
+  // 待付 = pending + unpaid + partial (不含逾期)
   // 逾期 = due_date < 当前日期 且 status 不是 paid/cancelled
   const purchaseStats = await db.prepare(`
     SELECT 
@@ -183,7 +183,7 @@ export async function getInvoiceStats(params = {}) {
       COALESCE(SUM(total_amount), 0) as total_amount,
       COALESCE(SUM(paid_amount), 0) as paid_amount,
       COALESCE(SUM(total_amount - paid_amount), 0) as unpaid_amount,
-      SUM(CASE WHEN status IN ('unpaid', 'partial') AND (due_date IS NULL OR due_date >= CURRENT_DATE) THEN 1 ELSE 0 END) as pending_count,
+      SUM(CASE WHEN status IN ('pending', 'unpaid', 'partial') AND (due_date IS NULL OR due_date >= CURRENT_DATE) THEN 1 ELSE 0 END) as pending_count,
       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
       SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled') THEN 1 ELSE 0 END) as overdue_count
     FROM invoices 
@@ -237,14 +237,19 @@ export async function createInvoice(data) {
   // 生成发票号
   const invoiceNumber = await generateInvoiceNumber(data.invoiceType)
   
+  // 处理集装箱号数组
+  const containerNumbers = Array.isArray(data.containerNumbers) 
+    ? JSON.stringify(data.containerNumbers) 
+    : JSON.stringify([])
+  
   const result = await db.prepare(`
     INSERT INTO invoices (
       id, invoice_number, invoice_type, invoice_date, due_date,
-      customer_id, customer_name, bill_id, bill_number,
+      customer_id, customer_name, bill_id, bill_number, container_numbers,
       subtotal, tax_amount, total_amount, paid_amount,
       currency, exchange_rate, description, notes,
       status, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     invoiceNumber,
@@ -255,6 +260,7 @@ export async function createInvoice(data) {
     data.customerName || '',
     data.billId || null,
     data.billNumber || '',
+    containerNumbers,
     data.subtotal || 0,
     data.taxAmount || 0,
     data.totalAmount || data.subtotal || 0,
@@ -301,6 +307,14 @@ export async function updateInvoice(id, data) {
       values.push(data[jsField])
     }
   })
+  
+  // 特殊处理集装箱号数组
+  if (data.containerNumbers !== undefined) {
+    fields.push('container_numbers = ?')
+    values.push(Array.isArray(data.containerNumbers) 
+      ? JSON.stringify(data.containerNumbers) 
+      : JSON.stringify([]))
+  }
   
   if (fields.length === 0) return false
   
@@ -536,7 +550,7 @@ export async function createPayment(data) {
   
   // 如果关联发票，更新发票付款金额
   if (data.invoiceId && data.status === 'completed') {
-    updateInvoicePaidAmount(data.invoiceId)
+    await updateInvoicePaidAmount(data.invoiceId)
   }
   
   return { id, paymentNumber }
@@ -549,7 +563,7 @@ export async function updatePayment(id, data) {
   const db = getDatabase()
   
   // 获取原记录
-  const original = getPaymentById(id)
+  const original = await getPaymentById(id)
   
   const fields = []
   const values = []
@@ -584,7 +598,7 @@ export async function updatePayment(id, data) {
   
   // 如果关联发票，更新发票付款金额
   if (original && original.invoiceId) {
-    updateInvoicePaidAmount(original.invoiceId)
+    await updateInvoicePaidAmount(original.invoiceId)
   }
   
   return result.changes > 0
@@ -597,13 +611,13 @@ export async function deletePayment(id) {
   const db = getDatabase()
   
   // 获取原记录
-  const original = getPaymentById(id)
+  const original = await getPaymentById(id)
   
   const result = await db.prepare('DELETE FROM payments WHERE id = ?').run(id)
   
   // 如果关联发票，更新发票付款金额
   if (original && original.invoiceId) {
-    updateInvoicePaidAmount(original.invoiceId)
+    await updateInvoicePaidAmount(original.invoiceId)
   }
   
   return result.changes > 0
@@ -618,7 +632,7 @@ export async function deletePayment(id) {
 export async function getFees(params = {}) {
   const db = getDatabase()
   const { 
-    category, billId, customerId, supplierId, feeType,
+    category, billId, customerId, supplierId, supplierName, feeType,
     startDate, endDate, search,
     page = 1, pageSize = 20 
   } = params
@@ -663,6 +677,12 @@ export async function getFees(params = {}) {
   if (supplierId) {
     whereClause += ' AND f.supplier_id = ?'
     queryParams.push(supplierId)
+  }
+  
+  // 支持按供应商名称过滤（用于兼容不同ID格式）
+  if (supplierName) {
+    whereClause += ' AND f.supplier_name = ?'
+    queryParams.push(supplierName)
   }
   
   if (startDate) {

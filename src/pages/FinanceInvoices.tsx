@@ -21,6 +21,7 @@ interface Invoice {
   customerName: string
   billId: string | null
   billNumber: string
+  containerNumbers?: string[]
   subtotal: number
   taxAmount: number
   totalAmount: number
@@ -161,12 +162,14 @@ export default function FinanceInvoices() {
     }).format(amount)
   }
 
-  const getStatusConfig = (status: string) => {
+  const getStatusConfig = (status: string, invoiceType?: string) => {
+    // 根据发票类型区分：销售发票用"收款"，采购发票用"付款"
+    const isSales = invoiceType === 'sales'
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof CheckCircle }> = {
       draft: { label: '草稿', color: 'text-gray-600', bg: 'bg-gray-100', icon: FileText },
-      pending: { label: '待付款', color: 'text-yellow-600', bg: 'bg-yellow-100', icon: Clock },
-      partial: { label: '部分付款', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock },
-      paid: { label: '已付款', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
+      pending: { label: isSales ? '待收款' : '待付款', color: 'text-yellow-600', bg: 'bg-yellow-100', icon: Clock },
+      partial: { label: isSales ? '部分收款' : '部分付款', color: 'text-blue-600', bg: 'bg-blue-100', icon: Clock },
+      paid: { label: isSales ? '已收款' : '已付款', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
       overdue: { label: '已逾期', color: 'text-red-600', bg: 'bg-red-100', icon: AlertTriangle },
       cancelled: { label: '已取消', color: 'text-gray-400', bg: 'bg-gray-50', icon: XCircle },
     }
@@ -215,8 +218,8 @@ export default function FinanceInvoices() {
       render: (_value, record) => (
         <div>
           <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
-          {record.billNumber && (
-            <div className="text-xs text-gray-400">提单: {record.billNumber}</div>
+          {record.containerNumbers && record.containerNumbers.length > 0 && (
+            <div className="text-xs text-gray-400">柜号: {record.containerNumbers.join(', ')}</div>
           )}
         </div>
       )
@@ -262,13 +265,13 @@ export default function FinanceInvoices() {
       sorter: true,
       filters: [
         { text: '草稿', value: 'draft' },
-        { text: '待付款', value: 'pending' },
-        { text: '部分付款', value: 'partial' },
+        { text: filterType === 'sales' ? '待收款' : filterType === 'purchase' ? '待付款' : '待收/付款', value: 'pending' },
+        { text: filterType === 'sales' ? '部分收款' : filterType === 'purchase' ? '部分付款' : '部分收/付款', value: 'partial' },
         { text: '已逾期', value: 'overdue' },
       ],
       onFilter: (value, record) => record.status === value,
       render: (_value, record) => {
-        const config = getStatusConfig(record.status)
+        const config = getStatusConfig(record.status, record.invoiceType)
         const Icon = config.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
@@ -357,7 +360,7 @@ export default function FinanceInvoices() {
       )
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [navigate])
+  ], [navigate, filterType])
 
   return (
     <div className="p-4 space-y-4">
@@ -374,7 +377,7 @@ export default function FinanceInvoices() {
         <div className="bg-blue-50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium text-blue-700">销售发票（应收）</span>
-            <span className="text-xs text-blue-600">{stats?.sales?.totalCount || 0} 张</span>
+            <span className="text-xs text-blue-600">{(stats?.sales?.pendingCount || 0) + (stats?.sales?.overdueCount || 0)} 张</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -396,7 +399,7 @@ export default function FinanceInvoices() {
         <div className="bg-orange-50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium text-orange-700">采购发票（应付）</span>
-            <span className="text-xs text-orange-600">{stats?.purchase?.totalCount || 0} 张</span>
+            <span className="text-xs text-orange-600">{(stats?.purchase?.pendingCount || 0) + (stats?.purchase?.overdueCount || 0)} 张</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -454,8 +457,8 @@ export default function FinanceInvoices() {
           >
             <option value="">待处理</option>
             <option value="draft">草稿</option>
-            <option value="pending">待付款</option>
-            <option value="partial">部分付款</option>
+            <option value="pending">{filterType === 'sales' ? '待收款' : filterType === 'purchase' ? '待付款' : '待收/付款'}</option>
+            <option value="partial">{filterType === 'sales' ? '部分收款' : filterType === 'purchase' ? '部分付款' : '部分收/付款'}</option>
             <option value="overdue">已逾期</option>
           </select>
         </div>

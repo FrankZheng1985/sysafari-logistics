@@ -7,6 +7,7 @@ import CMRModal, { type CMRDetail, type ExceptionRecord } from '../components/CM
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { getCMRList, updateBillDelivery, markBillComplete, type BillOfLading, type CMRStats, type CMRDetailData } from '../utils/api'
 import { copyToClipboard } from '../components/Toast'
+import { formatDate } from '../utils/dateFormat'
 
 // 扩展stats类型
 interface ExtendedCMRStats extends CMRStats {
@@ -349,7 +350,7 @@ export default function CMRManage() {
         return dateA - dateB
       },
       render: (_value, record: BillOfLading) => (
-        <span className="text-xs">{record.createTime}</span>
+        <span className="text-xs">{formatDate(record.createTime)}</span>
       ),
     },
     {

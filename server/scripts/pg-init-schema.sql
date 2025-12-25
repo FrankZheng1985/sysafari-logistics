@@ -647,6 +647,7 @@ CREATE TABLE IF NOT EXISTS customers (
     customer_code TEXT UNIQUE NOT NULL,
     customer_name TEXT NOT NULL,
     company_name TEXT,
+    company_name_en TEXT,
     customer_type TEXT DEFAULT 'shipper',
     customer_level TEXT DEFAULT 'normal',
     customer_region TEXT DEFAULT 'china',
@@ -800,9 +801,11 @@ CREATE TABLE IF NOT EXISTS payments (
     payment_date DATE,
     amount NUMERIC NOT NULL DEFAULT 0,
     currency TEXT DEFAULT 'EUR',
+    exchange_rate NUMERIC DEFAULT 1,
     payment_method TEXT,
     bank_account TEXT,
     reference_number TEXT,
+    description TEXT,
     notes TEXT,
     receipt_url TEXT,
     status TEXT DEFAULT 'pending',
@@ -820,6 +823,22 @@ DO $$
 BEGIN 
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'receipt_url') THEN
         ALTER TABLE payments ADD COLUMN receipt_url TEXT;
+    END IF;
+END $$;
+
+-- 添加 exchange_rate 字段（如果不存在）
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'exchange_rate') THEN
+        ALTER TABLE payments ADD COLUMN exchange_rate NUMERIC DEFAULT 1;
+    END IF;
+END $$;
+
+-- 添加 description 字段（如果不存在）
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'description') THEN
+        ALTER TABLE payments ADD COLUMN description TEXT;
     END IF;
 END $$;
 

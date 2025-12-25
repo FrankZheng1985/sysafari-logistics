@@ -7,6 +7,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { success, successWithPagination, badRequest, notFound, serverError } from '../../utils/response.js'
 import * as model from './model.js'
+import * as orderModel from '../order/model.js'
 import * as invoiceGenerator from './invoiceGenerator.js'
 import { getBOCExchangeRate } from '../../utils/exchangeRate.js'
 
@@ -91,36 +92,69 @@ export async function getInvoiceById(req, res) {
     // 获取关联付款记录
     const payments = await model.getPayments({ invoiceId: invoice.id })
     
-    // 如果 items 为空但有 bill_id，从 fees 表获取费用数据
+    // 检查是否需要重新获取费用明细
+    // 条件：items 为空，或者 items 只有一个"服务费"，或者 items 缺少 containerNumber 字段
     let items = invoice.items
-    if ((!items || items.length === 0) && invoice.billId) {
+    const hasContainerNumber = Array.isArray(items) && items.length > 0 && items[0].containerNumber
+    const needRefetchItems = !items || items.length === 0 || 
+      (items.length === 1 && items[0].description === '服务费') ||
+      !hasContainerNumber  // 如果缺少集装箱号，重新获取
+    
+    // 获取所有关联的订单信息（支持多个提单）
+    let relatedBills = []
+    if (invoice.billNumber) {
+      // 解析多个提单号（逗号分隔）
+      const billNumbers = invoice.billNumber.split(',').map(bn => bn.trim()).filter(Boolean)
+      
+      // 获取每个提单的详细信息（精确匹配提单号）
+      for (const billNumber of billNumbers) {
+        const bill = await orderModel.getBillByNumber(billNumber)
+        if (bill) {
+          relatedBills.push(bill)
+        }
+      }
+    }
+    
+    if (needRefetchItems) {
       // 根据发票类型确定要筛选的费用类型
       // sales = 销售发票(应收) -> fee_type = 'receivable'
       // purchase = 采购发票(应付) -> fee_type = 'payable'
       const targetFeeType = invoice.invoiceType === 'purchase' ? 'payable' : 'receivable'
       
-      const fees = await model.getFees({ billId: invoice.billId, feeType: targetFeeType })
+      // 从所有关联的 billId 获取费用
+      let allFees = []
+      if (relatedBills.length > 0) {
+        for (const bill of relatedBills) {
+          const fees = await model.getFees({ billId: bill.id, feeType: targetFeeType })
       if (fees && fees.list && fees.list.length > 0) {
-        // 按费用名称汇总
-        const feeGroups = {}
+            // 为每个费用添加集装箱号和提单号
         fees.list.forEach(fee => {
-          const feeName = fee.feeName || 'Other'
-          if (!feeGroups[feeName]) {
-            feeGroups[feeName] = {
-              description: feeName,
-              quantity: 0,
-              totalAmount: 0
-            }
+              allFees.push({
+                ...fee,
+                containerNumber: fee.containerNumber || bill.containerNumber,
+                billNumber: fee.billNumber || bill.billNumber
+              })
+            })
           }
-          feeGroups[feeName].quantity += 1
-          feeGroups[feeName].totalAmount += parseFloat(fee.amount) || 0
-        })
-        
-        items = Object.values(feeGroups).map(group => ({
-          description: group.description,
-          quantity: group.quantity,
-          unitValue: group.totalAmount / group.quantity,
-          amount: group.totalAmount
+        }
+      } else if (invoice.billId) {
+        // 兼容旧逻辑：如果没有解析到多个提单，使用单个 billId
+        const fees = await model.getFees({ billId: invoice.billId, feeType: targetFeeType })
+        if (fees && fees.list) {
+          allFees = fees.list
+        }
+      }
+      
+      if (allFees.length > 0) {
+        // 原始费用明细（不合并，每个费用一行）
+        items = allFees.map(fee => ({
+          description: fee.feeName || 'Other',
+          descriptionEn: fee.feeNameEn || null,
+          quantity: 1,
+          unitValue: parseFloat(fee.amount) || 0,
+          amount: parseFloat(fee.amount) || 0,
+          containerNumber: fee.containerNumber,
+          billNumber: fee.billNumber
         }))
       }
     }
@@ -128,6 +162,7 @@ export async function getInvoiceById(req, res) {
     return success(res, {
       ...invoice,
       items,
+      relatedBills,  // 返回所有关联的订单信息
       payments: payments.list
     })
   } catch (error) {
@@ -488,12 +523,14 @@ export async function viewPaymentReceipt(req, res) {
  */
 export async function getFees(req, res) {
   try {
-    const { category, billId, customerId, feeType, startDate, endDate, search, page, pageSize } = req.query
+    const { category, billId, customerId, supplierId, supplierName, feeType, startDate, endDate, search, page, pageSize } = req.query
     
     const result = await model.getFees({
       category,
       billId,
       customerId,
+      supplierId,      // 供应商ID过滤
+      supplierName,    // 供应商名称过滤（用于兼容不同ID格式）
       feeType,
       startDate,
       endDate,

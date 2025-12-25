@@ -8,6 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -360,7 +361,7 @@ export default function CRMFeedbacks() {
       },
       render: (_value, record) => (
         <span className="text-xs text-gray-500">
-          {record.createTime ? new Date(record.createTime).toLocaleDateString() : '-'}
+          {formatDate(record.createTime)}
         </span>
       )
     },

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   ArrowLeft, Save, FileText, Plus, Trash2, 
@@ -14,6 +14,7 @@ const API_BASE = getApiBaseUrl()
 interface Customer {
   id: string
   customerName: string
+  companyName?: string  // 公司全称
   customerCode?: string
   contactPerson?: string
   contactPhone?: string
@@ -69,6 +70,7 @@ interface Fee {
 interface SupplierFee extends Fee {
   billId: string
   billNumber: string
+  containerNumber?: string  // 集装箱号
   feeDate?: string
   selected?: boolean
 }
@@ -141,6 +143,7 @@ export default function CreateInvoice() {
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [supplierFees, setSupplierFees] = useState<SupplierFee[]>([])  // 供应商在各订单的应付费用
   const [loadingSupplierFees, setLoadingSupplierFees] = useState(false)
+  const [feeSearchKeyword, setFeeSearchKeyword] = useState('')  // 费用搜索关键词（支持多集装箱号，空格分隔）
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])  // 上传的对账单/发票文件
   const [previewFile, setPreviewFile] = useState<string | null>(null)  // 预览的文件URL
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -207,6 +210,39 @@ export default function CreateInvoice() {
     other: '其他费用'
   }
 
+  // 过滤后的费用列表（支持多集装箱号搜索，空格分隔）
+  const filteredSupplierFees = useMemo(() => {
+    if (!feeSearchKeyword.trim()) {
+      return supplierFees
+    }
+    // 将搜索词按空格分割成多个关键词
+    const keywords = feeSearchKeyword.trim().split(/\s+/).filter(k => k)
+    if (keywords.length === 0) {
+      return supplierFees
+    }
+    // 只要费用的集装箱号或提单号包含任意一个关键词，就显示
+    return supplierFees.filter(fee => 
+      keywords.some(keyword => {
+        const kw = keyword.toUpperCase()
+        return (fee.containerNumber?.toUpperCase().includes(kw) || 
+                fee.billNumber?.toUpperCase().includes(kw))
+      })
+    )
+  }, [supplierFees, feeSearchKeyword])
+
+  // 按集装箱号分组的费用
+  const groupedSupplierFees = useMemo(() => {
+    const groups: Record<string, SupplierFee[]> = {}
+    filteredSupplierFees.forEach(fee => {
+      const key = fee.containerNumber || fee.billNumber || '未知'
+      if (!groups[key]) {
+        groups[key] = []
+      }
+      groups[key].push(fee)
+    })
+    return groups
+  }, [filteredSupplierFees])
+
   // 获取汇率
   const fetchExchangeRate = async (currency: string) => {
     if (currency === 'CNY') {
@@ -244,9 +280,45 @@ export default function CreateInvoice() {
         const invoice = data.data
         setEditInvoiceNumber(invoice.invoiceNumber)
         
-        // 解析发票明细
+        // 解析发票明细 - 优先从 items 字段读取（包含正确的金额）
         let items: InvoiceItem[] = []
-        if (invoice.description) {
+        
+        // 尝试从 items 字段解析
+        let parsedItems: Array<{description: string, amount: number, quantity?: number, unitPrice?: number, taxRate?: number}> = []
+        if (invoice.items && typeof invoice.items === 'string') {
+          try {
+            parsedItems = JSON.parse(invoice.items)
+          } catch (e) {
+            parsedItems = []
+          }
+        } else if (Array.isArray(invoice.items)) {
+          parsedItems = invoice.items
+        }
+        
+        if (parsedItems.length > 0) {
+          // 使用 items 字段的数据（包含正确的金额）
+          items = parsedItems.map((item, index) => {
+            const amount = Number(item.amount) || 0
+            const quantity = item.quantity || 1
+            // 如果有 unitPrice 就用 unitPrice，否则用 amount/quantity 计算
+            const unitPrice = item.unitPrice || (quantity > 0 ? amount / quantity : amount)
+            return {
+              id: String(index + 1),
+              description: item.description || '',
+              quantity: quantity,
+              unitPrice: unitPrice,
+              currency: invoice.currency || 'EUR',
+              amount: amount,
+              taxRate: item.taxRate || 0,
+              taxAmount: 0,
+              discountPercent: 0,
+              discountAmount: 0,
+              finalAmount: amount,
+              isFromOrder: false
+            }
+          })
+        } else if (invoice.description) {
+          // 后备方案：从 description 字段分割（旧数据兼容）
           const descriptions = invoice.description.split(';').filter((s: string) => s.trim())
           const amountPerItem = Number(invoice.totalAmount) / descriptions.length
           items = descriptions.map((desc: string, idx: number) => ({
@@ -565,11 +637,12 @@ export default function CreateInvoice() {
   }
 
   // 获取供应商在各订单下的应付费用
-  const fetchSupplierFees = async (supplierId: string) => {
+  const fetchSupplierFees = async (supplierId: string, supplierName: string) => {
     setLoadingSupplierFees(true)
     try {
       // 获取该供应商的所有应付费用（跨订单），采购发票只显示应付费用
-      const response = await fetch(`${API_BASE}/api/fees?supplierId=${supplierId}&feeType=payable&pageSize=200`)
+      // 使用供应商名称查询（兼容不同ID格式）
+      const response = await fetch(`${API_BASE}/api/fees?supplierName=${encodeURIComponent(supplierName)}&feeType=payable&pageSize=500`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         // 按订单分组显示费用，并标记选中状态
@@ -599,8 +672,8 @@ export default function CreateInvoice() {
       supplierId: supplier.id,
       supplierName: supplier.supplierName
     }))
-    // 加载该供应商的费用
-    await fetchSupplierFees(supplier.id)
+    // 加载该供应商的费用（使用供应商名称查询，兼容不同ID格式）
+    await fetchSupplierFees(supplier.id, supplier.supplierName)
   }
 
   // 清除供应商选择
@@ -626,10 +699,24 @@ export default function CreateInvoice() {
     ))
   }
 
-  // 全选/取消全选
+  // 全选/取消全选（针对当前过滤后的费用）
   const toggleSelectAll = () => {
-    const allSelected = supplierFees.every(fee => fee.selected)
-    setSupplierFees(prev => prev.map(fee => ({ ...fee, selected: !allSelected })))
+    const targetFees = filteredSupplierFees
+    const allSelected = targetFees.every(fee => fee.selected)
+    const targetIds = new Set(targetFees.map(f => f.id))
+    setSupplierFees(prev => prev.map(fee => 
+      targetIds.has(fee.id) ? { ...fee, selected: !allSelected } : fee
+    ))
+  }
+
+  // 按集装箱选择/取消选择
+  const toggleContainerSelection = (containerKey: string) => {
+    const containerFees = groupedSupplierFees[containerKey] || []
+    const allSelected = containerFees.every(fee => fee.selected)
+    const containerFeeIds = new Set(containerFees.map(f => f.id))
+    setSupplierFees(prev => prev.map(fee => 
+      containerFeeIds.has(fee.id) ? { ...fee, selected: !allSelected } : fee
+    ))
   }
 
   // 将选中的费用转换为发票明细
@@ -863,12 +950,14 @@ export default function CreateInvoice() {
 
   // 选择客户
   const selectCustomer = (customer: Customer) => {
+    // 发票使用公司全称，如果没有全称则使用客户名称
+    const displayName = customer.companyName || customer.customerName
     setFormData(prev => ({
       ...prev,
       customerId: customer.id,
-      customerName: customer.customerName
+      customerName: displayName
     }))
-    setCustomerSearch(customer.customerName)
+    setCustomerSearch(displayName)
     setShowCustomerDropdown(false)
     
     // 清空之前选择的订单
@@ -1139,6 +1228,15 @@ export default function CreateInvoice() {
       const billNumbers = formData.invoiceType === 'purchase'
         ? [...new Set(formData.items.map(item => item.billNumber).filter(Boolean))]
         : [formData.billNumber]
+      
+      // 提取集装箱号：从选中的订单中获取
+      const containerNumbers = formData.invoiceType === 'sales'
+        ? selectedBills.map(b => b.containerNumber).filter(Boolean)
+        : [...new Set(formData.items.map(item => {
+            // 从 supplierFees 中查找对应订单的集装箱号
+            const fee = supplierFees.find(f => f.billId === item.billId)
+            return fee?.containerNumber
+          }).filter(Boolean))]
 
       const submitData = {
         invoiceType: formData.invoiceType,
@@ -1147,8 +1245,9 @@ export default function CreateInvoice() {
         // 销售发票用客户，采购发票用供应商
         customerId: formData.invoiceType === 'sales' ? formData.customerId : formData.supplierId,
         customerName: formData.invoiceType === 'sales' ? formData.customerName : formData.supplierName,
-        billId: billIds[0] || null,  // 主订单ID
+        billId: billIds.join(','),  // 多个订单ID用逗号分隔
         billNumber: billNumbers.join(', '),  // 可能多个订单号
+        containerNumbers: containerNumbers,  // 集装箱号数组
         subtotal: totals.subtotal,
         taxAmount: totals.taxAmount,
         totalAmount: totals.totalAmount,
@@ -1350,7 +1449,7 @@ export default function CreateInvoice() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-gray-900">{customer.customerName}</span>
+                            <span className="text-sm font-medium text-gray-900">{customer.companyName || customer.customerName}</span>
                             {/* 显示可开票订单数量 */}
                             {billCount >= 0 ? (
                               billCount > 0 ? (
@@ -1372,6 +1471,12 @@ export default function CreateInvoice() {
                             </span>
                           )}
                         </div>
+                        {/* 如果有公司全称，显示简称作为提示 */}
+                        {customer.companyName && customer.customerName !== customer.companyName && (
+                          <div className="mt-0.5 text-xs text-gray-400">
+                            简称: {customer.customerName}
+                          </div>
+                        )}
                         {customer.contactPerson && (
                           <div className="mt-1 text-xs text-gray-500">
                             联系人: {customer.contactPerson} {(customer as any).phone && `| ${(customer as any).phone}`}
@@ -1842,7 +1947,6 @@ export default function CreateInvoice() {
                       value={formData.supplierInvoiceDate}
                       onChange={(date) => setFormData(prev => ({ ...prev, supplierInvoiceDate: date }))}
                       placeholder="选择日期"
-                      className="!px-3 !py-2 !text-sm !rounded-lg"
                     />
                   </div>
                 </div>
@@ -1851,22 +1955,54 @@ export default function CreateInvoice() {
 
             {/* 右侧：系统费用匹配 */}
             <div className="border-l border-gray-200 pl-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-xs font-medium text-gray-700">
+              {/* 标题和操作栏 */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-sm font-medium text-gray-700">
                   该供应商的应付费用 
                   {loadingSupplierFees && <span className="text-gray-400 ml-2">加载中...</span>}
+                  {supplierFees.length > 0 && <span className="text-gray-400 ml-1">({supplierFees.length}项)</span>}
                 </div>
                 {supplierFees.length > 0 && (
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    title={supplierFees.every(f => f.selected) ? '取消全选' : '全选费用项'}
+                    title={filteredSupplierFees.every(f => f.selected) ? '取消全选' : '全选费用项'}
                     className="text-xs text-orange-600 hover:text-orange-700"
                   >
-                    {supplierFees.every(f => f.selected) ? '取消全选' : '全选'}
+                    {filteredSupplierFees.every(f => f.selected) ? '取消全选' : '全选'}
                   </button>
                 )}
               </div>
+
+              {/* 集装箱号搜索框 */}
+              {supplierFees.length > 0 && (
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={feeSearchKeyword}
+                      onChange={(e) => setFeeSearchKeyword(e.target.value)}
+                      placeholder="搜索集装箱号，多个用空格分隔"
+                      className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
+                    {feeSearchKeyword && (
+                      <button
+                        type="button"
+                        onClick={() => setFeeSearchKeyword('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {feeSearchKeyword && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      找到 {filteredSupplierFees.length} 项费用
+                    </p>
+                  )}
+                </div>
+              )}
 
               {supplierFees.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
@@ -1874,35 +2010,66 @@ export default function CreateInvoice() {
                   <p className="text-sm">暂无该供应商的应付费用记录</p>
                   <p className="text-xs mt-1">请先在订单的费用管理中录入费用</p>
                 </div>
+              ) : filteredSupplierFees.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">未找到匹配的费用</p>
+                  <p className="text-xs mt-1">请检查搜索的集装箱号</p>
+                </div>
               ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {supplierFees.map(fee => (
-                    <div
-                      key={fee.id}
-                      onClick={() => toggleFeeSelection(fee.id)}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        fee.selected
-                          ? 'bg-orange-50 border-orange-300'
-                          : 'bg-white border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={fee.selected || false}
-                        onChange={() => {}}
-                        title="选择此费用项"
-                        className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
-                      />
-                      <div className="flex-1 min-w-0">
+                <div className="space-y-4 max-h-80 overflow-y-auto">
+                  {Object.entries(groupedSupplierFees).map(([containerKey, fees]) => (
+                    <div key={containerKey} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* 集装箱号分组标题 - 点击可选择整个集装箱 */}
+                      <div 
+                        className="bg-gray-50 px-3 py-2 border-b border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+                        onClick={() => toggleContainerSelection(containerKey)}
+                      >
                         <div className="flex items-center gap-2">
-                          <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">{fee.billNumber}</span>
-                          <span className="text-sm text-gray-900 truncate">{fee.feeName || feeCategoryMap[fee.category] || '费用'}</span>
+                          <input
+                            type="checkbox"
+                            checked={fees.every(f => f.selected)}
+                            onChange={() => {}}
+                            title={fees.every(f => f.selected) ? '取消选择该集装箱所有费用' : '选择该集装箱所有费用'}
+                            className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                          />
+                          <span className="text-xs font-medium text-gray-700 flex-1">
+                            📦 {containerKey}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {fees.filter(f => f.selected).length}/{fees.length}项
+                          </span>
                         </div>
-                        {fee.description && <p className="text-xs text-gray-500 truncate mt-0.5">{fee.description}</p>}
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm font-medium text-gray-900">{Number(fee.amount).toFixed(2)}</div>
-                        <div className="text-xs text-gray-500">{fee.currency}</div>
+                      {/* 该集装箱下的费用列表 */}
+                      <div className="divide-y divide-gray-100">
+                        {fees.map(fee => (
+                          <div
+                            key={fee.id}
+                            onClick={() => toggleFeeSelection(fee.id)}
+                            className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                              fee.selected
+                                ? 'bg-orange-50'
+                                : 'bg-white hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={fee.selected || false}
+                              onChange={() => {}}
+                              title="选择此费用项"
+                              className="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm text-gray-900">{fee.feeName || feeCategoryMap[fee.category] || '费用'}</span>
+                              {fee.description && <p className="text-xs text-gray-500 truncate">{fee.description}</p>}
+                            </div>
+                            <div className="text-right whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{Number(fee.amount).toFixed(2)}</div>
+                              <div className="text-xs text-gray-500">{fee.currency}</div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -2078,10 +2245,10 @@ export default function CreateInvoice() {
                             type="button"
                             key={customer.id}
                             onClick={() => selectCustomer(customer)}
-                            title={`选择客户: ${customer.customerName}`}
+                            title={`选择客户: ${customer.companyName || customer.customerName}`}
                             className="w-full text-left px-2 py-1.5 hover:bg-gray-50 cursor-pointer"
                           >
-                            <div className="text-xs text-gray-900">{customer.customerName}</div>
+                            <div className="text-xs text-gray-900">{customer.companyName || customer.customerName}</div>
                             {customer.customerCode && (
                               <div className="text-[10px] text-gray-500">{customer.customerCode}</div>
                             )}
