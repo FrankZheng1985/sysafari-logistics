@@ -2186,6 +2186,71 @@ export async function runMigrations() {
       console.log('  ✅ 产品"欧洲运输"已同步')
     }
     
+    // 为欧洲运输插入费用项 (单独检查，确保费用项存在)
+    const prod1FeeCount = await client.query(`SELECT COUNT(*) as count FROM product_fee_items WHERE product_id = $1`, ['70f1aa1f-3ec8-45cb-b652-e176998b6796'])
+    if (parseInt(prod1FeeCount.rows[0].count) === 0) {
+      await client.query(`
+        INSERT INTO product_fee_items (product_id, fee_name, fee_name_en, fee_category, unit, standard_price, currency, is_required, description, billing_type, cost_price, profit_type, profit_value, supplier_id, supplier_name, supplier_price_id, created_at, updated_at) VALUES
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1150, 'EUR', 0, '', 'fixed', 932, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 56, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1150, 'EUR', 0, '', 'fixed', 932, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 57, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1150, 'EUR', 0, '', 'fixed', 932, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 58, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1150, 'EUR', 0, '', 'fixed', 950, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 59, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1250, 'EUR', 0, '', 'fixed', 1047, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 60, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1250, 'EUR', 0, '', 'fixed', 1047, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 61, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1250, 'EUR', 0, '', 'fixed', 1047, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 62, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1065, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 63, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1065, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 64, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1065, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 65, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1250, 'EUR', 0, '', 'fixed', 1040, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 66, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1100, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 67, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1100, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 68, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1100, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 69, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1100, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 70, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1100, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 71, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1350, 'EUR', 0, '', 'fixed', 1130, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 72, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1350, 'EUR', 0, '', 'fixed', 1137, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 73, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1090, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 74, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1450, 'EUR', 0, '', 'fixed', 1205, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 75, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1450, 'EUR', 0, '', 'fixed', 1205, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 76, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1450, 'EUR', 0, '', 'fixed', 1225, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 77, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1650, 'EUR', 0, '', 'fixed', 1405, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 78, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1650, 'EUR', 0, '', 'fixed', 1405, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 79, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1650, 'EUR', 0, '', 'fixed', 1405, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 80, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1650, 'EUR', 0, '', 'fixed', 1440, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 81, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1700, 'EUR', 0, '', 'fixed', 1467, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 82, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1700, 'EUR', 0, '', 'fixed', 1467, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 83, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1700, 'EUR', 0, '', 'fixed', 1500, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 84, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1900, 'EUR', 0, '', 'fixed', 1665, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 85, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 3300, 'EUR', 0, '', 'fixed', 3100, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 86, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1950, 'EUR', 0, '', 'fixed', 1705, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 87, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1950, 'EUR', 0, '', 'fixed', 1705, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 88, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1950, 'EUR', 0, '', 'fixed', 1705, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 89, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1950, 'EUR', 0, '', 'fixed', 1740, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 90, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2100, 'EUR', 0, '', 'fixed', 1900, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 91, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2100, 'EUR', 0, '', 'fixed', 1900, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 92, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2100, 'EUR', 0, '', 'fixed', 1900, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 93, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2100, 'EUR', 0, '', 'fixed', 1900, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 94, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2250, 'EUR', 0, '', 'fixed', 2005, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 95, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2250, 'EUR', 0, '', 'fixed', 2025, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 96, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2450, 'EUR', 0, '', 'fixed', 2205, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 97, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2750, 'EUR', 0, '', 'fixed', 2525, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 98, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 3750, 'EUR', 0, '', 'fixed', 3550, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 99, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2800, 'EUR', 0, '', 'fixed', 2580, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 100, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2450, 'EUR', 0, '', 'fixed', 2230, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 101, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2450, 'EUR', 0, '', 'fixed', 2250, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 102, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 2450, 'EUR', 0, '', 'fixed', 2250, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 103, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1300, 'EUR', 0, '', 'fixed', 1080, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 104, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 950, 'EUR', 0, '', 'fixed', 737, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 105, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1550, 'EUR', 0, '', 'fixed', 1350, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 106, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', 'TRANSPORT', '票', 1900, 'EUR', 0, '', 'fixed', 1855, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 107, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 3750, 'EUR', 0, '', 'fixed', 3550, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 108, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', 'THC费', 'THC fee', '换单费', '柜', 0, 'EUR', 0, '', 'actual', 0, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '', 129, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提单管理费', 'B/L Management Fee', '文件费', '次', 0, 'EUR', 0, '', 'actual', 0, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '', 130, NOW(), NOW()),
+        ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '卡车等待费', 'Truck Waiting Fee', '运输服务', '半小时', 50, 'EUR', 0, '', 'fixed', 35, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '', 131, NOW(), NOW())
+      `)
+      console.log('  ✅ 产品"欧洲运输"费用项已同步 (57个)')
+    }
+    
     // 检查并插入缺失的产品: 欧洲自税清关服务
     const prod2 = await client.query(`SELECT id FROM products WHERE id = $1`, ['ed0d483d-7693-480d-be6c-ed668e2fa620'])
     if (prod2.rows.length === 0) {
@@ -2193,7 +2258,12 @@ export async function runMigrations() {
         INSERT INTO products (id, product_code, product_name, product_name_en, category, description, is_active, sort_order, created_at, updated_at)
         VALUES ('ed0d483d-7693-480d-be6c-ed668e2fa620', 'PRD0004', '欧洲自税清关服务', 'European self-tax customs clearance services', '清关服务', '', 1, 0, NOW(), NOW())
       `)
-      // 为欧洲自税清关服务插入费用项
+      console.log('  ✅ 产品"欧洲自税清关服务"已同步')
+    }
+    
+    // 为欧洲自税清关服务插入费用项 (单独检查)
+    const prod2FeeCount = await client.query(`SELECT COUNT(*) as count FROM product_fee_items WHERE product_id = $1`, ['ed0d483d-7693-480d-be6c-ed668e2fa620'])
+    if (parseInt(prod2FeeCount.rows[0].count) === 0) {
       await client.query(`
         INSERT INTO product_fee_items (product_id, fee_name, fee_name_en, fee_category, unit, standard_price, currency, is_required, description, billing_type, cost_price, profit_type, profit_value, created_at, updated_at)
         VALUES 
@@ -2203,7 +2273,7 @@ export async function runMigrations() {
           ('ed0d483d-7693-480d-be6c-ed668e2fa620', '离岸税号清关费', 'Offshore tax number customs clearance fee', '清关服务', '票', 175, 'EUR', 0, '含10个HS', 'fixed', 150, 'amount', 25, NOW(), NOW()),
           ('ed0d483d-7693-480d-be6c-ed668e2fa620', '进口关税', 'import duties', '税务费', '次', 0, 'EUR', 0, '', 'actual', 0, 'amount', 0, NOW(), NOW())
       `)
-      console.log('  ✅ 产品"欧洲自税清关服务"及费用项已同步')
+      console.log('  ✅ 产品"欧洲自税清关服务"费用项已同步')
     }
 
     console.log('✅ 数据库迁移完成！')
