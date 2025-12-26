@@ -252,16 +252,16 @@ export default function FinanceFees() {
     })
   }, [fees])
 
-  // 费用分类配置 - 支持所有数据库中的分类
+  // 费用分类配置 - 支持所有数据库中的分类（包括服务费类别的英文代码）
   const getCategoryConfig = (category: string) => {
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof Truck }> = {
-      // 标准分类
+      // 标准分类（小写）
       freight: { label: '运费', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
-      transport: { label: '运输费', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
+      transport: { label: '运输服务', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
       customs: { label: '关税', color: 'text-red-600', bg: 'bg-red-100', icon: Receipt },
       duty: { label: '进口税', color: 'text-rose-600', bg: 'bg-rose-100', icon: Calculator },
       tax: { label: '增值税', color: 'text-pink-600', bg: 'bg-pink-100', icon: DollarSign },
-      warehouse: { label: '仓储费', color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 },
+      warehouse: { label: '仓储服务', color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 },
       storage: { label: '仓储费', color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 },
       insurance: { label: '保险费', color: 'text-green-600', bg: 'bg-green-100', icon: Shield },
       handling: { label: '操作费', color: 'text-purple-600', bg: 'bg-purple-100', icon: Package },
@@ -269,9 +269,20 @@ export default function FinanceFees() {
       port: { label: '港口费', color: 'text-indigo-600', bg: 'bg-indigo-100', icon: Anchor },
       service: { label: '服务费', color: 'text-teal-600', bg: 'bg-teal-100', icon: Briefcase },
       package: { label: '包装费', color: 'text-amber-600', bg: 'bg-amber-100', icon: Box },
-      other: { label: '其他费用', color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings },
+      other: { label: '其他服务', color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings },
+      clearance: { label: '清关服务', color: 'text-red-600', bg: 'bg-red-100', icon: Receipt },
+      thc: { label: '港杂费', color: 'text-purple-600', bg: 'bg-purple-100', icon: Package },
+      // 服务费类别英文代码（来自基础数据）
+      'export customs clearance services': { label: '出口报关服务', color: 'text-red-600', bg: 'bg-red-100', icon: Receipt },
+      'document fees': { label: '文件费', color: 'text-cyan-600', bg: 'bg-cyan-100', icon: FileText },
+      'document exchange fee': { label: '换单费', color: 'text-indigo-600', bg: 'bg-indigo-100', icon: FileText },
+      'tax fees': { label: '税务费', color: 'text-green-600', bg: 'bg-green-100', icon: Shield },
+      "importer's agency fee": { label: '进口商代理费', color: 'text-amber-600', bg: 'bg-amber-100', icon: Building2 },
+      'management fee': { label: '管理费', color: 'text-slate-600', bg: 'bg-slate-100', icon: Settings },
     }
-    return configs[category] || { label: category, color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings }
+    // 先转换为小写再匹配
+    const lowerCategory = category?.toLowerCase() || ''
+    return configs[lowerCategory] || { label: category, color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings }
   }
 
 

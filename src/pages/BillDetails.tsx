@@ -36,15 +36,16 @@ const mockDeclarations: Declaration[] = [
   },
 ]
 
-// 费用分类配置 - 支持所有数据库中的分类
+// 费用分类配置 - 支持所有数据库中的分类（包括服务费类别的英文代码）
 const getFeeCategoryConfig = (category: string) => {
   const configs: Record<string, { label: string; bgClass: string; textClass: string }> = {
+    // 标准分类（小写）
     freight: { label: '运费', bgClass: 'bg-blue-50', textClass: 'text-blue-600' },
-    transport: { label: '运输', bgClass: 'bg-blue-50', textClass: 'text-blue-600' },
+    transport: { label: '运输服务', bgClass: 'bg-blue-50', textClass: 'text-blue-600' },
     customs: { label: '关税', bgClass: 'bg-red-50', textClass: 'text-red-600' },
     duty: { label: '进口税', bgClass: 'bg-rose-50', textClass: 'text-rose-600' },
     tax: { label: '增值税', bgClass: 'bg-pink-50', textClass: 'text-pink-600' },
-    warehouse: { label: '仓储', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    warehouse: { label: '仓储服务', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
     storage: { label: '仓储', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
     insurance: { label: '保险', bgClass: 'bg-green-50', textClass: 'text-green-600' },
     handling: { label: '操作', bgClass: 'bg-purple-50', textClass: 'text-purple-600' },
@@ -52,9 +53,20 @@ const getFeeCategoryConfig = (category: string) => {
     port: { label: '港口', bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' },
     service: { label: '服务', bgClass: 'bg-teal-50', textClass: 'text-teal-600' },
     package: { label: '包装', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
-    other: { label: '其他', bgClass: 'bg-gray-50', textClass: 'text-gray-600' },
+    other: { label: '其他服务', bgClass: 'bg-gray-50', textClass: 'text-gray-600' },
+    clearance: { label: '清关服务', bgClass: 'bg-red-50', textClass: 'text-red-600' },
+    thc: { label: '港杂费', bgClass: 'bg-purple-50', textClass: 'text-purple-600' },
+    // 服务费类别英文代码（来自基础数据）
+    'export customs clearance services': { label: '出口报关服务', bgClass: 'bg-red-50', textClass: 'text-red-600' },
+    'document fees': { label: '文件费', bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' },
+    'document exchange fee': { label: '换单费', bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' },
+    'tax fees': { label: '税务费', bgClass: 'bg-green-50', textClass: 'text-green-600' },
+    "importer's agency fee": { label: '进口商代理费', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    'management fee': { label: '管理费', bgClass: 'bg-slate-50', textClass: 'text-slate-600' },
   }
-  return configs[category] || { label: category || '其他', bgClass: 'bg-gray-50', textClass: 'text-gray-600' }
+  // 先转换为小写再匹配
+  const lowerCategory = category?.toLowerCase() || ''
+  return configs[lowerCategory] || { label: category || '其他', bgClass: 'bg-gray-50', textClass: 'text-gray-600' }
 }
 
 // 提取为独立组件，避免在渲染循环中重新创建
