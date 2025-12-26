@@ -728,6 +728,25 @@ export async function deleteAirPort(req, res) {
   }
 }
 
+/**
+ * 获取机场国家列表
+ * @description 获取所有机场所属国家的去重列表
+ */
+export async function getAirPortCountries(req, res) {
+  try {
+    const db = getDatabase()
+    const countries = await db.prepare(
+      'SELECT DISTINCT country, country_code FROM air_ports WHERE country IS NOT NULL AND country != \'\' ORDER BY country'
+    ).all()
+    
+    const result = countries.map(r => ({ country: r.country, countryCode: r.country_code }))
+    return success(res, result)
+  } catch (error) {
+    console.error('获取机场国家列表失败:', error)
+    return serverError(res, '获取机场国家列表失败')
+  }
+}
+
 // ==================== 船公司相关 ====================
 
 export async function getShippingCompanies(req, res) {

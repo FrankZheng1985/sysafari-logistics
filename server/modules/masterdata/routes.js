@@ -92,6 +92,9 @@ router.delete('/destination-ports/:id', controller.deleteDestinationPort)
 
 // ==================== 机场相关路由 ====================
 
+// 获取机场国家列表 (需要在 :id 路由之前)
+router.get('/air-ports/countries', controller.getAirPortCountries)
+
 // 获取机场列表
 router.get('/air-ports', controller.getAirPorts)
 
