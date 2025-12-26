@@ -1061,7 +1061,9 @@ export default function ProductPricing() {
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <div className="text-xs text-gray-500">
-                        {product.category || '未分类'}
+                        {product.category 
+                          ? (serviceCategories.find(c => c.code === product.category || c.name === product.category)?.name || product.category)
+                          : '未分类'}
                       </div>
                       <div className="text-xs text-gray-400">
                         {product.feeItemCount ?? product.feeItems?.length ?? 0} 个费用项
