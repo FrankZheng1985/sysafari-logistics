@@ -315,14 +315,30 @@ export function getDatabase() {
       connectionString: DATABASE_URL,
       // 本地连接不使用 SSL，Render 连接需要 SSL
       ssl: needSSL ? { rejectUnauthorized: false } : false,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      max: 20,                        // 最大连接数
+      min: 2,                         // 保持最小连接数，减少冷启动延迟
+      idleTimeoutMillis: 60000,       // 空闲连接超时 60s（从30s增加）
+      connectionTimeoutMillis: 10000, // 连接超时 10s（从5s增加，应对网络波动）
+      allowExitOnIdle: false,         // 防止空闲时退出连接池
     })
     
     pgPool.on('error', (err) => {
       console.error('❌ PostgreSQL 连接池错误:', err.message)
     })
+    
+    // 数据库心跳检查（每 5 分钟），防止连接休眠
+    if (!isLocalhost) {
+      setInterval(async () => {
+        try {
+          const client = await pgPool.connect()
+          await client.query('SELECT 1')
+          client.release()
+          // 静默成功，减少日志噪音
+        } catch (err) {
+          console.error('💔 数据库心跳失败:', err.message)
+        }
+      }, 5 * 60 * 1000) // 5 分钟
+    }
     
     const dbType = isLocalhost ? '本地' : (isProduction ? '生产' : '测试')
     console.log(`🌐 PostgreSQL 数据库连接已建立 (${dbType}环境)`)
