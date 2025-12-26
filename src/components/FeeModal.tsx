@@ -232,6 +232,14 @@ export default function FeeModal({
   const [supplierPriceSearch, setSupplierPriceSearch] = useState('')
   const [selectedPriceIds, setSelectedPriceIds] = useState<number[]>([])
   
+  // 产品库搜索和多选
+  const [productSearch, setProductSearch] = useState('')
+  const [selectedProductFees, setSelectedProductFees] = useState<Array<{
+    productId: string
+    productName: string
+    feeItem: ProductFeeItem
+  }>>([])
+  
   // 供应商搜索防抖
   const supplierSearchRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -1349,32 +1357,50 @@ export default function FeeModal({
         </div>
       </div>
 
-      {/* 产品费用项选择弹窗 */}
+      {/* 产品费用项选择弹窗 - 支持多选 */}
       {showProductSelect && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setShowProductSelect(false)} />
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[70vh] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <Package className="w-4 h-4 text-green-600" />
-                从产品库选择费用项
-              </h3>
-              <button onClick={() => setShowProductSelect(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[calc(70vh-60px)]">
-              {products.map(product => (
-                <ProductFeeSelector
-                  key={product.id}
-                  product={product}
-                  onSelect={(feeItem) => handleSelectProductFee(product.id, feeItem)}
-                  loadFeeItems={loadProductFeeItems}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        <ProductFeeSelectModal
+          products={products}
+          productSearch={productSearch}
+          setProductSearch={setProductSearch}
+          selectedProductFees={selectedProductFees}
+          setSelectedProductFees={setSelectedProductFees}
+          loadProductFeeItems={loadProductFeeItems}
+          feeCategories={feeCategories}
+          onClose={() => {
+            setShowProductSelect(false)
+            setProductSearch('')
+            setSelectedProductFees([])
+          }}
+          onBatchAdd={(items) => {
+            // 将选中的产品费用项添加到待提交列表
+            const newItems = items.map(item => ({
+              id: `pending-product-${item.feeItem.id}-${Date.now()}`,
+              feeName: item.feeItem.feeName,
+              feeNameEn: item.feeItem.feeNameEn,
+              category: item.feeItem.feeCategory || 'other',
+              amount: item.feeItem.standardPrice || 0,
+              currency: item.feeItem.currency || 'EUR',
+              source: 'product' as FeeSourceType,
+              sourceId: item.feeItem.id,
+              routeInfo: `产品: ${item.productName}`
+            }))
+            
+            // 过滤掉已添加的
+            const existingSourceIds = pendingFeeItems.filter(p => p.source === 'product').map(p => p.sourceId)
+            const filteredNewItems = newItems.filter(item => !existingSourceIds.includes(item.sourceId))
+            
+            if (filteredNewItems.length === 0) {
+              alert('所选费用项已添加')
+              return
+            }
+            
+            setPendingFeeItems(prev => [...prev, ...filteredNewItems])
+            setSelectedProductFees([])
+            setProductSearch('')
+            setShowProductSelect(false)
+          }}
+        />
       )}
 
       {/* 供应商报价选择弹窗 */}
@@ -1631,73 +1657,294 @@ export default function FeeModal({
   )
 }
 
-// 产品费用项选择子组件
-function ProductFeeSelector({ 
-  product, 
-  onSelect, 
-  loadFeeItems 
-}: { 
-  product: Product
-  onSelect: (feeItem: ProductFeeItem) => void
-  loadFeeItems: (productId: string) => Promise<ProductFeeItem[]>
+// 产品费用项多选弹窗组件
+function ProductFeeSelectModal({
+  products,
+  productSearch,
+  setProductSearch,
+  selectedProductFees,
+  setSelectedProductFees,
+  loadProductFeeItems,
+  feeCategories,
+  onClose,
+  onBatchAdd
+}: {
+  products: Product[]
+  productSearch: string
+  setProductSearch: (value: string) => void
+  selectedProductFees: Array<{ productId: string; productName: string; feeItem: ProductFeeItem }>
+  setSelectedProductFees: (value: Array<{ productId: string; productName: string; feeItem: ProductFeeItem }>) => void
+  loadProductFeeItems: (productId: string) => Promise<ProductFeeItem[]>
+  feeCategories: FeeCategory[]
+  onClose: () => void
+  onBatchAdd: (items: Array<{ productId: string; productName: string; feeItem: ProductFeeItem }>) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const [feeItems, setFeeItems] = useState<ProductFeeItem[]>([])
-  const [loading, setLoading] = useState(false)
-
-  const handleExpand = async () => {
-    if (!expanded && feeItems.length === 0) {
-      setLoading(true)
-      const items = await loadFeeItems(product.id)
-      setFeeItems(items)
-      setLoading(false)
+  const [loadingProductId, setLoadingProductId] = useState<string | null>(null)
+  const [productFeeItemsMap, setProductFeeItemsMap] = useState<Record<string, ProductFeeItem[]>>({})
+  const [expandedProducts, setExpandedProducts] = useState<string[]>([])
+  
+  // 过滤产品
+  const filteredProducts = products.filter(product => {
+    if (!productSearch) return true
+    const search = productSearch.toLowerCase()
+    return (
+      product.productName?.toLowerCase().includes(search) ||
+      product.productCode?.toLowerCase().includes(search)
+    )
+  })
+  
+  // 加载产品费用项
+  const handleLoadFeeItems = async (productId: string) => {
+    if (productFeeItemsMap[productId]) {
+      // 已加载，切换展开状态
+      setExpandedProducts(prev => 
+        prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]
+      )
+      return
     }
-    setExpanded(!expanded)
+    
+    setLoadingProductId(productId)
+    try {
+      const items = await loadProductFeeItems(productId)
+      setProductFeeItemsMap(prev => ({ ...prev, [productId]: items }))
+      setExpandedProducts(prev => [...prev, productId])
+    } finally {
+      setLoadingProductId(null)
+    }
   }
-
+  
+  // 切换费用项选择
+  const toggleFeeItem = (productId: string, productName: string, feeItem: ProductFeeItem) => {
+    const isSelected = selectedProductFees.some(
+      f => f.productId === productId && f.feeItem.id === feeItem.id
+    )
+    
+    if (isSelected) {
+      setSelectedProductFees(selectedProductFees.filter(
+        f => !(f.productId === productId && f.feeItem.id === feeItem.id)
+      ))
+    } else {
+      setSelectedProductFees([...selectedProductFees, { productId, productName, feeItem }])
+    }
+  }
+  
+  // 全选某产品下的所有费用项
+  const selectAllFromProduct = (productId: string, productName: string) => {
+    const feeItems = productFeeItemsMap[productId] || []
+    const currentSelectedIds = selectedProductFees
+      .filter(f => f.productId === productId)
+      .map(f => f.feeItem.id)
+    
+    if (currentSelectedIds.length === feeItems.length) {
+      // 取消全选
+      setSelectedProductFees(selectedProductFees.filter(f => f.productId !== productId))
+    } else {
+      // 全选
+      const newSelections = feeItems
+        .filter(item => !currentSelectedIds.includes(item.id))
+        .map(item => ({ productId, productName, feeItem: item }))
+      setSelectedProductFees([...selectedProductFees, ...newSelections])
+    }
+  }
+  
   return (
-    <div className="border border-gray-200 rounded-lg mb-2 overflow-hidden">
-      <button
-        onClick={handleExpand}
-        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Package className="w-4 h-4 text-green-600" />
-          <span className="font-medium text-sm text-gray-900">{product.productName}</span>
-          <span className="text-xs text-gray-400">{product.productCode}</span>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        {/* 标题栏 */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <Package className="w-4 h-4 text-green-600" />
+            从产品库选择费用项
+            {selectedProductFees.length > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-600 rounded-full text-xs">
+                已选 {selectedProductFees.length} 项
+              </span>
+            )}
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
         </div>
-        <span className="text-gray-400">
-          {expanded ? '▼' : '▶'}
-        </span>
-      </button>
-      
-      {expanded && (
-        <div className="p-2 space-y-1">
-          {loading ? (
-            <div className="text-center py-3 text-xs text-gray-400">加载中...</div>
-          ) : feeItems.length > 0 ? (
-            feeItems.map(item => (
+        
+        {/* 搜索栏 */}
+        <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="搜索产品名称或代码..."
+              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            />
+            {productSearch && (
               <button
-                key={item.id}
-                onClick={() => onSelect(item)}
-                className="w-full text-left px-3 py-2 border border-gray-100 rounded hover:border-green-300 hover:bg-green-50 transition-colors"
+                onClick={() => setProductSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-900">{item.feeName}</span>
-                  <span className="text-sm font-medium text-green-600">
-                    {item.currency} {item.standardPrice?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                {item.feeNameEn && (
-                  <div className="text-xs text-gray-500">{item.feeNameEn}</div>
-                )}
+                <X className="w-4 h-4" />
               </button>
-            ))
+            )}
+          </div>
+          <div className="mt-1.5 text-xs text-gray-500">
+            共 {filteredProducts.length} 个产品 {productSearch && `(搜索结果)`}
+          </div>
+        </div>
+        
+        {/* 产品列表 */}
+        <div className="p-4 overflow-y-auto max-h-[calc(80vh-180px)]">
+          {filteredProducts.length > 0 ? (
+            <div className="space-y-2">
+              {filteredProducts.map(product => {
+                const isExpanded = expandedProducts.includes(product.id)
+                const isLoading = loadingProductId === product.id
+                const feeItems = productFeeItemsMap[product.id] || []
+                const selectedCount = selectedProductFees.filter(f => f.productId === product.id).length
+                
+                return (
+                  <div key={product.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                    {/* 产品标题 */}
+                    <div
+                      className="flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors"
+                      onClick={() => handleLoadFeeItems(product.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-green-600" />
+                        <span className="font-medium text-sm text-gray-900">{product.productName}</span>
+                        <span className="text-xs text-gray-400">{product.productCode}</span>
+                        {selectedCount > 0 && (
+                          <span className="px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-xs">
+                            已选 {selectedCount}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isLoading && (
+                          <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                        )}
+                        <span className="text-gray-400 text-xs">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* 费用项列表 */}
+                    {isExpanded && (
+                      <div className="p-2 border-t border-gray-100">
+                        {feeItems.length > 0 ? (
+                          <>
+                            {/* 全选按钮 */}
+                            <div className="flex items-center justify-between px-2 py-1 mb-2">
+                              <span className="text-xs text-gray-500">共 {feeItems.length} 个费用项</span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  selectAllFromProduct(product.id, product.productName)
+                                }}
+                                className="text-xs text-green-600 hover:text-green-700"
+                              >
+                                {selectedCount === feeItems.length ? '取消全选' : '全选'}
+                              </button>
+                            </div>
+                            
+                            {/* 费用项 */}
+                            <div className="space-y-1">
+                              {feeItems.map(item => {
+                                const isSelected = selectedProductFees.some(
+                                  f => f.productId === product.id && f.feeItem.id === item.id
+                                )
+                                
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className={`flex items-start gap-3 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
+                                      isSelected
+                                        ? 'border-green-400 bg-green-50'
+                                        : 'border-gray-100 hover:border-green-300 hover:bg-green-50/50'
+                                    }`}
+                                    onClick={() => toggleFeeItem(product.id, product.productName, item)}
+                                  >
+                                    {/* 复选框 */}
+                                    <div className={`flex-shrink-0 w-5 h-5 mt-0.5 rounded border-2 flex items-center justify-center ${
+                                      isSelected ? 'bg-green-500 border-green-500' : 'border-gray-300'
+                                    }`}>
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                    </div>
+                                    
+                                    {/* 内容 */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
+                                        <span className="text-sm font-medium text-green-600">
+                                          {item.currency} {item.standardPrice?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                        </span>
+                                      </div>
+                                      {item.feeNameEn && (
+                                        <div className="text-xs text-gray-500">{item.feeNameEn}</div>
+                                      )}
+                                      {item.feeCategory && (
+                                        <div className="mt-1 text-xs text-blue-600">
+                                          分类: {feeCategories.find(c => c.value === item.feeCategory)?.label || item.feeCategory}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-center py-4 text-xs text-gray-400">暂无费用项</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           ) : (
-            <div className="text-center py-3 text-xs text-gray-400">暂无费用项</div>
+            <div className="text-center py-8 text-gray-400">
+              <Package className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              <p className="text-sm">{productSearch ? '未找到匹配的产品' : '暂无产品数据'}</p>
+            </div>
           )}
         </div>
-      )}
+        
+        {/* 底部操作栏 */}
+        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+          <div className="text-xs text-gray-500">
+            {selectedProductFees.length > 0 
+              ? `已选择 ${selectedProductFees.length} 项，合计 ${
+                  selectedProductFees
+                    .reduce((sum, f) => sum + (f.feeItem.standardPrice || 0), 0)
+                    .toLocaleString('de-DE', { minimumFractionDigits: 2 })
+                } EUR`
+              : '点击展开产品，选择费用项，可多选'
+            }
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => onBatchAdd(selectedProductFees)}
+              disabled={selectedProductFees.length === 0}
+              className={`px-4 py-1.5 text-sm font-medium text-white rounded-lg flex items-center gap-1.5 ${
+                selectedProductFees.length > 0
+                  ? 'bg-green-500 hover:bg-green-600'
+                  : 'bg-gray-300 cursor-not-allowed'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              添加 {selectedProductFees.length > 0 ? `(${selectedProductFees.length})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
