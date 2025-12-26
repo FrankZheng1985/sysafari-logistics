@@ -210,14 +210,18 @@ export default function FeeModal({
   // 费用来源相关状态
   const [feeSource, setFeeSource] = useState<FeeSourceType>('manual')
   const [isManualEntry, setIsManualEntry] = useState(true)
-  const [selectedFeeItems, setSelectedFeeItems] = useState<Array<{
+  
+  // 已选择的费用项列表（待提交）
+  const [pendingFeeItems, setPendingFeeItems] = useState<Array<{
     id: string
     feeName: string
+    feeNameEn?: string
     category: string
     amount: number
     currency: string
     source: FeeSourceType
-    sourceId?: string | number
+    sourceId?: number
+    routeInfo?: string  // 路线信息
   }>>([])
   const [loadingSuppliers, setLoadingSuppliers] = useState(false)
   
@@ -475,6 +479,72 @@ export default function FeeModal({
     
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  // 批量提交待提交费用列表
+  const handleBatchSubmit = async () => {
+    if (pendingFeeItems.length === 0) return
+    
+    // 检查是否选择了供应商（应付费用必须）
+    if (formData.feeType === 'payable' && !formData.supplierId) {
+      alert('请先选择供应商')
+      return
+    }
+    
+    setSubmitting(true)
+    let successCount = 0
+    let failCount = 0
+    
+    try {
+      for (const item of pendingFeeItems) {
+        try {
+          const response = await fetch(`${API_BASE}/api/fees`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              billId: formData.billId || null,
+              billNumber: formData.billNumber || '',
+              customerId: null,
+              customerName: '',
+              supplierId: formData.supplierId || null,
+              supplierName: formData.supplierName || '',
+              feeType: 'payable',
+              category: item.category || 'other',
+              feeName: item.feeName,
+              amount: item.amount,
+              currency: item.currency || 'EUR',
+              feeDate: formData.feeDate,
+              description: item.routeInfo || '',
+              feeSource: 'supplier_price',
+              needApproval: false
+            })
+          })
+          const data = await response.json()
+          if (data.errCode === 200) {
+            successCount++
+          } else {
+            failCount++
+          }
+        } catch (err) {
+          failCount++
+        }
+      }
+      
+      if (successCount > 0) {
+        setPendingFeeItems([])
+        onSuccess?.()
+        onClose()
+      }
+      
+      if (failCount > 0) {
+        alert(`成功 ${successCount} 条，失败 ${failCount} 条`)
+      }
+    } catch (error) {
+      console.error('批量提交失败:', error)
+      alert('批量提交失败')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -1070,50 +1140,164 @@ export default function FeeModal({
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white resize-none"
             />
           </div>
+
+          {/* 待提交费用列表 */}
+          {pendingFeeItems.length > 0 && (
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-xs font-medium text-gray-700 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-orange-500" />
+                  待提交费用 ({pendingFeeItems.length} 项)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setPendingFeeItems([])}
+                  className="text-xs text-gray-400 hover:text-red-500"
+                >
+                  清空全部
+                </button>
+              </div>
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {pendingFeeItems.map((item, index) => (
+                  <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-gray-900 truncate">{item.feeName}</span>
+                        {item.amount === 0 && (
+                          <span className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-600 rounded">需填金额</span>
+                        )}
+                      </div>
+                      {item.routeInfo && (
+                        <div className="text-xs text-gray-500 truncate">{item.routeInfo}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <select
+                        value={item.currency}
+                        onChange={(e) => {
+                          const newItems = [...pendingFeeItems]
+                          newItems[index].currency = e.target.value
+                          setPendingFeeItems(newItems)
+                        }}
+                        className="px-1.5 py-1 text-xs border border-gray-200 rounded bg-white"
+                      >
+                        <option value="EUR">EUR</option>
+                        <option value="CNY">CNY</option>
+                        <option value="USD">USD</option>
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.amount}
+                        onChange={(e) => {
+                          const newItems = [...pendingFeeItems]
+                          newItems[index].amount = parseFloat(e.target.value) || 0
+                          setPendingFeeItems(newItems)
+                        }}
+                        className={`w-20 px-2 py-1 text-xs border rounded text-right ${
+                          item.amount === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
+                        }`}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingFeeItems(prev => prev.filter((_, i) => i !== index))
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                <span className="text-gray-500">
+                  合计: <span className="font-medium text-gray-900">
+                    {pendingFeeItems.reduce((sum, item) => sum + item.amount, 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })} EUR
+                  </span>
+                </span>
+                {pendingFeeItems.some(item => item.amount === 0) && (
+                  <span className="text-amber-500">⚠️ 有费用项金额为0，请确认</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 底部按钮 */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-          {/* 手动录入提示 */}
+          {/* 左侧提示 */}
           <div className="flex-1">
-            {isManualEntry && formData.feeName && !editingFee && (
+            {pendingFeeItems.length > 0 ? (
+              <div className="flex items-center gap-2 text-xs text-orange-600">
+                <Package className="w-4 h-4" />
+                <span>将批量创建 {pendingFeeItems.length} 条费用记录</span>
+              </div>
+            ) : isManualEntry && formData.feeName && !editingFee ? (
               <div className="flex items-center gap-2 text-xs text-amber-600">
                 <AlertCircle className="w-4 h-4" />
                 <span>手动录入的费用项将提交审批</span>
               </div>
-            )}
+            ) : null}
           </div>
           
           <div className="flex items-center gap-2">
             <button
-              onClick={onClose}
+              onClick={() => {
+                setPendingFeeItems([])
+                onClose()
+              }}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
             >
               取消
             </button>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${
-                isManualEntry && formData.feeName && !editingFee
-                  ? 'bg-amber-500 hover:bg-amber-600'
-                  : 'bg-primary-600 hover:bg-primary-700'
-              }`}
-            >
-              {submitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  保存中...
-                </>
-              ) : isManualEntry && formData.feeName && !editingFee ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  保存并提交审批
-                </>
-              ) : (
-                '保存'
-              )}
-            </button>
+            
+            {/* 批量提交按钮（有待提交费用时显示） */}
+            {pendingFeeItems.length > 0 ? (
+              <button
+                onClick={handleBatchSubmit}
+                disabled={submitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    提交中...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    批量提交 ({pendingFeeItems.length})
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${
+                  isManualEntry && formData.feeName && !editingFee
+                    ? 'bg-amber-500 hover:bg-amber-600'
+                    : 'bg-primary-600 hover:bg-primary-700'
+                }`}
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    保存中...
+                  </>
+                ) : isManualEntry && formData.feeName && !editingFee ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    保存并提交审批
+                  </>
+                ) : (
+                  '保存'
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1178,55 +1362,41 @@ export default function FeeModal({
           )
         }
         
-        // 批量添加选中的费用项
-        const handleBatchAdd = async () => {
+        // 批量添加选中的费用项到待提交列表
+        const handleBatchAdd = () => {
           const selectedItems = supplierPrices.filter(p => selectedPriceIds.includes(p.id))
           if (selectedItems.length === 0) return
           
-          // 如果只选了一个，直接用原来的逻辑
-          if (selectedItems.length === 1) {
-            handleSelectSupplierPrice(selectedItems[0])
-            setSelectedPriceIds([])
-            setSupplierPriceSearch('')
+          // 将选中的费用项添加到待提交列表
+          const newItems = selectedItems.map(item => ({
+            id: `pending-${item.id}-${Date.now()}`,
+            feeName: item.feeName,
+            feeNameEn: item.feeNameEn,
+            category: item.feeCategory || 'other',
+            amount: item.price || 0,
+            currency: item.currency || 'EUR',
+            source: 'supplier_price' as FeeSourceType,
+            sourceId: item.id,
+            routeInfo: [
+              item.routeFrom,
+              item.city ? `${item.city}${item.routeTo ? ` (${item.routeTo})` : ''}` : item.routeTo,
+              item.returnPoint ? `还柜:${item.returnPoint}` : ''
+            ].filter(Boolean).join(' → ')
+          }))
+          
+          // 过滤掉已添加的（根据 sourceId 判断）
+          const existingSourceIds = pendingFeeItems.map(p => p.sourceId)
+          const filteredNewItems = newItems.filter(item => !existingSourceIds.includes(item.sourceId))
+          
+          if (filteredNewItems.length === 0) {
+            alert('所选费用项已添加')
             return
           }
           
-          // 批量创建费用
-          setSubmitting(true)
-          try {
-            for (const item of selectedItems) {
-              await fetch(`${API_BASE}/api/fees`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  billId: formData.billId || null,
-                  billNumber: formData.billNumber || '',
-                  customerId: null,
-                  customerName: '',
-                  supplierId: formData.supplierId || null,
-                  supplierName: formData.supplierName || '',
-                  feeType: 'payable',
-                  category: item.feeCategory || 'other',
-                  feeName: item.feeName,
-                  amount: item.price || 0,
-                  currency: item.currency || 'EUR',
-                  feeDate: formData.feeDate,
-                  description: `${item.routeFrom || ''} → ${item.city || item.routeTo || ''}`.trim(),
-                  feeSource: 'supplier_price',
-                  needApproval: false
-                })
-              })
-            }
-            onSuccess?.()
-            onClose()
-          } catch (error) {
-            console.error('批量添加费用失败:', error)
-            alert('批量添加失败')
-          } finally {
-            setSubmitting(false)
-            setSelectedPriceIds([])
-            setSupplierPriceSearch('')
-          }
+          setPendingFeeItems(prev => [...prev, ...filteredNewItems])
+          setSelectedPriceIds([])
+          setSupplierPriceSearch('')
+          setShowSupplierPriceSelect(false)
         }
         
         return (

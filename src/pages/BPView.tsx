@@ -43,7 +43,7 @@ export default function BPView() {
           type: 'schedule',
           search: searchValue || undefined,
           page: 1,
-          pageSize: 1000,
+          pageSize: 100,  // 优化：减少初始加载数据量，提升加载速度
         })
         
         if (response.errCode === 200 && response.data) {
