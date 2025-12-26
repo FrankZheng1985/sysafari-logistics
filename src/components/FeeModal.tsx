@@ -382,8 +382,10 @@ export default function FeeModal({
     try {
       const response = await fetch(`${API_BASE}/api/masterdata/service-fee-categories?status=active`)
       const data = await response.json()
-      if (data.errCode === 200 && data.data?.list) {
-        const categories = data.data.list.map((item: any) => {
+      // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
+      const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+      if (data.errCode === 200 && list.length > 0) {
+        const categories = list.map((item: any) => {
           const style = getCategoryStyle(item.code || item.name)
           return {
             value: item.code || item.name,
@@ -1000,119 +1002,123 @@ export default function FeeModal({
             </div>
           </div>
 
-          {/* 费用分类 - 仅在手动录入时可选择 */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">
-              费用分类 <span className="text-red-500">*</span>
-              {!isManualEntry && formData.feeName && (
-                <span className="ml-2 text-green-600 text-xs font-normal">
-                  (已从{feeSource === 'product' ? '产品库' : '供应商报价'}自动填充)
-                </span>
-              )}
-              {!isManualEntry && !formData.feeName && (
-                <span className="ml-2 text-gray-400 text-xs font-normal">
-                  (请先选择费用来源或切换到手动录入)
-                </span>
-              )}
-            </label>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-              {feeCategories.map(cat => {
-                const Icon = cat.icon
-                // 只有手动录入时才能选择费用分类
-                const canSelect = isManualEntry || formData.feeName
-                return (
-                  <button
-                    key={cat.value}
-                    type="button"
-                    onClick={() => {
-                      if (canSelect) {
-                        setFormData(prev => ({ ...prev, category: cat.value }))
-                      }
-                    }}
-                    disabled={!canSelect}
-                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
-                      formData.category === cat.value
-                        ? `${cat.bg} ${cat.color} border-current`
-                        : !canSelect
-                          ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate">{cat.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-            {!isManualEntry && !formData.feeName && (
-              <p className="mt-1.5 text-xs text-gray-400">
-                💡 费用分类会根据选择的费用项自动填充，或选择"手动录入"自定义
-              </p>
-            )}
-          </div>
-
-          {/* 费用名称和金额 */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* 费用分类 - 仅在手动录入且无批量费用时显示 */}
+          {pendingFeeItems.length === 0 && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                费用名称 <span className="text-red-500">*</span>
-                {isManualEntry && formData.feeName && (
-                  <span className="ml-2 text-amber-500 text-xs font-normal">
-                    (手动录入·需审批)
+              <label className="block text-xs font-medium text-gray-700 mb-2">
+                费用分类 <span className="text-red-500">*</span>
+                {!isManualEntry && formData.feeName && (
+                  <span className="ml-2 text-green-600 text-xs font-normal">
+                    (已从{feeSource === 'product' ? '产品库' : '供应商报价'}自动填充)
+                  </span>
+                )}
+                {!isManualEntry && !formData.feeName && (
+                  <span className="ml-2 text-gray-400 text-xs font-normal">
+                    (请先选择费用来源或切换到手动录入)
                   </span>
                 )}
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formData.feeName}
-                  onChange={(e) => {
-                    setFormData(prev => ({ ...prev, feeName: e.target.value }))
-                    // 用户手动输入费用名称时，标记为手动录入
-                    if (e.target.value && feeSource !== 'product' && feeSource !== 'supplier_price') {
-                      setIsManualEntry(true)
-                    }
-                  }}
-                  placeholder={isManualEntry ? "请输入费用名称（新费用项需审批）" : "请输入费用名称"}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                    errors.feeName ? 'border-red-500' : 'border-gray-300'
-                  } ${isManualEntry && formData.feeName ? 'border-amber-300 bg-amber-50' : ''}`}
-                />
-                {isManualEntry && formData.feeName && (
-                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
-                )}
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
+                {feeCategories.map(cat => {
+                  const Icon = cat.icon
+                  // 只有手动录入时才能选择费用分类
+                  const canSelect = isManualEntry || formData.feeName
+                  return (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => {
+                        if (canSelect) {
+                          setFormData(prev => ({ ...prev, category: cat.value }))
+                        }
+                      }}
+                      disabled={!canSelect}
+                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
+                        formData.category === cat.value
+                          ? `${cat.bg} ${cat.color} border-current`
+                          : !canSelect
+                            ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
+                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{cat.label}</span>
+                    </button>
+                  )
+                })}
               </div>
-              {errors.feeName && <p className="mt-1 text-xs text-red-500">{errors.feeName}</p>}
+              {!isManualEntry && !formData.feeName && (
+                <p className="mt-1.5 text-xs text-gray-400">
+                  💡 费用分类会根据选择的费用项自动填充，或选择"手动录入"自定义
+                </p>
+              )}
             </div>
-            
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                金额 <span className="text-red-500">*</span>
-              </label>
-              <div className="flex gap-2">
-                <select
-                  value={formData.currency}
-                  onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
-                >
-                  <option value="EUR">EUR</option>
-                  <option value="CNY">CNY</option>
-                  <option value="USD">USD</option>
-                </select>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                  placeholder="0.00"
-                  className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                    errors.amount ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
+          )}
+
+          {/* 费用名称和金额 - 仅在无批量费用时显示 */}
+          {pendingFeeItems.length === 0 && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  费用名称 <span className="text-red-500">*</span>
+                  {isManualEntry && formData.feeName && (
+                    <span className="ml-2 text-amber-500 text-xs font-normal">
+                      (手动录入·需审批)
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.feeName}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, feeName: e.target.value }))
+                      // 用户手动输入费用名称时，标记为手动录入
+                      if (e.target.value && feeSource !== 'product' && feeSource !== 'supplier_price') {
+                        setIsManualEntry(true)
+                      }
+                    }}
+                    placeholder={isManualEntry ? "请输入费用名称（新费用项需审批）" : "请输入费用名称"}
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                      errors.feeName ? 'border-red-500' : 'border-gray-300'
+                    } ${isManualEntry && formData.feeName ? 'border-amber-300 bg-amber-50' : ''}`}
+                  />
+                  {isManualEntry && formData.feeName && (
+                    <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                  )}
+                </div>
+                {errors.feeName && <p className="mt-1 text-xs text-red-500">{errors.feeName}</p>}
               </div>
-              {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount}</p>}
+              
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  金额 <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.currency}
+                    onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
+                  >
+                    <option value="EUR">EUR</option>
+                    <option value="CNY">CNY</option>
+                    <option value="USD">USD</option>
+                  </select>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.amount}
+                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="0.00"
+                    className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                      errors.amount ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                </div>
+                {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount}</p>}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 费用日期 */}
           <div>
