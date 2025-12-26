@@ -86,15 +86,51 @@ interface Bill {
   customerId: string
 }
 
-const FEE_CATEGORIES = [
-  { value: 'freight', label: '运费', icon: Truck, color: 'text-blue-600', bg: 'bg-blue-100' },
-  { value: 'customs', label: '关税', icon: Receipt, color: 'text-red-600', bg: 'bg-red-100' },
-  { value: 'warehouse', label: '仓储费', icon: Building2, color: 'text-orange-600', bg: 'bg-orange-100' },
-  { value: 'insurance', label: '保险费', icon: Shield, color: 'text-green-600', bg: 'bg-green-100' },
-  { value: 'handling', label: '操作费', icon: Package, color: 'text-purple-600', bg: 'bg-purple-100' },
-  { value: 'documentation', label: '文件费', icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-100' },
-  { value: 'other', label: '其他费用', icon: Settings, color: 'text-gray-600', bg: 'bg-gray-100' },
+// 默认费用分类（API 加载前的备用）
+const DEFAULT_FEE_CATEGORIES = [
+  { value: 'other', label: '其他服务', icon: Settings, color: 'text-gray-600', bg: 'bg-gray-100' },
 ]
+
+// 根据类别代码匹配图标和颜色
+const getCategoryStyle = (code: string) => {
+  const lowerCode = code?.toLowerCase() || ''
+  if (lowerCode.includes('transport') || lowerCode.includes('运输')) {
+    return { icon: Truck, color: 'text-blue-600', bg: 'bg-blue-100' }
+  }
+  if (lowerCode.includes('clearance') || lowerCode.includes('customs') || lowerCode.includes('清关') || lowerCode.includes('报关')) {
+    return { icon: Receipt, color: 'text-red-600', bg: 'bg-red-100' }
+  }
+  if (lowerCode.includes('warehouse') || lowerCode.includes('仓储')) {
+    return { icon: Building2, color: 'text-orange-600', bg: 'bg-orange-100' }
+  }
+  if (lowerCode.includes('tax') || lowerCode.includes('税')) {
+    return { icon: Shield, color: 'text-green-600', bg: 'bg-green-100' }
+  }
+  if (lowerCode.includes('document') || lowerCode.includes('文件')) {
+    return { icon: FileText, color: 'text-cyan-600', bg: 'bg-cyan-100' }
+  }
+  if (lowerCode.includes('thc') || lowerCode.includes('港杂')) {
+    return { icon: Package, color: 'text-purple-600', bg: 'bg-purple-100' }
+  }
+  if (lowerCode.includes('exchange') || lowerCode.includes('换单')) {
+    return { icon: FileText, color: 'text-indigo-600', bg: 'bg-indigo-100' }
+  }
+  if (lowerCode.includes('agency') || lowerCode.includes('代理')) {
+    return { icon: Building2, color: 'text-amber-600', bg: 'bg-amber-100' }
+  }
+  if (lowerCode.includes('management') || lowerCode.includes('管理')) {
+    return { icon: Settings, color: 'text-slate-600', bg: 'bg-slate-100' }
+  }
+  return { icon: Settings, color: 'text-gray-600', bg: 'bg-gray-100' }
+}
+
+interface FeeCategory {
+  value: string
+  label: string
+  icon: any
+  color: string
+  bg: string
+}
 
 // 费用来源配置
 const FEE_SOURCES = [
@@ -185,6 +221,9 @@ export default function FeeModal({
   }>>([])
   const [loadingSuppliers, setLoadingSuppliers] = useState(false)
   
+  // 费用分类（从基础数据加载）
+  const [feeCategories, setFeeCategories] = useState<FeeCategory[]>(DEFAULT_FEE_CATEGORIES)
+  
   // 供应商报价搜索和多选
   const [supplierPriceSearch, setSupplierPriceSearch] = useState('')
   const [selectedPriceIds, setSelectedPriceIds] = useState<number[]>([])
@@ -192,12 +231,13 @@ export default function FeeModal({
   // 供应商搜索防抖
   const supplierSearchRef = useRef<NodeJS.Timeout | null>(null)
 
-  // 加载订单列表和供应商列表
+  // 加载订单列表、供应商列表和费用分类
   useEffect(() => {
     if (visible) {
       loadBills()
       loadSuppliers()
       loadProducts()
+      loadFeeCategories()
     }
   }, [visible])
 
@@ -330,6 +370,29 @@ export default function FeeModal({
       }
     } catch (error) {
       console.error('加载产品列表失败:', error)
+    }
+  }
+
+  // 加载费用分类（从基础数据服务费类别）
+  const loadFeeCategories = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/masterdata/service-fee-categories?status=active`)
+      const data = await response.json()
+      if (data.errCode === 200 && data.data?.list) {
+        const categories = data.data.list.map((item: any) => {
+          const style = getCategoryStyle(item.code || item.name)
+          return {
+            value: item.code || item.name,
+            label: item.name,
+            ...style
+          }
+        })
+        if (categories.length > 0) {
+          setFeeCategories(categories)
+        }
+      }
+    } catch (error) {
+      console.error('加载费用分类失败:', error)
     }
   }
 
@@ -882,8 +945,8 @@ export default function FeeModal({
                 </span>
               )}
             </label>
-            <div className="grid grid-cols-4 gap-2">
-              {FEE_CATEGORIES.map(cat => {
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
+              {feeCategories.map(cat => {
                 const Icon = cat.icon
                 // 只有手动录入时才能选择费用分类
                 const canSelect = isManualEntry || formData.feeName
@@ -897,7 +960,7 @@ export default function FeeModal({
                       }
                     }}
                     disabled={!canSelect}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
                       formData.category === cat.value
                         ? `${cat.bg} ${cat.color} border-current`
                         : !canSelect
@@ -905,8 +968,8 @@ export default function FeeModal({
                           : 'border-gray-200 text-gray-600 hover:border-gray-300'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
-                    {cat.label}
+                    <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">{cat.label}</span>
                   </button>
                 )
               })}
