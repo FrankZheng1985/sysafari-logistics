@@ -956,11 +956,11 @@ export default function FeeModal({
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 金额 <span className="text-red-500">*</span>
               </label>
-              <div className="flex">
+              <div className="flex gap-2">
                 <select
                   value={formData.currency}
                   onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
-                  className="px-2 py-2 text-sm border border-r-0 border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
                 >
                   <option value="EUR">EUR</option>
                   <option value="CNY">CNY</option>
@@ -972,7 +972,7 @@ export default function FeeModal({
                   value={formData.amount}
                   onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
                   placeholder="0.00"
-                  className={`flex-1 px-3 py-2 text-sm border rounded-r-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                  className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                     errors.amount ? 'border-red-500' : 'border-gray-300'
                   }`}
                 />

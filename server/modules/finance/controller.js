@@ -591,8 +591,9 @@ export async function createFee(req, res) {
       return badRequest(res, '费用名称为必填项')
     }
     
-    if (!amount || amount <= 0) {
-      return badRequest(res, '费用金额必须大于0')
+    // 允许金额为 0（某些费用如 THC费是实报实销的）
+    if (amount === undefined || amount === null || amount < 0) {
+      return badRequest(res, '费用金额不能为负数')
     }
     
     const result = await model.createFee({
