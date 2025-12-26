@@ -21,9 +21,9 @@ export function getApiBaseUrl(): string {
       return 'https://sysafari-logistics-demo-api.onrender.com'
     }
     
-    // 生产环境 -> 生产 API
+    // 生产环境 -> 新加坡生产 API (与数据库同区域)
     if (hostname === 'erp.xianfeng-eu.com') {
-      return 'https://sysafari-logistics-api.onrender.com'
+      return 'https://sysafari-logistics-api-sg.onrender.com'
     }
   }
   
