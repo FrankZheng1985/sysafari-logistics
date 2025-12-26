@@ -847,59 +847,7 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_nodes_completed ON tracking_nodes(is_completed)`)
     console.log('  ✅ tracking_nodes 表就绪')
 
-    // ==================== 23. 插入换单代理测试数据 ====================
-    // 检查是否已有换单代理供应商
-    const docSwapAgentCheck = await client.query(`
-      SELECT COUNT(*) as count FROM suppliers WHERE supplier_type = 'doc_swap_agent'
-    `)
-    
-    if (parseInt(docSwapAgentCheck.rows[0].count) === 0) {
-      console.log('  📝 插入换单代理测试数据...')
-      await client.query(`
-        INSERT INTO suppliers (
-          id, supplier_code, supplier_name, short_name, supplier_type,
-          contact_person, contact_phone, contact_email,
-          country, city, address,
-          status, level, currency, remark,
-          created_at, updated_at
-        ) VALUES 
-          ('dsa001', 'DSA001', 'Rotterdam Port Services B.V.', 'Rotterdam PS', 'doc_swap_agent',
-           'Jan van der Berg', '+31-10-123-4567', 'jan@rotterdam-ps.nl',
-           '荷兰', 'Rotterdam', 'Europaweg 100, 3199 LD Rotterdam',
-           'active', 'a', 'EUR', '鹿特丹港口换单代理，服务快速',
-           NOW(), NOW()),
-           
-          ('dsa002', 'DSA002', 'Amsterdam Shipping Agency', 'ASA', 'doc_swap_agent',
-           'Peter de Vries', '+31-20-456-7890', 'peter@asa-agency.nl',
-           '荷兰', 'Amsterdam', 'Havenstraat 50, 1019 BA Amsterdam',
-           'active', 'b', 'EUR', '阿姆斯特丹港口换单代理',
-           NOW(), NOW()),
-           
-          ('dsa003', 'DSA003', 'Hamburg Dokumenten Service GmbH', 'HDS', 'doc_swap_agent',
-           'Hans Mueller', '+49-40-789-0123', 'hans@hds-hamburg.de',
-           '德国', 'Hamburg', 'Hafenstraße 88, 20457 Hamburg',
-           'active', 'a', 'EUR', '汉堡港口换单代理，德国最大换单服务商',
-           NOW(), NOW()),
-           
-          ('dsa004', 'DSA004', 'Bremen Shipping Docs', 'BSD', 'doc_swap_agent',
-           'Klaus Schmidt', '+49-421-234-5678', 'klaus@bremen-docs.de',
-           '德国', 'Bremen', 'Überseestraße 12, 28217 Bremen',
-           'active', 'b', 'EUR', '不来梅港口换单代理',
-           NOW(), NOW()),
-           
-          ('dsa005', 'DSA005', 'Antwerp Document Exchange NV', 'ADE', 'doc_swap_agent',
-           'Marc Janssen', '+32-3-456-7890', 'marc@ade-antwerp.be',
-           '比利时', 'Antwerp', 'Noorderlaan 147, 2030 Antwerpen',
-           'active', 'a', 'EUR', '安特卫普港口换单代理，欧洲主要换单点',
-           NOW(), NOW())
-        ON CONFLICT (supplier_code) DO NOTHING
-      `)
-      console.log('  ✅ 换单代理测试数据已插入')
-    } else {
-      console.log('  ✅ 换单代理数据已存在，跳过插入')
-    }
-
-    // ==================== 24. 创建起运港表 ====================
+    // ==================== 23. 创建起运港表 ====================
     await client.query(`
       CREATE TABLE IF NOT EXISTS ports_of_loading (
         id SERIAL PRIMARY KEY,

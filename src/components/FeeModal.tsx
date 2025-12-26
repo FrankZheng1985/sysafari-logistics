@@ -70,6 +70,12 @@ interface SupplierPriceItem {
   unit: string
   price: number
   currency: string
+  routeFrom?: string    // 起运地
+  routeTo?: string      // 目的地
+  returnPoint?: string  // 还柜点
+  city?: string         // 城市
+  country?: string      // 国家
+  transportMode?: string // 运输方式
 }
 
 interface Bill {
@@ -1094,7 +1100,7 @@ export default function FeeModal({
                     <button
                       key={item.id}
                       onClick={() => handleSelectSupplierPrice(item)}
-                      className="w-full text-left px-3 py-2 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors"
+                      className="w-full text-left px-3 py-2.5 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
@@ -1104,6 +1110,26 @@ export default function FeeModal({
                       </div>
                       {item.feeNameEn && (
                         <div className="text-xs text-gray-500">{item.feeNameEn}</div>
+                      )}
+                      {/* 显示路线信息：起运地 → 目的地 */}
+                      {(item.routeFrom || item.routeTo || item.returnPoint || item.city) && (
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                          {(item.routeFrom || item.routeTo) && (
+                            <span className="text-blue-600">
+                              📍 {item.routeFrom || '-'} → {item.city || item.routeTo || '-'}
+                            </span>
+                          )}
+                          {item.returnPoint && (
+                            <span className="text-green-600">
+                              🔄 还柜: {item.returnPoint}
+                            </span>
+                          )}
+                          {item.transportMode && (
+                            <span className="text-purple-600">
+                              🚛 {item.transportMode}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </button>
                   ))}
