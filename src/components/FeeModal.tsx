@@ -386,7 +386,8 @@ export default function FeeModal({
   // 加载费用分类（从基础数据服务费类别）
   const loadFeeCategories = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/masterdata/service-fee-categories?status=active`)
+      // 正确路径：masterdata 路由直接挂载在 /api 下
+      const response = await fetch(`${API_BASE}/api/service-fee-categories?status=active`)
       const data = await response.json()
       // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
       const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
@@ -1171,60 +1172,92 @@ export default function FeeModal({
                   清空全部
                 </button>
               </div>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {pendingFeeItems.map((item, index) => (
-                  <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm text-gray-900 truncate">{item.feeName}</span>
-                        {item.amount === 0 && (
-                          <span className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-600 rounded">需填金额</span>
-                        )}
+              <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                {pendingFeeItems.map((item, index) => {
+                  // 获取当前分类的样式
+                  const categoryStyle = getCategoryStyle(item.category)
+                  const CategoryIcon = categoryStyle.icon
+                  
+                  return (
+                    <div key={item.id} className="p-2 bg-gray-50 rounded-lg border border-gray-200">
+                      {/* 第一行：费用名称和删除按钮 */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="font-medium text-sm text-gray-900 truncate">{item.feeName}</span>
+                          {item.amount === 0 && (
+                            <span className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-600 rounded flex-shrink-0">需填金额</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingFeeItems(prev => prev.filter((_, i) => i !== index))
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded flex-shrink-0"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
+                      
+                      {/* 路线信息 */}
                       {item.routeInfo && (
-                        <div className="text-xs text-gray-500 truncate">{item.routeInfo}</div>
+                        <div className="text-xs text-gray-500 truncate mb-2">{item.routeInfo}</div>
                       )}
+                      
+                      {/* 第二行：分类选择、币种和金额 */}
+                      <div className="flex items-center gap-2">
+                        {/* 费用分类选择 */}
+                        <div className="flex items-center gap-1 flex-1">
+                          <CategoryIcon className={`w-3.5 h-3.5 flex-shrink-0 ${categoryStyle.color}`} />
+                          <select
+                            value={item.category}
+                            onChange={(e) => {
+                              const newItems = [...pendingFeeItems]
+                              newItems[index].category = e.target.value
+                              setPendingFeeItems(newItems)
+                            }}
+                            className={`flex-1 px-1.5 py-1 text-xs border rounded ${categoryStyle.bg} ${categoryStyle.color} border-gray-200`}
+                          >
+                            {feeCategories.map(cat => (
+                              <option key={cat.value} value={cat.value}>{cat.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        {/* 币种选择 */}
+                        <select
+                          value={item.currency}
+                          onChange={(e) => {
+                            const newItems = [...pendingFeeItems]
+                            newItems[index].currency = e.target.value
+                            setPendingFeeItems(newItems)
+                          }}
+                          className="px-1.5 py-1 text-xs border border-gray-200 rounded bg-white"
+                        >
+                          <option value="EUR">EUR</option>
+                          <option value="CNY">CNY</option>
+                          <option value="USD">USD</option>
+                        </select>
+                        
+                        {/* 金额输入 */}
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.amount}
+                          onChange={(e) => {
+                            const newItems = [...pendingFeeItems]
+                            newItems[index].amount = parseFloat(e.target.value) || 0
+                            setPendingFeeItems(newItems)
+                          }}
+                          className={`w-20 px-2 py-1 text-xs border rounded text-right ${
+                            item.amount === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
+                          }`}
+                          placeholder="0.00"
+                        />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <select
-                        value={item.currency}
-                        onChange={(e) => {
-                          const newItems = [...pendingFeeItems]
-                          newItems[index].currency = e.target.value
-                          setPendingFeeItems(newItems)
-                        }}
-                        className="px-1.5 py-1 text-xs border border-gray-200 rounded bg-white"
-                      >
-                        <option value="EUR">EUR</option>
-                        <option value="CNY">CNY</option>
-                        <option value="USD">USD</option>
-                      </select>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.amount}
-                        onChange={(e) => {
-                          const newItems = [...pendingFeeItems]
-                          newItems[index].amount = parseFloat(e.target.value) || 0
-                          setPendingFeeItems(newItems)
-                        }}
-                        className={`w-20 px-2 py-1 text-xs border rounded text-right ${
-                          item.amount === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
-                        }`}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPendingFeeItems(prev => prev.filter((_, i) => i !== index))
-                      }}
-                      className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
                 <span className="text-gray-500">
