@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
-import { X, Receipt, Truck, Building2, Shield, Package, FileText, Settings, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Receipt, Truck, Building2, Shield, Package, FileText, Settings, ArrowDownCircle, ArrowUpCircle, Plus, Check, Search, AlertCircle, Edit3 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 import DatePicker from './DatePicker'
 
 const API_BASE = getApiBaseUrl()
+
+// 费用来源类型
+type FeeSourceType = 'product' | 'supplier_price' | 'manual'
 
 interface FeeModalProps {
   visible: boolean
@@ -87,6 +90,40 @@ const FEE_CATEGORIES = [
   { value: 'other', label: '其他费用', icon: Settings, color: 'text-gray-600', bg: 'bg-gray-100' },
 ]
 
+// 费用来源配置
+const FEE_SOURCES = [
+  { 
+    value: 'product' as FeeSourceType, 
+    label: '产品库', 
+    icon: Package, 
+    color: 'text-green-600', 
+    bg: 'bg-green-50',
+    borderColor: 'border-green-200',
+    hoverBg: 'hover:bg-green-100',
+    description: '从标准产品费用项中选择'
+  },
+  { 
+    value: 'supplier_price' as FeeSourceType, 
+    label: '供应商报价', 
+    icon: Receipt, 
+    color: 'text-orange-600', 
+    bg: 'bg-orange-50',
+    borderColor: 'border-orange-200',
+    hoverBg: 'hover:bg-orange-100',
+    description: '从供应商报价中选择'
+  },
+  { 
+    value: 'manual' as FeeSourceType, 
+    label: '手动录入', 
+    icon: Edit3, 
+    color: 'text-blue-600', 
+    bg: 'bg-blue-50',
+    borderColor: 'border-blue-200',
+    hoverBg: 'hover:bg-blue-100',
+    description: '自定义费用项（需审批）'
+  },
+]
+
 
 export default function FeeModal({
   visible,
@@ -127,6 +164,23 @@ export default function FeeModal({
   const [supplierSearch, setSupplierSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  
+  // 费用来源相关状态
+  const [feeSource, setFeeSource] = useState<FeeSourceType>('manual')
+  const [isManualEntry, setIsManualEntry] = useState(true)
+  const [selectedFeeItems, setSelectedFeeItems] = useState<Array<{
+    id: string
+    feeName: string
+    category: string
+    amount: number
+    currency: string
+    source: FeeSourceType
+    sourceId?: string | number
+  }>>([])
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false)
+  
+  // 供应商搜索防抖
+  const supplierSearchRef = useRef<NodeJS.Timeout | null>(null)
 
   // 加载订单列表和供应商列表
   useEffect(() => {
@@ -194,9 +248,12 @@ export default function FeeModal({
     }
   }
 
-  const loadSuppliers = async () => {
+  const loadSuppliers = async (search?: string) => {
+    setLoadingSuppliers(true)
     try {
-      const response = await fetch(`${API_BASE}/api/suppliers?pageSize=100`)
+      // 增加 pageSize 到 500 获取更多供应商，并支持搜索
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : ''
+      const response = await fetch(`${API_BASE}/api/suppliers?pageSize=500&status=active${searchParam}`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setSuppliers(data.data.list.map((s: any) => ({
@@ -207,6 +264,26 @@ export default function FeeModal({
       }
     } catch (error) {
       console.error('加载供应商列表失败:', error)
+    } finally {
+      setLoadingSuppliers(false)
+    }
+  }
+  
+  // 供应商搜索处理（带防抖）
+  const handleSupplierSearchChange = (value: string) => {
+    setSupplierSearch(value)
+    setFormData(prev => ({ ...prev, supplierId: '', supplierName: '' }))
+    setShowSupplierDropdown(true)
+    
+    // 防抖搜索
+    if (supplierSearchRef.current) {
+      clearTimeout(supplierSearchRef.current)
+    }
+    
+    if (value.length >= 2) {
+      supplierSearchRef.current = setTimeout(() => {
+        loadSuppliers(value)
+      }, 300)
     }
   }
 
@@ -282,6 +359,9 @@ export default function FeeModal({
       amount: String(feeItem.standardPrice || ''),
       currency: feeItem.currency || 'EUR'
     }))
+    // 标记为从产品库选择，不需要审批
+    setFeeSource('product')
+    setIsManualEntry(false)
     setShowProductSelect(false)
   }
 
@@ -293,6 +373,9 @@ export default function FeeModal({
       amount: String(priceItem.price || ''),
       currency: priceItem.currency || 'EUR'
     }))
+    // 标记为从供应商报价选择，不需要审批
+    setFeeSource('supplier_price')
+    setIsManualEntry(false)
     setShowSupplierPriceSelect(false)
   }
 
@@ -326,8 +409,14 @@ export default function FeeModal({
     
     setSubmitting(true)
     try {
-      const url = editingFee ? `/api/fees/${editingFee.id}` : '/api/fees'
+      const url = editingFee ? `${API_BASE}/api/fees/${editingFee.id}` : `${API_BASE}/api/fees`
       const method = editingFee ? 'PUT' : 'POST'
+      
+      // 构建描述信息，包含费用来源
+      let description = formData.description || ''
+      if (isManualEntry && !editingFee) {
+        description = `[手动录入-待审批] ${description}`.trim()
+      }
       
       const response = await fetch(url, {
         method,
@@ -345,13 +434,40 @@ export default function FeeModal({
           amount: parseFloat(formData.amount),
           currency: formData.currency,
           feeDate: formData.feeDate,
-          description: formData.description
+          description: description,
+          // 标记费用来源和审批状态
+          feeSource: feeSource,
+          needApproval: isManualEntry && !editingFee
         })
       })
       
       const data = await response.json()
       
       if (data.errCode === 200) {
+        // 如果是手动录入的新费用项，提示需要审批
+        if (isManualEntry && !editingFee) {
+          // 创建审批申请
+          try {
+            await fetch(`${API_BASE}/api/fee-item-approvals`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                feeId: data.data?.id,
+                feeName: formData.feeName,
+                category: formData.category,
+                amount: parseFloat(formData.amount),
+                currency: formData.currency,
+                supplierId: formData.supplierId || null,
+                supplierName: formData.supplierName || '',
+                description: formData.description,
+                status: 'pending'
+              })
+            })
+          } catch (err) {
+            console.log('创建审批记录失败（可能API未实现）:', err)
+          }
+        }
+        
         onSuccess?.()
         onClose()
       } else {
@@ -515,49 +631,66 @@ export default function FeeModal({
                 供应商 <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <input
-                  type="text"
-                  value={formData.supplierName || supplierSearch}
-                  onChange={(e) => {
-                    setSupplierSearch(e.target.value)
-                    setFormData(prev => ({ ...prev, supplierId: '', supplierName: '' }))
-                    setShowSupplierDropdown(true)
-                  }}
-                  onFocus={() => setShowSupplierDropdown(true)}
-                  placeholder="搜索供应商..."
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                />
-                {formData.supplierName && (
-                  <button
-                    onClick={() => setFormData(prev => ({ 
-                      ...prev, 
-                      supplierId: '', 
-                      supplierName: ''
-                    }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={formData.supplierName || supplierSearch}
+                    onChange={(e) => handleSupplierSearchChange(e.target.value)}
+                    onFocus={() => setShowSupplierDropdown(true)}
+                    placeholder="搜索供应商名称或编码..."
+                    className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  />
+                  {loadingSuppliers && (
+                    <div className="absolute right-8 top-1/2 -translate-y-1/2">
+                      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
+                  {formData.supplierName && (
+                    <button
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, supplierId: '', supplierName: '' }))
+                        setSupplierPrices([])
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
                 
                 {showSupplierDropdown && !formData.supplierName && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {filteredSuppliers.length > 0 ? (
-                      filteredSuppliers.slice(0, 10).map(supplier => (
-                        <div
-                          key={supplier.id}
-                          onClick={() => handleSupplierSelect(supplier)}
-                          className="px-3 py-2 hover:bg-gray-50 cursor-pointer"
-                        >
-                          <div className="font-medium text-sm">{supplier.supplierName}</div>
-                          <div className="text-xs text-gray-500">
-                            {supplier.supplierCode}
-                          </div>
+                      <>
+                        <div className="px-3 py-1.5 bg-gray-50 text-xs text-gray-500 border-b sticky top-0">
+                          共 {filteredSuppliers.length} 个供应商
                         </div>
-                      ))
+                        {filteredSuppliers.slice(0, 20).map(supplier => (
+                          <div
+                            key={supplier.id}
+                            onClick={() => handleSupplierSelect(supplier)}
+                            className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-sm text-gray-900">{supplier.supplierName}</div>
+                            <div className="text-xs text-gray-500">{supplier.supplierCode}</div>
+                          </div>
+                        ))}
+                        {filteredSuppliers.length > 20 && (
+                          <div className="px-3 py-2 text-xs text-gray-400 text-center bg-gray-50">
+                            还有 {filteredSuppliers.length - 20} 个供应商，请输入关键字筛选
+                          </div>
+                        )}
+                      </>
+                    ) : supplierSearch.length >= 2 ? (
+                      <div className="px-3 py-4 text-center">
+                        <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                        <p className="text-sm text-gray-500">未找到匹配的供应商</p>
+                        <p className="text-xs text-gray-400 mt-1">请检查供应商名称或编码</p>
+                      </div>
                     ) : (
-                      <div className="px-3 py-2 text-sm text-gray-400 text-center">
-                        无匹配供应商
+                      <div className="px-3 py-3 text-sm text-gray-400 text-center">
+                        请输入至少2个字符搜索供应商
                       </div>
                     )}
                   </div>
@@ -567,52 +700,199 @@ export default function FeeModal({
             </div>
           )}
 
-          {/* 费用来源选择 */}
+          {/* 费用来源选择 - 根据费用类型显示不同选项 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">
-              费用来源
+              费用来源 <span className="text-red-500">*</span>
             </label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {formData.feeType === 'receivable' && products.length > 0 && (
+            
+            {/* 应收费用：产品库 + 手动录入 */}
+            {formData.feeType === 'receivable' && (
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {/* 产品库选项 */}
                 <button
                   type="button"
-                  onClick={() => setShowProductSelect(true)}
+                  onClick={() => {
+                    setFeeSource('product')
+                    setIsManualEntry(false)
+                    setShowProductSelect(true)
+                  }}
+                  className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                    feeSource === 'product'
+                      ? 'bg-green-50 text-green-600 border-green-500 ring-1 ring-green-500'
+                      : 'border-gray-200 text-gray-600 hover:bg-green-50'
+                  }`}
+                >
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <Package className="w-4 h-4" />
+                  <span className="font-medium text-xs">产品库</span>
+                </button>
+                
+                {/* 手动录入选项 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeeSource('manual')
+                    setIsManualEntry(true)
+                  }}
+                  className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                    feeSource === 'manual'
+                      ? 'bg-blue-50 text-blue-600 border-blue-500 ring-1 ring-blue-500'
+                      : 'border-gray-200 text-gray-600 hover:bg-blue-50'
+                  }`}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span className="font-medium text-xs">手动录入</span>
+                </button>
+              </div>
+            )}
+            
+            {/* 应付费用：供应商报价 + 手动录入 */}
+            {formData.feeType === 'payable' && (
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {/* 供应商报价选项 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (formData.supplierId) {
+                      setFeeSource('supplier_price')
+                      setIsManualEntry(false)
+                      setShowSupplierPriceSelect(true)
+                    }
+                  }}
+                  disabled={!formData.supplierId}
+                  className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                    feeSource === 'supplier_price'
+                      ? 'bg-orange-50 text-orange-600 border-orange-500 ring-1 ring-orange-500'
+                      : !formData.supplierId
+                        ? 'border-gray-200 text-gray-300 bg-gray-50 cursor-not-allowed'
+                        : 'border-gray-200 text-gray-600 hover:bg-orange-50'
+                  }`}
+                >
+                  {formData.supplierId && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                  )}
+                  <Receipt className="w-4 h-4" />
+                  <span className="font-medium text-xs">供应商报价</span>
+                </button>
+                
+                {/* 手动录入选项 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeeSource('manual')
+                    setIsManualEntry(true)
+                  }}
+                  className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                    feeSource === 'manual'
+                      ? 'bg-blue-50 text-blue-600 border-blue-500 ring-1 ring-blue-500'
+                      : 'border-gray-200 text-gray-600 hover:bg-blue-50'
+                  }`}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span className="font-medium text-xs">手动录入</span>
+                </button>
+              </div>
+            )}
+            
+            {/* 费用来源说明 */}
+            <div className="text-xs text-gray-500 mb-2">
+              {formData.feeType === 'receivable' && feeSource === 'product' && (
+                <span className="flex items-center gap-1">
+                  <Package className="w-3 h-3 text-green-500" />
+                  从产品库选择标准费用项，价格自动填充
+                </span>
+              )}
+              {formData.feeType === 'payable' && feeSource === 'supplier_price' && (
+                <span className="flex items-center gap-1">
+                  <Receipt className="w-3 h-3 text-orange-500" />
+                  {formData.supplierId 
+                    ? supplierPrices.length > 0 
+                      ? `该供应商有 ${supplierPrices.length} 个报价项可选`
+                      : '该供应商暂无报价数据，请手动录入'
+                    : '请先选择供应商'
+                  }
+                </span>
+              )}
+              {feeSource === 'manual' && (
+                <span className="flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-500" />
+                  手动录入的新费用项需经理审批后才能成为常规费用
+                </span>
+              )}
+            </div>
+            
+            {/* 快捷选择按钮 */}
+            <div className="flex flex-wrap gap-2">
+              {formData.feeType === 'receivable' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFeeSource('product')
+                    setShowProductSelect(true)
+                  }}
                   className="px-3 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 flex items-center gap-1"
                 >
-                  <Package className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5" />
                   从产品库选择
                 </button>
               )}
-              {formData.feeType === 'payable' && formData.supplierId && supplierPrices.length > 0 && (
+              {formData.feeType === 'payable' && formData.supplierId && (
                 <button
                   type="button"
-                  onClick={() => setShowSupplierPriceSelect(true)}
-                  className="px-3 py-1.5 text-xs bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100 flex items-center gap-1"
+                  onClick={() => {
+                    setFeeSource('supplier_price')
+                    setShowSupplierPriceSelect(true)
+                  }}
+                  className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${
+                    supplierPrices.length > 0
+                      ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+                      : 'bg-gray-50 text-gray-400 border-gray-200'
+                  }`}
                 >
-                  <Receipt className="w-3.5 h-3.5" />
-                  从供应商报价选择
+                  <Plus className="w-3.5 h-3.5" />
+                  从供应商报价选择 {supplierPrices.length > 0 ? `(${supplierPrices.length})` : '(暂无)'}
                 </button>
               )}
             </div>
           </div>
 
-          {/* 费用分类 */}
+          {/* 费用分类 - 仅在手动录入时可选择 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-2">
               费用分类 <span className="text-red-500">*</span>
+              {!isManualEntry && formData.feeName && (
+                <span className="ml-2 text-green-600 text-xs font-normal">
+                  (已从{feeSource === 'product' ? '产品库' : '供应商报价'}自动填充)
+                </span>
+              )}
+              {!isManualEntry && !formData.feeName && (
+                <span className="ml-2 text-gray-400 text-xs font-normal">
+                  (请先选择费用来源或切换到手动录入)
+                </span>
+              )}
             </label>
             <div className="grid grid-cols-4 gap-2">
               {FEE_CATEGORIES.map(cat => {
                 const Icon = cat.icon
+                // 只有手动录入时才能选择费用分类
+                const canSelect = isManualEntry || formData.feeName
                 return (
                   <button
                     key={cat.value}
                     type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, category: cat.value }))}
+                    onClick={() => {
+                      if (canSelect) {
+                        setFormData(prev => ({ ...prev, category: cat.value }))
+                      }
+                    }}
+                    disabled={!canSelect}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
                       formData.category === cat.value
                         ? `${cat.bg} ${cat.color} border-current`
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                        : !canSelect
+                          ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -621,6 +901,11 @@ export default function FeeModal({
                 )
               })}
             </div>
+            {!isManualEntry && !formData.feeName && (
+              <p className="mt-1.5 text-xs text-gray-400">
+                💡 费用分类会根据选择的费用项自动填充，或选择"手动录入"自定义
+              </p>
+            )}
           </div>
 
           {/* 费用名称和金额 */}
@@ -628,16 +913,32 @@ export default function FeeModal({
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
                 费用名称 <span className="text-red-500">*</span>
+                {isManualEntry && formData.feeName && (
+                  <span className="ml-2 text-amber-500 text-xs font-normal">
+                    (手动录入·需审批)
+                  </span>
+                )}
               </label>
-              <input
-                type="text"
-                value={formData.feeName}
-                onChange={(e) => setFormData(prev => ({ ...prev, feeName: e.target.value }))}
-                placeholder="请输入费用名称"
-                className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                  errors.feeName ? 'border-red-500' : 'border-gray-300'
-                }`}
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.feeName}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, feeName: e.target.value }))
+                    // 用户手动输入费用名称时，标记为手动录入
+                    if (e.target.value && feeSource !== 'product' && feeSource !== 'supplier_price') {
+                      setIsManualEntry(true)
+                    }
+                  }}
+                  placeholder={isManualEntry ? "请输入费用名称（新费用项需审批）" : "请输入费用名称"}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                    errors.feeName ? 'border-red-500' : 'border-gray-300'
+                  } ${isManualEntry && formData.feeName ? 'border-amber-300 bg-amber-50' : ''}`}
+                />
+                {isManualEntry && formData.feeName && (
+                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                )}
+              </div>
               {errors.feeName && <p className="mt-1 text-xs text-red-500">{errors.feeName}</p>}
             </div>
             
@@ -699,20 +1000,48 @@ export default function FeeModal({
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            取消
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-50"
-          >
-            {submitting ? '保存中...' : '保存'}
-          </button>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+          {/* 手动录入提示 */}
+          <div className="flex-1">
+            {isManualEntry && formData.feeName && !editingFee && (
+              <div className="flex items-center gap-2 text-xs text-amber-600">
+                <AlertCircle className="w-4 h-4" />
+                <span>手动录入的费用项将提交审批</span>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${
+                isManualEntry && formData.feeName && !editingFee
+                  ? 'bg-amber-500 hover:bg-amber-600'
+                  : 'bg-primary-600 hover:bg-primary-700'
+              }`}
+            >
+              {submitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  保存中...
+                </>
+              ) : isManualEntry && formData.feeName && !editingFee ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  保存并提交审批
+                </>
+              ) : (
+                '保存'
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

@@ -70,6 +70,7 @@ import FinanceFees from './pages/FinanceFees'
 import FinanceReports from './pages/FinanceReports'
 import FinanceOrderReport from './pages/FinanceOrderReport'
 import FinancialStatements from './pages/FinancialStatements'
+import FeeItemApprovals from './pages/FeeItemApprovals'
 import BankAccounts from './pages/BankAccounts'
 import CreateInvoice from './pages/CreateInvoice'
 // TMS模块
@@ -261,6 +262,7 @@ function AppRoutes() {
         <Route path="/finance/carrier-settlement" element={<CarrierSettlement />} />
         <Route path="/finance/statements" element={<FinancialStatements />} />
         <Route path="/finance/bank-accounts" element={<BankAccounts />} />
+        <Route path="/finance/fee-approvals" element={<FeeItemApprovals />} />
       </Routes>
     </Layout>
   )

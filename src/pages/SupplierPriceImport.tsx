@@ -209,7 +209,7 @@ const FR_POSTAL_CITY_MAP: Record<string, string> = {
   '02': 'Laon', '020': 'Laon', '023': 'Saint-Quentin',
   // 阿尔萨斯地区 (Alsace)
   '68': 'Mulhouse', '682': 'Dannemarie', '680': 'Mulhouse', '681': 'Colmar',
-  '67': 'Strasbourg', '670': 'Strasbourg', '672': 'Haguenau',
+  '670': 'Strasbourg', '672': 'Haguenau',
   // 其他地区
   '57': 'Metz', '54': 'Nancy', '51': 'Reims', '45': 'Orléans', '37': 'Tours',
   '49': 'Angers', '72': 'Le Mans', '76': 'Rouen', '14': 'Caen', '29': 'Brest',

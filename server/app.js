@@ -42,6 +42,9 @@ import messageRoutes from './modules/message/routes.js'
 import chatRoutes from './modules/chat/routes.js'
 import lastMileRoutes from './modules/last-mile/routes.js'
 import quotationCenterRoutes from './modules/quotation-center/routes.js'
+// 费用项审批模块
+import feeItemApprovalRoutes from './modules/finance/feeItemApprovalRoutes.js'
+
 // 新增：从 index.js 合并的路由
 import clearanceRoutes from './modules/clearance/routes.js'
 import taricRoutes from './modules/taric/routes.js'
@@ -163,6 +166,9 @@ app.use('/api', crmRoutes)
 
 // 财务管理模块
 app.use('/api', financeRoutes)
+
+// 费用项审批模块
+app.use('/api/fee-item-approvals', feeItemApprovalRoutes)
 
 // 文档管理模块
 app.use('/api/documents', documentRoutes)

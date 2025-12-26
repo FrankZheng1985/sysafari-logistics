@@ -477,11 +477,13 @@ export async function getActiveAlertCount() {
  */
 export async function createAlertLog(data) {
   const db = getDatabase()
+  const id = uuidv4()
   
   await db.prepare(`
-    INSERT INTO alert_logs (rule_id, rule_name, alert_type, alert_level, title, content, related_type, related_id, status)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
+    INSERT INTO alert_logs (id, rule_id, rule_name, alert_type, alert_level, title, content, related_type, related_id, status)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active')
   `).run(
+    id,
     data.ruleId || null,
     data.ruleName || null,
     data.alertType,
@@ -492,7 +494,7 @@ export async function createAlertLog(data) {
     data.relatedId || null
   )
   
-  return { success: true }
+  return { success: true, id }
 }
 
 /**

@@ -280,7 +280,7 @@ export async function runMigrations() {
     // ==================== 10. 创建 alert_logs 预警日志表 ====================
     await client.query(`
       CREATE TABLE IF NOT EXISTS alert_logs (
-        id SERIAL PRIMARY KEY,
+        id TEXT PRIMARY KEY,
         rule_id TEXT REFERENCES alert_rules(id) ON DELETE SET NULL,
         rule_name TEXT,
         alert_type TEXT NOT NULL,
@@ -301,6 +301,22 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_alert_logs_status ON alert_logs(status)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_alert_logs_level ON alert_logs(alert_level)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_alert_logs_created ON alert_logs(created_at DESC)`)
+    
+    // 修复已存在的 alert_logs 表：如果 id 列是 INTEGER 类型，需要转换为 TEXT
+    try {
+      const colType = await client.query(`
+        SELECT data_type FROM information_schema.columns 
+        WHERE table_name = 'alert_logs' AND column_name = 'id'
+      `)
+      if (colType.rows[0] && colType.rows[0].data_type === 'integer') {
+        // 删除现有数据（如果有的话）并重建表
+        await client.query(`ALTER TABLE alert_logs ALTER COLUMN id TYPE TEXT USING id::TEXT`)
+        console.log('  ✅ alert_logs.id 列已转换为 TEXT 类型')
+      }
+    } catch (err) {
+      // 忽略错误，表可能是新创建的
+    }
+    
     console.log('  ✅ alert_logs 表就绪')
 
     // ==================== 11. 插入默认预警规则 ====================
