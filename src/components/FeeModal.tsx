@@ -1111,12 +1111,12 @@ export default function FeeModal({
                       {item.feeNameEn && (
                         <div className="text-xs text-gray-500">{item.feeNameEn}</div>
                       )}
-                      {/* 显示路线信息：起运地 → 目的地 */}
+                      {/* 显示路线信息：起运地 → 目的地 + 邮编 */}
                       {(item.routeFrom || item.routeTo || item.returnPoint || item.city) && (
                         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                          {(item.routeFrom || item.routeTo) && (
+                          {(item.routeFrom || item.routeTo || item.city) && (
                             <span className="text-blue-600">
-                              📍 {item.routeFrom || '-'} → {item.city || item.routeTo || '-'}
+                              📍 {item.routeFrom || '-'} → {item.city ? `${item.city}${item.routeTo ? ` (${item.routeTo})` : ''}` : item.routeTo || '-'}
                             </span>
                           )}
                           {item.returnPoint && (
