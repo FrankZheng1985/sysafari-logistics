@@ -122,6 +122,40 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_supplier_price_supplier ON supplier_price_items(supplier_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_supplier_price_category ON supplier_price_items(fee_category)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_supplier_price_batch ON supplier_price_items(import_batch_id)`)
+    
+    // 检查并添加 supplier_price_items 缺失的字段（2025-12-26新增）
+    const supplierPriceCols = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'supplier_price_items' 
+      AND column_name IN ('country', 'city', 'return_point', 'transport_mode', 'billing_type', 'status')
+    `)
+    const existingSupplierPriceCols = supplierPriceCols.rows.map(r => r.column_name)
+    
+    if (!existingSupplierPriceCols.includes('country')) {
+      await client.query(`ALTER TABLE supplier_price_items ADD COLUMN country TEXT`)
+      console.log('  ✅ supplier_price_items.country 字段已添加')
+    }
+    if (!existingSupplierPriceCols.includes('city')) {
+      await client.query(`ALTER TABLE supplier_price_items ADD COLUMN city TEXT`)
+      console.log('  ✅ supplier_price_items.city 字段已添加')
+    }
+    if (!existingSupplierPriceCols.includes('return_point')) {
+      await client.query(`ALTER TABLE supplier_price_items ADD COLUMN return_point TEXT`)
+      console.log('  ✅ supplier_price_items.return_point 字段已添加')
+    }
+    if (!existingSupplierPriceCols.includes('transport_mode')) {
+      await client.query(`ALTER TABLE supplier_price_items ADD COLUMN transport_mode TEXT`)
+      console.log('  ✅ supplier_price_items.transport_mode 字段已添加')
+    }
+    if (!existingSupplierPriceCols.includes('billing_type')) {
+      await client.query(`ALTER TABLE supplier_price_items ADD COLUMN billing_type TEXT DEFAULT 'fixed'`)
+      console.log('  ✅ supplier_price_items.billing_type 字段已添加')
+    }
+    if (!existingSupplierPriceCols.includes('status')) {
+      await client.query(`ALTER TABLE supplier_price_items ADD COLUMN status TEXT DEFAULT 'active'`)
+      console.log('  ✅ supplier_price_items.status 字段已添加')
+    }
+    
     console.log('  ✅ supplier_price_items 表就绪')
 
     // ==================== 4. 创建 import_records 表 ====================

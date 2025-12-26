@@ -167,8 +167,8 @@ export async function getSupplierList(params = {}) {
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
-  // 分页和排序
-  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  // 分页和排序 - 按供应商编码升序排序（DSA001, DSA002, DSA003...）
+  query += ' ORDER BY supplier_code ASC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
@@ -505,6 +505,7 @@ function formatSupplierPriceItem(row) {
     feeNameEn: row.fee_name_en,
     nameEn: row.fee_name_en,         // 前端兼容
     category: row.fee_category,
+    feeCategory: row.fee_category,   // 前端兼容（FeeModal使用此字段名）
     unit: row.unit,
     price: price,
     unitPrice: price,                // 前端兼容
