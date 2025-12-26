@@ -2175,6 +2175,37 @@ export async function runMigrations() {
       console.log('  ✅ service_fee_categories.name_en 字段已添加')
     }
 
+    // ==================== 同步缺失的产品数据 ====================
+    // 检查并插入缺失的产品: 欧洲运输
+    const prod1 = await client.query(`SELECT id FROM products WHERE id = $1`, ['70f1aa1f-3ec8-45cb-b652-e176998b6796'])
+    if (prod1.rows.length === 0) {
+      await client.query(`
+        INSERT INTO products (id, product_code, product_name, product_name_en, category, description, is_active, sort_order, created_at, updated_at)
+        VALUES ('70f1aa1f-3ec8-45cb-b652-e176998b6796', 'PRD0003', '欧洲运输', 'EU Transport', 'trucking', '', 1, 0, NOW(), NOW())
+      `)
+      console.log('  ✅ 产品"欧洲运输"已同步')
+    }
+    
+    // 检查并插入缺失的产品: 欧洲自税清关服务
+    const prod2 = await client.query(`SELECT id FROM products WHERE id = $1`, ['ed0d483d-7693-480d-be6c-ed668e2fa620'])
+    if (prod2.rows.length === 0) {
+      await client.query(`
+        INSERT INTO products (id, product_code, product_name, product_name_en, category, description, is_active, sort_order, created_at, updated_at)
+        VALUES ('ed0d483d-7693-480d-be6c-ed668e2fa620', 'PRD0004', '欧洲自税清关服务', 'European self-tax customs clearance services', '清关服务', '', 1, 0, NOW(), NOW())
+      `)
+      // 为欧洲自税清关服务插入费用项
+      await client.query(`
+        INSERT INTO product_fee_items (product_id, fee_name, fee_name_en, fee_category, unit, standard_price, currency, is_required, description, billing_type, cost_price, profit_type, profit_value, created_at, updated_at)
+        VALUES 
+          ('ed0d483d-7693-480d-be6c-ed668e2fa620', '税号管理费', 'Tax ID management fee', 'IMPORTER''S AGENCY FEE', '票', 200, 'EUR', 1, '', 'fixed', 0, 'amount', 0, NOW(), NOW()),
+          ('ed0d483d-7693-480d-be6c-ed668e2fa620', 'HS Code 品名费', 'HS Code product name fee', '文件费', '个', 8, 'EUR', 0, '', 'fixed', 6, 'amount', 2, NOW(), NOW()),
+          ('ed0d483d-7693-480d-be6c-ed668e2fa620', '本土税号清关费', 'Local tax number customs clearance fee', '清关服务', '票', 150, 'EUR', 0, '含10个HS', 'fixed', 100, 'amount', 50, NOW(), NOW()),
+          ('ed0d483d-7693-480d-be6c-ed668e2fa620', '离岸税号清关费', 'Offshore tax number customs clearance fee', '清关服务', '票', 175, 'EUR', 0, '含10个HS', 'fixed', 150, 'amount', 25, NOW(), NOW()),
+          ('ed0d483d-7693-480d-be6c-ed668e2fa620', '进口关税', 'import duties', '税务费', '次', 0, 'EUR', 0, '', 'actual', 0, 'amount', 0, NOW(), NOW())
+      `)
+      console.log('  ✅ 产品"欧洲自税清关服务"及费用项已同步')
+    }
+
     console.log('✅ 数据库迁移完成！')
     return true
     
