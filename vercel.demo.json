@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://sysafari-logistics-demo-api.onrender.com/api/:path*"
+      "destination": "https://sysafari-logistics-demo-api-sg.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
