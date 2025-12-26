@@ -1084,6 +1084,14 @@ export default function BasicDataManage() {
       sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
+      key: 'nameEn',
+      label: '英文名称',
+      sorter: (a, b) => (a.nameEn || '').localeCompare(b.nameEn || ''),
+      render: (_value, record: ServiceFeeCategory) => (
+        <span className="text-xs text-gray-600">{record.nameEn || '-'}</span>
+      ),
+    },
+    {
       key: 'code',
       label: '类别代码',
       sorter: (a, b) => a.code.localeCompare(b.code),

@@ -1263,6 +1263,7 @@ export async function getServiceFeeCategories(req, res) {
     return success(res, list.map(r => ({
       id: String(r.id),
       name: r.name,
+      nameEn: r.name_en,
       code: r.code,
       description: r.description,
       sortOrder: r.sort_order,
@@ -1290,10 +1291,11 @@ export async function createServiceFeeCategory(req, res) {
     }
     
     const result = await db.prepare(`
-      INSERT INTO service_fee_categories (name, code, description, sort_order, status)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO service_fee_categories (name, name_en, code, description, sort_order, status)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       name,
+      req.body.nameEn || '',
       code,
       req.body.description || '',
       req.body.sortOrder || 0,
@@ -1321,6 +1323,7 @@ export async function updateServiceFeeCategory(req, res) {
     const values = []
     
     if (req.body.name) { fields.push('name = ?'); values.push(req.body.name) }
+    if (req.body.nameEn !== undefined) { fields.push('name_en = ?'); values.push(req.body.nameEn) }
     if (req.body.code) { fields.push('code = ?'); values.push(req.body.code) }
     if (req.body.description !== undefined) { fields.push('description = ?'); values.push(req.body.description) }
     if (req.body.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(req.body.sortOrder) }

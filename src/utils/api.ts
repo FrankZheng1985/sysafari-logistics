@@ -3433,6 +3433,7 @@ export async function deleteVatRate(id: string): Promise<ApiResponse<void>> {
 export interface ServiceFeeCategory {
   id: string
   name: string
+  nameEn?: string
   code: string
   description: string
   sortOrder: number

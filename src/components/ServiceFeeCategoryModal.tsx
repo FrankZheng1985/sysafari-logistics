@@ -21,6 +21,7 @@ export default function ServiceFeeCategoryModal({
 }: ServiceFeeCategoryModalProps) {
   const [formData, setFormData] = useState({
     name: '',
+    nameEn: '',
     code: '',
     description: '',
     sortOrder: 0,
@@ -33,6 +34,7 @@ export default function ServiceFeeCategoryModal({
     if (data) {
       setFormData({
         name: data.name,
+        nameEn: data.nameEn || '',
         code: data.code,
         description: data.description || '',
         sortOrder: data.sortOrder || 0,
@@ -41,6 +43,7 @@ export default function ServiceFeeCategoryModal({
     } else {
       setFormData({
         name: '',
+        nameEn: '',
         code: '',
         description: '',
         sortOrder: 0,
@@ -73,6 +76,7 @@ export default function ServiceFeeCategoryModal({
         // 编辑模式
         const response = await updateServiceFeeCategory(data.id, {
           name: formData.name,
+          nameEn: formData.nameEn,
           code: formData.code.toUpperCase(),
           description: formData.description,
           sortOrder: formData.sortOrder,
@@ -85,6 +89,7 @@ export default function ServiceFeeCategoryModal({
         // 新增模式
         const response = await createServiceFeeCategory({
           name: formData.name,
+          nameEn: formData.nameEn,
           code: formData.code.toUpperCase(),
           description: formData.description,
           sortOrder: formData.sortOrder,
@@ -144,6 +149,19 @@ export default function ServiceFeeCategoryModal({
               placeholder="如：报关服务"
             />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              英文名称
+            </label>
+            <input
+              type="text"
+              value={formData.nameEn}
+              onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+              placeholder="如：Customs Clearance"
+            />
           </div>
 
           <div>

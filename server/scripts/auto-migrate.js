@@ -2137,6 +2137,16 @@ export async function runMigrations() {
       console.log('  ⏭️ customer_tax_numbers 序列重置跳过:', seqErr.message)
     }
 
+    // ==================== 为 service_fee_categories 添加 name_en 字段 ====================
+    const feeCategoryColumns = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'service_fee_categories' AND column_name = 'name_en'
+    `)
+    if (feeCategoryColumns.rows.length === 0) {
+      await client.query(`ALTER TABLE service_fee_categories ADD COLUMN name_en TEXT`)
+      console.log('  ✅ service_fee_categories.name_en 字段已添加')
+    }
+
     console.log('✅ 数据库迁移完成！')
     return true
     

@@ -11,6 +11,7 @@ import PageHeader from '../components/PageHeader'
 import FeeModal from '../components/FeeModal'
 import { copyToClipboard } from '../components/Toast'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -680,9 +681,9 @@ export default function FinanceFees() {
                             <div className="w-[100px] flex-shrink-0 text-right text-xs font-medium text-gray-900">
                               {formatCurrency(Number(fee.amount) || 0, fee.currency)}
                             </div>
-                            <div className="w-[90px] flex-shrink-0 text-xs text-gray-500 text-center">
-                              {fee.feeDate || '-'}
-                            </div>
+<div className="w-[90px] flex-shrink-0 text-xs text-gray-500 text-center">
+                                              {formatDate(fee.feeDate)}
+                                            </div>
                             <div className="flex-1 min-w-[100px]">
                               <span className="text-xs text-gray-500 truncate block" title={fee.description}>
                                 {fee.description || '-'}

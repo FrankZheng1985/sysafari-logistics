@@ -408,6 +408,7 @@ export interface ServiceFeeCategory {
   id: string
   code: string
   name: string
+  nameEn?: string
   description?: string
   status: 'active' | 'inactive'
   createTime?: string
