@@ -2189,6 +2189,8 @@ export async function runMigrations() {
     // 为欧洲运输插入费用项 (单独检查，确保费用项存在)
     const prod1FeeCount = await client.query(`SELECT COUNT(*) as count FROM product_fee_items WHERE product_id = $1`, ['70f1aa1f-3ec8-45cb-b652-e176998b6796'])
     if (parseInt(prod1FeeCount.rows[0].count) === 0) {
+      // 先重置序列到正确值，避免 ID 冲突
+      await client.query(`SELECT setval('product_fee_items_id_seq', COALESCE((SELECT MAX(id) FROM product_fee_items), 0) + 1, false)`)
       await client.query(`
         INSERT INTO product_fee_items (product_id, fee_name, fee_name_en, fee_category, unit, standard_price, currency, is_required, description, billing_type, cost_price, profit_type, profit_value, supplier_id, supplier_name, supplier_price_id, created_at, updated_at) VALUES
         ('70f1aa1f-3ec8-45cb-b652-e176998b6796', '提柜送仓费', 'Container Pickup & Delivery', '运输服务', '票', 1150, 'EUR', 0, '', 'fixed', 932, 'amount', 0, '205b8444-c9fa-4069-99cd-13b11462228b', '安百', 56, NOW(), NOW()),
