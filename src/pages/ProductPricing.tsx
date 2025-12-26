@@ -37,6 +37,7 @@ interface FeeItem {
   costPrice?: number | null
   profitType?: 'amount' | 'rate'
   profitValue?: number
+  billingType?: 'fixed' | 'actual'  // 计费类型: fixed=固定价格, actual=按实际收费
 }
 
 interface Supplier {
@@ -61,10 +62,11 @@ interface SupplierPrice {
 
 // 服务费类别接口（从基础数据获取）
 interface ServiceFeeCategory {
-  id: number
+  id: string
   name: string
   code: string
   description?: string
+  sortOrder?: number
   status: string
 }
 
@@ -122,14 +124,19 @@ export default function ProductPricing() {
     supplierName: '' as string,
     costPrice: '' as string | number,
     profitType: 'amount' as 'amount' | 'rate',
-    profitValue: '' as string | number
+    profitValue: '' as string | number,
+    billingType: 'fixed' as 'fixed' | 'actual'  // 计费类型
   })
   
   const [submitting, setSubmitting] = useState(false)
   
-  // 翻译相关状态
+  // 翻译相关状态（产品名称）
   const [isTranslatingName, setIsTranslatingName] = useState(false)
   const translateTimerRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // 翻译相关状态（费用项名称）
+  const [isTranslatingFeeName, setIsTranslatingFeeName] = useState(false)
+  const feeNameTranslateTimerRef = useRef<NodeJS.Timeout | null>(null)
   
   // 翻译中文名称为英文
   const translateToEnglish = useCallback(async (chineseText: string) => {
@@ -180,8 +187,54 @@ export default function ProductPricing() {
       if (translateTimerRef.current) {
         clearTimeout(translateTimerRef.current)
       }
+      if (feeNameTranslateTimerRef.current) {
+        clearTimeout(feeNameTranslateTimerRef.current)
+      }
     }
   }, [])
+  
+  // 翻译费用项中文名称为英文
+  const translateFeeNameToEnglish = useCallback(async (chineseText: string) => {
+    if (!chineseText.trim()) {
+      setFeeItemForm(prev => ({ ...prev, feeNameEn: '' }))
+      return
+    }
+    
+    setIsTranslatingFeeName(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: chineseText, from: 'zh-CN', to: 'en' })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.errCode === 200 && data.data?.translatedText) {
+          setFeeItemForm(prev => ({ ...prev, feeNameEn: data.data.translatedText }))
+        }
+      }
+    } catch (error) {
+      console.error('翻译费用项名称失败:', error)
+    } finally {
+      setIsTranslatingFeeName(false)
+    }
+  }, [])
+  
+  // 处理费用项名称输入变化（带防抖翻译）
+  const handleFeeNameChange = useCallback((value: string) => {
+    setFeeItemForm(prev => ({ ...prev, feeName: value }))
+    
+    // 清除之前的定时器
+    if (feeNameTranslateTimerRef.current) {
+      clearTimeout(feeNameTranslateTimerRef.current)
+    }
+    
+    // 设置新的防抖定时器（500ms 后触发翻译）
+    feeNameTranslateTimerRef.current = setTimeout(() => {
+      translateFeeNameToEnglish(value)
+    }, 500)
+  }, [translateFeeNameToEnglish])
   
   // 供应商选择相关状态
   const [showSupplierPicker, setShowSupplierPicker] = useState(false)
@@ -193,13 +246,22 @@ export default function ProductPricing() {
   const [supplierSearch, setSupplierSearch] = useState('')
   const [priceSearch, setPriceSearch] = useState('')
   
-  // 销售价格向上取整到50的倍数
-  const roundSalesPriceTo50 = (price: number): number => {
+  // 销售价格向上取整到50的倍数（仅运输费用）
+  const roundSalesPriceTo50 = (price: number, feeCategory?: string): number => {
     if (!price || price <= 0) return price
+    
+    // 只有运输相关费用才取整
+    const transportCategories = ['transport', 'TRANSPORT', 'trucking', 'TRUCKING', '运输服务', '运输']
+    const isTransport = transportCategories.some(cat => 
+      feeCategory?.toLowerCase?.()?.includes(cat.toLowerCase())
+    )
+    
+    if (!isTransport) return price  // 非运输费用保持原价
+    
     return Math.ceil(price / 50) * 50
   }
   
-  // 计算销售价格（自动取整到50的倍数）
+  // 计算销售价格（运输费用自动取整到50的倍数）
   const calculatedPrice = useMemo(() => {
     const cost = parseFloat(String(feeItemForm.costPrice)) || 0
     const profit = parseFloat(String(feeItemForm.profitValue)) || 0
@@ -212,9 +274,9 @@ export default function ProductPricing() {
     } else {
       rawPrice = cost + profit
     }
-    // 销售价向上取整到50的倍数
-    return roundSalesPriceTo50(rawPrice)
-  }, [feeItemForm.costPrice, feeItemForm.profitType, feeItemForm.profitValue])
+    // 销售价向上取整到50的倍数（仅运输费用）
+    return roundSalesPriceTo50(rawPrice, feeItemForm.feeCategory)
+  }, [feeItemForm.costPrice, feeItemForm.profitType, feeItemForm.profitValue, feeItemForm.feeCategory])
   
   // 计算未取整的原始价格（用于显示）
   const rawCalculatedPrice = useMemo(() => {
@@ -785,7 +847,8 @@ export default function ProductPricing() {
       supplierName: feeItem.supplierName || '',
       costPrice: feeItem.costPrice || '',
       profitType: feeItem.profitType || 'amount',
-      profitValue: feeItem.profitValue || ''
+      profitValue: feeItem.profitValue || '',
+      billingType: feeItem.billingType || 'fixed'
     })
     setShowFeeItemModal(true)
   }
@@ -796,14 +859,20 @@ export default function ProductPricing() {
       return
     }
     
+    // 计算最终价格
+    const finalPrice = calculatedPrice !== null ? calculatedPrice : (parseFloat(String(feeItemForm.standardPrice)) || 0)
+    
+    // 固定价格类型必须输入价格
+    if (feeItemForm.billingType === 'fixed' && finalPrice <= 0) {
+      alert('固定价格类型必须输入价格')
+      return
+    }
+    
     setSubmitting(true)
     try {
       const url = editingFeeItem
         ? `${API_BASE}/api/products/fee-items/${editingFeeItem.id}`
         : `${API_BASE}/api/products/${currentProductId}/fee-items`
-      
-      // 使用计算后的价格（如果有设置利润）或手动输入的价格
-      const finalPrice = calculatedPrice !== null ? calculatedPrice : (parseFloat(String(feeItemForm.standardPrice)) || 0)
       
       const response = await fetch(url, {
         method: editingFeeItem ? 'PUT' : 'POST',
@@ -1077,13 +1146,13 @@ export default function ProductPricing() {
                                 </div>
                               )}
                             </div>
-                          <button
-                            onClick={() => handleAddFeeItem(product.id)}
-                            className="px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 rounded flex items-center gap-1"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            添加费用项
-                          </button>
+                        <button
+                          onClick={() => handleAddFeeItem(product.id)}
+                          className="px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 rounded flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          添加费用项
+                        </button>
                         </div>
                       </div>
                       
@@ -1157,14 +1226,22 @@ export default function ProductPricing() {
                                     )}
                                   </td>
                                   <td className="px-3 py-2 text-right">
+                                    {item.billingType === 'actual' ? (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                                        按实际
+                                      </span>
+                                    ) : (
+                                      <>
                                     <span className="font-medium text-gray-900">
                                       {item.currency} {item.standardPrice?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                                     </span>
-                                    {item.costPrice && item.profitValue ? (
-                                      <div className="text-xs text-green-600">
-                                        +{item.profitType === 'rate' ? `${item.profitValue}%` : `${item.profitValue}`}
+                                        {item.costPrice && item.profitValue ? (
+                                          <div className="text-xs text-green-600">
+                                            +{item.profitType === 'rate' ? `${item.profitValue}%` : `${item.profitValue}`}
                                       </div>
-                                    ) : null}
+                                        ) : null}
+                                      </>
+                                    )}
                                   </td>
                                   <td className="px-3 py-2 text-center">
                                     {item.isRequired ? (
@@ -1415,18 +1492,23 @@ export default function ProductPricing() {
                     {calculatedPrice !== null && rawCalculatedPrice !== null && (
                       <div className="mt-3 p-2 bg-green-50 rounded border border-green-200">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">销售价（已取整）:</span>
+                          <span className="text-gray-600">
+                            销售价{calculatedPrice !== rawCalculatedPrice ? '（已取整）' : ''}:
+                          </span>
                           <span className="font-semibold text-green-700">
                             {feeItemForm.currency} {calculatedPrice.toFixed(2)}
                           </span>
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          原始计算: {Number(feeItemForm.costPrice).toFixed(2)} 
+                          {Number(feeItemForm.costPrice).toFixed(2)} 
                           {feeItemForm.profitType === 'rate' 
                             ? ` × (1 + ${feeItemForm.profitValue || 0}%)` 
                             : ` + ${feeItemForm.profitValue || 0}`
                           }
-                          = {rawCalculatedPrice.toFixed(2)} → 取整为 {calculatedPrice.toFixed(2)}
+                          = {rawCalculatedPrice.toFixed(2)}
+                          {calculatedPrice !== rawCalculatedPrice && (
+                            <span className="text-blue-600"> → 取整为 {calculatedPrice.toFixed(2)}（运输费用）</span>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1442,19 +1524,24 @@ export default function ProductPricing() {
                   <input
                     type="text"
                     value={feeItemForm.feeName}
-                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, feeName: e.target.value }))}
+                    onChange={(e) => handleFeeNameChange(e.target.value)}
                     placeholder="如：海运费"
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">英文名称</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    英文名称
+                    {isTranslatingFeeName && (
+                      <span className="ml-2 text-xs text-blue-500">翻译中...</span>
+                    )}
+                  </label>
                   <input
                     type="text"
                     value={feeItemForm.feeNameEn}
-                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, feeNameEn: e.target.value }))}
-                    placeholder="如：Ocean Freight"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    readOnly
+                    placeholder={isTranslatingFeeName ? "翻译中..." : "自动翻译"}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -1467,8 +1554,9 @@ export default function ProductPricing() {
                     onChange={(e) => setFeeItemForm(prev => ({ ...prev, feeCategory: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    {Object.entries(FEE_CATEGORIES).map(([key, val]) => (
-                      <option key={key} value={key}>{val.label}</option>
+                    <option value="">请选择类别</option>
+                    {serviceCategories.map((cat) => (
+                      <option key={cat.id} value={cat.code}>{cat.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1484,37 +1572,74 @@ export default function ProductPricing() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-3 gap-4">
+              {/* 计费类型 */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {feeItemForm.costPrice ? '销售价格（自动计算）' : '标准价格'}
+                <label className="block text-xs font-medium text-gray-700 mb-1">计费类型</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="billingType"
+                      value="fixed"
+                      checked={feeItemForm.billingType === 'fixed'}
+                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, billingType: e.target.value as 'fixed' | 'actual' }))}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-gray-700">固定价格</span>
                   </label>
-                  <div className="flex">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="billingType"
+                      value="actual"
+                      checked={feeItemForm.billingType === 'actual'}
+                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, billingType: e.target.value as 'fixed' | 'actual' }))}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-gray-700">按实际收费</span>
+                  </label>
+                </div>
+                {feeItemForm.billingType === 'actual' && (
+                  <p className="text-xs text-amber-600 mt-1">⚠️ 按实际收费项目将根据实际发生金额计费</p>
+                )}
+              </div>
+              
+              {/* 价格行 */}
+              <div className="grid grid-cols-4 gap-4">
+                {/* 货币 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">货币</label>
                     <select
                       value={feeItemForm.currency}
                       onChange={(e) => setFeeItemForm(prev => ({ ...prev, currency: e.target.value }))}
-                      className="px-2 py-2 text-sm border border-r-0 border-gray-300 rounded-l-lg bg-gray-50"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                       <option value="EUR">EUR</option>
                       <option value="CNY">CNY</option>
                       <option value="USD">USD</option>
                     </select>
+                </div>
+                {/* 标准价格 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    {feeItemForm.costPrice ? '销售价格' : '标准价格'}
+                  </label>
                     <input
                       type="number"
                       step="0.01"
-                      value={calculatedPrice !== null ? calculatedPrice.toFixed(2) : feeItemForm.standardPrice}
+                    value={calculatedPrice !== null ? calculatedPrice.toFixed(2) : feeItemForm.standardPrice}
                       onChange={(e) => setFeeItemForm(prev => ({ ...prev, standardPrice: e.target.value }))}
                       placeholder="0.00"
-                      disabled={!!feeItemForm.costPrice}
-                      className={`flex-1 px-3 py-2 text-sm border border-gray-300 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                        feeItemForm.costPrice ? 'bg-gray-100 text-gray-600' : ''
-                      }`}
+                    disabled={!!feeItemForm.costPrice}
+                    className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                      feeItemForm.costPrice ? 'bg-gray-100 text-gray-600' : ''
+                    }`}
                     />
-                  </div>
                   {feeItemForm.costPrice && (
-                    <p className="text-xs text-gray-500 mt-1">价格由成本+利润自动计算</p>
+                    <p className="text-xs text-gray-500 mt-1">自动计算</p>
                   )}
-                </div>
+                  </div>
+                {/* 最低价 */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">最低价</label>
                   <input
@@ -1526,6 +1651,7 @@ export default function ProductPricing() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
+                {/* 最高价 */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">最高价</label>
                   <input
@@ -1594,7 +1720,7 @@ export default function ProductPricing() {
               <button onClick={() => setShowSupplierPicker(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
-            </div>
+    </div>
             
             <div className="flex-1 flex min-h-0">
               {/* 左侧供应商列表 */}

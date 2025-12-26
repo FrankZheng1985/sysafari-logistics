@@ -87,18 +87,6 @@ const FEE_CATEGORIES = [
   { value: 'other', label: '其他费用', icon: Settings, color: 'text-gray-600', bg: 'bg-gray-100' },
 ]
 
-const QUICK_FEE_ITEMS = [
-  { category: 'freight', name: '海运费', amount: 0 },
-  { category: 'freight', name: '内陆运费', amount: 0 },
-  { category: 'customs', name: '进口关税', amount: 0 },
-  { category: 'customs', name: '增值税', amount: 0 },
-  { category: 'handling', name: '报关费', amount: 150 },
-  { category: 'handling', name: '查验费', amount: 200 },
-  { category: 'handling', name: '换单费', amount: 50 },
-  { category: 'warehouse', name: '仓储费', amount: 0 },
-  { category: 'documentation', name: '文件费', amount: 30 },
-  { category: 'insurance', name: '保险费', amount: 0 },
-]
 
 export default function FeeModal({
   visible,
@@ -308,14 +296,6 @@ export default function FeeModal({
     setShowSupplierPriceSelect(false)
   }
 
-  const handleQuickFeeSelect = (item: typeof QUICK_FEE_ITEMS[0]) => {
-    setFormData(prev => ({
-      ...prev,
-      category: item.category,
-      feeName: item.name,
-      amount: item.amount > 0 ? String(item.amount) : prev.amount
-    }))
-  }
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -613,24 +593,6 @@ export default function FeeModal({
                   从供应商报价选择
                 </button>
               )}
-            </div>
-            
-            {/* 快速选择 */}
-            <div className="flex flex-wrap gap-2">
-              {QUICK_FEE_ITEMS.map((item, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => handleQuickFeeSelect(item)}
-                  className={`px-2 py-1 text-xs rounded-full border transition-colors ${
-                    formData.feeName === item.name 
-                      ? 'bg-primary-100 border-primary-500 text-primary-700'
-                      : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {item.name}
-                </button>
-              ))}
             </div>
           </div>
 

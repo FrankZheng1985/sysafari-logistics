@@ -8,13 +8,30 @@ import { getDatabase, generateId } from '../../config/database.js'
 // ==================== 工具函数 ====================
 
 /**
- * 销售价格向上取整到50的倍数（用于客户销售价）
+ * 销售价格向上取整到50的倍数（仅用于运输费用）
  * 例如: 901-949 → 950, 951-999 → 1000, 932 → 950
  * @param {number} price - 原始价格
+ * @param {string} feeCategory - 费用类别
  * @returns {number} 取整后的价格
  */
-function roundSalesPriceTo50(price) {
+function roundSalesPriceTo50(price, feeCategory) {
   if (!price || price <= 0) return price
+  
+  // 只有运输相关费用才取整
+  const transportCategories = [
+    'transport', 'TRANSPORT', 'trucking', 'TRUCKING', 
+    '运输服务', '运输', 'Container Pickup & Delivery'
+  ]
+  
+  // 检查费用类别是否为运输相关（支持模糊匹配）
+  const isTransport = transportCategories.some(cat => 
+    feeCategory?.toLowerCase?.()?.includes(cat.toLowerCase())
+  )
+  
+  if (!isTransport) {
+    return price  // 非运输费用保持原价
+  }
+  
   return Math.ceil(price / 50) * 50
 }
 
@@ -207,8 +224,8 @@ export async function addProductFeeItem(productId, data) {
       // 固定利润: 销售价 = 成本价 + 固定利润额
       standardPrice = data.costPrice + data.profitValue
     }
-    // 销售价向上取整到50的倍数
-    standardPrice = roundSalesPriceTo50(standardPrice)
+    // 销售价向上取整到50的倍数（仅运输费用）
+    standardPrice = roundSalesPriceTo50(standardPrice, data.feeCategory)
   }
   
   const result = await db.prepare(`
@@ -217,8 +234,8 @@ export async function addProductFeeItem(productId, data) {
       standard_price, min_price, max_price, currency, is_required,
       description, sort_order,
       supplier_id, supplier_price_id, supplier_name, cost_price, profit_type, profit_value,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      billing_type, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     RETURNING id
   `).get(
     productId,
@@ -238,7 +255,8 @@ export async function addProductFeeItem(productId, data) {
     data.supplierName || null,
     data.costPrice || null,
     data.profitType || 'amount',
-    data.profitValue || 0
+    data.profitValue || 0,
+    data.billingType || 'fixed'  // 计费类型
   )
   
   return { id: result?.id }
@@ -261,8 +279,10 @@ export async function updateProductFeeItem(id, data) {
       // 固定利润: 销售价 = 成本价 + 固定利润额
       data.standardPrice = data.costPrice + data.profitValue
     }
-    // 销售价向上取整到50的倍数
-    data.standardPrice = roundSalesPriceTo50(data.standardPrice)
+    // 销售价向上取整到50的倍数（仅运输费用）
+    // 如果没有传入类别，从现有记录获取
+    const feeCategory = data.feeCategory || existing?.fee_category
+    data.standardPrice = roundSalesPriceTo50(data.standardPrice, feeCategory)
   }
   
   const fieldMap = {
@@ -277,13 +297,14 @@ export async function updateProductFeeItem(id, data) {
     isRequired: 'is_required',
     description: 'description',
     sortOrder: 'sort_order',
-    // 新增供应商关联和利润字段
+    // 供应商关联和利润字段
     supplierId: 'supplier_id',
     supplierPriceId: 'supplier_price_id',
     supplierName: 'supplier_name',
     costPrice: 'cost_price',
     profitType: 'profit_type',
-    profitValue: 'profit_value'
+    profitValue: 'profit_value',
+    billingType: 'billing_type'  // 计费类型
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
@@ -416,13 +437,14 @@ function convertFeeItemToCamelCase(row) {
     isRequired: row.is_required === 1,
     description: row.description,
     sortOrder: row.sort_order,
-    // 新增供应商关联和利润字段
+    // 供应商关联和利润字段
     supplierId: row.supplier_id || null,
     supplierPriceId: row.supplier_price_id || null,
     supplierName: row.supplier_name || null,
     costPrice: row.cost_price ? parseFloat(row.cost_price) : null,
     profitType: row.profit_type || 'amount',
     profitValue: row.profit_value ? parseFloat(row.profit_value) : 0,
+    billingType: row.billing_type || 'fixed',  // 计费类型: fixed=固定价格, actual=按实际收费
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -527,8 +549,8 @@ export async function batchSetProfit(feeItemIds, profitType, profitValue) {
     } else {
       standardPrice = costPrice + profitValue
     }
-    // 销售价向上取整到50的倍数
-    standardPrice = roundSalesPriceTo50(standardPrice)
+    // 销售价向上取整到50的倍数（仅运输费用）
+    standardPrice = roundSalesPriceTo50(standardPrice, feeItem.fee_category)
     
     // 更新费用项
     await db.prepare(`
@@ -601,8 +623,8 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
       } else {
         standardPrice = costPrice + profitValue
       }
-      // 销售价向上取整到50的倍数
-      standardPrice = roundSalesPriceTo50(standardPrice)
+      // 销售价向上取整到50的倍数（仅运输费用）
+      standardPrice = roundSalesPriceTo50(standardPrice, supplierPrice.fee_category)
       
       // 创建费用项（不指定 id，让数据库自动生成）
       const result = await db.prepare(`
@@ -610,8 +632,8 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
           product_id, fee_name, fee_name_en, fee_category, unit,
           standard_price, currency, is_required, description,
           supplier_id, supplier_price_id, supplier_name, cost_price, profit_type, profit_value,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          billing_type, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         RETURNING id
       `).get(
         productId,
@@ -627,7 +649,8 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
         supplierPrice.supplier_name || '',
         costPrice,
         profitType,
-        profitValue
+        profitValue,
+        supplierPrice.billing_type || 'fixed'  // 从供应商报价带过来的计费类型
       )
       
       imported++
@@ -637,7 +660,8 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
         feeItemId: result?.id,
         feeName: supplierPrice.fee_name,
         costPrice,
-        standardPrice
+        standardPrice,
+        billingType: supplierPrice.billing_type || 'fixed'
       })
     } catch (error) {
       console.error(`导入报价 ${priceId} 失败:`, error)
@@ -687,9 +711,9 @@ export async function batchRecalculateRounding(feeItemIds) {
       newPrice = parseFloat(feeItem.standard_price) || 0
     }
     
-    // 应用取整规则
+    // 应用取整规则（仅运输费用）
     const oldPrice = parseFloat(feeItem.standard_price) || 0
-    newPrice = roundSalesPriceTo50(newPrice)
+    newPrice = roundSalesPriceTo50(newPrice, feeItem.fee_category)
     
     // 只有价格变化才更新
     if (Math.abs(newPrice - oldPrice) > 0.01) {
@@ -754,8 +778,8 @@ export async function batchAdjustPrice(feeItemIds, adjustType, adjustValue) {
     
     // 确保价格不为负
     newPrice = Math.max(0, newPrice)
-    // 销售价向上取整到50的倍数
-    newPrice = roundSalesPriceTo50(newPrice)
+    // 销售价向上取整到50的倍数（仅运输费用）
+    newPrice = roundSalesPriceTo50(newPrice, feeItem.fee_category)
     
     // 更新费用项
     await db.prepare(`
