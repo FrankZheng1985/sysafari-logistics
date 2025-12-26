@@ -259,7 +259,8 @@ export async function getSupplierPrices(req, res) {
       search
     })
     
-    return success(res, prices)
+    // 返回 { list: [...] } 格式，与前端期望一致
+    return success(res, { list: prices, total: prices.length })
   } catch (error) {
     console.error('获取采购价列表失败:', error)
     return serverError(res, '获取采购价列表失败')
