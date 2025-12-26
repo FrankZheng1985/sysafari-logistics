@@ -215,19 +215,6 @@ export default function ServiceFeeCategoryModal({
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              英文名称 <span className="text-gray-400 text-xs font-normal">(自动翻译)</span>
-            </label>
-            <input
-              type="text"
-              value={formData.nameEn}
-              readOnly
-              className="w-full px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50 text-gray-600 cursor-not-allowed"
-              placeholder="根据中文名称自动生成"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
               类别代码 <span className="text-red-500">*</span>
             </label>
             <input
