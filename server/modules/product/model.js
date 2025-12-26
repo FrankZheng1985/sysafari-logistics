@@ -8,28 +8,30 @@ import { getDatabase, generateId } from '../../config/database.js'
 // ==================== 工具函数 ====================
 
 /**
- * 销售价格向上取整到50的倍数（仅用于运输费用）
+ * 销售价格向上取整到50的倍数（仅用于主运输费用）
  * 例如: 901-949 → 950, 951-999 → 1000, 932 → 950
+ * 只有"提柜送仓费"等主运输费用才取整，其他费用保持原价
  * @param {number} price - 原始价格
  * @param {string} feeCategory - 费用类别
+ * @param {string} feeName - 费用名称
  * @returns {number} 取整后的价格
  */
-function roundSalesPriceTo50(price, feeCategory) {
+function roundSalesPriceTo50(price, feeCategory, feeName) {
   if (!price || price <= 0) return price
   
-  // 只有运输相关费用才取整
-  const transportCategories = [
-    'transport', 'TRANSPORT', 'trucking', 'TRUCKING', 
-    '运输服务', '运输', 'Container Pickup & Delivery'
+  // 只有以下主运输费用才取整（费用名称匹配）
+  const transportFeeNames = [
+    '提柜送仓费', '提柜费', '送仓费', '运输费', '配送费',
+    'Container Pickup & Delivery', 'Delivery Fee', 'Transport Fee'
   ]
   
-  // 检查费用类别是否为运输相关（支持模糊匹配）
-  const isTransport = transportCategories.some(cat => 
-    feeCategory?.toLowerCase?.()?.includes(cat.toLowerCase())
+  // 检查费用名称是否为主运输费用（精确匹配）
+  const isMainTransportFee = transportFeeNames.some(name => 
+    feeName?.toLowerCase?.()?.includes(name.toLowerCase())
   )
   
-  if (!isTransport) {
-    return price  // 非运输费用保持原价
+  if (!isMainTransportFee) {
+    return price  // 非主运输费用保持原价
   }
   
   return Math.ceil(price / 50) * 50
@@ -224,8 +226,8 @@ export async function addProductFeeItem(productId, data) {
       // 固定利润: 销售价 = 成本价 + 固定利润额
       standardPrice = data.costPrice + data.profitValue
     }
-    // 销售价向上取整到50的倍数（仅运输费用）
-    standardPrice = roundSalesPriceTo50(standardPrice, data.feeCategory)
+    // 销售价向上取整到50的倍数（仅主运输费用）
+    standardPrice = roundSalesPriceTo50(standardPrice, data.feeCategory, data.feeName)
   }
   
   const result = await db.prepare(`
@@ -279,10 +281,11 @@ export async function updateProductFeeItem(id, data) {
       // 固定利润: 销售价 = 成本价 + 固定利润额
       data.standardPrice = data.costPrice + data.profitValue
     }
-    // 销售价向上取整到50的倍数（仅运输费用）
-    // 如果没有传入类别，从现有记录获取
+    // 销售价向上取整到50的倍数（仅主运输费用）
+    // 如果没有传入类别/名称，从现有记录获取
     const feeCategory = data.feeCategory || existing?.fee_category
-    data.standardPrice = roundSalesPriceTo50(data.standardPrice, feeCategory)
+    const feeName = data.feeName || existing?.fee_name
+    data.standardPrice = roundSalesPriceTo50(data.standardPrice, feeCategory, feeName)
   }
   
   const fieldMap = {
@@ -549,8 +552,8 @@ export async function batchSetProfit(feeItemIds, profitType, profitValue) {
     } else {
       standardPrice = costPrice + profitValue
     }
-    // 销售价向上取整到50的倍数（仅运输费用）
-    standardPrice = roundSalesPriceTo50(standardPrice, feeItem.fee_category)
+    // 销售价向上取整到50的倍数（仅主运输费用）
+    standardPrice = roundSalesPriceTo50(standardPrice, feeItem.fee_category, feeItem.fee_name)
     
     // 更新费用项
     await db.prepare(`
@@ -623,8 +626,8 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
       } else {
         standardPrice = costPrice + profitValue
       }
-      // 销售价向上取整到50的倍数（仅运输费用）
-      standardPrice = roundSalesPriceTo50(standardPrice, supplierPrice.fee_category)
+      // 销售价向上取整到50的倍数（仅主运输费用）
+      standardPrice = roundSalesPriceTo50(standardPrice, supplierPrice.fee_category, supplierPrice.fee_name)
       
       // 创建费用项（不指定 id，让数据库自动生成）
       const result = await db.prepare(`
@@ -711,9 +714,9 @@ export async function batchRecalculateRounding(feeItemIds) {
       newPrice = parseFloat(feeItem.standard_price) || 0
     }
     
-    // 应用取整规则（仅运输费用）
+    // 应用取整规则（仅主运输费用）
     const oldPrice = parseFloat(feeItem.standard_price) || 0
-    newPrice = roundSalesPriceTo50(newPrice, feeItem.fee_category)
+    newPrice = roundSalesPriceTo50(newPrice, feeItem.fee_category, feeItem.fee_name)
     
     // 只有价格变化才更新
     if (Math.abs(newPrice - oldPrice) > 0.01) {
@@ -778,8 +781,8 @@ export async function batchAdjustPrice(feeItemIds, adjustType, adjustValue) {
     
     // 确保价格不为负
     newPrice = Math.max(0, newPrice)
-    // 销售价向上取整到50的倍数（仅运输费用）
-    newPrice = roundSalesPriceTo50(newPrice, feeItem.fee_category)
+    // 销售价向上取整到50的倍数（仅主运输费用）
+    newPrice = roundSalesPriceTo50(newPrice, feeItem.fee_category, feeItem.fee_name)
     
     // 更新费用项
     await db.prepare(`

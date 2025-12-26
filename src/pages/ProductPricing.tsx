@@ -70,14 +70,42 @@ interface ServiceFeeCategory {
   status: string
 }
 
+// 费用分类映射 - 支持多种格式：小写英文、中文、大写英文
 const FEE_CATEGORIES: Record<string, { label: string; color: string }> = {
+  // 小写英文代码
   freight: { label: '运费', color: 'bg-blue-100 text-blue-700' },
   customs: { label: '关税', color: 'bg-red-100 text-red-700' },
   warehouse: { label: '仓储', color: 'bg-orange-100 text-orange-700' },
   insurance: { label: '保险', color: 'bg-green-100 text-green-700' },
   handling: { label: '操作', color: 'bg-purple-100 text-purple-700' },
   documentation: { label: '文件', color: 'bg-cyan-100 text-cyan-700' },
-  other: { label: '其他', color: 'bg-gray-100 text-gray-700' }
+  duty: { label: '关税', color: 'bg-red-100 text-red-700' },
+  tax: { label: '税费', color: 'bg-amber-100 text-amber-700' },
+  other: { label: '其他', color: 'bg-gray-100 text-gray-700' },
+  // 大写英文代码
+  'TRANSPORT': { label: '运输', color: 'bg-blue-100 text-blue-700' },
+  'WAREHOUSE': { label: '仓储', color: 'bg-orange-100 text-orange-700' },
+  'CLEARANCE': { label: '清关', color: 'bg-purple-100 text-purple-700' },
+  'DOCUMENT FEES': { label: '文件', color: 'bg-cyan-100 text-cyan-700' },
+  'DOCUMENT EXCHANGE FEE': { label: '换单', color: 'bg-cyan-100 text-cyan-700' },
+  'THC': { label: 'THC', color: 'bg-orange-100 text-orange-700' },
+  'TAX FEES': { label: '税费', color: 'bg-amber-100 text-amber-700' },
+  "IMPORTER'S AGENCY FEE": { label: '代理费', color: 'bg-indigo-100 text-indigo-700' },
+  'MANAGEMENT FEE': { label: '管理费', color: 'bg-gray-100 text-gray-700' },
+  'OTHER': { label: '其他', color: 'bg-gray-100 text-gray-700' },
+  'EXPORT CUSTOMS CLEARANCE SERVICES': { label: '出口报关', color: 'bg-purple-100 text-purple-700' },
+  // 中文分类名称
+  '运输服务': { label: '运输', color: 'bg-blue-100 text-blue-700' },
+  '清关服务': { label: '清关', color: 'bg-purple-100 text-purple-700' },
+  '仓储服务': { label: '仓储', color: 'bg-orange-100 text-orange-700' },
+  '文件费': { label: '文件', color: 'bg-cyan-100 text-cyan-700' },
+  '换单费': { label: '换单', color: 'bg-cyan-100 text-cyan-700' },
+  '港杂费': { label: 'THC', color: 'bg-orange-100 text-orange-700' },
+  '税务费': { label: '税费', color: 'bg-amber-100 text-amber-700' },
+  '进口商代理费': { label: '代理费', color: 'bg-indigo-100 text-indigo-700' },
+  '管理费': { label: '管理费', color: 'bg-gray-100 text-gray-700' },
+  '其他服务': { label: '其他', color: 'bg-gray-100 text-gray-700' },
+  '出口报关服务': { label: '出口报关', color: 'bg-purple-100 text-purple-700' }
 }
 
 export default function ProductPricing() {
@@ -246,17 +274,20 @@ export default function ProductPricing() {
   const [supplierSearch, setSupplierSearch] = useState('')
   const [priceSearch, setPriceSearch] = useState('')
   
-  // 销售价格向上取整到50的倍数（仅运输费用）
-  const roundSalesPriceTo50 = (price: number, feeCategory?: string): number => {
+  // 销售价格向上取整到50的倍数（仅主运输费用）
+  const roundSalesPriceTo50 = (price: number, feeCategory?: string, feeName?: string): number => {
     if (!price || price <= 0) return price
     
-    // 只有运输相关费用才取整
-    const transportCategories = ['transport', 'TRANSPORT', 'trucking', 'TRUCKING', '运输服务', '运输']
-    const isTransport = transportCategories.some(cat => 
-      feeCategory?.toLowerCase?.()?.includes(cat.toLowerCase())
+    // 只有以下主运输费用才取整（按费用名称匹配）
+    const transportFeeNames = [
+      '提柜送仓费', '提柜费', '送仓费', '运输费', '配送费',
+      'Container Pickup & Delivery', 'Delivery Fee', 'Transport Fee'
+    ]
+    const isMainTransportFee = transportFeeNames.some(name => 
+      feeName?.toLowerCase?.()?.includes(name.toLowerCase())
     )
     
-    if (!isTransport) return price  // 非运输费用保持原价
+    if (!isMainTransportFee) return price  // 非主运输费用保持原价
     
     return Math.ceil(price / 50) * 50
   }
@@ -274,9 +305,9 @@ export default function ProductPricing() {
     } else {
       rawPrice = cost + profit
     }
-    // 销售价向上取整到50的倍数（仅运输费用）
-    return roundSalesPriceTo50(rawPrice, feeItemForm.feeCategory)
-  }, [feeItemForm.costPrice, feeItemForm.profitType, feeItemForm.profitValue, feeItemForm.feeCategory])
+    // 销售价向上取整到50的倍数（仅主运输费用）
+    return roundSalesPriceTo50(rawPrice, feeItemForm.feeCategory, feeItemForm.feeName)
+  }, [feeItemForm.costPrice, feeItemForm.profitType, feeItemForm.profitValue, feeItemForm.feeCategory, feeItemForm.feeName])
   
   // 计算未取整的原始价格（用于显示）
   const rawCalculatedPrice = useMemo(() => {
@@ -1509,7 +1540,7 @@ export default function ProductPricing() {
                           }
                           = {rawCalculatedPrice.toFixed(2)}
                           {calculatedPrice !== rawCalculatedPrice && (
-                            <span className="text-blue-600"> → 取整为 {calculatedPrice.toFixed(2)}（运输费用）</span>
+                            <span className="text-blue-600"> → 取整为 {calculatedPrice.toFixed(2)}（主运输费）</span>
                           )}
                         </div>
                       </div>
