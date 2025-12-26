@@ -192,7 +192,17 @@ export async function runMigrations() {
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_type ON fees(fee_type)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_supplier ON fees(supplier_id)`)
-    console.log('  ✅ fees 表字段就绪')
+    
+    // 费用表性能优化索引（2024-12-26新增）
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_bill_id ON fees(bill_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_fee_date ON fees(fee_date DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_created_at ON fees(created_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_customer_id ON fees(customer_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_bill_number ON fees(bill_number)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_bill_type ON fees(bill_id, fee_type)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_date_created ON fees(fee_date DESC, created_at DESC)`)
+    
+    console.log('  ✅ fees 表字段和索引就绪')
 
     // ==================== 6. payments 表新增字段 ====================
     const paymentsColumns = await client.query(`
