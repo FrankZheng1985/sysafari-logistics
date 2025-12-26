@@ -6,6 +6,60 @@ import {
   ServiceFeeCategory 
 } from '../utils/api'
 
+// 服务费类别中英文翻译映射表
+const CATEGORY_NAME_TRANSLATIONS: Record<string, string> = {
+  // 运输相关
+  '运输服务': 'Transport Services',
+  '拖车服务': 'Trucking Services',
+  '铁路运输': 'Rail Transport',
+  '公路运输': 'Road Transport',
+  '多式联运': 'Multimodal Transport',
+  // 港口相关
+  '港口服务': 'Port Services',
+  '码头服务': 'Terminal Services',
+  '码头操作': 'Terminal Handling',
+  '堆场服务': 'Depot Services',
+  // 清关相关
+  '报关服务': 'Customs Clearance',
+  '清关服务': 'Clearance Services',
+  '查验服务': 'Inspection Services',
+  // 仓储相关
+  '仓储服务': 'Warehousing Services',
+  '仓库操作': 'Warehouse Handling',
+  '装卸服务': 'Loading Services',
+  // 文件相关
+  '文件服务': 'Documentation Services',
+  '单证服务': 'Document Services',
+  // 增值服务
+  '增值服务': 'Value Added Services',
+  '保险服务': 'Insurance Services',
+  '代理服务': 'Agency Services',
+  // 其他
+  '其他服务': 'Other Services',
+  '杂费': 'Miscellaneous',
+}
+
+// 自动翻译类别名称
+function translateCategoryName(chineseName: string): string {
+  // 去除空格后匹配
+  const trimmedName = chineseName.trim()
+  
+  // 直接匹配
+  if (CATEGORY_NAME_TRANSLATIONS[trimmedName]) {
+    return CATEGORY_NAME_TRANSLATIONS[trimmedName]
+  }
+  
+  // 部分匹配
+  for (const [cn, en] of Object.entries(CATEGORY_NAME_TRANSLATIONS)) {
+    if (trimmedName.includes(cn) || cn.includes(trimmedName)) {
+      return en
+    }
+  }
+  
+  // 默认返回空字符串，提示用户手动设置
+  return ''
+}
+
 interface ServiceFeeCategoryModalProps {
   visible: boolean
   onClose: () => void
@@ -142,7 +196,15 @@ export default function ServiceFeeCategoryModal({
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => {
+                const newName = e.target.value
+                const translatedName = translateCategoryName(newName)
+                setFormData({ 
+                  ...formData, 
+                  name: newName,
+                  nameEn: translatedName
+                })
+              }}
               className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white ${
                 errors.name ? 'border-red-300' : 'border-gray-300'
               }`}
@@ -153,14 +215,14 @@ export default function ServiceFeeCategoryModal({
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              英文名称
+              英文名称 <span className="text-gray-400 text-xs font-normal">(自动翻译)</span>
             </label>
             <input
               type="text"
               value={formData.nameEn}
-              onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-              placeholder="如：Customs Clearance"
+              readOnly
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50 text-gray-600 cursor-not-allowed"
+              placeholder="根据中文名称自动生成"
             />
           </div>
 
