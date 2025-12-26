@@ -2278,6 +2278,19 @@ export async function runMigrations() {
       console.log('  ✅ 产品"欧洲自税清关服务"费用项已同步')
     }
 
+    // 修复空的 supplier_name - 根据 supplier_id 从 suppliers 表获取名称
+    const fixedSupplierNames = await client.query(`
+      UPDATE product_fee_items pfi
+      SET supplier_name = s.supplier_name
+      FROM suppliers s
+      WHERE pfi.supplier_id = s.id
+        AND (pfi.supplier_name IS NULL OR pfi.supplier_name = '')
+        AND pfi.supplier_id IS NOT NULL
+    `)
+    if (fixedSupplierNames.rowCount > 0) {
+      console.log('  ✅ 已修复 ' + fixedSupplierNames.rowCount + ' 个费用项的供应商名称')
+    }
+
     console.log('✅ 数据库迁移完成！')
     return true
     
