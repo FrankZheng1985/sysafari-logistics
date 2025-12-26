@@ -480,7 +480,7 @@ export default function FinanceFees() {
         {/* 表格头部 */}
         <div className="bg-gray-50 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center px-3 py-2 text-xs font-medium text-gray-500">
-            <div className="w-8 flex items-center justify-center">
+            <div className="w-8 flex-shrink-0 flex items-center justify-center">
               <button 
                 onClick={toggleExpandAll}
                 className="p-1 hover:bg-gray-200 rounded transition-colors"
@@ -493,14 +493,14 @@ export default function FinanceFees() {
                 )}
               </button>
             </div>
-            <div className="w-[120px]">订单号</div>
-            <div className="w-[150px]">提单号</div>
-            <div className="w-[120px]">集装箱号</div>
-            <div className="w-[120px]">客户</div>
-            <div className="w-[80px] text-center">费用数</div>
-            <div className="w-[120px] text-right">应收</div>
-            <div className="w-[120px] text-right">应付</div>
-            <div className="w-[120px] text-right">净额</div>
+            <div className="w-[100px] flex-shrink-0">订单号</div>
+            <div className="w-[140px] flex-shrink-0">提单号</div>
+            <div className="w-[130px] flex-shrink-0">集装箱号</div>
+            <div className="w-[100px] flex-shrink-0">客户</div>
+            <div className="w-[60px] flex-shrink-0 text-center">费用数</div>
+            <div className="w-[110px] flex-shrink-0 text-right">应收</div>
+            <div className="w-[110px] flex-shrink-0 text-right">应付</div>
+            <div className="w-[110px] flex-shrink-0 text-right">净额</div>
             <div className="flex-1"></div>
           </div>
         </div>
@@ -532,7 +532,7 @@ export default function FinanceFees() {
                     }`}
                     onClick={() => toggleOrderExpand(groupKey)}
                   >
-                    <div className="w-8 flex items-center justify-center">
+                    <div className="w-8 flex-shrink-0 flex items-center justify-center">
                       <button className="p-1 hover:bg-gray-200 rounded transition-colors">
                         {isExpanded ? (
                           <ChevronDown className="w-4 h-4 text-primary-600" />
@@ -541,10 +541,10 @@ export default function FinanceFees() {
                         )}
                       </button>
                     </div>
-                    <div className="w-[120px]">
+                    <div className="w-[100px] flex-shrink-0">
                       {group.orderNumber ? (
                         <span 
-                          className="font-medium text-primary-600 hover:text-primary-700 hover:underline"
+                          className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline"
                           onClick={(e) => {
                             e.stopPropagation()
                             group.billId && navigate(`/finance/bill-details/${group.billId}`)
@@ -556,10 +556,10 @@ export default function FinanceFees() {
                         <span className="text-gray-400 text-xs">无订单号</span>
                       )}
                     </div>
-                    <div className="w-[150px]">
+                    <div className="w-[140px] flex-shrink-0">
                       {group.billNumber ? (
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-gray-600 truncate max-w-[120px]" title={group.billNumber}>
+                          <span className="text-xs text-gray-600 truncate max-w-[110px]" title={group.billNumber}>
                             {group.billNumber}
                           </span>
                           <button
@@ -577,24 +577,26 @@ export default function FinanceFees() {
                         <span className="text-gray-400 text-xs">-</span>
                       )}
                     </div>
-                    <div className="w-[120px] text-xs text-gray-600">
+                    <div className="w-[130px] flex-shrink-0 text-xs text-gray-600">
                       {group.containerNumber || '-'}
                     </div>
-                    <div className="w-[120px] text-xs text-gray-600 truncate" title={group.customerName}>
+                    <div className="w-[100px] flex-shrink-0 text-xs text-gray-600 truncate" title={group.customerName}>
                       {group.customerName || '-'}
                     </div>
-                    <div className="w-[80px] text-center">
-                      <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                        {group.feeCount}
-                      </span>
+                    <div className="w-[60px] flex-shrink-0">
+                      <div className="flex items-center justify-center">
+                        <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                          {group.feeCount}
+                        </span>
+                      </div>
                     </div>
-                    <div className="w-[120px] text-right text-xs font-medium text-green-600">
+                    <div className="w-[110px] flex-shrink-0 text-right text-xs font-medium text-green-600">
                       {group.receivableTotal > 0 ? formatCurrency(group.receivableTotal) : '-'}
                     </div>
-                    <div className="w-[120px] text-right text-xs font-medium text-orange-600">
+                    <div className="w-[110px] flex-shrink-0 text-right text-xs font-medium text-orange-600">
                       {group.payableTotal > 0 ? formatCurrency(group.payableTotal) : '-'}
                     </div>
-                    <div className={`w-[120px] text-right text-xs font-bold ${
+                    <div className={`w-[110px] flex-shrink-0 text-right text-xs font-bold ${
                       netAmount >= 0 ? 'text-green-600' : 'text-red-600'
                     }`}>
                       {formatCurrency(netAmount)}
@@ -608,14 +610,14 @@ export default function FinanceFees() {
                       {/* 明细表头 */}
                       <div className="flex items-center px-3 py-1.5 bg-gray-100/80 text-xs text-gray-500 border-y border-gray-200/50">
                         <div className="w-8 flex-shrink-0"></div>
-                        <div className="w-[150px] flex-shrink-0 pl-4">费用名称</div>
-                        <div className="w-[80px] flex-shrink-0 text-center">类型</div>
-                        <div className="w-[100px] flex-shrink-0">分类</div>
-                        <div className="w-[100px] flex-shrink-0">客户/供应商</div>
-                        <div className="w-[120px] flex-shrink-0 text-right pr-2">金额</div>
-                        <div className="w-[100px] flex-shrink-0">日期</div>
-                        <div className="w-[150px] flex-shrink-0">说明</div>
-                        <div className="w-[80px] flex-shrink-0 text-center">操作</div>
+                        <div className="w-[140px] flex-shrink-0 pl-4">费用名称</div>
+                        <div className="w-[70px] flex-shrink-0 text-center">类型</div>
+                        <div className="w-[90px] flex-shrink-0 text-center">分类</div>
+                        <div className="w-[90px] flex-shrink-0">客户/供应商</div>
+                        <div className="w-[100px] flex-shrink-0 text-right">金额</div>
+                        <div className="w-[90px] flex-shrink-0 text-center">日期</div>
+                        <div className="flex-1 min-w-[100px]">说明</div>
+                        <div className="w-[70px] flex-shrink-0 text-center">操作</div>
                       </div>
                       
                       {/* 明细行 */}
@@ -631,66 +633,70 @@ export default function FinanceFees() {
                             }`}
                           >
                             <div className="w-8 flex-shrink-0"></div>
-                            <div className="w-[150px] flex-shrink-0 pl-4">
-                              <div className="text-xs font-medium text-gray-900">{fee.feeName}</div>
+                            <div className="w-[140px] flex-shrink-0 pl-4">
+                              <div className="text-xs font-medium text-gray-900 truncate" title={fee.feeName}>{fee.feeName}</div>
                             </div>
-                            <div className="w-[80px] flex-shrink-0">
+                            <div className="w-[70px] flex-shrink-0">
                               <div className="flex items-center justify-center">
                                 {fee.feeType === 'payable' ? (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                                  <span className="inline-flex items-center justify-center min-w-[52px] gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
                                     <ArrowUpCircle className="w-3 h-3" />
                                     应付
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                                  <span className="inline-flex items-center justify-center min-w-[52px] gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
                                     <ArrowDownCircle className="w-3 h-3" />
                                     应收
                                   </span>
                                 )}
                               </div>
                             </div>
-                            <div className="w-[100px] flex-shrink-0">
-                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium ${categoryConfig.bg} ${categoryConfig.color}`}>
-                                <CategoryIcon className="w-3 h-3" />
-                                {categoryConfig.label}
-                              </span>
+                            <div className="w-[90px] flex-shrink-0">
+                              <div className="flex items-center justify-center">
+                                <span className={`inline-flex items-center justify-center min-w-[60px] gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium ${categoryConfig.bg} ${categoryConfig.color}`}>
+                                  <CategoryIcon className="w-3 h-3" />
+                                  {categoryConfig.label}
+                                </span>
+                              </div>
                             </div>
-                            <div className="w-[100px] flex-shrink-0 text-xs truncate">
+                            <div className="w-[90px] flex-shrink-0 text-xs truncate">
                               {fee.feeType === 'payable' ? (
                                 <span className="text-orange-600" title={fee.supplierName}>{fee.supplierName || '-'}</span>
                               ) : (
                                 <span className="text-gray-600" title={fee.customerName}>{fee.customerName || '-'}</span>
                               )}
                             </div>
-                            <div className="w-[120px] flex-shrink-0 text-right pr-2 text-xs font-medium text-gray-900">
+                            <div className="w-[100px] flex-shrink-0 text-right text-xs font-medium text-gray-900">
                               {formatCurrency(Number(fee.amount) || 0, fee.currency)}
                             </div>
-                            <div className="w-[100px] flex-shrink-0 text-xs text-gray-500">
+                            <div className="w-[90px] flex-shrink-0 text-xs text-gray-500 text-center">
                               {fee.feeDate || '-'}
                             </div>
-                            <div className="w-[150px] flex-shrink-0">
+                            <div className="flex-1 min-w-[100px]">
                               <span className="text-xs text-gray-500 truncate block" title={fee.description}>
                                 {fee.description || '-'}
                               </span>
                             </div>
-                            <div className="w-[80px] flex-shrink-0 flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => {
-                                  setEditingFee(fee)
-                                  setModalVisible(true)
-                                }}
-                                className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                                title="编辑"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(fee.id)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="删除"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                            <div className="w-[70px] flex-shrink-0">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingFee(fee)
+                                    setModalVisible(true)
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                                  title="编辑"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(fee.id)}
+                                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="删除"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         )
