@@ -5,6 +5,19 @@
 
 import { getDatabase, generateId } from '../../config/database.js'
 
+// ==================== 工具函数 ====================
+
+/**
+ * 销售价格向上取整到50的倍数（用于客户销售价）
+ * 例如: 901-949 → 950, 951-999 → 1000, 932 → 950
+ * @param {number} price - 原始价格
+ * @returns {number} 取整后的价格
+ */
+function roundSalesPriceTo50(price) {
+  if (!price || price <= 0) return price
+  return Math.ceil(price / 50) * 50
+}
+
 // ==================== 产品管理 ====================
 
 /**
@@ -14,37 +27,50 @@ export async function getProducts(params = {}) {
   const db = getDatabase()
   const { category, isActive, search, page = 1, pageSize = 20 } = params
   
-  let query = 'SELECT * FROM products WHERE 1=1'
+  // 使用子查询获取每个产品的费用项数量
+  let query = `
+    SELECT p.*, 
+           COALESCE((SELECT COUNT(*) FROM product_fee_items WHERE product_id = p.id), 0) as fee_item_count
+    FROM products p 
+    WHERE 1=1
+  `
   const queryParams = []
   
   if (category) {
-    query += ' AND category = ?'
+    query += ' AND p.category = ?'
     queryParams.push(category)
   }
   
   if (isActive !== undefined) {
-    query += ' AND is_active = ?'
+    query += ' AND p.is_active = ?'
     queryParams.push(isActive ? 1 : 0)
   }
   
   if (search) {
-    query += ' AND (product_name LIKE ? OR product_code LIKE ? OR product_name_en LIKE ?)'
+    query += ' AND (p.product_name LIKE ? OR p.product_code LIKE ? OR p.product_name_en LIKE ?)'
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern, searchPattern)
   }
   
   // 获取总数
-  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
-  const totalResult = await db.prepare(countQuery).get(...queryParams)
+  const countQuery = 'SELECT COUNT(*) as total FROM products p WHERE 1=1' + 
+    (category ? ' AND p.category = ?' : '') +
+    (isActive !== undefined ? ' AND p.is_active = ?' : '') +
+    (search ? ' AND (p.product_name LIKE ? OR p.product_code LIKE ? OR p.product_name_en LIKE ?)' : '')
+  const countParams = queryParams.slice(0, queryParams.length) // 复制参数用于计数查询
+  const totalResult = await db.prepare(countQuery).get(...countParams)
   
   // 分页
-  query += ' ORDER BY sort_order, created_at DESC LIMIT ? OFFSET ?'
+  query += ' ORDER BY p.sort_order, p.created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
   
   return {
-    list: (list || []).map(convertProductToCamelCase),
+    list: (list || []).map(item => ({
+      ...convertProductToCamelCase(item),
+      feeItemCount: parseInt(item.fee_item_count) || 0
+    })),
     total: totalResult?.total || 0,
     page,
     pageSize
@@ -171,12 +197,28 @@ export async function getProductFeeItems(productId) {
 export async function addProductFeeItem(productId, data) {
   const db = getDatabase()
   
+  // 如果有利润设置，计算销售价格
+  let standardPrice = data.standardPrice || 0
+  if (data.costPrice && data.profitValue) {
+    if (data.profitType === 'rate') {
+      // 利润率: 销售价 = 成本价 * (1 + 利润率/100)
+      standardPrice = data.costPrice * (1 + data.profitValue / 100)
+    } else {
+      // 固定利润: 销售价 = 成本价 + 固定利润额
+      standardPrice = data.costPrice + data.profitValue
+    }
+    // 销售价向上取整到50的倍数
+    standardPrice = roundSalesPriceTo50(standardPrice)
+  }
+  
   const result = await db.prepare(`
     INSERT INTO product_fee_items (
       product_id, fee_name, fee_name_en, fee_category, unit,
       standard_price, min_price, max_price, currency, is_required,
-      description, sort_order, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      description, sort_order,
+      supplier_id, supplier_price_id, supplier_name, cost_price, profit_type, profit_value,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     RETURNING id
   `).get(
     productId,
@@ -184,13 +226,19 @@ export async function addProductFeeItem(productId, data) {
     data.feeNameEn || '',
     data.feeCategory || 'other',
     data.unit || '',
-    data.standardPrice || 0,
+    standardPrice,
     data.minPrice || null,
     data.maxPrice || null,
     data.currency || 'EUR',
     data.isRequired ? 1 : 0,
     data.description || '',
-    data.sortOrder || 0
+    data.sortOrder || 0,
+    data.supplierId || null,
+    data.supplierPriceId || null,
+    data.supplierName || null,
+    data.costPrice || null,
+    data.profitType || 'amount',
+    data.profitValue || 0
   )
   
   return { id: result?.id }
@@ -204,6 +252,19 @@ export async function updateProductFeeItem(id, data) {
   const fields = []
   const values = []
   
+  // 如果有利润设置，计算销售价格
+  if (data.costPrice !== undefined && data.profitValue !== undefined) {
+    if (data.profitType === 'rate') {
+      // 利润率: 销售价 = 成本价 * (1 + 利润率/100)
+      data.standardPrice = data.costPrice * (1 + data.profitValue / 100)
+    } else {
+      // 固定利润: 销售价 = 成本价 + 固定利润额
+      data.standardPrice = data.costPrice + data.profitValue
+    }
+    // 销售价向上取整到50的倍数
+    data.standardPrice = roundSalesPriceTo50(data.standardPrice)
+  }
+  
   const fieldMap = {
     feeName: 'fee_name',
     feeNameEn: 'fee_name_en',
@@ -215,7 +276,14 @@ export async function updateProductFeeItem(id, data) {
     currency: 'currency',
     isRequired: 'is_required',
     description: 'description',
-    sortOrder: 'sort_order'
+    sortOrder: 'sort_order',
+    // 新增供应商关联和利润字段
+    supplierId: 'supplier_id',
+    supplierPriceId: 'supplier_price_id',
+    supplierName: 'supplier_name',
+    costPrice: 'cost_price',
+    profitType: 'profit_type',
+    profitValue: 'profit_value'
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
@@ -348,9 +416,365 @@ function convertFeeItemToCamelCase(row) {
     isRequired: row.is_required === 1,
     description: row.description,
     sortOrder: row.sort_order,
+    // 新增供应商关联和利润字段
+    supplierId: row.supplier_id || null,
+    supplierPriceId: row.supplier_price_id || null,
+    supplierName: row.supplier_name || null,
+    costPrice: row.cost_price ? parseFloat(row.cost_price) : null,
+    profitType: row.profit_type || 'amount',
+    profitValue: row.profit_value ? parseFloat(row.profit_value) : 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+// ==================== 批量操作 ====================
+
+/**
+ * 批量同步成本价（从供应商报价更新）
+ * @param {number[]} feeItemIds - 费用项ID数组
+ */
+export async function batchSyncCostFromSupplier(feeItemIds) {
+  const db = getDatabase()
+  let updated = 0
+  let failed = 0
+  const results = []
+  
+  for (const id of feeItemIds) {
+    // 获取费用项及其关联的供应商报价
+    const feeItem = await db.prepare(`
+      SELECT pfi.*, spi.price as supplier_price, spi.fee_name as supplier_fee_name
+      FROM product_fee_items pfi
+      LEFT JOIN supplier_price_items spi ON pfi.supplier_price_id = spi.id
+      WHERE pfi.id = ?
+    `).get(id)
+    
+    if (!feeItem) {
+      failed++
+      results.push({ id, success: false, error: '费用项不存在' })
+      continue
+    }
+    
+    if (!feeItem.supplier_price_id) {
+      failed++
+      results.push({ id, success: false, error: '未关联供应商报价' })
+      continue
+    }
+    
+    if (feeItem.supplier_price === null) {
+      failed++
+      results.push({ id, success: false, error: '供应商报价已删除' })
+      continue
+    }
+    
+    // 计算新的销售价格
+    const costPrice = feeItem.supplier_price
+    const profitType = feeItem.profit_type || 'amount'
+    const profitValue = parseFloat(feeItem.profit_value) || 0
+    
+    let standardPrice = costPrice
+    if (profitType === 'rate') {
+      standardPrice = costPrice * (1 + profitValue / 100)
+    } else {
+      standardPrice = costPrice + profitValue
+    }
+    
+    // 更新费用项
+    await db.prepare(`
+      UPDATE product_fee_items 
+      SET cost_price = ?, standard_price = ?, updated_at = NOW()
+      WHERE id = ?
+    `).run(costPrice, standardPrice, id)
+    
+    updated++
+    results.push({ 
+      id, 
+      success: true, 
+      oldCost: feeItem.cost_price,
+      newCost: costPrice,
+      newPrice: standardPrice
+    })
+  }
+  
+  return { updated, failed, results }
+}
+
+/**
+ * 批量设置利润
+ * @param {number[]} feeItemIds - 费用项ID数组
+ * @param {string} profitType - 利润类型: 'amount' | 'rate'
+ * @param {number} profitValue - 利润值
+ */
+export async function batchSetProfit(feeItemIds, profitType, profitValue) {
+  const db = getDatabase()
+  let updated = 0
+  const results = []
+  
+  for (const id of feeItemIds) {
+    const feeItem = await db.prepare('SELECT * FROM product_fee_items WHERE id = ?').get(id)
+    
+    if (!feeItem) {
+      results.push({ id, success: false, error: '费用项不存在' })
+      continue
+    }
+    
+    const costPrice = parseFloat(feeItem.cost_price) || parseFloat(feeItem.standard_price) || 0
+    
+    // 计算新的销售价格
+    let standardPrice = costPrice
+    if (profitType === 'rate') {
+      standardPrice = costPrice * (1 + profitValue / 100)
+    } else {
+      standardPrice = costPrice + profitValue
+    }
+    // 销售价向上取整到50的倍数
+    standardPrice = roundSalesPriceTo50(standardPrice)
+    
+    // 更新费用项
+    await db.prepare(`
+      UPDATE product_fee_items 
+      SET profit_type = ?, profit_value = ?, standard_price = ?, 
+          cost_price = COALESCE(cost_price, standard_price),
+          updated_at = NOW()
+      WHERE id = ?
+    `).run(profitType, profitValue, standardPrice, id)
+    
+    updated++
+    results.push({ 
+      id, 
+      success: true, 
+      costPrice,
+      newPrice: standardPrice
+    })
+  }
+  
+  return { updated, failed: feeItemIds.length - updated, results }
+}
+
+/**
+ * 批量从供应商报价导入到产品费用项
+ * @param {string} productId - 目标产品ID
+ * @param {number[]} supplierPriceIds - 供应商报价ID数组
+ * @param {string} profitType - 利润类型
+ * @param {number} profitValue - 利润值
+ */
+export async function batchImportFromSupplier(productId, supplierPriceIds, profitType = 'amount', profitValue = 0) {
+  const db = getDatabase()
+  let imported = 0
+  let skipped = 0
+  const results = []
+  
+  for (const priceId of supplierPriceIds) {
+    try {
+      // 获取供应商报价
+      const supplierPrice = await db.prepare(`
+        SELECT * FROM supplier_price_items WHERE id = ?
+      `).get(priceId)
+      
+      if (!supplierPrice) {
+        results.push({ priceId, success: false, error: '供应商报价不存在' })
+        continue
+      }
+      
+      // 检查是否已经导入过相同的供应商报价到该产品
+      const existing = await db.prepare(`
+        SELECT id FROM product_fee_items 
+        WHERE product_id = ? AND supplier_price_id = ?
+      `).get(productId, priceId)
+      
+      if (existing) {
+        skipped++
+        results.push({ 
+          priceId, 
+          success: false, 
+          error: '该报价已导入过',
+          existingId: existing.id
+        })
+        continue
+      }
+      
+      // 计算销售价格（成本价保持原价，销售价取整）
+      const costPrice = parseFloat(supplierPrice.price) || 0
+      let standardPrice = costPrice
+      if (profitType === 'rate') {
+        standardPrice = costPrice * (1 + profitValue / 100)
+      } else {
+        standardPrice = costPrice + profitValue
+      }
+      // 销售价向上取整到50的倍数
+      standardPrice = roundSalesPriceTo50(standardPrice)
+      
+      // 创建费用项（不指定 id，让数据库自动生成）
+      const result = await db.prepare(`
+        INSERT INTO product_fee_items (
+          product_id, fee_name, fee_name_en, fee_category, unit,
+          standard_price, currency, is_required, description,
+          supplier_id, supplier_price_id, supplier_name, cost_price, profit_type, profit_value,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        RETURNING id
+      `).get(
+        productId,
+        supplierPrice.fee_name,
+        supplierPrice.fee_name_en || '',
+        supplierPrice.fee_category || 'other',
+        supplierPrice.unit || '',
+        standardPrice,
+        supplierPrice.currency || 'EUR',
+        supplierPrice.remark || '',
+        supplierPrice.supplier_id,
+        priceId,
+        supplierPrice.supplier_name || '',
+        costPrice,
+        profitType,
+        profitValue
+      )
+      
+      imported++
+      results.push({ 
+        priceId, 
+        success: true, 
+        feeItemId: result?.id,
+        feeName: supplierPrice.fee_name,
+        costPrice,
+        standardPrice
+      })
+    } catch (error) {
+      console.error(`导入报价 ${priceId} 失败:`, error)
+      results.push({ 
+        priceId, 
+        success: false, 
+        error: error.message || '导入失败'
+      })
+    }
+  }
+  
+  return { imported, skipped, failed: supplierPriceIds.length - imported - skipped, results }
+}
+
+/**
+ * 批量重新计算取整（用于更新旧数据）
+ * @param {number[]} feeItemIds - 费用项ID数组
+ */
+export async function batchRecalculateRounding(feeItemIds) {
+  const db = getDatabase()
+  let updated = 0
+  const results = []
+  
+  for (const id of feeItemIds) {
+    const feeItem = await db.prepare('SELECT * FROM product_fee_items WHERE id = ?').get(id)
+    
+    if (!feeItem) {
+      results.push({ id, success: false, error: '费用项不存在' })
+      continue
+    }
+    
+    const costPrice = parseFloat(feeItem.cost_price) || 0
+    const profitType = feeItem.profit_type || 'amount'
+    const profitValue = parseFloat(feeItem.profit_value) || 0
+    
+    // 如果没有成本价，使用当前销售价进行取整
+    let newPrice
+    if (costPrice > 0) {
+      // 根据成本价和利润重新计算
+      if (profitType === 'rate') {
+        newPrice = costPrice * (1 + profitValue / 100)
+      } else {
+        newPrice = costPrice + profitValue
+      }
+    } else {
+      // 没有成本价，直接对当前销售价取整
+      newPrice = parseFloat(feeItem.standard_price) || 0
+    }
+    
+    // 应用取整规则
+    const oldPrice = parseFloat(feeItem.standard_price) || 0
+    newPrice = roundSalesPriceTo50(newPrice)
+    
+    // 只有价格变化才更新
+    if (Math.abs(newPrice - oldPrice) > 0.01) {
+      await db.prepare(`
+        UPDATE product_fee_items 
+        SET standard_price = ?, updated_at = NOW()
+        WHERE id = ?
+      `).run(newPrice, id)
+      
+      updated++
+      results.push({ 
+        id, 
+        success: true, 
+        oldPrice,
+        newPrice,
+        change: newPrice - oldPrice
+      })
+    } else {
+      results.push({ 
+        id, 
+        success: true, 
+        oldPrice,
+        newPrice,
+        change: 0,
+        message: '价格已是取整值'
+      })
+    }
+  }
+  
+  return { updated, total: feeItemIds.length, results }
+}
+
+/**
+ * 批量调价
+ * @param {number[]} feeItemIds - 费用项ID数组
+ * @param {string} adjustType - 调价类型: 'percent' | 'amount'
+ * @param {number} adjustValue - 调价值（百分比或金额）
+ */
+export async function batchAdjustPrice(feeItemIds, adjustType, adjustValue) {
+  const db = getDatabase()
+  let updated = 0
+  const results = []
+  
+  for (const id of feeItemIds) {
+    const feeItem = await db.prepare('SELECT * FROM product_fee_items WHERE id = ?').get(id)
+    
+    if (!feeItem) {
+      results.push({ id, success: false, error: '费用项不存在' })
+      continue
+    }
+    
+    const oldPrice = parseFloat(feeItem.standard_price) || 0
+    let newPrice = oldPrice
+    
+    if (adjustType === 'percent') {
+      // 按百分比调价
+      newPrice = oldPrice * (1 + adjustValue / 100)
+    } else {
+      // 按固定金额调价
+      newPrice = oldPrice + adjustValue
+    }
+    
+    // 确保价格不为负
+    newPrice = Math.max(0, newPrice)
+    // 销售价向上取整到50的倍数
+    newPrice = roundSalesPriceTo50(newPrice)
+    
+    // 更新费用项
+    await db.prepare(`
+      UPDATE product_fee_items 
+      SET standard_price = ?, updated_at = NOW()
+      WHERE id = ?
+    `).run(newPrice, id)
+    
+    updated++
+    results.push({ 
+      id, 
+      success: true, 
+      oldPrice,
+      newPrice,
+      change: newPrice - oldPrice
+    })
+  }
+  
+  return { updated, failed: feeItemIds.length - updated, results }
 }
 
 /**
@@ -479,5 +903,11 @@ export default {
   updateProductFeeItem,
   deleteProductFeeItem,
   setProductFeeItems,
+  // 批量操作
+  batchSyncCostFromSupplier,
+  batchSetProfit,
+  batchImportFromSupplier,
+  batchRecalculateRounding,
+  batchAdjustPrice,
   seedDemoData
 }

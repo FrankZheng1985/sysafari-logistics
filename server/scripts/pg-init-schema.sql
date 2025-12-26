@@ -1378,12 +1378,20 @@ CREATE TABLE IF NOT EXISTS product_fee_items (
     is_required INTEGER DEFAULT 0,
     description TEXT,
     sort_order INTEGER DEFAULT 0,
+    -- 供应商关联和利润设置字段
+    supplier_id TEXT,                    -- 关联的供应商ID
+    supplier_price_id INTEGER,           -- 关联的供应商采购价ID
+    supplier_name TEXT,                  -- 供应商名称（冗余）
+    cost_price NUMERIC DEFAULT 0,        -- 成本价（从供应商报价获取）
+    profit_type TEXT DEFAULT 'amount',   -- 利润类型: amount=固定金额, rate=利润率
+    profit_value NUMERIC DEFAULT 0,      -- 利润值（金额或百分比）
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_product_fee_items_product ON product_fee_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_fee_items_category ON product_fee_items(fee_category);
+CREATE INDEX IF NOT EXISTS idx_product_fee_items_supplier ON product_fee_items(supplier_id);
 
 -- ==================== 供应商报价表 ====================
 CREATE TABLE IF NOT EXISTS supplier_price_items (

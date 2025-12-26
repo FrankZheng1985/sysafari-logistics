@@ -443,9 +443,38 @@ export default {
   
   // 地理编码
   geocodeAddress,
+  batchGetCitiesByPostalCodes,
   
   // ERP内部
   getAllInquiries,
   setQuote
+}
+
+/**
+ * 批量获取邮编对应的城市
+ */
+export async function batchGetCitiesByPostalCodes(req, res) {
+  try {
+    const { postalCodes } = req.body
+    
+    if (!Array.isArray(postalCodes) || postalCodes.length === 0) {
+      return res.status(400).json({ error: '请提供邮编数组' })
+    }
+    
+    // 限制一次最多查询100个
+    if (postalCodes.length > 100) {
+      return res.status(400).json({ error: '单次查询最多支持100个邮编' })
+    }
+    
+    const result = await hereService.batchGetCities(postalCodes)
+    
+    res.json({
+      success: true,
+      cities: result
+    })
+  } catch (error) {
+    console.error('批量获取城市失败:', error)
+    res.status(500).json({ error: '获取城市信息失败' })
+  }
 }
 

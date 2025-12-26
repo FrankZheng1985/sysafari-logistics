@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Plus, Search, Edit2, Trash2, Building2, DollarSign,
-  Languages, Loader2, ArrowLeft, Filter, CheckCircle
+  Languages, Loader2, ArrowLeft, Filter, CheckCircle, Copy
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
@@ -29,17 +29,21 @@ interface SupplierPrice {
   validUntil: string | null
   isActive: boolean
   notes: string
+  routeFrom?: string      // 起运地
+  routeTo?: string        // 目的地
+  city?: string           // 城市
+  returnPoint?: string    // 还柜点
+  transportMode?: string  // 运输方式（空运/海运）
+  billingType?: string    // 计费类型（fixed/actual）
 }
 
-const CATEGORY_OPTIONS = [
-  '运输服务',
-  '港口服务',
-  '报关服务',
-  '仓储服务',
-  '文件费',
-  '管理费',
-  '其他服务'
-]
+// 费用类别接口
+interface ServiceFeeCategory {
+  id: number
+  name: string
+  code: string
+  status: string
+}
 
 const CURRENCIES = [
   { value: 'EUR', label: 'EUR' },
@@ -57,6 +61,7 @@ export default function SupplierPrices() {
   const [prices, setPrices] = useState<SupplierPrice[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingPrices, setLoadingPrices] = useState(false)
+  const [feeCategories, setFeeCategories] = useState<ServiceFeeCategory[]>([])
   
   // 筛选
   const [searchValue, setSearchValue] = useState('')
@@ -79,7 +84,12 @@ export default function SupplierPrices() {
     validFrom: '',
     validUntil: '',
     isActive: true,
-    notes: ''
+    notes: '',
+    routeFrom: '',      // 起运地（仅运输服务）
+    routeTo: '',        // 目的地（仅运输服务）
+    returnPoint: '',    // 还柜点（仅运输服务）
+    transportMode: '',  // 运输方式（空运/海运）
+    billingType: 'fixed' // 计费类型（fixed/actual）
   })
 
   const tabs = [
@@ -90,6 +100,7 @@ export default function SupplierPrices() {
 
   useEffect(() => {
     loadSuppliers()
+    loadFeeCategories()  // 加载费用类别
   }, [])
 
   useEffect(() => {
@@ -113,6 +124,19 @@ export default function SupplierPrices() {
       console.error('加载供应商失败:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 加载服务费类别（从基础数据）
+  const loadFeeCategories = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/service-fee-categories?status=active`)
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setFeeCategories(data.data || [])
+      }
+    } catch (error) {
+      console.error('加载费用类别失败:', error)
     }
   }
 
@@ -154,7 +178,12 @@ export default function SupplierPrices() {
         validFrom: price.validFrom ? price.validFrom.split('T')[0] : '',
         validUntil: price.validUntil ? price.validUntil.split('T')[0] : '',
         isActive: price.isActive,
-        notes: price.notes || ''
+        notes: price.notes || '',
+        routeFrom: price.routeFrom || '',
+        routeTo: price.routeTo || '',
+        returnPoint: price.returnPoint || '',
+        transportMode: price.transportMode || '',
+        billingType: price.billingType || 'fixed'
       })
     } else {
       setEditingPrice(null)
@@ -168,7 +197,12 @@ export default function SupplierPrices() {
         validFrom: '',
         validUntil: '',
         isActive: true,
-        notes: ''
+        notes: '',
+        routeFrom: '',
+        routeTo: '',
+        returnPoint: '',
+        transportMode: '',
+        billingType: 'fixed'
       })
     }
     setModalVisible(true)
@@ -196,8 +230,13 @@ export default function SupplierPrices() {
   }
 
   const handleSave = async () => {
-    if (!formData.category || !formData.name || formData.unitPrice <= 0) {
-      alert('请填写费用类别、名称和单价')
+    // 按实际计算时不需要验证单价
+    if (!formData.category || !formData.name) {
+      alert('请填写费用类别和名称')
+      return
+    }
+    if (formData.billingType === 'fixed' && formData.unitPrice <= 0) {
+      alert('固定价格类型需要填写单价')
       return
     }
     if (!selectedSupplier) return
@@ -208,14 +247,21 @@ export default function SupplierPrices() {
         ? `${API_BASE}/api/suppliers/${selectedSupplier.id}/prices/${editingPrice.id}`
         : `${API_BASE}/api/suppliers/${selectedSupplier.id}/prices`
       
+      // 只有运输服务才发送路线字段
+      const payload = {
+        ...formData,
+        validFrom: formData.validFrom || null,
+        validUntil: formData.validUntil || null,
+        // 非运输服务不发送路线字段
+        routeFrom: formData.category === '运输服务' ? formData.routeFrom : '',
+        routeTo: formData.category === '运输服务' ? formData.routeTo : '',
+        returnPoint: formData.category === '运输服务' ? formData.returnPoint : ''
+      }
+      
       const res = await fetch(url, {
         method: editingPrice ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          validFrom: formData.validFrom || null,
-          validUntil: formData.validUntil || null
-        })
+        body: JSON.stringify(payload)
       })
 
       const data = await res.json()
@@ -230,6 +276,52 @@ export default function SupplierPrices() {
       alert('保存失败')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // 复制费用条目
+  const handleCopy = (price: SupplierPrice) => {
+    // 预填充数据但不设置 editingPrice（这样保存时会创建新记录）
+    setEditingPrice(null)
+    setFormData({
+      category: price.category,
+      name: price.name,
+      nameEn: price.nameEn || '',
+      unit: price.unit || '次',
+      unitPrice: price.unitPrice,
+      currency: price.currency || 'EUR',
+      validFrom: price.validFrom ? price.validFrom.split('T')[0] : '',
+      validUntil: price.validUntil ? price.validUntil.split('T')[0] : '',
+      isActive: price.isActive,
+      notes: price.notes || '',
+      routeFrom: price.routeFrom || '',
+      routeTo: price.routeTo || '',
+      returnPoint: price.returnPoint || '',
+      transportMode: price.transportMode || '',
+      billingType: price.billingType || 'fixed'
+    })
+    setModalVisible(true)
+  }
+
+  // 切换启用/禁用状态
+  const handleToggleStatus = async (price: SupplierPrice) => {
+    if (!selectedSupplier) return
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/suppliers/${selectedSupplier.id}/prices/${price.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !price.isActive })
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        loadPrices(selectedSupplier.id)
+      } else {
+        alert(data.msg || '状态更新失败')
+      }
+    } catch (error) {
+      console.error('状态更新失败:', error)
+      alert('状态更新失败')
     }
   }
 
@@ -363,8 +455,8 @@ export default function SupplierPrices() {
                       className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                     >
                       <option value="">全部类别</option>
-                      {CATEGORY_OPTIONS.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
+                      {feeCategories.map(cat => (
+                        <option key={cat.id} value={cat.name}>{cat.name}</option>
                       ))}
                     </select>
                     <select
@@ -403,34 +495,80 @@ export default function SupplierPrices() {
                             <span className="text-sm font-medium text-gray-700">{category}</span>
                             <span className="ml-2 text-xs text-gray-500">({categoryPrices.length}项)</span>
                           </div>
-                          <table className="w-full">
+                          <table className="w-full text-xs">
                             <thead>
                               <tr className="bg-gray-50/50">
-                                <th className="text-left py-2 px-4 text-xs font-medium text-gray-500">费用名称</th>
-                                <th className="text-left py-2 px-4 text-xs font-medium text-gray-500">英文名称</th>
-                                <th className="text-right py-2 px-4 text-xs font-medium text-gray-500">单价</th>
-                                <th className="text-center py-2 px-4 text-xs font-medium text-gray-500">有效期</th>
-                                <th className="text-center py-2 px-4 text-xs font-medium text-gray-500">状态</th>
-                                <th className="text-center py-2 px-4 text-xs font-medium text-gray-500">操作</th>
+                                <th className="text-left py-2 px-3 font-medium text-gray-500">费用名称</th>
+                                <th className="text-left py-2 px-3 font-medium text-gray-500">英文名称</th>
+                                <th className="text-center py-2 px-3 font-medium text-gray-500">运输方式</th>
+                                {category === '运输服务' && (
+                                  <>
+                                    <th className="text-left py-2 px-3 font-medium text-gray-500">起运地</th>
+                                    <th className="text-left py-2 px-3 font-medium text-gray-500">目的地</th>
+                                    <th className="text-left py-2 px-3 font-medium text-gray-500">还柜点</th>
+                                  </>
+                                )}
+                                <th className="text-right py-2 px-3 font-medium text-gray-500">单价</th>
+                                <th className="text-center py-2 px-3 font-medium text-gray-500">有效期</th>
+                                <th className="text-left py-2 px-3 font-medium text-gray-500">备注</th>
+                                <th className="text-center py-2 px-3 font-medium text-gray-500">状态</th>
+                                <th className="text-center py-2 px-3 font-medium text-gray-500">操作</th>
                               </tr>
                             </thead>
                             <tbody>
                               {categoryPrices.map(price => (
                                 <tr key={price.id} className="border-t hover:bg-gray-50">
-                                  <td className="py-3 px-4">
-                                    <div className="text-sm font-medium text-gray-900">{price.name}</div>
+                                  <td className="py-2 px-3">
+                                    <div className="font-medium text-gray-900">{price.name || '-'}</div>
                                   </td>
-                                  <td className="py-3 px-4">
-                                    <div className="text-sm text-gray-600">{price.nameEn || '-'}</div>
+                                  <td className="py-2 px-3">
+                                    <div className="text-gray-600">{price.nameEn || '-'}</div>
                                   </td>
-                                  <td className="py-3 px-4 text-right">
-                                    <span className="text-sm font-medium text-gray-900">
-                                      {price.unitPrice?.toLocaleString()} {price.currency}
-                                    </span>
-                                    <span className="text-xs text-gray-500">/{price.unit}</span>
+                                  <td className="py-2 px-3 text-center">
+                                    {price.transportMode ? (
+                                      <span className={`inline-flex px-2 py-0.5 rounded text-xs ${
+                                        price.transportMode === '海运' ? 'bg-blue-100 text-blue-700' :
+                                        price.transportMode === '空运' ? 'bg-purple-100 text-purple-700' :
+                                        price.transportMode === '铁路' ? 'bg-orange-100 text-orange-700' :
+                                        price.transportMode === '卡航' ? 'bg-green-100 text-green-700' :
+                                        'bg-gray-100 text-gray-600'
+                                      }`}>
+                                        {price.transportMode}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
                                   </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <div className="text-xs text-gray-500">
+                                  {category === '运输服务' && (
+                                    <>
+                                      <td className="py-2 px-3">
+                                        <div className="text-gray-700">{price.routeFrom || '-'}</div>
+                                      </td>
+                                      <td className="py-2 px-3">
+                                        <div className="text-gray-700">{price.routeTo || '-'}</div>
+                                        {price.city && <div className="text-gray-400 text-[10px]">{price.city}</div>}
+                                      </td>
+                                      <td className="py-2 px-3">
+                                        <div className="text-gray-700">{price.returnPoint || '-'}</div>
+                                      </td>
+                                    </>
+                                  )}
+                                  <td className="py-2 px-3 text-right">
+                                    {price.billingType === 'actual' ? (
+                                      <span className="inline-flex px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">
+                                        按实际
+                                      </span>
+                                    ) : (
+                                      <>
+                                        <span className="font-medium text-gray-900">
+                                          {price.unitPrice?.toLocaleString()} {price.currency}
+                                        </span>
+                                        <span className="text-gray-500">/{price.unit}</span>
+                                      </>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-3 text-center">
+                                    <div className="text-gray-500">
                                       {price.validFrom && price.validUntil ? (
                                         `${price.validFrom.split('T')[0]} ~ ${price.validUntil.split('T')[0]}`
                                       ) : (
@@ -438,31 +576,47 @@ export default function SupplierPrices() {
                                       )}
                                     </div>
                                   </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full ${
-                                      price.isActive 
-                                        ? 'bg-green-100 text-green-700' 
-                                        : 'bg-gray-100 text-gray-500'
-                                    }`}>
+                                  <td className="py-2 px-3">
+                                    <div className="text-gray-600 max-w-[120px] truncate" title={price.notes || ''}>
+                                      {price.notes || '-'}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-3 text-center">
+                                    <button
+                                      onClick={() => handleToggleStatus(price)}
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
+                                        price.isActive 
+                                          ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                      }`}
+                                      title={price.isActive ? '点击禁用' : '点击启用'}
+                                    >
                                       {price.isActive && <CheckCircle className="w-3 h-3" />}
                                       {price.isActive ? '启用' : '禁用'}
-                                    </span>
+                                    </button>
                                   </td>
-                                  <td className="py-3 px-4">
-                                    <div className="flex items-center justify-center gap-2">
+                                  <td className="py-2 px-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => handleCopy(price)}
+                                        className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                                        title="复制"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
                                       <button
                                         onClick={() => handleOpenModal(price)}
                                         className="p-1 text-gray-400 hover:text-primary-600 rounded"
                                         title="编辑"
                                       >
-                                        <Edit2 className="w-4 h-4" />
+                                        <Edit2 className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={() => handleDelete(price)}
                                         className="p-1 text-gray-400 hover:text-red-600 rounded"
                                         title="删除"
                                       >
-                                        <Trash2 className="w-4 h-4" />
+                                        <Trash2 className="w-3.5 h-3.5" />
                                       </button>
                                     </div>
                                   </td>
@@ -496,21 +650,49 @@ export default function SupplierPrices() {
             </div>
 
             <div className="p-4 space-y-4">
-              {/* 费用类别 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  费用类别 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.category}
-                  onChange={e => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">请选择</option>
-                  {CATEGORY_OPTIONS.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+              {/* 费用类别和运输方式 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    费用类别 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.category}
+                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">请选择</option>
+                    {feeCategories.map(cat => (
+                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    运输方式
+                  </label>
+                  <select
+                    value={formData.transportMode}
+                    onChange={e => {
+                      const mode = e.target.value
+                      // 根据运输方式自动设置单位
+                      let unit = formData.unit
+                      if (mode === '海运' || mode === '铁路' || mode === '卡航') {
+                        unit = '柜'
+                      } else if (mode === '空运') {
+                        unit = 'KG'
+                      }
+                      setFormData({ ...formData, transportMode: mode, unit })
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">不限</option>
+                    <option value="海运">海运（按柜计费）</option>
+                    <option value="空运">空运（按KG计费）</option>
+                    <option value="铁路">铁路（按柜计费）</option>
+                    <option value="卡航">卡航（按柜计费）</option>
+                  </select>
+                </div>
               </div>
 
               {/* 费用名称 */}
@@ -550,20 +732,89 @@ export default function SupplierPrices() {
                 </div>
               </div>
 
+              {/* 运输服务特有字段：起运地、目的地、还柜点 */}
+              {formData.category === '运输服务' && (
+                <div className="grid grid-cols-3 gap-4 p-3 bg-blue-50 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">起运地</label>
+                    <input
+                      type="text"
+                      value={formData.routeFrom}
+                      onChange={e => setFormData({ ...formData, routeFrom: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      placeholder="如：鹿特丹"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">目的地（邮编）</label>
+                    <input
+                      type="text"
+                      value={formData.routeTo}
+                      onChange={e => setFormData({ ...formData, routeTo: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      placeholder="如：DE-41751"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">还柜点</label>
+                    <input
+                      type="text"
+                      value={formData.returnPoint}
+                      onChange={e => setFormData({ ...formData, returnPoint: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      placeholder="如：鹿特丹"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 计费类型 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">计费类型</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="billingType"
+                      value="fixed"
+                      checked={formData.billingType === 'fixed'}
+                      onChange={e => setFormData({ ...formData, billingType: e.target.value })}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-gray-700">固定价格</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="billingType"
+                      value="actual"
+                      checked={formData.billingType === 'actual'}
+                      onChange={e => setFormData({ ...formData, billingType: e.target.value, unitPrice: 0 })}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-gray-700">按实际计算</span>
+                  </label>
+                </div>
+              </div>
+
               {/* 单价和单位 */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    单价 <span className="text-red-500">*</span>
+                    单价 {formData.billingType === 'fixed' && <span className="text-red-500">*</span>}
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="number"
-                      value={formData.unitPrice}
+                      value={formData.billingType === 'actual' ? 0 : formData.unitPrice}
                       onChange={e => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
                       min="0"
                       step="0.01"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      disabled={formData.billingType === 'actual'}
+                      placeholder={formData.billingType === 'actual' ? '按实际计算' : ''}
+                      className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                        formData.billingType === 'actual' ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                      }`}
                     />
                     <select
                       value={formData.currency}
@@ -582,7 +833,12 @@ export default function SupplierPrices() {
                     type="text"
                     value={formData.unit}
                     onChange={e => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    disabled={['海运', '铁路', '卡航', '空运'].includes(formData.transportMode)}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                      ['海运', '铁路', '卡航', '空运'].includes(formData.transportMode) 
+                        ? 'bg-gray-100 text-gray-600 cursor-not-allowed' 
+                        : ''
+                    }`}
                     placeholder="次"
                   />
                 </div>

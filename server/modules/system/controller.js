@@ -1581,3 +1581,50 @@ export async function getSupervisorCandidates(req, res) {
   }
 }
 
+// ==================== 翻译服务 ====================
+
+/**
+ * 翻译文本 - 使用 Google Translate API
+ */
+export async function translateText(req, res) {
+  try {
+    const { text, from = 'zh-CN', to = 'en' } = req.body
+    
+    if (!text || !text.trim()) {
+      return success(res, { translatedText: '' })
+    }
+
+    // 使用免费的 Google Translate API
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`翻译请求失败: ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    // 解析返回的数据结构
+    // 返回格式: [[["translated text","original text",null,null,10]],null,"zh-CN",...]
+    let translatedText = text
+    if (data && data[0] && Array.isArray(data[0])) {
+      const translatedParts = data[0]
+        .filter(part => part && part[0])
+        .map(part => part[0])
+      translatedText = translatedParts.join('')
+    }
+
+    return success(res, { translatedText })
+  } catch (error) {
+    console.error('[翻译错误]', error.message)
+    // 翻译失败时返回原文
+    return success(res, { translatedText: req.body.text || '' })
+  }
+}
+

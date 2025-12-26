@@ -260,5 +260,10 @@ router.post('/team/check-approval', authenticate, controller.checkApprovalRequir
 // 获取可选择的上级列表
 router.get('/supervisors', authenticate, controller.getSupervisorCandidates)
 
+// ==================== 翻译服务路由 ====================
+
+// 翻译文本（中文 -> 英文）
+router.post('/translate', controller.translateText)
+
 export default router
 

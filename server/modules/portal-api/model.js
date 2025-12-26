@@ -14,6 +14,7 @@ export async function getCustomerOrders(customerId, params = {}) {
   const db = getDatabase()
   const { 
     status, 
+    shipStatus,
     customsStatus,
     deliveryStatus,
     billNumber, 
@@ -44,9 +45,19 @@ export async function getCustomerOrders(customerId, params = {}) {
     conditions.push(status)
   }
   
-  // 清关状态筛选
-  if (customsStatus === 'clearing') {
-    sql += ` AND (b.customs_status = '清关中' OR b.customs_status = '查验中')`
+  // 船运状态筛选 - 未到港
+  if (shipStatus === 'not_arrived') {
+    sql += ` AND b.ship_status = '未到港'`
+  }
+  
+  // 已到港状态筛选（已到港但未清关放行、未送达）
+  if (shipStatus === 'arrived') {
+    sql += ` AND b.ship_status = '已到港' AND (b.customs_status IS NULL OR b.customs_status = '' OR b.customs_status != '已放行') AND (b.delivery_status IS NULL OR b.delivery_status = '' OR b.delivery_status NOT IN ('已送达')) AND b.status != '已完成'`
+  }
+  
+  // 清关状态筛选 - 已放行
+  if (customsStatus === 'cleared') {
+    sql += ` AND b.customs_status = '已放行'`
   }
   
   // 派送状态筛选
@@ -243,7 +254,9 @@ export async function getCustomerOrderStats(customerId) {
   const stats = await db.prepare(`
     SELECT
       COUNT(*) as total,
-      COUNT(CASE WHEN customs_status = '清关中' OR customs_status = '查验中' THEN 1 END) as customs_clearing,
+      COUNT(CASE WHEN ship_status = '未到港' THEN 1 END) as not_arrived,
+      COUNT(CASE WHEN ship_status = '已到港' AND (customs_status IS NULL OR customs_status = '' OR customs_status != '已放行') AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status NOT IN ('已送达')) AND status != '已完成' THEN 1 END) as arrived,
+      COUNT(CASE WHEN customs_status = '已放行' AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status NOT IN ('已送达')) AND status != '已完成' THEN 1 END) as customs_cleared,
       COUNT(CASE WHEN delivery_status = '派送中' OR delivery_status = '待派送' THEN 1 END) as delivering,
       COUNT(CASE WHEN delivery_status = '已送达' OR status = '已完成' THEN 1 END) as delivered
     FROM bills_of_lading
@@ -252,7 +265,9 @@ export async function getCustomerOrderStats(customerId) {
   
   return {
     total: parseInt(stats?.total) || 0,
-    customsClearing: parseInt(stats?.customs_clearing) || 0,
+    notArrived: parseInt(stats?.not_arrived) || 0,
+    arrived: parseInt(stats?.arrived) || 0,
+    customsCleared: parseInt(stats?.customs_cleared) || 0,
     delivering: parseInt(stats?.delivering) || 0,
     delivered: parseInt(stats?.delivered) || 0
   }

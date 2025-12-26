@@ -6,6 +6,7 @@
 import { parseExcel, suggestFieldMapping, extractDataWithMapping } from './excelParser.js'
 import { parseQuotationPdf } from './pdfParser.js'
 import { recognizeScannedPdf, extractDataFromOcrText } from './ocrService.js'
+import { recognizeDocument } from '../modules/ocr/tencentOcrService.js'
 
 /**
  * 检测文件类型
@@ -126,26 +127,40 @@ async function parsePdfFile(fileBuffer, options) {
     return {
       success: false,
       fileType: 'scanned_pdf',
-      message: ocrResult.message,
+      message: ocrResult.message || '检测到扫描件PDF，暂不支持自动识别。请将PDF内容手动整理为Excel格式后再导入。',
       needsOcr: true
     }
   }
   
   if (ocrResult.success && ocrResult.text) {
     const extractedData = extractDataFromOcrText(ocrResult.text)
-    return {
-      success: true,
-      fileType: 'pdf',
-      pageCount: ocrResult.pageCount,
-      data: extractedData,
-      rawText: ocrResult.text,
-      totalRecords: extractedData.length
+    if (extractedData.length > 0) {
+      return {
+        success: true,
+        fileType: 'pdf',
+        pageCount: ocrResult.pageCount,
+        data: extractedData,
+        rawText: ocrResult.text,
+        totalRecords: extractedData.length
+      }
     }
   }
   
+  // 检查是否有原始文本但无法识别结构
+  const hasText = pdfResult.text && pdfResult.text.trim().length > 50
+  if (hasText) {
+    return {
+      success: false,
+      fileType: 'pdf',
+      error: 'PDF 解析失败，无法提取有效数据。PDF包含文字但格式不规范，建议将内容整理为Excel表格后再导入。',
+      rawText: pdfResult.text?.substring(0, 500) + '...'
+    }
+  }
+  
+  // 完全无法解析
   return {
     success: false,
-    error: 'PDF 解析失败，无法提取有效数据'
+    error: 'PDF 解析失败，无法提取有效数据。可能是扫描件或图片PDF，请将内容手动整理为Excel格式后再导入。'
   }
 }
 
@@ -153,12 +168,71 @@ async function parsePdfFile(fileBuffer, options) {
  * 解析图片文件 (OCR)
  */
 async function parseImageFile(fileBuffer, options) {
-  // 图片需要 OCR 处理
-  return {
-    success: false,
-    fileType: 'image',
-    message: '图片文件需要使用 OCR 识别，请先将图片转换为 Excel 或文字 PDF 格式后再导入',
-    needsOcr: true
+  try {
+    // 将图片转为Base64
+    const base64Image = fileBuffer.toString('base64')
+    
+    // 调用腾讯云OCR识别
+    const ocrResult = await recognizeDocument(base64Image)
+    
+    if (!ocrResult.success) {
+      return {
+        success: false,
+        fileType: 'image',
+        error: 'OCR识别失败: ' + (ocrResult.error || '未知错误'),
+        needsOcr: true
+      }
+    }
+    
+    // 如果是模拟模式，提示用户配置OCR
+    if (ocrResult.data?._mock) {
+      return {
+        success: false,
+        fileType: 'image',
+        error: '腾讯云OCR未配置，请在系统设置中配置OCR服务，或将图片内容手动整理为Excel格式后导入。',
+        needsOcr: true
+      }
+    }
+    
+    // 提取识别到的文本
+    const fullText = ocrResult.data?.fullText || ''
+    
+    if (!fullText || fullText.trim().length < 20) {
+      return {
+        success: false,
+        fileType: 'image',
+        error: '图片OCR识别成功，但未提取到有效内容。请确保图片清晰且包含报价表内容。'
+      }
+    }
+    
+    // 从OCR文本中提取数据
+    const extractedData = extractDataFromOcrText(fullText)
+    
+    if (extractedData.length === 0) {
+      return {
+        success: false,
+        fileType: 'image',
+        error: 'OCR识别成功，但无法从文字中识别报价数据。建议将内容手动整理为Excel格式后导入。',
+        rawText: fullText.substring(0, 500) + '...'
+      }
+    }
+    
+    return {
+      success: true,
+      fileType: 'image',
+      data: extractedData,
+      rawText: fullText,
+      totalRecords: extractedData.length,
+      _ocrSource: true
+    }
+  } catch (error) {
+    console.error('图片OCR识别失败:', error)
+    return {
+      success: false,
+      fileType: 'image',
+      error: 'OCR识别出错: ' + error.message,
+      needsOcr: true
+    }
   }
 }
 
@@ -175,11 +249,13 @@ export function validateAndNormalizeData(data) {
     const normalized = {
       feeName: String(item.feeName || '').trim(),
       feeNameEn: String(item.feeNameEn || '').trim(),
+      feeCategory: String(item.feeCategory || '其他服务').trim(),  // 费用类别
       unit: String(item.unit || '').trim(),
       price: parseFloat(String(item.price || '0').replace(/[,，]/g, '')) || 0,
       currency: detectCurrency(item.currency || item.price),
       routeFrom: String(item.routeFrom || '').trim(),
       routeTo: String(item.routeTo || '').trim(),
+      returnPoint: String(item.returnPoint || '').trim(),  // 还柜点
       remark: String(item.remark || '').trim(),
       _rowIndex: index + 1,
       _warnings: []

@@ -272,7 +272,11 @@ export async function getSupplierPrices(req, res) {
 export async function createSupplierPrice(req, res) {
   try {
     const { id } = req.params
-    const { category, name, nameEn, unit, unitPrice, currency, validFrom, validUntil, notes } = req.body
+    const { 
+      category, name, nameEn, unit, unitPrice, currency, 
+      validFrom, validUntil, notes,
+      routeFrom, routeTo, returnPoint, transportMode, billingType  // 新增字段
+    } = req.body
     
     // 验证必填字段
     if (!category || !name || unitPrice === undefined) {
@@ -295,7 +299,12 @@ export async function createSupplierPrice(req, res) {
       currency,
       validFrom,
       validUntil,
-      notes
+      notes,
+      routeFrom,       // 起运地
+      routeTo,         // 目的地
+      returnPoint,     // 还柜点
+      transportMode,   // 运输方式
+      billingType      // 计费类型
     })
     
     return success(res, result, '创建成功')

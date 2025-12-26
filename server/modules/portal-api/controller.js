@@ -178,10 +178,11 @@ export async function changePassword(req, res) {
 export async function getOrders(req, res) {
   try {
     const customerId = req.customer.customerId
-    const { status, customsStatus, deliveryStatus, billNumber, startDate, endDate, page, pageSize } = req.query
+    const { status, shipStatus, customsStatus, deliveryStatus, billNumber, startDate, endDate, page, pageSize } = req.query
     
     const result = await model.getCustomerOrders(customerId, {
       status,
+      shipStatus,
       customsStatus,
       deliveryStatus,
       billNumber,

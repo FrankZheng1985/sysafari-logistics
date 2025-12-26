@@ -24,4 +24,11 @@ router.put('/products/fee-items/:id', controller.updateProductFeeItem)
 router.delete('/products/fee-items/:id', controller.deleteProductFeeItem)
 router.put('/products/:productId/fee-items/batch', controller.setProductFeeItems)
 
+// 批量操作
+router.post('/products/fee-items/batch-sync-cost', controller.batchSyncCostFromSupplier)
+router.post('/products/fee-items/batch-set-profit', controller.batchSetProfit)
+router.post('/products/:productId/fee-items/batch-import', controller.batchImportFromSupplier)
+router.post('/products/fee-items/batch-adjust-price', controller.batchAdjustPrice)
+router.post('/products/fee-items/batch-recalculate-rounding', controller.batchRecalculateRounding)
+
 export default router

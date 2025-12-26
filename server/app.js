@@ -171,7 +171,7 @@ app.use('/api/documents', documentRoutes)
 app.use('/api', supplierRoutes)
 
 // 产品定价模块
-app.use('/api/product', productRoutes)
+app.use('/api', productRoutes)
 
 // 消息/审批/预警模块
 app.use('/api', messageRoutes)

@@ -279,6 +279,173 @@ export async function setProductFeeItems(req, res) {
   }
 }
 
+// ==================== 批量操作 ====================
+
+/**
+ * 批量同步成本价（从供应商报价更新）
+ */
+export async function batchSyncCostFromSupplier(req, res) {
+  try {
+    const { feeItemIds } = req.body
+    
+    if (!Array.isArray(feeItemIds) || feeItemIds.length === 0) {
+      return res.json({
+        errCode: 400,
+        msg: '请选择要同步的费用项'
+      })
+    }
+    
+    const result = await model.batchSyncCostFromSupplier(feeItemIds)
+    res.json({
+      errCode: 200,
+      msg: `成功同步 ${result.updated} 项，失败 ${result.failed} 项`,
+      data: result
+    })
+  } catch (error) {
+    console.error('批量同步成本失败:', error)
+    res.json({
+      errCode: 500,
+      msg: '批量同步成本失败: ' + error.message
+    })
+  }
+}
+
+/**
+ * 批量设置利润
+ */
+export async function batchSetProfit(req, res) {
+  try {
+    const { feeItemIds, profitType, profitValue } = req.body
+    
+    if (!Array.isArray(feeItemIds) || feeItemIds.length === 0) {
+      return res.json({
+        errCode: 400,
+        msg: '请选择要设置的费用项'
+      })
+    }
+    
+    if (!profitType || !['amount', 'rate'].includes(profitType)) {
+      return res.json({
+        errCode: 400,
+        msg: '请选择有效的利润类型'
+      })
+    }
+    
+    const result = await model.batchSetProfit(feeItemIds, profitType, parseFloat(profitValue) || 0)
+    res.json({
+      errCode: 200,
+      msg: `成功设置 ${result.updated} 项利润`,
+      data: result
+    })
+  } catch (error) {
+    console.error('批量设置利润失败:', error)
+    res.json({
+      errCode: 500,
+      msg: '批量设置利润失败: ' + error.message
+    })
+  }
+}
+
+/**
+ * 批量从供应商报价导入
+ */
+export async function batchImportFromSupplier(req, res) {
+  try {
+    const { productId } = req.params
+    const { supplierPriceIds, profitType, profitValue } = req.body
+    
+    if (!Array.isArray(supplierPriceIds) || supplierPriceIds.length === 0) {
+      return res.json({
+        errCode: 400,
+        msg: '请选择要导入的供应商报价'
+      })
+    }
+    
+    const result = await model.batchImportFromSupplier(
+      productId, 
+      supplierPriceIds, 
+      profitType || 'amount', 
+      parseFloat(profitValue) || 0
+    )
+    res.json({
+      errCode: 200,
+      msg: `成功导入 ${result.imported} 项，失败 ${result.failed} 项`,
+      data: result
+    })
+  } catch (error) {
+    console.error('批量导入失败:', error)
+    res.json({
+      errCode: 500,
+      msg: '批量导入失败: ' + error.message
+    })
+  }
+}
+
+/**
+ * 批量调价
+ */
+export async function batchAdjustPrice(req, res) {
+  try {
+    const { feeItemIds, adjustType, adjustValue } = req.body
+    
+    if (!Array.isArray(feeItemIds) || feeItemIds.length === 0) {
+      return res.json({
+        errCode: 400,
+        msg: '请选择要调价的费用项'
+      })
+    }
+    
+    if (!adjustType || !['percent', 'amount'].includes(adjustType)) {
+      return res.json({
+        errCode: 400,
+        msg: '请选择有效的调价类型'
+      })
+    }
+    
+    const result = await model.batchAdjustPrice(feeItemIds, adjustType, parseFloat(adjustValue) || 0)
+    res.json({
+      errCode: 200,
+      msg: `成功调整 ${result.updated} 项价格`,
+      data: result
+    })
+  } catch (error) {
+    console.error('批量调价失败:', error)
+    res.json({
+      errCode: 500,
+      msg: '批量调价失败: ' + error.message
+    })
+  }
+}
+
+/**
+ * 批量重新计算取整
+ */
+export async function batchRecalculateRounding(req, res) {
+  try {
+    const { feeItemIds } = req.body
+    
+    if (!Array.isArray(feeItemIds) || feeItemIds.length === 0) {
+      return res.json({
+        errCode: 400,
+        msg: '请选择要重新计算的费用项'
+      })
+    }
+    
+    const result = await model.batchRecalculateRounding(feeItemIds)
+    res.json({
+      errCode: 200,
+      msg: `成功更新 ${result.updated} 项价格取整`,
+      data: result
+    })
+  } catch (error) {
+    console.error('批量重新计算取整失败:', error)
+    res.json({
+      errCode: 500,
+      msg: '批量重新计算取整失败: ' + error.message
+    })
+  }
+}
+
 /**
  * 插入演示测试数据 (仅用于演示环境)
  */

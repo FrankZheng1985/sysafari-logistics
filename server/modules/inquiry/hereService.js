@@ -389,10 +389,78 @@ function toRad(deg) {
   return deg * (Math.PI / 180)
 }
 
+/**
+ * 根据邮编获取城市名
+ * @param {string} postalCode - 邮编，格式如 "DE-41751" 或 "41751"
+ * @param {string} countryCode - 国家代码，如 "DE", "FR"
+ */
+export async function getCityByPostalCode(postalCode, countryCode = '') {
+  // 解析邮编格式
+  let code = postalCode
+  let country = countryCode
+  
+  // 如果邮编格式是 "DE-41751"，提取国家代码和数字部分
+  const match = postalCode.match(/^([A-Z]{2})-?(\d+)/)
+  if (match) {
+    country = match[1]
+    code = match[2]
+  }
+  
+  if (!country || !code) {
+    return null
+  }
+  
+  // 构建搜索查询
+  const searchQuery = `${code}, ${country}`
+  
+  try {
+    const result = await geocodeAddress(searchQuery)
+    if (result && result.city) {
+      return {
+        postalCode: postalCode,
+        city: result.city,
+        country: result.country,
+        fullAddress: result.address
+      }
+    }
+    return null
+  } catch (error) {
+    console.error('获取城市失败:', error)
+    return null
+  }
+}
+
+/**
+ * 批量获取邮编对应的城市
+ * @param {Array<string>} postalCodes - 邮编数组
+ */
+export async function batchGetCities(postalCodes) {
+  const results = {}
+  const uniqueCodes = [...new Set(postalCodes.filter(Boolean))]
+  
+  // 并行请求，但限制并发数
+  const batchSize = 5
+  for (let i = 0; i < uniqueCodes.length; i += batchSize) {
+    const batch = uniqueCodes.slice(i, i + batchSize)
+    const promises = batch.map(code => getCityByPostalCode(code))
+    const batchResults = await Promise.all(promises)
+    
+    batch.forEach((code, index) => {
+      if (batchResults[index]) {
+        results[code] = batchResults[index].city
+      }
+    })
+  }
+  
+  return results
+}
+
 export default {
   geocodeAddress,
   calculateTruckRoute,
   calculateTransportCost,
+  getCityByPostalCode,
+  batchGetCities,
   TOLL_RATES,
   FUEL_SURCHARGE_RATE
 }

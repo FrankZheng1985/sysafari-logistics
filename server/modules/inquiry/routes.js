@@ -20,6 +20,9 @@ router.get('/truck-types/recommend', controller.recommendTruckType)
 // 地址地理编码
 router.get('/geocode', controller.geocodeAddress)
 
+// 批量获取邮编对应的城市
+router.post('/cities-by-postal', controller.batchGetCitiesByPostalCodes)
+
 // ==================== 运输计算 ====================
 
 // 计算运输费用

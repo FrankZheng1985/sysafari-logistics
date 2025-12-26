@@ -490,6 +490,46 @@ function convertToCamelCase(row) {
 // ==================== 供应商采购价管理 ====================
 
 /**
+ * 格式化采购价项数据（从数据库到API）
+ */
+function formatSupplierPriceItem(row) {
+  if (!row) return null
+  const price = parseFloat(row.price) || 0
+  return {
+    id: row.id,
+    supplierId: row.supplier_id,
+    supplierName: row.supplier_name,
+    // 兼容两种字段名
+    feeName: row.fee_name,
+    name: row.fee_name,              // 前端兼容
+    feeNameEn: row.fee_name_en,
+    nameEn: row.fee_name_en,         // 前端兼容
+    category: row.fee_category,
+    unit: row.unit,
+    price: price,
+    unitPrice: price,                // 前端兼容
+    currency: row.currency,
+    effectiveDate: row.effective_date,
+    expiryDate: row.expiry_date,
+    validFrom: row.effective_date,   // 前端兼容
+    validUntil: row.expiry_date,     // 前端兼容
+    isActive: row.status !== 'disabled',  // 前端兼容
+    routeFrom: row.route_from,       // 起运地
+    country: row.country,            // 国家
+    routeTo: row.route_to,           // 目的地邮编
+    city: row.city,                  // 城市
+    returnPoint: row.return_point,   // 还柜点
+    transportMode: row.transport_mode, // 运输方式（空运/海运）
+    billingType: row.billing_type || 'fixed', // 计费类型（fixed/actual）
+    remark: row.remark,
+    notes: row.remark,               // 前端兼容
+    importBatchId: row.import_batch_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+/**
  * 获取供应商的采购价列表
  */
 export async function getSupplierPrices(supplierId, options = {}) {
@@ -497,30 +537,32 @@ export async function getSupplierPrices(supplierId, options = {}) {
   const { category, isActive, search } = options
   
   let sql = `
-    SELECT * FROM supplier_prices 
-    WHERE supplier_id = ?
+    SELECT * FROM supplier_price_items 
+    WHERE supplier_id = $1
   `
   const params = [supplierId]
+  let paramIndex = 2
   
   if (category) {
-    sql += ` AND category = ?`
+    sql += ` AND fee_category = $${paramIndex++}`
     params.push(category)
   }
   
-  if (isActive !== undefined) {
-    sql += ` AND is_active = ?`
-    params.push(isActive ? 1 : 0)
-  }
-  
   if (search) {
-    sql += ` AND (name LIKE ? OR name_en LIKE ?)`
-    params.push(`%${search}%`, `%${search}%`)
+    sql += ` AND (fee_name ILIKE $${paramIndex} OR fee_name_en ILIKE $${paramIndex})`
+    params.push(`%${search}%`)
+    paramIndex++
   }
   
-  sql += ` ORDER BY category, name`
+  sql += ` ORDER BY fee_category, fee_name`
   
-  const rows = db.prepare(sql).all(...params)
-  return rows.map(formatSupplierPrice)
+  try {
+    const result = await db.pool.query(sql, params)
+    return result.rows.map(formatSupplierPriceItem)
+  } catch (error) {
+    console.error('获取采购价列表失败:', error.message)
+    return []
+  }
 }
 
 /**
@@ -528,8 +570,13 @@ export async function getSupplierPrices(supplierId, options = {}) {
  */
 export async function getSupplierPriceById(id) {
   const db = getDatabase()
-  const row = db.prepare('SELECT * FROM supplier_prices WHERE id = ?').get(id)
-  return row ? formatSupplierPrice(row) : null
+  try {
+    const result = await db.pool.query('SELECT * FROM supplier_price_items WHERE id = $1', [id])
+    return result.rows[0] ? formatSupplierPriceItem(result.rows[0]) : null
+  } catch (error) {
+    console.error('获取采购价失败:', error.message)
+    return null
+  }
 }
 
 /**
@@ -538,26 +585,38 @@ export async function getSupplierPriceById(id) {
 export async function createSupplierPrice(data) {
   const db = getDatabase()
   
-  const result = db.prepare(`
-    INSERT INTO supplier_prices (
-      supplier_id, category, name, name_en, unit, unit_price, 
-      currency, valid_from, valid_until, is_active, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    data.supplierId,
-    data.category,
-    data.name,
-    data.nameEn || null,
-    data.unit || '次',
-    data.unitPrice,
-    data.currency || 'EUR',
-    data.validFrom || null,
-    data.validUntil || null,
-    data.isActive !== false ? 1 : 0,
-    data.notes || null
-  )
-  
-  return { id: result.lastInsertRowid, ...data }
+  try {
+    const result = await db.pool.query(`
+      INSERT INTO supplier_price_items (
+        supplier_id, supplier_name, fee_name, fee_name_en, fee_category, 
+        unit, price, currency, effective_date, expiry_date, 
+        route_from, route_to, return_point, transport_mode, billing_type, remark
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      RETURNING id
+    `, [
+      data.supplierId,
+      data.supplierName || null,
+      data.feeName || data.name,
+      data.feeNameEn || data.nameEn || null,
+      data.category || 'other',
+      data.unit || '次',
+      data.price || data.unitPrice || 0,
+      data.currency || 'EUR',
+      data.effectiveDate || data.validFrom || null,
+      data.expiryDate || data.validUntil || null,
+      data.routeFrom || null,
+      data.routeTo || null,
+      data.returnPoint || null,
+      data.transportMode || null,  // 运输方式
+      data.billingType || 'fixed', // 计费类型
+      data.remark || data.notes || null
+    ])
+    
+    return { id: result.rows[0].id, ...data }
+  } catch (error) {
+    console.error('创建采购价失败:', error.message)
+    throw error
+  }
 }
 
 /**
@@ -568,54 +627,86 @@ export async function updateSupplierPrice(id, data) {
   
   const fields = []
   const values = []
+  let paramIndex = 1
   
   if (data.category !== undefined) {
-    fields.push('category = ?')
+    fields.push(`fee_category = $${paramIndex++}`)
     values.push(data.category)
   }
-  if (data.name !== undefined) {
-    fields.push('name = ?')
-    values.push(data.name)
+  if (data.feeName !== undefined || data.name !== undefined) {
+    fields.push(`fee_name = $${paramIndex++}`)
+    values.push(data.feeName || data.name)
   }
-  if (data.nameEn !== undefined) {
-    fields.push('name_en = ?')
-    values.push(data.nameEn)
+  if (data.feeNameEn !== undefined || data.nameEn !== undefined) {
+    fields.push(`fee_name_en = $${paramIndex++}`)
+    values.push(data.feeNameEn || data.nameEn)
   }
   if (data.unit !== undefined) {
-    fields.push('unit = ?')
+    fields.push(`unit = $${paramIndex++}`)
     values.push(data.unit)
   }
-  if (data.unitPrice !== undefined) {
-    fields.push('unit_price = ?')
-    values.push(data.unitPrice)
+  if (data.price !== undefined || data.unitPrice !== undefined) {
+    fields.push(`price = $${paramIndex++}`)
+    values.push(data.price || data.unitPrice)
   }
   if (data.currency !== undefined) {
-    fields.push('currency = ?')
+    fields.push(`currency = $${paramIndex++}`)
     values.push(data.currency)
   }
-  if (data.validFrom !== undefined) {
-    fields.push('valid_from = ?')
-    values.push(data.validFrom)
+  if (data.effectiveDate !== undefined || data.validFrom !== undefined) {
+    fields.push(`effective_date = $${paramIndex++}`)
+    values.push(data.effectiveDate || data.validFrom)
   }
-  if (data.validUntil !== undefined) {
-    fields.push('valid_until = ?')
-    values.push(data.validUntil)
+  if (data.expiryDate !== undefined || data.validUntil !== undefined) {
+    fields.push(`expiry_date = $${paramIndex++}`)
+    values.push(data.expiryDate || data.validUntil)
+  }
+  if (data.remark !== undefined || data.notes !== undefined) {
+    fields.push(`remark = $${paramIndex++}`)
+    values.push(data.remark || data.notes)
+  }
+  if (data.routeFrom !== undefined) {
+    fields.push(`route_from = $${paramIndex++}`)
+    values.push(data.routeFrom)
+  }
+  if (data.routeTo !== undefined) {
+    fields.push(`route_to = $${paramIndex++}`)
+    values.push(data.routeTo)
+  }
+  if (data.returnPoint !== undefined) {
+    fields.push(`return_point = $${paramIndex++}`)
+    values.push(data.returnPoint)
+  }
+  if (data.transportMode !== undefined) {
+    fields.push(`transport_mode = $${paramIndex++}`)
+    values.push(data.transportMode)
+  }
+  if (data.billingType !== undefined) {
+    fields.push(`billing_type = $${paramIndex++}`)
+    values.push(data.billingType)
   }
   if (data.isActive !== undefined) {
-    fields.push('is_active = ?')
-    values.push(data.isActive ? 1 : 0)
-  }
-  if (data.notes !== undefined) {
-    fields.push('notes = ?')
-    values.push(data.notes)
+    fields.push(`status = $${paramIndex++}`)
+    values.push(data.isActive ? 'active' : 'disabled')
   }
   
-  fields.push('updated_at = NOW()')
+  if (fields.length === 0) {
+    return getSupplierPriceById(id)
+  }
+  
+  fields.push(`updated_at = NOW()`)
   values.push(id)
   
-  db.prepare(`UPDATE supplier_prices SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-  
-  return getSupplierPriceById(id)
+  try {
+    await db.pool.query(
+      `UPDATE supplier_price_items SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    )
+    return getSupplierPriceById(id)
+  } catch (error) {
+    console.error('更新采购价失败:', error.message)
+    throw error
+  }
 }
 
 /**
@@ -623,8 +714,13 @@ export async function updateSupplierPrice(id, data) {
  */
 export async function deleteSupplierPrice(id) {
   const db = getDatabase()
-  db.prepare('DELETE FROM supplier_prices WHERE id = ?').run(id)
-  return { success: true }
+  try {
+    await db.pool.query('DELETE FROM supplier_price_items WHERE id = $1', [id])
+    return { success: true }
+  } catch (error) {
+    console.error('删除采购价失败:', error.message)
+    return { success: false, error: error.message }
+  }
 }
 
 /**
@@ -632,34 +728,17 @@ export async function deleteSupplierPrice(id) {
  */
 export async function findSupplierPriceByName(supplierId, feeName) {
   const db = getDatabase()
-  const row = db.prepare(`
-    SELECT * FROM supplier_prices 
-    WHERE supplier_id = ? AND name = ? AND is_active = 1
-    ORDER BY created_at DESC
-    LIMIT 1
-  `).get(supplierId, feeName)
-  return row ? formatSupplierPrice(row) : null
-}
-
-/**
- * 格式化采购价数据
- */
-function formatSupplierPrice(row) {
-  return {
-    id: row.id,
-    supplierId: row.supplier_id,
-    category: row.category,
-    name: row.name,
-    nameEn: row.name_en,
-    unit: row.unit,
-    unitPrice: parseFloat(row.unit_price) || 0,
-    currency: row.currency,
-    validFrom: row.valid_from,
-    validUntil: row.valid_until,
-    isActive: row.is_active === 1,
-    notes: row.notes,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+  try {
+    const result = await db.pool.query(`
+      SELECT * FROM supplier_price_items 
+      WHERE supplier_id = $1 AND fee_name = $2
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [supplierId, feeName])
+    return result.rows[0] ? formatSupplierPriceItem(result.rows[0]) : null
+  } catch (error) {
+    console.error('查找采购价失败:', error.message)
+    return null
   }
 }
 
@@ -677,29 +756,31 @@ export async function batchCreateSupplierPrices(supplierId, items, options = {})
   
   for (const item of items) {
     try {
-      const id = generateId()
-      
+      // id 是自增整数，不需要手动指定
       await db.prepare(`
         INSERT INTO supplier_price_items (
-          id, supplier_id, supplier_name, fee_name, fee_name_en,
+          supplier_id, supplier_name, fee_name, fee_name_en,
           fee_category, unit, price, currency,
-          effective_date, expiry_date, route_from, route_to,
-          remark, import_batch_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          effective_date, expiry_date, route_from, country, route_to, city, return_point,
+          transport_mode, remark, import_batch_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `).run(
-        id,
         supplierId,
         supplierName || '',
         item.feeName || '',
         item.feeNameEn || '',
         item.feeCategory || 'other',
-        item.unit || '',
+        item.unit || '票',
         item.price || 0,
         item.currency || 'EUR',
         item.effectiveDate || null,
         item.expiryDate || null,
-        item.routeFrom || '',
-        item.routeTo || '',
+        item.routeFrom || '',      // 起运地
+        item.country || '',        // 国家
+        item.routeTo || '',        // 目的地邮编
+        item.city || '',           // 城市
+        item.returnPoint || '',    // 还柜点
+        item.transportMode || '',  // 运输方式
         item.remark || '',
         importBatchId
       )
