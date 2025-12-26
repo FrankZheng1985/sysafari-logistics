@@ -185,6 +185,10 @@ export default function FeeModal({
   }>>([])
   const [loadingSuppliers, setLoadingSuppliers] = useState(false)
   
+  // 供应商报价搜索和多选
+  const [supplierPriceSearch, setSupplierPriceSearch] = useState('')
+  const [selectedPriceIds, setSelectedPriceIds] = useState<number[]>([])
+  
   // 供应商搜索防抖
   const supplierSearchRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -1080,70 +1084,269 @@ export default function FeeModal({
       )}
 
       {/* 供应商报价选择弹窗 */}
-      {showSupplierPriceSelect && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setShowSupplierPriceSelect(false)} />
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[70vh] overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-orange-600" />
-                从供应商报价选择
-              </h3>
-              <button onClick={() => setShowSupplierPriceSelect(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[calc(70vh-60px)]">
-              {supplierPrices.length > 0 ? (
-                <div className="space-y-2">
-                  {supplierPrices.map(item => (
-                    <button
-                      key={item.id}
-                      onClick={() => handleSelectSupplierPrice(item)}
-                      className="w-full text-left px-3 py-2.5 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
-                        <span className="text-sm font-medium text-orange-600">
-                          {item.currency} {item.price?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      {item.feeNameEn && (
-                        <div className="text-xs text-gray-500">{item.feeNameEn}</div>
-                      )}
-                      {/* 显示路线信息：起运地 → 目的地 + 邮编 */}
-                      {(item.routeFrom || item.routeTo || item.returnPoint || item.city) && (
-                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                          {(item.routeFrom || item.routeTo || item.city) && (
-                            <span className="text-blue-600">
-                              📍 {item.routeFrom || '-'} → {item.city ? `${item.city}${item.routeTo ? ` (${item.routeTo})` : ''}` : item.routeTo || '-'}
-                            </span>
-                          )}
-                          {item.returnPoint && (
-                            <span className="text-green-600">
-                              🔄 还柜: {item.returnPoint}
-                            </span>
-                          )}
-                          {item.transportMode && (
-                            <span className="text-purple-600">
-                              🚛 {item.transportMode}
-                            </span>
-                          )}
+      {showSupplierPriceSelect && (() => {
+        // 过滤搜索结果
+        const filteredPrices = supplierPrices.filter(item => {
+          if (!supplierPriceSearch) return true
+          const search = supplierPriceSearch.toLowerCase()
+          return (
+            item.feeName?.toLowerCase().includes(search) ||
+            item.feeNameEn?.toLowerCase().includes(search) ||
+            item.routeFrom?.toLowerCase().includes(search) ||
+            item.routeTo?.toLowerCase().includes(search) ||
+            item.city?.toLowerCase().includes(search) ||
+            item.returnPoint?.toLowerCase().includes(search)
+          )
+        })
+        
+        // 全选/取消全选
+        const handleSelectAll = () => {
+          if (selectedPriceIds.length === filteredPrices.length) {
+            setSelectedPriceIds([])
+          } else {
+            setSelectedPriceIds(filteredPrices.map(p => p.id))
+          }
+        }
+        
+        // 切换单个选择
+        const toggleSelect = (id: number) => {
+          setSelectedPriceIds(prev => 
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+          )
+        }
+        
+        // 批量添加选中的费用项
+        const handleBatchAdd = async () => {
+          const selectedItems = supplierPrices.filter(p => selectedPriceIds.includes(p.id))
+          if (selectedItems.length === 0) return
+          
+          // 如果只选了一个，直接用原来的逻辑
+          if (selectedItems.length === 1) {
+            handleSelectSupplierPrice(selectedItems[0])
+            setSelectedPriceIds([])
+            setSupplierPriceSearch('')
+            return
+          }
+          
+          // 批量创建费用
+          setSubmitting(true)
+          try {
+            for (const item of selectedItems) {
+              await fetch(`${API_BASE}/api/fees`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  billId: formData.billId || null,
+                  billNumber: formData.billNumber || '',
+                  customerId: null,
+                  customerName: '',
+                  supplierId: formData.supplierId || null,
+                  supplierName: formData.supplierName || '',
+                  feeType: 'payable',
+                  category: item.feeCategory || 'other',
+                  feeName: item.feeName,
+                  amount: item.price || 0,
+                  currency: item.currency || 'EUR',
+                  feeDate: formData.feeDate,
+                  description: `${item.routeFrom || ''} → ${item.city || item.routeTo || ''}`.trim(),
+                  feeSource: 'supplier_price',
+                  needApproval: false
+                })
+              })
+            }
+            onSuccess?.()
+            onClose()
+          } catch (error) {
+            console.error('批量添加费用失败:', error)
+            alert('批量添加失败')
+          } finally {
+            setSubmitting(false)
+            setSelectedPriceIds([])
+            setSupplierPriceSearch('')
+          }
+        }
+        
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/30" onClick={() => {
+              setShowSupplierPriceSelect(false)
+              setSelectedPriceIds([])
+              setSupplierPriceSearch('')
+            }} />
+            <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+              {/* 标题栏 */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-orange-600" />
+                  从供应商报价选择
+                  {selectedPriceIds.length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-xs">
+                      已选 {selectedPriceIds.length} 项
+                    </span>
+                  )}
+                </h3>
+                <button onClick={() => {
+                  setShowSupplierPriceSelect(false)
+                  setSelectedPriceIds([])
+                  setSupplierPriceSearch('')
+                }} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+              
+              {/* 搜索和全选操作栏 */}
+              <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  {/* 搜索框 */}
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={supplierPriceSearch}
+                      onChange={(e) => setSupplierPriceSearch(e.target.value)}
+                      placeholder="搜索费用名称、城市、邮编..."
+                      className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
+                    {supplierPriceSearch && (
+                      <button
+                        onClick={() => setSupplierPriceSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {/* 全选按钮 */}
+                  <button
+                    onClick={handleSelectAll}
+                    className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-100 whitespace-nowrap"
+                  >
+                    {selectedPriceIds.length === filteredPrices.length && filteredPrices.length > 0 ? '取消全选' : '全选'}
+                  </button>
+                </div>
+                <div className="mt-1.5 text-xs text-gray-500">
+                  共 {filteredPrices.length} 条报价 {supplierPriceSearch && `(搜索结果)`}
+                </div>
+              </div>
+              
+              {/* 报价列表 */}
+              <div className="p-4 overflow-y-auto max-h-[calc(80vh-180px)]">
+                {filteredPrices.length > 0 ? (
+                  <div className="space-y-2">
+                    {filteredPrices.map(item => {
+                      const isSelected = selectedPriceIds.includes(item.id)
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex items-start gap-3 px-3 py-2.5 border rounded-lg cursor-pointer transition-colors ${
+                            isSelected 
+                              ? 'border-orange-400 bg-orange-50' 
+                              : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50/50'
+                          }`}
+                          onClick={() => toggleSelect(item.id)}
+                        >
+                          {/* 复选框 */}
+                          <div className={`flex-shrink-0 w-5 h-5 mt-0.5 rounded border-2 flex items-center justify-center ${
+                            isSelected ? 'bg-orange-500 border-orange-500' : 'border-gray-300'
+                          }`}>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                          </div>
+                          
+                          {/* 内容 */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
+                              <span className="text-sm font-medium text-orange-600">
+                                {item.currency} {item.price?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            {item.feeNameEn && (
+                              <div className="text-xs text-gray-500">{item.feeNameEn}</div>
+                            )}
+                            {/* 显示路线信息 */}
+                            {(item.routeFrom || item.routeTo || item.returnPoint || item.city) && (
+                              <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                                {(item.routeFrom || item.routeTo || item.city) && (
+                                  <span className="text-blue-600">
+                                    📍 {item.routeFrom || '-'} → {item.city ? `${item.city}${item.routeTo ? ` (${item.routeTo})` : ''}` : item.routeTo || '-'}
+                                  </span>
+                                )}
+                                {item.returnPoint && (
+                                  <span className="text-green-600">
+                                    🔄 还柜: {item.returnPoint}
+                                  </span>
+                                )}
+                                {item.transportMode && (
+                                  <span className="text-purple-600">
+                                    🚛 {item.transportMode}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </button>
-                  ))}
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400">
+                    <Receipt className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">{supplierPriceSearch ? '未找到匹配的报价' : '该供应商暂无报价数据'}</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* 底部操作栏 */}
+              <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+                <div className="text-xs text-gray-500">
+                  {selectedPriceIds.length > 0 
+                    ? `已选择 ${selectedPriceIds.length} 项，合计 ${
+                        supplierPrices
+                          .filter(p => selectedPriceIds.includes(p.id))
+                          .reduce((sum, p) => sum + (p.price || 0), 0)
+                          .toLocaleString('de-DE', { minimumFractionDigits: 2 })
+                      } EUR`
+                    : '点击选择费用项，可多选'
+                  }
                 </div>
-              ) : (
-                <div className="text-center py-8 text-gray-400">
-                  <Receipt className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                  <p className="text-sm">该供应商暂无报价数据</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowSupplierPriceSelect(false)
+                      setSelectedPriceIds([])
+                      setSupplierPriceSearch('')
+                    }}
+                    className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleBatchAdd}
+                    disabled={selectedPriceIds.length === 0 || submitting}
+                    className={`px-4 py-1.5 text-sm font-medium text-white rounded-lg flex items-center gap-1.5 ${
+                      selectedPriceIds.length > 0 
+                        ? 'bg-orange-500 hover:bg-orange-600' 
+                        : 'bg-gray-300 cursor-not-allowed'
+                    }`}
+                  >
+                    {submitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        添加中...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        添加 {selectedPriceIds.length > 0 ? `(${selectedPriceIds.length})` : ''}
+                      </>
+                    )}
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
