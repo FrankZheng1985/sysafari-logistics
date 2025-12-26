@@ -66,6 +66,34 @@ export async function runMigrations() {
     
     await client.query(`CREATE INDEX IF NOT EXISTS idx_product_fee_items_product ON product_fee_items(product_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_product_fee_items_category ON product_fee_items(fee_category)`)
+    
+    // 添加供应商关联字段（如果不存在）
+    const feeItemColumns = ['supplier_id', 'supplier_price_id', 'cost_price', 'profit_type', 'profit_value', 'supplier_name', 'billing_type']
+    for (const col of feeItemColumns) {
+      const colExists = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'product_fee_items' AND column_name = $1
+      `, [col])
+      if (colExists.rows.length === 0) {
+        if (col === 'supplier_id') {
+          await client.query(`ALTER TABLE product_fee_items ADD COLUMN supplier_id TEXT`)
+        } else if (col === 'supplier_price_id') {
+          await client.query(`ALTER TABLE product_fee_items ADD COLUMN supplier_price_id INTEGER`)
+        } else if (col === 'cost_price') {
+          await client.query(`ALTER TABLE product_fee_items ADD COLUMN cost_price NUMERIC DEFAULT 0`)
+        } else if (col === 'profit_type') {
+          await client.query(`ALTER TABLE product_fee_items ADD COLUMN profit_type TEXT DEFAULT 'amount'`)
+        } else if (col === 'profit_value') {
+          await client.query(`ALTER TABLE product_fee_items ADD COLUMN profit_value NUMERIC DEFAULT 0`)
+        } else if (col === 'supplier_name') {
+          await client.query(`ALTER TABLE product_fee_items ADD COLUMN supplier_name TEXT`)
+        } else if (col === 'billing_type') {
+          await client.query(`ALTER TABLE product_fee_items ADD COLUMN billing_type TEXT DEFAULT 'fixed'`)
+        }
+        console.log(`    + product_fee_items.${col} 字段已添加`)
+      }
+    }
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_product_fee_items_supplier ON product_fee_items(supplier_id)`)
     console.log('  ✅ product_fee_items 表就绪')
 
     // ==================== 3. 创建 supplier_price_items 表 ====================
