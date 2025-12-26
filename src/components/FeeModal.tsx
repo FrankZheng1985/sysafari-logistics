@@ -263,6 +263,10 @@ export default function FeeModal({
         feeDate: editingFee.feeDate || new Date().toISOString().split('T')[0],
         description: editingFee.description || ''
       })
+      // 编辑时如果有供应商，自动加载其报价
+      if (editingFee.supplierId) {
+        loadSupplierPrices(editingFee.supplierId)
+      }
     } else {
       // 新增时使用默认值
       setFormData({
@@ -280,6 +284,8 @@ export default function FeeModal({
         feeDate: new Date().toISOString().split('T')[0],
         description: ''
       })
+      // 清空供应商报价
+      setSupplierPrices([])
     }
     setErrors({})
   }, [editingFee, visible, defaultBillId, defaultBillNumber, defaultCustomerId, defaultCustomerName, defaultFeeType])
@@ -406,8 +412,10 @@ export default function FeeModal({
     try {
       const response = await fetch(`${API_BASE}/api/suppliers/${supplierId}/prices?pageSize=100`)
       const data = await response.json()
-      if (data.errCode === 200 && data.data?.list) {
-        setSupplierPrices(data.data.list)
+      // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
+      const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+      if (data.errCode === 200 && list.length > 0) {
+        setSupplierPrices(list)
       } else {
         setSupplierPrices([])
       }

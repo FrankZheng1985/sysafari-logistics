@@ -607,15 +607,15 @@ export default function FinanceFees() {
                     <div className="bg-gray-50/50">
                       {/* 明细表头 */}
                       <div className="flex items-center px-3 py-1.5 bg-gray-100/80 text-xs text-gray-500 border-y border-gray-200/50">
-                        <div className="w-8"></div>
-                        <div className="w-[150px] pl-4">费用名称</div>
-                        <div className="w-[80px] text-center">类型</div>
-                        <div className="w-[100px]">分类</div>
-                        <div className="w-[120px]">客户/供应商</div>
-                        <div className="w-[100px] text-right">金额</div>
-                        <div className="w-[100px]">日期</div>
-                        <div className="flex-1">说明</div>
-                        <div className="w-[80px] text-center">操作</div>
+                        <div className="w-8 flex-shrink-0"></div>
+                        <div className="w-[150px] flex-shrink-0 pl-4">费用名称</div>
+                        <div className="w-[80px] flex-shrink-0 text-center">类型</div>
+                        <div className="w-[100px] flex-shrink-0">分类</div>
+                        <div className="w-[100px] flex-shrink-0">客户/供应商</div>
+                        <div className="w-[120px] flex-shrink-0 text-right pr-2">金额</div>
+                        <div className="w-[100px] flex-shrink-0">日期</div>
+                        <div className="w-[150px] flex-shrink-0">说明</div>
+                        <div className="w-[80px] flex-shrink-0 text-center">操作</div>
                       </div>
                       
                       {/* 明细行 */}
@@ -630,11 +630,11 @@ export default function FinanceFees() {
                               feeIndex < group.fees.length - 1 ? 'border-b border-gray-100' : ''
                             }`}
                           >
-                            <div className="w-8"></div>
-                            <div className="w-[150px] pl-4">
+                            <div className="w-8 flex-shrink-0"></div>
+                            <div className="w-[150px] flex-shrink-0 pl-4">
                               <div className="text-xs font-medium text-gray-900">{fee.feeName}</div>
                             </div>
-                            <div className="w-[80px]">
+                            <div className="w-[80px] flex-shrink-0">
                               <div className="flex items-center justify-center">
                                 {fee.feeType === 'payable' ? (
                                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
@@ -649,31 +649,31 @@ export default function FinanceFees() {
                                 )}
                               </div>
                             </div>
-                            <div className="w-[100px]">
+                            <div className="w-[100px] flex-shrink-0">
                               <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium ${categoryConfig.bg} ${categoryConfig.color}`}>
                                 <CategoryIcon className="w-3 h-3" />
                                 {categoryConfig.label}
                               </span>
                             </div>
-                            <div className="w-[120px] text-xs">
+                            <div className="w-[100px] flex-shrink-0 text-xs truncate">
                               {fee.feeType === 'payable' ? (
-                                <span className="text-orange-600">{fee.supplierName || '-'}</span>
+                                <span className="text-orange-600" title={fee.supplierName}>{fee.supplierName || '-'}</span>
                               ) : (
-                                <span className="text-gray-600">{fee.customerName || '-'}</span>
+                                <span className="text-gray-600" title={fee.customerName}>{fee.customerName || '-'}</span>
                               )}
                             </div>
-                            <div className="w-[100px] text-right text-xs font-medium text-gray-900">
+                            <div className="w-[120px] flex-shrink-0 text-right pr-2 text-xs font-medium text-gray-900">
                               {formatCurrency(Number(fee.amount) || 0, fee.currency)}
                             </div>
-                            <div className="w-[100px] text-xs text-gray-500">
-                              {fee.feeDate}
+                            <div className="w-[100px] flex-shrink-0 text-xs text-gray-500">
+                              {fee.feeDate || '-'}
                             </div>
-                            <div className="flex-1">
-                              <span className="text-xs text-gray-500 truncate block max-w-[180px]" title={fee.description}>
+                            <div className="w-[150px] flex-shrink-0">
+                              <span className="text-xs text-gray-500 truncate block" title={fee.description}>
                                 {fee.description || '-'}
                               </span>
                             </div>
-                            <div className="w-[80px] flex items-center justify-center gap-1">
+                            <div className="w-[80px] flex-shrink-0 flex items-center justify-center gap-1">
                               <button
                                 onClick={() => {
                                   setEditingFee(fee)

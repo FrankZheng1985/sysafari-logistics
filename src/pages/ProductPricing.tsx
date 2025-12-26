@@ -368,7 +368,9 @@ export default function ProductPricing() {
       const response = await fetch(`${API_BASE}/api/suppliers/${supplierId}/prices`)
       const data = await response.json()
       if (data.errCode === 200) {
-        setSupplierPrices(data.data || [])
+        // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
+        const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+        setSupplierPrices(list)
       }
     } catch (error) {
       console.error('加载供应商报价失败:', error)

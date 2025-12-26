@@ -397,7 +397,9 @@ export default function SupplierManage() {
       const res = await fetch(`${API_BASE}/api/suppliers/${supplierId}/prices`)
       const data = await res.json()
       if (data.errCode === 200) {
-        setSupplierPrices(data.data || [])
+        // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
+        const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+        setSupplierPrices(list)
       }
     } catch (error) {
       console.error('获取采购价列表失败:', error)

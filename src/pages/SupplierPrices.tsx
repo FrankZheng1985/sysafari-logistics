@@ -150,7 +150,9 @@ export default function SupplierPrices() {
       const res = await fetch(`${API_BASE}/api/suppliers/${id}/prices?${params}`)
       const data = await res.json()
       if (data.errCode === 200) {
-        setPrices(data.data || [])
+        // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
+        const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+        setPrices(list)
       }
     } catch (error) {
       console.error('加载采购价失败:', error)
