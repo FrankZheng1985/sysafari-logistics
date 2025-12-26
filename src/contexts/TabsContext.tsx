@@ -24,24 +24,36 @@ type TabsAction =
   | { type: 'UPDATE_TAB_TITLE'; payload: { key: string; title: string } }
   | { type: 'INIT'; payload: TabsState }
 
-// 路由到标题的映射
+// 路由到标题的映射（与侧边栏菜单名称保持一致）
 const routeTitleMap: Record<string, string> = {
+  // 首页
   '/': '首页',
-  '/dashboard': '首页',
+  '/dashboard': '系统概览',
   '/bp-view': 'BP View',
-  '/bp-view/history': 'BP 历史',
-  '/bookings/labels': '打单管理',
+  '/bp-view/history': 'BP View 历史',
+  // 订单管理
+  '/bookings/labels': '打单',
   '/bookings/labels/pure': '纯标签',
   '/bookings/labels/search': '标签查询',
   '/bookings/labels/create-single': '创建单个标签',
   '/bookings/labels/create-batch': '批量创建标签',
-  '/bookings/packages': '打包管理',
-  '/bookings/bill': '提单管理',
-  '/bookings/declarations': '报关管理',
+  '/bookings/packages': '打包',
+  '/bookings/bill': '提单',
+  '/bookings/declarations': '报关',
   '/bookings/clearance': '清关文件',
+  // 单证管理
+  '/documents': '单证概览',
+  '/documents/import': '货物导入',
+  '/documents/matching': 'HS匹配审核',
+  '/documents/tax-calc': '税费计算',
+  '/documents/supplement': '数据补充',
+  '/documents/match-records': '匹配记录库',
+  '/document-center': '文档中心',
+  // 查验管理
   '/inspection': '查验概览',
   '/inspection/pending': '待查验',
   '/inspection/released': '已放行',
+  // TMS运输管理
   '/tms': 'TMS概览',
   '/tms/pricing': '运费管理',
   '/tms/conditions': '条件管理',
@@ -54,6 +66,7 @@ const routeTitleMap: Record<string, string> = {
   '/last-mile/import': '运费导入',
   '/last-mile/shipments': '派送单',
   '/last-mile/quote': '快速报价',
+  // CRM客户管理
   '/crm': 'CRM概览',
   '/crm/customers': '客户管理',
   '/crm/opportunities': '商机管理',
@@ -64,11 +77,13 @@ const routeTitleMap: Record<string, string> = {
   '/crm/commission/records': '佣金记录',
   '/crm/commission/penalties': '罚款记录',
   '/crm/commission/settlements': '佣金结算',
+  // 供应商管理
   '/suppliers': '供应商概览',
   '/suppliers/list': '供应商列表',
   '/suppliers/manage': '供应商管理',
   '/suppliers/prices': '供应商价格',
   '/suppliers/import': '价格导入',
+  // 财务管理
   '/finance': '财务概览',
   '/finance/invoices': '发票管理',
   '/finance/invoices/history': '发票历史',
@@ -80,38 +95,34 @@ const routeTitleMap: Record<string, string> = {
   '/finance/statements': '财务报表',
   '/finance/bank-accounts': '银行账户',
   '/finance/carrier-settlement': '承运商结算',
-  '/documents': '单证概览',
-  '/documents/import': '货物导入',
-  '/documents/matching': 'HS匹配审核',
-  '/documents/tax-calc': '税费计算',
-  '/documents/supplement': '数据补充',
-  '/documents/match-records': '匹配记录库',
-  '/document-center': '文档中心',
+  // 合同管理
   '/contracts': '合同管理',
   '/contracts/config': '合同模板配置',
+  // 工具
   '/tools': '工具',
   '/tools/inquiry': '询价',
   '/tools/tariff-calculator': '关税计算',
   '/tools/shared-tax': '共享税号库',
   '/tools/product-pricing': '报价管理',
+  // 系统管理
   '/system': '系统管理',
+  '/system/info-center': '信息中心',
+  '/system/data-import': '数据导入',
   '/system/menu-settings': '板块开关',
   '/system/user-manage': '用户管理',
   '/system/user-manage/permissions': '角色权限',
   '/system/user-binding': '用户绑定',
   '/system/security-settings': '安全设置',
-  '/system/security-center': '安全中心',
+  '/system/security-center': '安全管理中心',
   '/system/activity-logs': '活动日志',
-  '/system/logo-manage': 'Logo管理',
+  '/system/logo-manage': 'Logo 管理',
   '/system/basic-data': '基础数据管理',
   '/system/tariff-rates': 'HS Code数据库',
   '/system/approvals': '审批工作台',
   '/system/approval-center': '审批中心',
   '/system/messages': '消息中心',
   '/system/alerts': '预警管理',
-  '/system/info-center': '信息中心',
   '/system/api-integrations': 'API对接管理',
-  '/system/data-import': '数据导入',
 }
 
 // 获取路由标题
