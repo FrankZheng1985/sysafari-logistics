@@ -175,7 +175,7 @@ export default function FinanceReports() {
       documentation: '文件费',
       port: '港口费',
       service: '服务费',
-      package: '包装费',
+      package: '清提派业务',
       other: '其他'
     }
     return names[category] || category

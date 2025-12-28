@@ -15,9 +15,9 @@ interface ToolCard {
 
 const tools: ToolCard[] = [
   {
-    path: '/tools/inquiry',
-    label: '报价管理',
-    description: '创建和管理客户报价单，支持多币种和多服务类型',
+    path: '/tools/product-pricing',
+    label: '产品定价',
+    description: '管理公司产品定价、费用项配置和供应商报价关联',
     icon: FileText,
     color: 'text-blue-600',
     bgColor: 'bg-blue-50 hover:bg-blue-100',

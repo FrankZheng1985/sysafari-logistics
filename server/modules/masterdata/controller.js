@@ -1266,12 +1266,78 @@ export async function deleteTransportMethod(req, res) {
 export async function getServiceFeeCategories(req, res) {
   try {
     const db = getDatabase()
-    const { status = 'active' } = req.query
+    const { status, tree } = req.query
     
     let query = 'SELECT * FROM service_fee_categories WHERE 1=1'
     const params = []
     
-    if (status) {
+    // 只有明确指定status时才过滤，否则返回全部
+    if (status && status !== 'all') {
+      query += ' AND status = ?'
+      params.push(status)
+    }
+    
+    query += ' ORDER BY COALESCE(parent_id, 0), sort_order, name'
+    
+    const list = await db.prepare(query).all(...params)
+    const mappedList = list.map(r => ({
+      id: String(r.id),
+      name: r.name,
+      nameEn: r.name_en,
+      code: r.code,
+      description: r.description,
+      sortOrder: r.sort_order,
+      status: r.status,
+      parentId: r.parent_id ? String(r.parent_id) : null,
+      level: r.level || 1,
+      createTime: r.created_at
+    }))
+    
+    // 如果请求树形结构，则构建树
+    if (tree === 'true') {
+      const treeData = buildCategoryTree(mappedList)
+      return success(res, treeData)
+    }
+    
+    return success(res, mappedList)
+  } catch (error) {
+    console.error('获取服务费类别列表失败:', error)
+    return serverError(res, '获取服务费类别列表失败')
+  }
+}
+
+// 构建分类树形结构
+function buildCategoryTree(list) {
+  const map = {}
+  const roots = []
+  
+  // 先建立 id -> item 的映射
+  list.forEach(item => {
+    map[item.id] = { ...item, children: [] }
+  })
+  
+  // 构建树
+  list.forEach(item => {
+    if (item.parentId && map[item.parentId]) {
+      map[item.parentId].children.push(map[item.id])
+    } else {
+      roots.push(map[item.id])
+    }
+  })
+  
+  return roots
+}
+
+// 获取顶级分类列表（用于选择父级）
+export async function getTopLevelCategories(req, res) {
+  try {
+    const db = getDatabase()
+    const { status = 'active' } = req.query
+    
+    let query = 'SELECT * FROM service_fee_categories WHERE (parent_id IS NULL OR parent_id = 0)'
+    const params = []
+    
+    if (status && status !== 'all') {
       query += ' AND status = ?'
       params.push(status)
     }
@@ -1286,17 +1352,19 @@ export async function getServiceFeeCategories(req, res) {
       code: r.code,
       description: r.description,
       sortOrder: r.sort_order,
-      status: r.status
+      status: r.status,
+      parentId: null,
+      level: 1
     })))
   } catch (error) {
-    console.error('获取服务费类别列表失败:', error)
-    return serverError(res, '获取服务费类别列表失败')
+    console.error('获取顶级分类列表失败:', error)
+    return serverError(res, '获取顶级分类列表失败')
   }
 }
 
 export async function createServiceFeeCategory(req, res) {
   try {
-    const { name, code } = req.body
+    const { name, code, parentId } = req.body
     
     if (!name || !code) {
       return badRequest(res, '名称和代码为必填项')
@@ -1309,19 +1377,39 @@ export async function createServiceFeeCategory(req, res) {
       return conflict(res, '代码已存在')
     }
     
+    // 确定层级：如果有父级则为父级层级+1，否则为1
+    let level = 1
+    let sortOrder = req.body.sortOrder || 0
+    
+    if (parentId) {
+      const parent = await db.prepare('SELECT level FROM service_fee_categories WHERE id = ?').get(parentId)
+      if (parent) {
+        level = (parent.level || 1) + 1
+      }
+      
+      // 子分类自动计算排序：查询该父级下已有子分类的最大排序值 + 1
+      const maxSortResult = await db.prepare(
+        'SELECT COALESCE(MAX(sort_order), 0) as max_sort FROM service_fee_categories WHERE parent_id = ?'
+      ).get(parentId)
+      sortOrder = (maxSortResult?.max_sort || 0) + 1
+    }
+    
     const result = await db.prepare(`
-      INSERT INTO service_fee_categories (name, name_en, code, description, sort_order, status)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
+      INSERT INTO service_fee_categories (name, name_en, code, description, sort_order, status, parent_id, level)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING id
+    `).get(
       name,
       req.body.nameEn || '',
       code,
       req.body.description || '',
-      req.body.sortOrder || 0,
-      req.body.status || 'active'
+      sortOrder,
+      req.body.status || 'active',
+      parentId || null,
+      level
     )
     
-    return success(res, { id: result.lastInsertRowid }, '创建成功')
+    return success(res, { id: result?.id, sortOrder }, '创建成功')
   } catch (error) {
     console.error('创建服务费类别失败:', error)
     return serverError(res, '创建服务费类别失败')
@@ -1333,7 +1421,7 @@ export async function updateServiceFeeCategory(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = await db.prepare('SELECT id FROM service_fee_categories WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id, parent_id FROM service_fee_categories WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '服务费类别不存在')
     }
@@ -1347,6 +1435,39 @@ export async function updateServiceFeeCategory(req, res) {
     if (req.body.description !== undefined) { fields.push('description = ?'); values.push(req.body.description) }
     if (req.body.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(req.body.sortOrder) }
     if (req.body.status !== undefined) { fields.push('status = ?'); values.push(req.body.status) }
+    
+    // 处理父级分类变更
+    if (req.body.parentId !== undefined) {
+      // 防止设置自己为父级
+      if (req.body.parentId && String(req.body.parentId) === String(id)) {
+        return badRequest(res, '不能将自己设为父级分类')
+      }
+      
+      // 防止设置子级为父级（避免循环引用）
+      if (req.body.parentId) {
+        const children = await db.prepare(
+          'SELECT id FROM service_fee_categories WHERE parent_id = ?'
+        ).all(id)
+        const childIds = children.map(c => String(c.id))
+        if (childIds.includes(String(req.body.parentId))) {
+          return badRequest(res, '不能将子级分类设为父级')
+        }
+      }
+      
+      fields.push('parent_id = ?')
+      values.push(req.body.parentId || null)
+      
+      // 更新层级
+      let level = 1
+      if (req.body.parentId) {
+        const parent = await db.prepare('SELECT level FROM service_fee_categories WHERE id = ?').get(req.body.parentId)
+        if (parent) {
+          level = (parent.level || 1) + 1
+        }
+      }
+      fields.push('level = ?')
+      values.push(level)
+    }
     
     if (fields.length === 0) {
       return badRequest(res, '没有需要更新的字段')
@@ -1367,7 +1488,18 @@ export async function updateServiceFeeCategory(req, res) {
 export async function deleteServiceFeeCategory(req, res) {
   try {
     const db = getDatabase()
-    const result = await db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(req.params.id)
+    const { id } = req.params
+    
+    // 检查是否有子分类
+    const children = await db.prepare(
+      'SELECT COUNT(*) as count FROM service_fee_categories WHERE parent_id = ?'
+    ).get(id)
+    
+    if (children && children.count > 0) {
+      return badRequest(res, `该分类下有 ${children.count} 个子分类，请先删除子分类`)
+    }
+    
+    const result = await db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(id)
     
     if (result.changes === 0) {
       return notFound(res, '服务费类别不存在')

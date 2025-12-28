@@ -50,11 +50,21 @@ interface OrderFeeGroup {
 }
 
 interface FeeStats {
-  byCategory: Array<{ category: string; count: number; total: number }>
+  byCategory: Array<{ category: string; categoryCode: string; count: number; total: number }>
   totalAmount: number
   // 应收/应付分别统计
   receivable?: { amount: number; count: number }
   payable?: { amount: number; count: number }
+}
+
+// 服务费类别接口
+interface ServiceFeeCategory {
+  id: string
+  name: string
+  nameEn?: string
+  code: string
+  description?: string
+  status: string
 }
 
 export default function FinanceFees() {
@@ -64,7 +74,8 @@ export default function FinanceFees() {
   const [fees, setFees] = useState<Fee[]>([])
   const [stats, setStats] = useState<FeeStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [total, setTotal] = useState(0)
+  const [total, setTotal] = useState(0)  // 费用条数
+  const [totalGroups, setTotalGroups] = useState(0)  // 订单分组数（用于分页）
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   
@@ -78,6 +89,9 @@ export default function FinanceFees() {
   
   // 展开/收起状态管理（存储已展开的订单号）
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
+  
+  // 服务费类别（从基础数据加载）
+  const [serviceCategories, setServiceCategories] = useState<ServiceFeeCategory[]>([])
   
   // 从URL获取筛选/预填信息（从订单详情页面跳转过来时）
   const filterBillId = searchParams.get('billId') || ''
@@ -104,16 +118,35 @@ export default function FinanceFees() {
     { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
+  // 加载服务费类别（用于显示费用分类名称）
+  useEffect(() => {
+    loadServiceCategories()
+  }, [])
    
   useEffect(() => {
     fetchFees()
     fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, filterCategory, filterFeeType, searchValue, filterBillId])
+  
+  // 加载服务费类别数据
+  const loadServiceCategories = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/service-fee-categories?status=active`)
+      const data = await response.json()
+      const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+      if (data.errCode === 200 && list.length > 0) {
+        setServiceCategories(list)
+      }
+    } catch (error) {
+      console.error('加载服务费类别失败:', error)
+    }
+  }
 
   const fetchFees = async () => {
     try {
       setLoading(true)
+      // 统计按 category（费用分类）分组，筛选也使用 category 参数
       const params = new URLSearchParams({
         page: page.toString(),
         pageSize: pageSize.toString(),
@@ -128,7 +161,8 @@ export default function FinanceFees() {
       
       if (data.errCode === 200) {
         setFees(data.data?.list || [])
-        setTotal(data.data?.total || 0)
+        setTotal(Number(data.data?.total) || 0)  // 费用条数
+        setTotalGroups(Number(data.data?.totalGroups) || Number(data.data?.total) || 0)  // 订单分组数
       }
     } catch (error) {
       console.error('获取费用列表失败:', error)
@@ -253,8 +287,54 @@ export default function FinanceFees() {
     })
   }, [fees])
 
-  // 费用分类配置 - 支持所有数据库中的分类（包括服务费类别的英文代码）
+  // 根据分类代码获取样式配置
+  const getCategoryStyle = (code: string) => {
+    const lowerCode = code?.toLowerCase() || ''
+    if (lowerCode.includes('transport') || lowerCode.includes('freight') || lowerCode.includes('运输')) {
+      return { color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck }
+    }
+    if (lowerCode.includes('customs') || lowerCode.includes('clearance') || lowerCode.includes('关税') || lowerCode.includes('清关')) {
+      return { color: 'text-red-600', bg: 'bg-red-100', icon: Receipt }
+    }
+    if (lowerCode.includes('duty') || lowerCode.includes('进口税')) {
+      return { color: 'text-rose-600', bg: 'bg-rose-100', icon: Calculator }
+    }
+    if (lowerCode.includes('tax') || lowerCode.includes('vat') || lowerCode.includes('增值税')) {
+      return { color: 'text-pink-600', bg: 'bg-pink-100', icon: DollarSign }
+    }
+    if (lowerCode.includes('warehouse') || lowerCode.includes('storage') || lowerCode.includes('仓储')) {
+      return { color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 }
+    }
+    if (lowerCode.includes('insurance') || lowerCode.includes('保险')) {
+      return { color: 'text-green-600', bg: 'bg-green-100', icon: Shield }
+    }
+    if (lowerCode.includes('handling') || lowerCode.includes('操作') || lowerCode.includes('thc') || lowerCode.includes('港杂')) {
+      return { color: 'text-purple-600', bg: 'bg-purple-100', icon: Package }
+    }
+    if (lowerCode.includes('document') || lowerCode.includes('文件') || lowerCode.includes('换单')) {
+      return { color: 'text-cyan-600', bg: 'bg-cyan-100', icon: FileText }
+    }
+    if (lowerCode.includes('port') || lowerCode.includes('港口')) {
+      return { color: 'text-indigo-600', bg: 'bg-indigo-100', icon: Anchor }
+    }
+    if (lowerCode.includes('service') || lowerCode.includes('服务')) {
+      return { color: 'text-teal-600', bg: 'bg-teal-100', icon: Briefcase }
+    }
+    if (lowerCode.includes('package') || lowerCode.includes('清提派') || lowerCode.includes('clearing and dispatching')) {
+      return { color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Package }
+    }
+    if (lowerCode.includes('agency') || lowerCode.includes('代理') || lowerCode.includes('税号')) {
+      return { color: 'text-amber-600', bg: 'bg-amber-100', icon: Building2 }
+    }
+    if (lowerCode.includes('management') || lowerCode.includes('管理')) {
+      return { color: 'text-slate-600', bg: 'bg-slate-100', icon: Settings }
+    }
+    return { color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings }
+  }
+
+  // 费用分类配置 - 优先从动态数据匹配，再使用硬编码映射
   const getCategoryConfig = (category: string) => {
+    // 硬编码的基础映射（用于快速匹配常见分类）
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof Truck }> = {
       // 标准分类（小写）
       freight: { label: '运费', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
@@ -269,21 +349,43 @@ export default function FinanceFees() {
       documentation: { label: '文件费', color: 'text-cyan-600', bg: 'bg-cyan-100', icon: FileText },
       port: { label: '港口费', color: 'text-indigo-600', bg: 'bg-indigo-100', icon: Anchor },
       service: { label: '服务费', color: 'text-teal-600', bg: 'bg-teal-100', icon: Briefcase },
-      package: { label: '包装费', color: 'text-amber-600', bg: 'bg-amber-100', icon: Box },
+      package: { label: '清提派业务', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Package },
       other: { label: '其他服务', color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings },
       clearance: { label: '清关服务', color: 'text-red-600', bg: 'bg-red-100', icon: Receipt },
       thc: { label: '港杂费', color: 'text-purple-600', bg: 'bg-purple-100', icon: Package },
-      // 服务费类别英文代码（来自基础数据）
-      'export customs clearance services': { label: '出口报关服务', color: 'text-red-600', bg: 'bg-red-100', icon: Receipt },
-      'document fees': { label: '文件费', color: 'text-cyan-600', bg: 'bg-cyan-100', icon: FileText },
-      'document exchange fee': { label: '换单费', color: 'text-indigo-600', bg: 'bg-indigo-100', icon: FileText },
-      'tax fees': { label: '税务费', color: 'text-green-600', bg: 'bg-green-100', icon: Shield },
-      "importer's agency fee": { label: '进口商代理费', color: 'text-amber-600', bg: 'bg-amber-100', icon: Building2 },
-      'management fee': { label: '管理费', color: 'text-slate-600', bg: 'bg-slate-100', icon: Settings },
+      // 清提派业务分类
+      'clearing and dispatching business': { label: '清提派业务', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Package },
     }
-    // 先转换为小写再匹配
+    
     const lowerCategory = category?.toLowerCase() || ''
-    return configs[lowerCategory] || { label: category, color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings }
+    
+    // 1. 优先从动态加载的服务费类别中匹配（通过 code 或 name 匹配，忽略大小写）
+    const dynamicCategory = serviceCategories.find(
+      cat => cat.code?.toLowerCase() === lowerCategory || 
+             cat.name?.toLowerCase() === lowerCategory ||
+             cat.name === category
+    )
+    
+    if (dynamicCategory) {
+      // 根据 code 获取样式
+      const style = getCategoryStyle(dynamicCategory.code || dynamicCategory.name)
+      return { 
+        label: dynamicCategory.name, 
+        ...style 
+      }
+    }
+    
+    // 2. 从硬编码映射中查找
+    if (configs[lowerCategory]) {
+      return configs[lowerCategory]
+    }
+    
+    // 3. 最后：根据原始值智能匹配样式，并使用原始值作为标签
+    const style = getCategoryStyle(category)
+    return { 
+      label: category || '其他', 
+      ...style 
+    }
   }
 
 
@@ -357,19 +459,28 @@ export default function FinanceFees() {
               const config = getCategoryConfig(categoryData.category)
               const Icon = config.icon
               
+              const categoryKey = categoryData.categoryCode || categoryData.category
+              
               return (
                 <div
-                  key={categoryData.category}
-                  onClick={() => setFilterCategory(filterCategory === categoryData.category ? '' : categoryData.category)}
+                  key={categoryKey}
+                  onClick={() => {
+                    setFilterCategory(filterCategory === categoryKey ? '' : categoryKey)
+                    setPage(1) // 重置分页到第一页
+                  }}
+                  title={config.label}
                   className={`rounded-lg p-3 cursor-pointer transition-all ${
-                    filterCategory === categoryData.category 
+                    filterCategory === categoryKey 
                       ? `${config.bg} ring-2 ring-offset-1 ring-current`
                       : 'bg-gray-50 hover:bg-gray-100'
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <Icon className={`w-4 h-4 ${config.color}`} />
-                    <span className={`text-xs font-medium truncate ${filterCategory === categoryData.category ? config.color : 'text-gray-600'}`}>
+                    <span 
+                      className={`text-xs font-medium truncate ${filterCategory === categoryKey ? config.color : 'text-gray-600'}`}
+                      title={config.label}
+                    >
                       {config.label}
                     </span>
                   </div>
@@ -414,6 +525,7 @@ export default function FinanceFees() {
               placeholder="搜索费用名称/订单号/提单号/柜号..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchFees()}
               className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-72 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
             />
           </div>
@@ -421,7 +533,10 @@ export default function FinanceFees() {
           {/* 费用类型筛选 */}
           <select
             value={filterFeeType}
-            onChange={(e) => setFilterFeeType(e.target.value as '' | 'receivable' | 'payable')}
+            onChange={(e) => {
+              setFilterFeeType(e.target.value as '' | 'receivable' | 'payable')
+              setPage(1) // 重置分页到第一页
+            }}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             title="筛选费用类型"
           >
@@ -433,7 +548,10 @@ export default function FinanceFees() {
           {/* 分类筛选 - 动态生成选项 */}
           <select
             value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
+            onChange={(e) => {
+              setFilterCategory(e.target.value)
+              setPage(1) // 重置分页到第一页
+            }}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             title="筛选费用分类"
           >
@@ -442,7 +560,7 @@ export default function FinanceFees() {
               ?.slice()
               .sort((a, b) => b.total - a.total)
               .map((cat) => (
-                <option key={cat.category} value={cat.category}>
+                <option key={cat.categoryCode || cat.category} value={cat.categoryCode || cat.category}>
                   {getCategoryConfig(cat.category).label} ({cat.count}笔)
                 </option>
               ))}
@@ -488,37 +606,39 @@ export default function FinanceFees() {
       </div>
 
       {/* 分组数据表格 */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}>
-        {/* 表格头部 */}
-        <div className="bg-gray-50 border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center px-3 py-2 text-xs font-medium text-gray-500">
-            <div className="w-8 flex-shrink-0 flex items-center justify-center">
-              <button 
-                onClick={toggleExpandAll}
-                className="p-1 hover:bg-gray-200 rounded transition-colors"
-                title={expandedOrders.size === orderGroups.length ? '全部收起' : '全部展开'}
-              >
-                {expandedOrders.size === orderGroups.length ? (
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
-                )}
-              </button>
+      <div className="bg-white rounded-lg border border-gray-200 overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}>
+        {/* 表格内容包装器 - 设置最小宽度 */}
+        <div className="min-w-[950px]">
+          {/* 表格头部 - sticky 固定在顶部 */}
+          <div className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+            <div className="flex items-center w-full px-3 py-2 text-xs font-medium text-gray-500">
+              <div className="w-8 flex-shrink-0 flex items-center justify-center">
+                <button 
+                  onClick={toggleExpandAll}
+                  className="p-1 hover:bg-gray-200 rounded transition-colors"
+                  title={expandedOrders.size === orderGroups.length ? '全部收起' : '全部展开'}
+                >
+                  {expandedOrders.size === orderGroups.length ? (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  )}
+                </button>
+              </div>
+              <div className="w-[100px] flex-shrink-0">订单号</div>
+              <div className="w-[140px] flex-shrink-0">提单号</div>
+              <div className="w-[130px] flex-shrink-0">集装箱号</div>
+              <div className="w-[100px] flex-shrink-0">客户</div>
+              <div className="w-[60px] flex-shrink-0 text-center">费用数</div>
+              <div className="w-[110px] flex-shrink-0 text-right">应收</div>
+              <div className="w-[110px] flex-shrink-0 text-right">应付</div>
+              <div className="w-[110px] flex-shrink-0 text-right">净额</div>
+              <div className="flex-1 min-w-[20px]"></div>
             </div>
-            <div className="w-[100px] flex-shrink-0">订单号</div>
-            <div className="w-[140px] flex-shrink-0">提单号</div>
-            <div className="w-[130px] flex-shrink-0">集装箱号</div>
-            <div className="w-[100px] flex-shrink-0">客户</div>
-            <div className="w-[60px] flex-shrink-0 text-center">费用数</div>
-            <div className="w-[110px] flex-shrink-0 text-right">应收</div>
-            <div className="w-[110px] flex-shrink-0 text-right">应付</div>
-            <div className="w-[110px] flex-shrink-0 text-right">净额</div>
-            <div className="flex-1"></div>
           </div>
-        </div>
 
-        {/* 表格内容 - 可滚动区域 */}
-        <div className="divide-y divide-gray-100 overflow-y-auto flex-1">
+          {/* 表格内容 */}
+          <div className="divide-y divide-gray-100">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -536,10 +656,10 @@ export default function FinanceFees() {
               const netAmount = group.receivableTotal - group.payableTotal
               
               return (
-                <div key={groupKey}>
+                <div key={groupKey} className="w-full">
                   {/* 订单汇总行 */}
                   <div 
-                    className={`flex items-center px-3 py-2.5 hover:bg-gray-50 cursor-pointer transition-colors ${
+                    className={`flex items-center w-full px-3 py-2.5 hover:bg-gray-50 cursor-pointer transition-colors ${
                       isExpanded ? 'bg-primary-50/50' : ''
                     }`}
                     onClick={() => toggleOrderExpand(groupKey)}
@@ -618,9 +738,9 @@ export default function FinanceFees() {
 
                   {/* 展开的费用明细 */}
                   {isExpanded && (
-                    <div className="bg-gray-50/50">
+                    <div className="bg-gray-50/50 w-full">
                       {/* 明细表头 */}
-                      <div className="flex items-center px-3 py-1.5 bg-gray-100/80 text-xs text-gray-500 border-y border-gray-200/50">
+                      <div className="flex items-center w-full px-3 py-1.5 bg-gray-100/80 text-xs text-gray-500 border-y border-gray-200/50">
                         <div className="w-8 flex-shrink-0"></div>
                         <div className="w-[140px] flex-shrink-0 pl-4">费用名称</div>
                         <div className="w-[70px] flex-shrink-0 text-center">类型</div>
@@ -640,7 +760,7 @@ export default function FinanceFees() {
                         return (
                           <div 
                             key={fee.id}
-                            className={`flex items-center px-3 py-2 hover:bg-white transition-colors ${
+                            className={`flex items-center w-full px-3 py-2 hover:bg-white transition-colors ${
                               feeIndex < group.fees.length - 1 ? 'border-b border-gray-100' : ''
                             }`}
                           >
@@ -720,6 +840,7 @@ export default function FinanceFees() {
             })
           )}
         </div>
+        </div>
       </div>
 
       {/* 分页 */}
@@ -737,11 +858,11 @@ export default function FinanceFees() {
               上一页
             </button>
             <span className="text-xs text-gray-600">
-              第 {page} / {Math.ceil(total / pageSize) || 1} 页
+              第 {page} / {Math.ceil(totalGroups / pageSize) || 1} 页
             </span>
             <button
-              onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
-              disabled={page >= Math.ceil(total / pageSize)}
+              onClick={() => setPage(p => Math.min(Math.ceil(totalGroups / pageSize), p + 1))}
+              disabled={page >= Math.ceil(totalGroups / pageSize)}
               className="px-3 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               下一页

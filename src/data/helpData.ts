@@ -1052,17 +1052,17 @@ export const helpItems: HelpItem[] = [
   },
   {
     id: 'tools-inquiry',
-    title: '询价工具',
+    title: '服务费配置',
     module: 'tools',
     moduleIcon: 'Wrench',
     path: '/tools/inquiry',
     videoUrl: '',
-    description: '快速获取运输报价。',
+    description: '配置公司服务费项目和运输价格。',
     steps: [
-      '输入起始地和目的地',
-      '填写货物信息',
-      '选择运输方式',
-      '获取报价结果'
+      '管理服务费项目',
+      '按类别分组配置',
+      '设置运输价格',
+      '计算运输成本'
     ]
   },
   {

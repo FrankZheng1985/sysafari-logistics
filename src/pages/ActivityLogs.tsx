@@ -183,6 +183,7 @@ export default function ActivityLogs() {
               placeholder="搜索活动内容、操作者..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchActivities()}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>

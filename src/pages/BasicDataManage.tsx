@@ -387,13 +387,16 @@ export default function BasicDataManage() {
     }
   }
 
-  // 加载服务费类别数据
+  // 加载服务费类别数据（扁平列表，按层级排序）
   const loadFeeCategoryData = async () => {
     setFeeCategoryLoading(true)
     try {
-      const response = await getServiceFeeCategories()
+      // 加载所有状态的数据
+      const response = await getServiceFeeCategories({ status: 'all' })
       if (response.errCode === 200 && response.data) {
-        setFeeCategoryData(response.data)
+        // 对数据进行排序：先按父级ID分组，然后父级紧跟子级
+        const sortedData = sortCategoriesWithChildren(response.data)
+        setFeeCategoryData(sortedData)
       } else {
         console.error('加载服务费类别失败:', response.msg)
       }
@@ -402,6 +405,36 @@ export default function BasicDataManage() {
     } finally {
       setFeeCategoryLoading(false)
     }
+  }
+
+  // 对分类数据进行排序：父级紧跟其子级
+  const sortCategoriesWithChildren = (data: ServiceFeeCategory[]): ServiceFeeCategory[] => {
+    const result: ServiceFeeCategory[] = []
+    const topLevel = data.filter(item => !item.parentId)
+    const childrenMap = new Map<string, ServiceFeeCategory[]>()
+    
+    // 构建子分类映射
+    data.forEach(item => {
+      if (item.parentId) {
+        if (!childrenMap.has(item.parentId)) {
+          childrenMap.set(item.parentId, [])
+        }
+        childrenMap.get(item.parentId)!.push(item)
+      }
+    })
+    
+    // 按排序值排序顶级分类，然后插入子分类
+    topLevel
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      .forEach(parent => {
+        result.push(parent)
+        const children = childrenMap.get(parent.id) || []
+        children
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+          .forEach(child => result.push(child))
+      })
+    
+    return result
   }
 
   // 加载运输方式数据
@@ -1076,12 +1109,31 @@ export default function BasicDataManage() {
     },
   ]
 
+  // 添加子分类状态
+  const [addingSubCategoryParentId, setAddingSubCategoryParentId] = useState<string | null>(null)
+
   // 服务费类别表格列
   const feeCategoryColumns: Column<ServiceFeeCategory>[] = [
     {
       key: 'name',
       label: '类别名称',
       sorter: (a, b) => a.name.localeCompare(b.name),
+      render: (_value, record: ServiceFeeCategory) => {
+        const isSubCategory = record.level && record.level > 1
+        return (
+          <div className="flex items-center gap-1">
+            {isSubCategory && (
+              <span className="text-gray-400 text-xs">└─</span>
+            )}
+            <span className={isSubCategory ? 'text-gray-700' : 'font-medium text-gray-900'}>
+              {record.name}
+            </span>
+            {isSubCategory && (
+              <span className="text-xs text-gray-400 bg-gray-100 px-1 rounded">子分类</span>
+            )}
+          </div>
+        )
+      },
     },
     {
       key: 'nameEn',
@@ -1133,31 +1185,46 @@ export default function BasicDataManage() {
       onFilter: (value, record) => record.status === value,
     },
     {
-      key: 'createTime',
-      label: '创建时间',
-      sorter: (a, b) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
-    },
-    {
       key: 'actions',
       label: '操作',
-      render: (_value, record: ServiceFeeCategory) => (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => handleFeeCategoryEdit(record)}
-            className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
-          >
-            编辑
-          </button>
-          <button
-            onClick={() => handleFeeCategoryDelete(record.id)}
-            className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
-          >
-            删除
-          </button>
-        </div>
-      ),
+      render: (_value, record: ServiceFeeCategory) => {
+        const isTopLevel = !record.parentId
+        return (
+          <div className="flex items-center gap-1">
+            {/* 只有顶级分类可以添加子分类 */}
+            {isTopLevel && (
+              <button
+                onClick={() => handleAddSubCategory(record.id)}
+                className="px-1.5 py-0.5 text-xs text-green-600 hover:bg-green-50 rounded transition-colors"
+                title="添加子分类"
+              >
+                +子分类
+              </button>
+            )}
+            <button
+              onClick={() => handleFeeCategoryEdit(record)}
+              className="px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
+            >
+              编辑
+            </button>
+            <button
+              onClick={() => handleFeeCategoryDelete(record.id)}
+              className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
+            >
+              删除
+            </button>
+          </div>
+        )
+      },
     },
   ]
+
+  // 添加子分类
+  const handleAddSubCategory = (parentId: string) => {
+    setAddingSubCategoryParentId(parentId)
+    setEditingFeeCategoryData(null)
+    setFeeCategoryModalVisible(true)
+  }
 
   // 运输方式表格列
   const transportMethodColumns: Column<TransportMethod>[] = [
@@ -2724,9 +2791,16 @@ export default function BasicDataManage() {
       {/* 服务费类别弹出页面 */}
       <ServiceFeeCategoryModal
         visible={feeCategoryModalVisible}
-        onClose={handleFeeCategoryModalClose}
-        onSuccess={handleFeeCategoryModalSuccess}
+        onClose={() => {
+          handleFeeCategoryModalClose()
+          setAddingSubCategoryParentId(null)
+        }}
+        onSuccess={() => {
+          handleFeeCategoryModalSuccess()
+          setAddingSubCategoryParentId(null)
+        }}
         data={editingFeeCategoryData}
+        parentId={addingSubCategoryParentId}
       />
 
       {/* 运输方式弹出页面 */}

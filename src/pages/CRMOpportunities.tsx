@@ -667,6 +667,7 @@ export default function CRMOpportunities() {
               placeholder="搜索机会名称、客户..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadData()}
               className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             />
           </div>

@@ -105,10 +105,21 @@ export async function getProductById(id) {
   
   if (!product) return null
   
-  // 获取费用项
-  const feeItems = await db.prepare(
-    'SELECT * FROM product_fee_items WHERE product_id = ? ORDER BY sort_order, id'
-  ).all(id)
+  // 获取费用项，同时获取关联的供应商报价中的路线信息
+  const feeItems = await db.prepare(`
+    SELECT 
+      pfi.*,
+      spi.route_from as supplier_route_from,
+      spi.route_to as supplier_route_to,
+      spi.return_point as supplier_return_point,
+      spi.city as supplier_city,
+      spi.country as supplier_country,
+      spi.transport_mode as supplier_transport_mode
+    FROM product_fee_items pfi
+    LEFT JOIN supplier_price_items spi ON pfi.supplier_price_id = spi.id
+    WHERE pfi.product_id = ?
+    ORDER BY pfi.sort_order, pfi.id
+  `).all(id)
   
   return {
     ...convertProductToCamelCase(product),
@@ -236,8 +247,9 @@ export async function addProductFeeItem(productId, data) {
       standard_price, min_price, max_price, currency, is_required,
       description, sort_order,
       supplier_id, supplier_price_id, supplier_name, cost_price, profit_type, profit_value,
-      billing_type, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      billing_type, route_from, route_to, postal_code, return_point,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     RETURNING id
   `).get(
     productId,
@@ -258,7 +270,11 @@ export async function addProductFeeItem(productId, data) {
     data.costPrice || null,
     data.profitType || 'amount',
     data.profitValue || 0,
-    data.billingType || 'fixed'  // 计费类型
+    data.billingType || 'fixed',  // 计费类型
+    data.routeFrom || null,       // 起运地
+    data.routeTo || null,         // 目的地
+    data.postalCode || null,      // 邮编
+    data.returnPoint || null      // 还柜点
   )
   
   return { id: result?.id }
@@ -272,8 +288,12 @@ export async function updateProductFeeItem(id, data) {
   const fields = []
   const values = []
   
-  // 如果有利润设置，计算销售价格
-  if (data.costPrice !== undefined && data.profitValue !== undefined) {
+  // 如果有有效的成本价和利润值，则重新计算销售价格
+  // 注意：costPrice 必须是有效的数值（不能是 null 或 undefined），profitValue 也要是有效的数值
+  const hasCostPrice = data.costPrice !== undefined && data.costPrice !== null && !isNaN(data.costPrice) && data.costPrice > 0
+  const hasProfitValue = data.profitValue !== undefined && data.profitValue !== null && !isNaN(data.profitValue)
+  
+  if (hasCostPrice && hasProfitValue) {
     if (data.profitType === 'rate') {
       // 利润率: 销售价 = 成本价 * (1 + 利润率/100)
       data.standardPrice = data.costPrice * (1 + data.profitValue / 100)
@@ -282,11 +302,11 @@ export async function updateProductFeeItem(id, data) {
       data.standardPrice = data.costPrice + data.profitValue
     }
     // 销售价向上取整到50的倍数（仅主运输费用）
-    // 如果没有传入类别/名称，从现有记录获取
-    const feeCategory = data.feeCategory || existing?.fee_category
-    const feeName = data.feeName || existing?.fee_name
+    const feeCategory = data.feeCategory
+    const feeName = data.feeName
     data.standardPrice = roundSalesPriceTo50(data.standardPrice, feeCategory, feeName)
   }
+  // 如果没有有效的成本价，直接使用前端传入的 standardPrice（不重新计算）
   
   const fieldMap = {
     feeName: 'fee_name',
@@ -307,7 +327,12 @@ export async function updateProductFeeItem(id, data) {
     costPrice: 'cost_price',
     profitType: 'profit_type',
     profitValue: 'profit_value',
-    billingType: 'billing_type'  // 计费类型
+    billingType: 'billing_type',  // 计费类型
+    // 路线信息
+    routeFrom: 'route_from',      // 起运地
+    routeTo: 'route_to',          // 目的地
+    postalCode: 'postal_code',    // 邮编
+    returnPoint: 'return_point'   // 还柜点
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
@@ -447,7 +472,15 @@ function convertFeeItemToCamelCase(row) {
     costPrice: row.cost_price ? parseFloat(row.cost_price) : null,
     profitType: row.profit_type || 'amount',
     profitValue: row.profit_value ? parseFloat(row.profit_value) : 0,
-    billingType: row.billing_type || 'fixed',  // 计费类型: fixed=固定价格, actual=按实际收费
+    billingType: row.billing_type || 'fixed',  // 计费类型: fixed=固定价格, actual=按实际收费, percentage=按百分比（垫付金额）
+    // 路线信息（优先使用费用项自身字段，备选从供应商报价获取）
+    routeFrom: row.route_from || row.supplier_route_from || null,    // 起运地
+    routeTo: row.route_to || row.supplier_route_to || null,          // 目的地
+    postalCode: row.postal_code || null,                              // 邮编
+    returnPoint: row.return_point || row.supplier_return_point || null, // 还柜点
+    city: row.supplier_city || null,               // 城市
+    country: row.supplier_country || null,         // 国家
+    transportMode: row.supplier_transport_mode || null, // 运输方式
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -591,9 +624,12 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
   
   for (const priceId of supplierPriceIds) {
     try {
-      // 获取供应商报价
+      // 获取供应商报价（包含供应商信息）
       const supplierPrice = await db.prepare(`
-        SELECT * FROM supplier_price_items WHERE id = ?
+        SELECT spi.*, s.supplier_name as supplier_name_from_table
+        FROM supplier_price_items spi
+        LEFT JOIN suppliers s ON spi.supplier_id = s.id
+        WHERE spi.id = ?
       `).get(priceId)
       
       if (!supplierPrice) {
@@ -629,6 +665,9 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
       // 销售价向上取整到50的倍数（仅主运输费用）
       standardPrice = roundSalesPriceTo50(standardPrice, supplierPrice.fee_category, supplierPrice.fee_name)
       
+      // 获取供应商名称：优先使用报价记录中的，若为空则从供应商表获取
+      const supplierName = supplierPrice.supplier_name || supplierPrice.supplier_name_from_table || ''
+      
       // 创建费用项（不指定 id，让数据库自动生成）
       const result = await db.prepare(`
         INSERT INTO product_fee_items (
@@ -649,7 +688,7 @@ export async function batchImportFromSupplier(productId, supplierPriceIds, profi
         supplierPrice.remark || '',
         supplierPrice.supplier_id,
         priceId,
-        supplierPrice.supplier_name || '',
+        supplierName,
         costPrice,
         profitType,
         profitValue,

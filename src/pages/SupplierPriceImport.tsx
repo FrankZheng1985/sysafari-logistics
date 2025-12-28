@@ -548,7 +548,7 @@ export default function SupplierPriceImport() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title="报价管理"
+        title="供应商报价"
         tabs={tabs}
         activeTab="/suppliers/import"
         onTabChange={(path) => navigate(path)}

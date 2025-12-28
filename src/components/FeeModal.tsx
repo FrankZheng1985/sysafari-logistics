@@ -60,6 +60,13 @@ interface ProductFeeItem {
   unit: string
   standardPrice: number
   currency: string
+  // 路线信息（从关联的供应商报价获取）
+  routeFrom?: string    // 起运地
+  routeTo?: string      // 目的地邮编
+  returnPoint?: string  // 还柜点
+  city?: string         // 城市
+  country?: string      // 国家
+  transportMode?: string // 运输方式
 }
 
 interface SupplierPriceItem {
@@ -448,13 +455,21 @@ export default function FeeModal({
   }
 
   const handleSelectProductFee = async (productId: string, feeItem: ProductFeeItem) => {
-    setFormData(prev => ({
-      ...prev,
-      category: feeItem.feeCategory || 'other',
-      feeName: feeItem.feeName,
-      amount: String(feeItem.standardPrice || ''),
-      currency: feeItem.currency || 'EUR'
-    }))
+    setFormData(prev => {
+      // 如果是编辑模式或用户已有金额，则保留原金额
+      const currentAmount = prev.amount
+      const hasExistingAmount = currentAmount && parseFloat(currentAmount) > 0
+      const shouldPreserveAmount = editingFee || hasExistingAmount
+      
+      return {
+        ...prev,
+        category: feeItem.feeCategory || 'other',
+        feeName: feeItem.feeName,
+        // 保留原有金额或使用产品标准价格
+        amount: shouldPreserveAmount ? currentAmount : String(feeItem.standardPrice || ''),
+        currency: feeItem.currency || 'EUR'
+      }
+    })
     // 标记为从产品库选择，不需要审批
     setFeeSource('product')
     setIsManualEntry(false)
@@ -462,13 +477,21 @@ export default function FeeModal({
   }
 
   const handleSelectSupplierPrice = (priceItem: SupplierPriceItem) => {
-    setFormData(prev => ({
-      ...prev,
-      category: priceItem.feeCategory || 'other',
-      feeName: priceItem.feeName,
-      amount: String(priceItem.price || ''),
-      currency: priceItem.currency || 'EUR'
-    }))
+    setFormData(prev => {
+      // 如果是编辑模式或用户已有金额，则保留原金额
+      const currentAmount = prev.amount
+      const hasExistingAmount = currentAmount && parseFloat(currentAmount) > 0
+      const shouldPreserveAmount = editingFee || hasExistingAmount
+      
+      return {
+        ...prev,
+        category: priceItem.feeCategory || 'other',
+        feeName: priceItem.feeName,
+        // 保留原有金额或使用报价金额
+        amount: shouldPreserveAmount ? currentAmount : String(priceItem.price || ''),
+        currency: priceItem.currency || 'EUR'
+      }
+    })
     // 标记为从供应商报价选择，不需要审批
     setFeeSource('supplier_price')
     setIsManualEntry(false)
@@ -571,8 +594,19 @@ export default function FeeModal({
     
     setSubmitting(true)
     try {
-      const url = editingFee ? `${API_BASE}/api/fees/${editingFee.id}` : `${API_BASE}/api/fees`
-      const method = editingFee ? 'PUT' : 'POST'
+      // 修复：使用 editingFee 对象存在性判断是更新还是创建
+      // 与系统中其他页面保持一致的判断方式
+      const isEditing = Boolean(editingFee && editingFee.id)
+      const url = isEditing ? `${API_BASE}/api/fees/${editingFee!.id}` : `${API_BASE}/api/fees`
+      const method = isEditing ? 'PUT' : 'POST'
+      
+      // 调试日志：帮助排查编辑变新增问题
+      console.log('[FeeModal] 提交模式:', isEditing ? '编辑(PUT)' : '新增(POST)', {
+        editingFee: editingFee,
+        editingFeeId: editingFee?.id,
+        url,
+        method
+      })
       
       // 构建描述信息，包含费用来源
       let description = formData.description || ''
@@ -1025,8 +1059,14 @@ export default function FeeModal({
               <label className="block text-xs font-medium text-gray-700 mb-2">
                 费用分类 <span className="text-red-500">*</span>
                 {!isManualEntry && formData.feeName && (
-                  <span className="ml-2 text-green-600 text-xs font-normal">
-                    (已从{feeSource === 'product' ? '产品库' : '供应商报价'}自动填充)
+                  <span className="ml-2 text-green-600 text-xs font-normal flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+                    已从{feeSource === 'product' ? '产品库' : '供应商报价'}绑定，不可修改
+                  </span>
+                )}
+                {isManualEntry && (
+                  <span className="ml-2 text-amber-500 text-xs font-normal">
+                    (手动录入可选择分类)
                   </span>
                 )}
                 {!isManualEntry && !formData.feeName && (
@@ -1035,38 +1075,66 @@ export default function FeeModal({
                   </span>
                 )}
               </label>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-                {feeCategories.map(cat => {
-                  const Icon = cat.icon
-                  // 只有手动录入时才能选择费用分类
-                  const canSelect = isManualEntry || formData.feeName
-                  return (
-                    <button
-                      key={cat.value}
-                      type="button"
-                      onClick={() => {
-                        if (canSelect) {
-                          setFormData(prev => ({ ...prev, category: cat.value }))
-                        }
-                      }}
-                      disabled={!canSelect}
-                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
-                        formData.category === cat.value
-                          ? `${cat.bg} ${cat.color} border-current`
-                          : !canSelect
-                            ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
-                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{cat.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              
+              {/* 非手动录入且有费用名称时，只读显示分类 */}
+              {!isManualEntry && formData.feeName && formData.category ? (
+                <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  {(() => {
+                    const selectedCat = feeCategories.find(c => c.value === formData.category) || {
+                      icon: Settings,
+                      label: formData.category,
+                      color: 'text-gray-600',
+                      bg: 'bg-gray-100'
+                    }
+                    const Icon = selectedCat.icon
+                    return (
+                      <>
+                        <div className={`p-1.5 rounded-lg ${selectedCat.bg}`}>
+                          <Icon className={`w-4 h-4 ${selectedCat.color}`} />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{selectedCat.label}</div>
+                          <div className="text-xs text-gray-500">分类已锁定，如需修改请到报价管理维护</div>
+                        </div>
+                      </>
+                    )
+                  })()}
+                </div>
+              ) : (
+                /* 手动录入或未选择费用时，显示分类选择 */
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
+                  {feeCategories.map(cat => {
+                    const Icon = cat.icon
+                    // 只有手动录入时才能选择费用分类
+                    const canSelect = isManualEntry
+                    return (
+                      <button
+                        key={cat.value}
+                        type="button"
+                        onClick={() => {
+                          if (canSelect) {
+                            setFormData(prev => ({ ...prev, category: cat.value }))
+                          }
+                        }}
+                        disabled={!canSelect}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
+                          formData.category === cat.value
+                            ? `${cat.bg} ${cat.color} border-current`
+                            : !canSelect
+                              ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
+                              : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate">{cat.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               {!isManualEntry && !formData.feeName && (
                 <p className="mt-1.5 text-xs text-gray-400">
-                  💡 费用分类会根据选择的费用项自动填充，或选择"手动录入"自定义
+                  💡 费用分类会根据选择的费用项自动绑定，或选择"手动录入"自定义
                 </p>
               )}
             </div>
@@ -1212,24 +1280,33 @@ export default function FeeModal({
                         <div className="text-xs text-gray-500 truncate mb-2">{item.routeInfo}</div>
                       )}
                       
-                      {/* 第二行：分类选择、币种和金额 */}
+                      {/* 第二行：分类显示（只读）、币种和金额 */}
                       <div className="flex items-center gap-2">
-                        {/* 费用分类选择 */}
+                        {/* 费用分类 - 从产品库/供应商报价选择的费用分类锁定不可修改 */}
                         <div className="flex items-center gap-1 flex-1">
                           <CategoryIcon className={`w-3.5 h-3.5 flex-shrink-0 ${categoryStyle.color}`} />
-                          <select
-                            value={item.category}
-                            onChange={(e) => {
-                              const newItems = [...pendingFeeItems]
-                              newItems[index].category = e.target.value
-                              setPendingFeeItems(newItems)
-                            }}
-                            className={`flex-1 px-1.5 py-1 text-xs border rounded ${categoryStyle.bg} ${categoryStyle.color} border-gray-200`}
-                          >
-                            {feeCategories.map(cat => (
-                              <option key={cat.value} value={cat.value}>{cat.label}</option>
-                            ))}
-                          </select>
+                          {item.source === 'manual' ? (
+                            /* 手动录入的费用可以选择分类 */
+                            <select
+                              value={item.category}
+                              onChange={(e) => {
+                                const newItems = [...pendingFeeItems]
+                                newItems[index].category = e.target.value
+                                setPendingFeeItems(newItems)
+                              }}
+                              className={`flex-1 px-1.5 py-1 text-xs border rounded ${categoryStyle.bg} ${categoryStyle.color} border-gray-200`}
+                            >
+                              {feeCategories.map(cat => (
+                                <option key={cat.value} value={cat.value}>{cat.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            /* 从产品库/供应商报价选择的费用，分类只读显示 */
+                            <div className={`flex-1 px-1.5 py-1 text-xs rounded ${categoryStyle.bg} ${categoryStyle.color} flex items-center gap-1`}>
+                              <span>{feeCategories.find(c => c.value === item.category)?.label || item.category}</span>
+                              <span className="text-[10px] opacity-70">🔒</span>
+                            </div>
+                          )}
                         </div>
                         
                         {/* 币种选择 */}
@@ -1373,13 +1450,18 @@ export default function FeeModal({
             setSelectedProductFees([])
           }}
           onBatchAdd={(items) => {
+            // 获取原有金额（编辑模式下或用户已输入金额时）
+            const originalAmount = formData.amount ? parseFloat(formData.amount) : 0
+            const hasOriginalAmount = originalAmount > 0
+            
             // 将选中的产品费用项添加到待提交列表
-            const newItems = items.map(item => ({
+            const newItems = items.map((item, index) => ({
               id: `pending-product-${item.feeItem.id}-${Date.now()}`,
               feeName: item.feeItem.feeName,
               feeNameEn: item.feeItem.feeNameEn,
               category: item.feeItem.feeCategory || 'other',
-              amount: item.feeItem.standardPrice || 0,
+              // 编辑模式或有原有金额时：第一个费用项使用原有金额，其他使用产品标准价格
+              amount: (hasOriginalAmount && index === 0) ? originalAmount : (item.feeItem.standardPrice || 0),
               currency: item.feeItem.currency || 'EUR',
               source: 'product' as FeeSourceType,
               sourceId: item.feeItem.id,
@@ -1440,13 +1522,18 @@ export default function FeeModal({
           const selectedItems = supplierPrices.filter(p => selectedPriceIds.includes(p.id))
           if (selectedItems.length === 0) return
           
+          // 获取原有金额（编辑模式下或用户已输入金额时）
+          const originalAmount = formData.amount ? parseFloat(formData.amount) : 0
+          const hasOriginalAmount = originalAmount > 0
+          
           // 将选中的费用项添加到待提交列表
-          const newItems = selectedItems.map(item => ({
+          const newItems = selectedItems.map((item, index) => ({
             id: `pending-${item.id}-${Date.now()}`,
             feeName: item.feeName,
             feeNameEn: item.feeNameEn,
             category: item.feeCategory || 'other',
-            amount: item.price || 0,
+            // 编辑模式或有原有金额时：第一个费用项使用原有金额，其他使用报价金额
+            amount: (hasOriginalAmount && index === 0) ? originalAmount : (item.price || 0),
             currency: item.currency || 'EUR',
             source: 'supplier_price' as FeeSourceType,
             sourceId: item.id,
@@ -1682,16 +1769,60 @@ function ProductFeeSelectModal({
   const [loadingProductId, setLoadingProductId] = useState<string | null>(null)
   const [productFeeItemsMap, setProductFeeItemsMap] = useState<Record<string, ProductFeeItem[]>>({})
   const [expandedProducts, setExpandedProducts] = useState<string[]>([])
+  const [feeItemSearch, setFeeItemSearch] = useState('')  // 费用项搜索
   
-  // 过滤产品
-  const filteredProducts = products.filter(product => {
-    if (!productSearch) return true
-    const search = productSearch.toLowerCase()
+  // 检查费用项是否匹配搜索词
+  const feeItemMatchesSearch = (item: ProductFeeItem, search: string): boolean => {
+    return (
+      item.feeName?.toLowerCase().includes(search) ||
+      item.feeNameEn?.toLowerCase().includes(search) ||
+      item.routeFrom?.toLowerCase().includes(search) ||
+      item.routeTo?.toLowerCase().includes(search) ||
+      item.city?.toLowerCase().includes(search) ||
+      item.country?.toLowerCase().includes(search) ||
+      item.returnPoint?.toLowerCase().includes(search)
+    )
+  }
+  
+  // 检查搜索词是否匹配产品名称/代码
+  const productMatchesSearch = (product: Product, search: string): boolean => {
     return (
       product.productName?.toLowerCase().includes(search) ||
       product.productCode?.toLowerCase().includes(search)
     )
+  }
+  
+  // 过滤产品：
+  // 1. 如果搜索词匹配产品名称/代码，显示该产品
+  // 2. 如果搜索词匹配已加载的费用项，显示该产品
+  // 3. 如果没有产品名称匹配，但有费用项数据还没加载，显示所有产品（让用户展开搜索）
+  const filteredProducts = products.filter(product => {
+    if (!productSearch) return true
+    const search = productSearch.toLowerCase()
+    
+    // 检查产品名称/代码是否匹配
+    if (productMatchesSearch(product, search)) return true
+    
+    // 检查已加载的费用项是否有匹配的路线信息
+    const feeItems = productFeeItemsMap[product.id] || []
+    if (feeItems.length > 0 && feeItems.some(item => feeItemMatchesSearch(item, search))) {
+      return true
+    }
+    
+    // 如果该产品的费用项还没加载，保留该产品让用户可以展开查看
+    if (feeItems.length === 0) {
+      return true
+    }
+    
+    return false
   })
+  
+  // 过滤费用项（支持搜索费用名称、起运地、目的地、邮编、还柜点）
+  const filterFeeItems = (items: ProductFeeItem[]): ProductFeeItem[] => {
+    if (!feeItemSearch) return items
+    const search = feeItemSearch.toLowerCase()
+    return items.filter(item => feeItemMatchesSearch(item, search))
+  }
   
   // 加载产品费用项
   const handleLoadFeeItems = async (productId: string) => {
@@ -1728,18 +1859,25 @@ function ProductFeeSelectModal({
     }
   }
   
-  // 全选某产品下的所有费用项
+  // 全选某产品下的所有费用项（使用过滤后的列表）
   const selectAllFromProduct = (productId: string, productName: string) => {
-    const feeItems = productFeeItemsMap[productId] || []
+    const allFeeItems = productFeeItemsMap[productId] || []
+    const feeItems = filterFeeItems(allFeeItems)  // 使用过滤后的费用项
     const currentSelectedIds = selectedProductFees
       .filter(f => f.productId === productId)
       .map(f => f.feeItem.id)
     
-    if (currentSelectedIds.length === feeItems.length) {
-      // 取消全选
-      setSelectedProductFees(selectedProductFees.filter(f => f.productId !== productId))
+    // 判断是否所有过滤后的费用项都已选中
+    const filteredItemIds = feeItems.map(item => item.id)
+    const allFilteredSelected = filteredItemIds.every(id => currentSelectedIds.includes(id))
+    
+    if (allFilteredSelected && feeItems.length > 0) {
+      // 取消选择过滤后的费用项
+      setSelectedProductFees(selectedProductFees.filter(
+        f => !(f.productId === productId && filteredItemIds.includes(f.feeItem.id))
+      ))
     } else {
-      // 全选
+      // 全选过滤后的费用项
       const newSelections = feeItems
         .filter(item => !currentSelectedIds.includes(item.id))
         .map(item => ({ productId, productName, feeItem: item }))
@@ -1774,13 +1912,19 @@ function ProductFeeSelectModal({
             <input
               type="text"
               value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-              placeholder="搜索产品名称或代码..."
+              onChange={(e) => {
+                setProductSearch(e.target.value)
+                setFeeItemSearch(e.target.value)  // 同步设置费用项搜索
+              }}
+              placeholder="搜索产品、费用项、起运地、目的地、邮编、还柜点..."
               className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
             />
             {productSearch && (
               <button
-                onClick={() => setProductSearch('')}
+                onClick={() => {
+                  setProductSearch('')
+                  setFeeItemSearch('')
+                }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
                 <X className="w-4 h-4" />
@@ -1799,7 +1943,8 @@ function ProductFeeSelectModal({
               {filteredProducts.map(product => {
                 const isExpanded = expandedProducts.includes(product.id)
                 const isLoading = loadingProductId === product.id
-                const feeItems = productFeeItemsMap[product.id] || []
+                const allFeeItems = productFeeItemsMap[product.id] || []
+                const feeItems = filterFeeItems(allFeeItems)  // 应用费用项搜索过滤
                 const selectedCount = selectedProductFees.filter(f => f.productId === product.id).length
                 
                 return (
@@ -1836,7 +1981,12 @@ function ProductFeeSelectModal({
                           <>
                             {/* 全选按钮 */}
                             <div className="flex items-center justify-between px-2 py-1 mb-2">
-                              <span className="text-xs text-gray-500">共 {feeItems.length} 个费用项</span>
+                              <span className="text-xs text-gray-500">
+                                共 {feeItems.length} 个费用项
+                                {feeItemSearch && allFeeItems.length !== feeItems.length && (
+                                  <span className="text-gray-400"> (总计 {allFeeItems.length})</span>
+                                )}
+                              </span>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -1844,7 +1994,7 @@ function ProductFeeSelectModal({
                                 }}
                                 className="text-xs text-green-600 hover:text-green-700"
                               >
-                                {selectedCount === feeItems.length ? '取消全选' : '全选'}
+                                {selectedCount === feeItems.length && feeItems.length > 0 ? '取消全选' : '全选'}
                               </button>
                             </div>
                             
@@ -1883,8 +2033,28 @@ function ProductFeeSelectModal({
                                       {item.feeNameEn && (
                                         <div className="text-xs text-gray-500">{item.feeNameEn}</div>
                                       )}
+                                      {/* 显示路线信息 */}
+                                      {(item.routeFrom || item.routeTo || item.returnPoint || item.city) && (
+                                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                                          {(item.routeFrom || item.routeTo || item.city) && (
+                                            <span className="text-blue-600">
+                                              📍 {item.routeFrom || '-'} → {item.city ? `${item.city}${item.routeTo ? ` (${item.routeTo})` : ''}` : item.routeTo || '-'}
+                                            </span>
+                                          )}
+                                          {item.returnPoint && (
+                                            <span className="text-green-600">
+                                              🔄 还柜: {item.returnPoint}
+                                            </span>
+                                          )}
+                                          {item.transportMode && (
+                                            <span className="text-purple-600">
+                                              🚛 {item.transportMode}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
                                       {item.feeCategory && (
-                                        <div className="mt-1 text-xs text-blue-600">
+                                        <div className="mt-1 text-xs text-gray-500">
                                           分类: {feeCategories.find(c => c.value === item.feeCategory)?.label || item.feeCategory}
                                         </div>
                                       )}

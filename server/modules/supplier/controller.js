@@ -292,6 +292,7 @@ export async function createSupplierPrice(req, res) {
     
     const result = await model.createSupplierPrice({
       supplierId: id,
+      supplierName: supplier.supplierName,  // 添加供应商名称
       category,
       name,
       nameEn,

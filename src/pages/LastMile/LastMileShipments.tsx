@@ -553,6 +553,7 @@ export default function LastMileShipments() {
               placeholder="搜索运单号、收件人..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchShipments()}
               className="w-full pl-9 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>

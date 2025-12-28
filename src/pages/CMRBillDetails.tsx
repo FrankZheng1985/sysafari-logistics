@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Truck, FileText, Clock, 
   Upload, Download, Trash2, File, Image, FileArchive, Loader2,
-  CheckCircle, AlertTriangle, XCircle, MapPin
+  CheckCircle, AlertTriangle, XCircle, MapPin, Lock
 } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 import Timeline, { TimelineItem } from '../components/Timeline'
 import CMRModal, { type CMRDetail } from '../components/CMRModal'
 import { 
@@ -24,6 +25,7 @@ import {
 export default function CMRBillDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { hasPermission } = useAuth()
   
   const [activeTab, setActiveTab] = useState<'info' | 'files' | 'timeline'>('info')
   const [billDetail, setBillDetail] = useState<BillOfLading | null>(null)
@@ -287,6 +289,15 @@ export default function CMRBillDetails() {
   const deliveryStatus = getDeliveryStatusStyle(billDetail.deliveryStatus || '待派送')
   const cmrDetail = parseCMRDetail()
   
+  // 判断提单是否已完成（已完成或已归档状态）
+  const isCompleted = billDetail?.status === '已完成' || billDetail?.status === '已归档'
+  
+  // 判断用户是否有财务管理权限（财务人员可以修改已完成的提单）
+  const hasFinancePermission = hasPermission('finance:manage') || hasPermission('finance:fee_manage')
+  
+  // 判断是否可以编辑（未完成 或 有财务权限）
+  const canEdit = !isCompleted || hasFinancePermission
+  
   return (
     <div className="h-full flex flex-col bg-white">
       {/* 顶部导航 */}
@@ -308,11 +319,19 @@ export default function CMRBillDetails() {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* 已完成提示 */}
+          {isCompleted && (
+            <div className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+              <Lock className="w-3 h-3" />
+              <span>已完成</span>
+              {!hasFinancePermission && <span className="text-amber-500">（仅财务可改）</span>}
+            </div>
+          )}
           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${deliveryStatus.bg} ${deliveryStatus.text}`}>
             {deliveryStatus.icon}
             {billDetail.deliveryStatus || '待派送'}
           </span>
-          {billDetail.deliveryStatus !== '已送达' && billDetail.deliveryStatus !== '已完成' && (
+          {canEdit && billDetail.deliveryStatus !== '已送达' && billDetail.deliveryStatus !== '已完成' && (
             <button
               onClick={() => setCmrModalVisible(true)}
               className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 flex items-center gap-1"
@@ -575,33 +594,46 @@ export default function CMRBillDetails() {
                   <Upload className="w-3 h-3 text-primary-600" />
                   文件上传
                 </h3>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                  <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
-                    uploading 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-primary-600 text-white hover:bg-primary-700'
-                  }`}>
-                    {uploading ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        上传中 {uploadProgress}%
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3 h-3" />
-                        选择文件
-                      </>
-                    )}
+                {canEdit ? (
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                      uploading 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-primary-600 text-white hover:bg-primary-700'
+                    }`}>
+                      {uploading ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          上传中 {uploadProgress}%
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3 h-3" />
+                          选择文件
+                        </>
+                      )}
+                    </span>
+                  </label>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-gray-100 text-gray-400 cursor-not-allowed">
+                    <Lock className="w-3 h-3" />
+                    已锁定
                   </span>
-                </label>
+                )}
               </div>
+              {!canEdit && (
+                <div className="flex items-center gap-1 px-2 py-1.5 mb-3 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                  <Lock className="w-3 h-3" />
+                  <span>提单已完成，仅财务人员可上传文件</span>
+                </div>
+              )}
               <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center">
                 <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
                 <p className="text-xs text-gray-500">点击上方按钮或拖拽文件到此处上传</p>
@@ -643,13 +675,15 @@ export default function CMRBillDetails() {
                         >
                           <Download className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleFileDelete(file.id, file.fileName)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded"
-                          title="删除"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => handleFileDelete(file.id, file.fileName)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded"
+                            title="删除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

@@ -99,6 +99,7 @@ export default function FinanceDashboard() {
 
   const getCategoryName = (category: string) => {
     const names: Record<string, string> = {
+      // 标准分类（小写）
       freight: '运费',
       transport: '运输费',
       customs: '关税',
@@ -111,10 +112,20 @@ export default function FinanceDashboard() {
       documentation: '文件费',
       port: '港口费',
       service: '服务费',
-      package: '包装费',
-      other: '其他费用'
+      package: '清提派业务',
+      other: '其他费用',
+      clearance: '清关服务',
+      thc: '港杂费',
+      // 服务费类别英文代码（来自基础数据）
+      'export customs clearance services': '出口报关服务',
+      'document fees': '文件费',
+      'document exchange fee': '换单费',
+      'tax fees': '税务费',
+      "importer's agency fee": '税号使用费',
+      'management fee': '管理费',
     }
-    return names[category] || category
+    const lowerCategory = category?.toLowerCase() || ''
+    return names[lowerCategory] || category
   }
 
   if (loading) {

@@ -37,7 +37,12 @@ interface FeeItem {
   costPrice?: number | null
   profitType?: 'amount' | 'rate'
   profitValue?: number
-  billingType?: 'fixed' | 'actual'  // 计费类型: fixed=固定价格, actual=按实际收费
+  billingType?: 'fixed' | 'actual' | 'percentage'  // 计费类型: fixed=固定价格, actual=按实际收费, percentage=按百分比（垫付金额）
+  // 路线信息（运输服务）
+  routeFrom?: string | null     // 起运地
+  routeTo?: string | null       // 目的地
+  postalCode?: string | null    // 邮编
+  returnPoint?: string | null   // 还柜点
 }
 
 interface Supplier {
@@ -56,8 +61,12 @@ interface SupplierPrice {
   unit: string
   unitPrice: number
   currency: string
-  routeFrom?: string
-  routeTo?: string
+  routeFrom?: string      // 起运地
+  routeTo?: string        // 目的地
+  city?: string           // 城市
+  postalCode?: string     // 邮编
+  returnPoint?: string    // 还柜点
+  transportMode?: string  // 运输方式
 }
 
 // 服务费类别接口（从基础数据获取）
@@ -68,6 +77,8 @@ interface ServiceFeeCategory {
   description?: string
   sortOrder?: number
   status: string
+  parentId?: string | null
+  level?: number
 }
 
 // 费用分类映射 - 支持多种格式：小写英文、中文、大写英文
@@ -102,10 +113,85 @@ const FEE_CATEGORIES: Record<string, { label: string; color: string }> = {
   '换单费': { label: '换单', color: 'bg-cyan-100 text-cyan-700' },
   '港杂费': { label: 'THC', color: 'bg-orange-100 text-orange-700' },
   '税务费': { label: '税费', color: 'bg-amber-100 text-amber-700' },
-  '进口商代理费': { label: '代理费', color: 'bg-indigo-100 text-indigo-700' },
+  '税号使用费': { label: '税号使用费', color: 'bg-indigo-100 text-indigo-700' },
   '管理费': { label: '管理费', color: 'bg-gray-100 text-gray-700' },
   '其他服务': { label: '其他', color: 'bg-gray-100 text-gray-700' },
   '出口报关服务': { label: '出口报关', color: 'bg-purple-100 text-purple-700' }
+}
+
+// 分类颜色映射（用于动态类别，支持父级和子级code）
+const CATEGORY_COLORS: Record<string, string> = {
+  // 父级分类 code
+  'transport': 'bg-blue-100 text-blue-700',
+  'clearance': 'bg-purple-100 text-purple-700',
+  'warehouse': 'bg-orange-100 text-orange-700',
+  'tax fees': 'bg-amber-100 text-amber-700',
+  'thc': 'bg-orange-100 text-orange-700',
+  'document exchange fee': 'bg-cyan-100 text-cyan-700',
+  "importer's agency fee": 'bg-indigo-100 text-indigo-700',
+  'document fees': 'bg-cyan-100 text-cyan-700',
+  'management fee': 'bg-gray-100 text-gray-700',
+  'other': 'bg-gray-100 text-gray-700',
+  'port charges': 'bg-indigo-100 text-indigo-700',
+  'export customs clearance services': 'bg-purple-100 text-purple-700',
+  'truck waiting fee': 'bg-yellow-100 text-yellow-700',
+  'inspection fee': 'bg-rose-100 text-rose-700',
+  'clearing and dispatching business': 'bg-emerald-100 text-emerald-700',
+  'operation fee': 'bg-purple-100 text-purple-700',
+  // 运输服务子类别
+  'transportation fees': 'bg-blue-100 text-blue-700',
+  'transportation fees to remote areas': 'bg-blue-100 text-blue-700',
+  'out-of-town cabinet return fee': 'bg-blue-100 text-blue-700',
+  'order loss fee': 'bg-blue-100 text-blue-700',
+  // 仓储服务子类别  
+  'unloading fee': 'bg-orange-100 text-orange-700',
+  'scanning fee': 'bg-orange-100 text-orange-700',
+  'finding goods labor cost': 'bg-orange-100 text-orange-700',
+  'loading fee': 'bg-orange-100 text-orange-700',
+  'storage fee': 'bg-orange-100 text-orange-700',
+  // 清关服务子类别
+  'customs clearance related service fees': 'bg-purple-100 text-purple-700',
+  'customs re-declaration': 'bg-purple-100 text-purple-700',
+  'customs clearance consultation fee': 'bg-purple-100 text-purple-700',
+  'order splitting fee': 'bg-purple-100 text-purple-700',
+  'multiple import vat declarations': 'bg-purple-100 text-purple-700',
+  // 文件费子类别
+  'transfer t1 fee': 'bg-cyan-100 text-cyan-700',
+  'hs code': 'bg-cyan-100 text-cyan-700',
+  'concealment': 'bg-cyan-100 text-cyan-700',
+  'file error fee': 'bg-cyan-100 text-cyan-700',
+  'customs fines': 'bg-cyan-100 text-cyan-700',
+  'one bill of lading for multiple containers': 'bg-cyan-100 text-cyan-700',
+  // 换单费子类别
+  'dock document exchange': 'bg-cyan-100 text-cyan-700',
+  'airport document exchange': 'bg-cyan-100 text-cyan-700',
+  'railway document exchange': 'bg-cyan-100 text-cyan-700',
+  // 港杂费子类别
+  'port charges for shipowners': 'bg-indigo-100 text-indigo-700',
+  'dock fees': 'bg-indigo-100 text-indigo-700',
+  'x-ray scanning': 'bg-indigo-100 text-indigo-700',
+  'container gas detection': 'bg-indigo-100 text-indigo-700',
+  'demurrage': 'bg-indigo-100 text-indigo-700',
+  // 税务费子类别
+  'duty': 'bg-amber-100 text-amber-700',
+  'vat': 'bg-amber-100 text-amber-700',
+  // 进口商代理费子类别
+  'importer as an agent for import': 'bg-indigo-100 text-indigo-700',
+  'tax id usage fee': 'bg-indigo-100 text-indigo-700',
+  'tax agency services': 'bg-indigo-100 text-indigo-700',
+  // 管理费子类别
+  'bill of lading management fee': 'bg-gray-100 text-gray-700',
+  'tax agency fees': 'bg-gray-100 text-gray-700',
+  // 卡车等待费子类别
+  'unloading waiting fee': 'bg-yellow-100 text-yellow-700',
+  'truck unloading overnight fee': 'bg-yellow-100 text-yellow-700',
+  'customs clearance truck waiting fees': 'bg-yellow-100 text-yellow-700',
+  'weekend waiting fee': 'bg-yellow-100 text-yellow-700',
+  // 查验费子类别
+  'port inspection fee': 'bg-rose-100 text-rose-700',
+  'customs clearance inspection fee': 'bg-rose-100 text-rose-700',
+  // 其他服务子类别
+  'ups cost': 'bg-gray-100 text-gray-700',
 }
 
 export default function ProductPricing() {
@@ -153,7 +239,12 @@ export default function ProductPricing() {
     costPrice: '' as string | number,
     profitType: 'amount' as 'amount' | 'rate',
     profitValue: '' as string | number,
-    billingType: 'fixed' as 'fixed' | 'actual'  // 计费类型
+    billingType: 'fixed' as 'fixed' | 'actual' | 'percentage',  // 计费类型
+    // 路线信息
+    routeFrom: '' as string,      // 起运地
+    routeTo: '' as string,        // 目的地
+    postalCode: '' as string,     // 邮编
+    returnPoint: '' as string     // 还柜点
   })
   
   const [submitting, setSubmitting] = useState(false)
@@ -369,10 +460,76 @@ export default function ProductPricing() {
       const response = await fetch(`${API_BASE}/api/service-fee-categories?status=active`)
       const data = await response.json()
       if (data.errCode === 200) {
-        setServiceCategories(data.data || [])
+        // 对数据进行排序：父级分类在前，子级紧随其后
+        const sorted = sortCategoriesWithChildren(data.data || [])
+        setServiceCategories(sorted)
       }
     } catch (error) {
       console.error('加载服务类别失败:', error)
+    }
+  }
+
+  // 排序服务类别：父级在前，子级紧随其后
+  const sortCategoriesWithChildren = (data: ServiceFeeCategory[]): ServiceFeeCategory[] => {
+    const result: ServiceFeeCategory[] = []
+    const topLevel = data.filter(item => !item.parentId)
+    const childrenMap = new Map<string, ServiceFeeCategory[]>()
+    
+    // 构建子分类映射
+    data.forEach(item => {
+      if (item.parentId) {
+        if (!childrenMap.has(item.parentId)) {
+          childrenMap.set(item.parentId, [])
+        }
+        childrenMap.get(item.parentId)!.push(item)
+      }
+    })
+    
+    // 按排序值排序顶级分类，然后插入子分类
+    topLevel
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      .forEach(parent => {
+        result.push(parent)
+        const children = childrenMap.get(parent.id) || []
+        children
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+          .forEach(child => result.push(child))
+      })
+    
+    return result
+  }
+
+  // 获取费用类别的显示信息（优先从动态数据获取，再fallback到硬编码映射）
+  const getCategoryDisplay = (categoryValue: string) => {
+    if (!categoryValue) {
+      return { label: '其他', color: 'bg-gray-100 text-gray-700' }
+    }
+    
+    // 先从动态加载的类别中查找（通过code或name匹配，忽略大小写）
+    const dynamicCategory = serviceCategories.find(
+      cat => cat.code?.toLowerCase() === categoryValue.toLowerCase() || 
+             cat.name === categoryValue
+    )
+    
+    if (dynamicCategory) {
+      // 根据code获取颜色（转为小写匹配），如果没有则使用默认蓝色
+      const colorKey = dynamicCategory.code?.toLowerCase() || ''
+      const color = CATEGORY_COLORS[colorKey] || 'bg-blue-100 text-blue-700'
+      return { label: dynamicCategory.name, color }
+    }
+    
+    // 再从硬编码映射中查找（同时尝试原值和小写）
+    if (FEE_CATEGORIES[categoryValue]) {
+      return FEE_CATEGORIES[categoryValue]
+    }
+    if (FEE_CATEGORIES[categoryValue.toLowerCase()]) {
+      return FEE_CATEGORIES[categoryValue.toLowerCase()]
+    }
+    
+    // 最后返回默认值（直接使用原值作为标签）
+    return { 
+      label: categoryValue, 
+      color: 'bg-gray-100 text-gray-700' 
     }
   }
 
@@ -439,7 +596,12 @@ export default function ProductPricing() {
       supplierName: selectedSupplier?.supplierName || price.supplierName || '',
       costPrice: price.unitPrice,
       // 如果还没有设置销售价，默认设为成本价
-      standardPrice: prev.standardPrice || String(price.unitPrice)
+      standardPrice: prev.standardPrice || String(price.unitPrice),
+      // 复制路线信息
+      routeFrom: price.routeFrom || prev.routeFrom || '',
+      routeTo: price.routeTo || prev.routeTo || '',
+      postalCode: price.postalCode || prev.postalCode || '',
+      returnPoint: price.returnPoint || prev.returnPoint || ''
     }))
     setShowSupplierPicker(false)
   }
@@ -881,7 +1043,12 @@ export default function ProductPricing() {
       costPrice: feeItem.costPrice || '',
       profitType: feeItem.profitType || 'amount',
       profitValue: feeItem.profitValue || '',
-      billingType: feeItem.billingType || 'fixed'
+      billingType: feeItem.billingType || 'fixed',
+      // 路线信息
+      routeFrom: feeItem.routeFrom || '',
+      routeTo: feeItem.routeTo || '',
+      postalCode: feeItem.postalCode || '',
+      returnPoint: feeItem.returnPoint || ''
     })
     setShowFeeItemModal(true)
   }
@@ -898,6 +1065,12 @@ export default function ProductPricing() {
     // 固定价格类型必须输入价格
     if (feeItemForm.billingType === 'fixed' && finalPrice <= 0) {
       alert('固定价格类型必须输入价格')
+      return
+    }
+    
+    // 按百分比类型必须输入百分比值
+    if (feeItemForm.billingType === 'percentage' && finalPrice <= 0) {
+      alert('按百分比类型必须输入百分比值')
       return
     }
     
@@ -962,7 +1135,7 @@ export default function ProductPricing() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title="报价管理"
+        title="产品定价"
         tabs={tabs}
         activeTab="/tools/product-pricing"
         onTabChange={(path) => navigate(path)}
@@ -979,6 +1152,7 @@ export default function ProductPricing() {
                 placeholder="搜索产品名称或编码..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && loadProducts()}
                 className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
@@ -1211,6 +1385,7 @@ export default function ProductPricing() {
                                 <th className="text-left px-3 py-2 font-medium text-gray-600">费用名称</th>
                                 <th className="text-left px-3 py-2 font-medium text-gray-600">类别</th>
                                 <th className="text-left px-3 py-2 font-medium text-gray-600">单位</th>
+                                <th className="text-left px-3 py-2 font-medium text-gray-600">路线/目的地</th>
                                 <th className="text-right px-3 py-2 font-medium text-gray-600">成本价</th>
                                 <th className="text-right px-3 py-2 font-medium text-gray-600">销售价</th>
                                 <th className="text-center px-3 py-2 font-medium text-gray-600">必选</th>
@@ -1244,13 +1419,35 @@ export default function ProductPricing() {
                                     )}
                                   </td>
                                   <td className="px-3 py-2">
-                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${
-                                      FEE_CATEGORIES[item.feeCategory]?.color || FEE_CATEGORIES.other.color
-                                    }`}>
-                                      {FEE_CATEGORIES[item.feeCategory]?.label || '其他'}
-                                    </span>
+                                    {(() => {
+                                      const display = getCategoryDisplay(item.feeCategory)
+                                      return (
+                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${display.color}`}>
+                                          {display.label}
+                                        </span>
+                                      )
+                                    })()}
                                   </td>
                                   <td className="px-3 py-2 text-gray-600">{item.unit || '-'}</td>
+                                  <td className="px-3 py-2">
+                                    {(item.routeFrom || item.routeTo || item.postalCode || item.returnPoint) ? (
+                                      <div className="text-xs">
+                                        {(item.routeFrom || item.routeTo) && (
+                                          <div className="text-gray-700">
+                                            {item.routeFrom || '-'} → {item.routeTo || '-'}
+                                          </div>
+                                        )}
+                                        {item.postalCode && (
+                                          <div className="text-gray-500">{item.postalCode}</div>
+                                        )}
+                                        {item.returnPoint && (
+                                          <div className="text-gray-400">还柜: {item.returnPoint}</div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </td>
                                   <td className="px-3 py-2 text-right">
                                     {item.costPrice ? (
                                       <span className="text-gray-600">
@@ -1265,15 +1462,38 @@ export default function ProductPricing() {
                                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
                                         按实际
                                       </span>
+                                    ) : item.billingType === 'percentage' ? (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                                        {item.standardPrice}%
+                                      </span>
                                     ) : (
                                       <>
                                     <span className="font-medium text-gray-900">
                                       {item.currency} {item.standardPrice?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                                     </span>
                                         {item.costPrice && item.profitValue ? (
-                                          <div className="text-xs text-green-600">
-                                            +{item.profitType === 'rate' ? `${item.profitValue}%` : `${item.profitValue}`}
-                                      </div>
+                                          <>
+                                            <div className="text-xs text-green-600">
+                                              +{item.profitType === 'rate' ? `${item.profitValue}%` : item.profitValue}
+                                            </div>
+                                            {/* 显示取整差值（如果有） */}
+                                            {(() => {
+                                              // 计算原始价格（成本+利润）
+                                              const rawPrice = item.profitType === 'rate'
+                                                ? item.costPrice * (1 + item.profitValue / 100)
+                                                : item.costPrice + item.profitValue
+                                              // 取整差值 = 销售价 - 原始价格
+                                              const roundingDiff = Math.round((item.standardPrice - rawPrice) * 100) / 100
+                                              if (roundingDiff > 0) {
+                                                return (
+                                                  <div className="text-xs text-blue-600">
+                                                    +{roundingDiff}
+                                                  </div>
+                                                )
+                                              }
+                                              return null
+                                            })()}
+                                          </>
                                         ) : null}
                                       </>
                                     )}
@@ -1590,9 +1810,15 @@ export default function ProductPricing() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">请选择类别</option>
-                    {serviceCategories.map((cat) => (
-                      <option key={cat.id} value={cat.code}>{cat.name}</option>
-                    ))}
+                    {serviceCategories.map((cat) => {
+                      const isSubCategory = !!cat.parentId
+                      const prefix = isSubCategory ? '　└─ ' : ''
+                      return (
+                        <option key={cat.id} value={cat.code}>
+                          {prefix}{cat.name}
+                        </option>
+                      )
+                    })}
                   </select>
                 </div>
                 <div>
@@ -1617,7 +1843,7 @@ export default function ProductPricing() {
                       name="billingType"
                       value="fixed"
                       checked={feeItemForm.billingType === 'fixed'}
-                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, billingType: e.target.value as 'fixed' | 'actual' }))}
+                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, billingType: e.target.value as 'fixed' | 'actual' | 'percentage' }))}
                       className="w-4 h-4 text-primary-600"
                     />
                     <span className="text-sm text-gray-700">固定价格</span>
@@ -1628,78 +1854,177 @@ export default function ProductPricing() {
                       name="billingType"
                       value="actual"
                       checked={feeItemForm.billingType === 'actual'}
-                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, billingType: e.target.value as 'fixed' | 'actual' }))}
+                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, billingType: e.target.value as 'fixed' | 'actual' | 'percentage' }))}
                       className="w-4 h-4 text-primary-600"
                     />
                     <span className="text-sm text-gray-700">按实际收费</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="billingType"
+                      value="percentage"
+                      checked={feeItemForm.billingType === 'percentage'}
+                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, billingType: e.target.value as 'fixed' | 'actual' | 'percentage' }))}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-gray-700">按百分比</span>
                   </label>
                 </div>
                 {feeItemForm.billingType === 'actual' && (
                   <p className="text-xs text-amber-600 mt-1">⚠️ 按实际收费项目将根据实际发生金额计费</p>
                 )}
+                {feeItemForm.billingType === 'percentage' && (
+                  <p className="text-xs text-blue-600 mt-1">📊 按垫付金额的百分比收取手续费（如：关税代垫、增值税代垫）</p>
+                )}
               </div>
               
               {/* 价格行 */}
-              <div className="grid grid-cols-4 gap-4">
-                {/* 货币 */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">货币</label>
+              {feeItemForm.billingType === 'percentage' ? (
+                // 按百分比模式 - 简化显示
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      百分比率 (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={feeItemForm.standardPrice}
+                        onChange={(e) => setFeeItemForm(prev => ({ ...prev, standardPrice: e.target.value }))}
+                        placeholder="如：2 表示 2%"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      例：垫付 €1000，收取 {feeItemForm.standardPrice || 2}% = €{((parseFloat(String(feeItemForm.standardPrice)) || 2) * 10).toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">货币</label>
                     <select
                       value={feeItemForm.currency}
                       onChange={(e) => setFeeItemForm(prev => ({ ...prev, currency: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                       <option value="EUR">EUR</option>
                       <option value="CNY">CNY</option>
                       <option value="USD">USD</option>
                     </select>
+                  </div>
                 </div>
-                {/* 标准价格 */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {feeItemForm.costPrice ? '销售价格' : '标准价格'}
-                  </label>
+              ) : (
+                // 固定价格/按实际模式
+                <div className="grid grid-cols-4 gap-4">
+                  {/* 货币 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">货币</label>
+                      <select
+                        value={feeItemForm.currency}
+                        onChange={(e) => setFeeItemForm(prev => ({ ...prev, currency: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="EUR">EUR</option>
+                        <option value="CNY">CNY</option>
+                        <option value="USD">USD</option>
+                      </select>
+                  </div>
+                  {/* 标准价格 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      {feeItemForm.costPrice ? '销售价格' : '标准价格'}
+                    </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                      value={calculatedPrice !== null ? calculatedPrice.toFixed(2) : feeItemForm.standardPrice}
+                        onChange={(e) => setFeeItemForm(prev => ({ ...prev, standardPrice: e.target.value }))}
+                        placeholder="0.00"
+                      disabled={!!feeItemForm.costPrice || feeItemForm.billingType === 'actual'}
+                      className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        feeItemForm.costPrice || feeItemForm.billingType === 'actual' ? 'bg-gray-100 text-gray-600' : ''
+                      }`}
+                      />
+                    {feeItemForm.costPrice && (
+                      <p className="text-xs text-gray-500 mt-1">自动计算</p>
+                    )}
+                    </div>
+                  {/* 最低价 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">最低价</label>
                     <input
                       type="number"
                       step="0.01"
-                    value={calculatedPrice !== null ? calculatedPrice.toFixed(2) : feeItemForm.standardPrice}
-                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, standardPrice: e.target.value }))}
-                      placeholder="0.00"
-                    disabled={!!feeItemForm.costPrice}
-                    className={`w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                      feeItemForm.costPrice ? 'bg-gray-100 text-gray-600' : ''
-                    }`}
+                      value={feeItemForm.minPrice}
+                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, minPrice: e.target.value }))}
+                      placeholder="可选"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
-                  {feeItemForm.costPrice && (
-                    <p className="text-xs text-gray-500 mt-1">自动计算</p>
-                  )}
                   </div>
-                {/* 最低价 */}
+                  {/* 最高价 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">最高价</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={feeItemForm.maxPrice}
+                      onChange={(e) => setFeeItemForm(prev => ({ ...prev, maxPrice: e.target.value }))}
+                      placeholder="可选"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* 路线信息（运输服务用） */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">最低价</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">起运地</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    value={feeItemForm.minPrice}
-                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, minPrice: e.target.value }))}
-                    placeholder="可选"
+                    type="text"
+                    value={feeItemForm.routeFrom}
+                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, routeFrom: e.target.value }))}
+                    placeholder="如：鹿特丹"
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
-                {/* 最高价 */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">最高价</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">目的地/邮编</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    value={feeItemForm.maxPrice}
-                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, maxPrice: e.target.value }))}
-                    placeholder="可选"
+                    type="text"
+                    value={feeItemForm.routeTo}
+                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, routeTo: e.target.value }))}
+                    placeholder="如：DE-41199"
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
               
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">邮编</label>
+                  <input
+                    type="text"
+                    value={feeItemForm.postalCode}
+                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, postalCode: e.target.value }))}
+                    placeholder="如：41199"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">还柜点</label>
+                  <input
+                    type="text"
+                    value={feeItemForm.returnPoint}
+                    onChange={(e) => setFeeItemForm(prev => ({ ...prev, returnPoint: e.target.value }))}
+                    placeholder="如：鹿特丹"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>
                 <input
@@ -1809,7 +2134,7 @@ export default function ProductPricing() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="搜索报价项..."
+                      placeholder="搜索费用名称/路线/城市/邮编..."
                       value={priceSearch}
                       onChange={(e) => setPriceSearch(e.target.value)}
                       disabled={!selectedSupplier}
@@ -1836,10 +2161,21 @@ export default function ProductPricing() {
                   ) : (
                     <div className="divide-y">
                       {supplierPrices
-                        .filter(p => !priceSearch || 
-                          p.name?.toLowerCase().includes(priceSearch.toLowerCase()) ||
-                          p.nameEn?.toLowerCase().includes(priceSearch.toLowerCase())
-                        )
+                        .filter(p => {
+                          if (!priceSearch) return true
+                          const search = priceSearch.toLowerCase()
+                          return (
+                            p.name?.toLowerCase().includes(search) ||
+                            p.nameEn?.toLowerCase().includes(search) ||
+                            p.category?.toLowerCase().includes(search) ||
+                            p.routeFrom?.toLowerCase().includes(search) ||
+                            p.routeTo?.toLowerCase().includes(search) ||
+                            p.city?.toLowerCase().includes(search) ||
+                            p.postalCode?.toLowerCase().includes(search) ||
+                            p.returnPoint?.toLowerCase().includes(search) ||
+                            p.transportMode?.toLowerCase().includes(search)
+                          )
+                        })
                         .map(price => (
                           <button
                             key={price.id}
@@ -2161,7 +2497,7 @@ export default function ProductPricing() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="搜索报价项..."
+                      placeholder="搜索费用名称/路线/城市/邮编..."
                       value={priceSearch}
                       onChange={(e) => setPriceSearch(e.target.value)}
                       disabled={!selectedSupplier}
@@ -2196,10 +2532,21 @@ export default function ProductPricing() {
                   ) : (
                     <div className="divide-y">
                       {supplierPrices
-                        .filter(p => !priceSearch || 
-                          p.name?.toLowerCase().includes(priceSearch.toLowerCase()) ||
-                          p.nameEn?.toLowerCase().includes(priceSearch.toLowerCase())
-                        )
+                        .filter(p => {
+                          if (!priceSearch) return true
+                          const search = priceSearch.toLowerCase()
+                          return (
+                            p.name?.toLowerCase().includes(search) ||
+                            p.nameEn?.toLowerCase().includes(search) ||
+                            p.category?.toLowerCase().includes(search) ||
+                            p.routeFrom?.toLowerCase().includes(search) ||
+                            p.routeTo?.toLowerCase().includes(search) ||
+                            p.city?.toLowerCase().includes(search) ||
+                            p.postalCode?.toLowerCase().includes(search) ||
+                            p.returnPoint?.toLowerCase().includes(search) ||
+                            p.transportMode?.toLowerCase().includes(search)
+                          )
+                        })
                         .map(price => (
                           <label
                             key={price.id}

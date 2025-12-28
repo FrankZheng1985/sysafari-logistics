@@ -139,12 +139,14 @@ export default function SupplierPriceModal({
 
     setLoading(true)
     try {
-      const url = data?.id 
-        ? `${API_BASE}/api/suppliers/${supplierId}/prices/${data.id}`
+      // 修复：使用更严格的判断方式，避免 id 为假值时误判
+      const isEditing = Boolean(data && data.id)
+      const url = isEditing 
+        ? `${API_BASE}/api/suppliers/${supplierId}/prices/${data!.id}`
         : `${API_BASE}/api/suppliers/${supplierId}/prices`
       
       const response = await fetch(url, {
-        method: data?.id ? 'PUT' : 'POST',
+        method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           category: formData.category,

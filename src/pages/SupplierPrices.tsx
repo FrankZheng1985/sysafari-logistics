@@ -34,15 +34,18 @@ interface SupplierPrice {
   city?: string           // 城市
   returnPoint?: string    // 还柜点
   transportMode?: string  // 运输方式（空运/海运）
-  billingType?: string    // 计费类型（fixed/actual）
+  billingType?: string    // 计费类型（fixed/actual/percentage）
 }
 
 // 费用类别接口
 interface ServiceFeeCategory {
-  id: number
+  id: string
   name: string
   code: string
   status: string
+  parentId?: string | null
+  level?: number
+  sortOrder?: number
 }
 
 const CURRENCIES = [
@@ -92,6 +95,12 @@ export default function SupplierPrices() {
     billingType: 'fixed' // 计费类型（fixed/actual）
   })
 
+  // 费用名称相关状态
+  const [subCategories, setSubCategories] = useState<ServiceFeeCategory[]>([])  // 选中类别的子分类
+  const [isNewFeeName, setIsNewFeeName] = useState(false)  // 是否是新的费用名称
+  const [showFeeNameInput, setShowFeeNameInput] = useState(false)  // 是否显示输入框
+  const [submittingApproval, setSubmittingApproval] = useState(false)  // 是否正在提交审批
+
   const tabs = [
     { key: 'product-pricing', label: '产品定价', path: '/tools/product-pricing' },
     { key: 'supplier-pricing', label: '供应商报价', path: '/suppliers/prices' },
@@ -133,10 +142,122 @@ export default function SupplierPrices() {
       const res = await fetch(`${API_BASE}/api/service-fee-categories?status=active`)
       const data = await res.json()
       if (data.errCode === 200) {
-        setFeeCategories(data.data || [])
+        // 对数据进行排序：父级分类在前，子级紧随其后
+        const sorted = sortCategoriesWithChildren(data.data || [])
+        setFeeCategories(sorted)
       }
     } catch (error) {
       console.error('加载费用类别失败:', error)
+    }
+  }
+
+  // 排序服务类别：父级在前，子级紧随其后
+  const sortCategoriesWithChildren = (data: ServiceFeeCategory[]): ServiceFeeCategory[] => {
+    const result: ServiceFeeCategory[] = []
+    const topLevel = data.filter(item => !item.parentId)
+    const childrenMap = new Map<string, ServiceFeeCategory[]>()
+    
+    // 构建子分类映射
+    data.forEach(item => {
+      if (item.parentId) {
+        if (!childrenMap.has(item.parentId)) {
+          childrenMap.set(item.parentId, [])
+        }
+        childrenMap.get(item.parentId)!.push(item)
+      }
+    })
+    
+    // 按排序值排序顶级分类，然后插入子分类
+    topLevel
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      .forEach(parent => {
+        result.push(parent)
+        const children = childrenMap.get(parent.id) || []
+        children
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+          .forEach(child => result.push(child))
+      })
+    
+    return result
+  }
+
+  // 获取选中类别的子分类
+  const getSubCategoriesForParent = (parentName: string): ServiceFeeCategory[] => {
+    // 先找到父级分类
+    const parent = feeCategories.find(cat => cat.name === parentName && !cat.parentId)
+    if (!parent) return []
+    // 返回该父级的所有子分类（使用字符串比较，兼容 id/parentId 类型不一致）
+    return feeCategories.filter(cat => String(cat.parentId) === String(parent.id))
+  }
+
+  // 当费用类别变化时，更新子分类列表
+  useEffect(() => {
+    if (formData.category) {
+      const subs = getSubCategoriesForParent(formData.category)
+      setSubCategories(subs)
+      // 如果是选择了父级分类，清空费用名称
+      const selectedCat = feeCategories.find(c => c.name === formData.category)
+      if (selectedCat && !selectedCat.parentId) {
+        // 如果当前名称不在子分类中，保留但标记为新名称
+        const existsInSubs = subs.some(s => s.name === formData.name)
+        if (!existsInSubs && formData.name) {
+          setIsNewFeeName(true)
+        }
+      }
+    } else {
+      setSubCategories([])
+    }
+  }, [formData.category, feeCategories])
+
+  // 获取父级分类ID
+  const getParentCategoryId = (parentName: string): string | null => {
+    const parent = feeCategories.find(cat => cat.name === parentName && !cat.parentId)
+    return parent?.id || null
+  }
+
+  // 提交新费用分类审批
+  const submitNewCategoryApproval = async () => {
+    if (!formData.name.trim() || !formData.category) {
+      alert('请填写费用名称和选择费用类别')
+      return
+    }
+
+    const parentId = getParentCategoryId(formData.category)
+    if (!parentId) {
+      alert('无法找到父级分类')
+      return
+    }
+
+    setSubmittingApproval(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/fee-item-approvals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approvalType: 'new_category',
+          feeName: formData.name.trim(),
+          feeNameEn: formData.nameEn.trim() || null,
+          parentCategoryId: parentId,
+          parentCategoryName: formData.category,
+          category: formData.category,
+          description: `新费用分类申请：在「${formData.category}」下添加子分类「${formData.name}」`,
+          requestedBy: 'current_user',  // TODO: 替换为实际登录用户
+          requestedByName: '当前用户'
+        })
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        alert(`✅ 已提交审批申请！\n\n新费用名称「${formData.name}」需要老板审批后才能使用。\n审批通过后会自动添加到「${formData.category}」分类下。`)
+        setIsNewFeeName(false)
+        setShowFeeNameInput(false)
+      } else {
+        alert(`提交失败: ${data.msg}`)
+      }
+    } catch (error) {
+      console.error('提交审批失败:', error)
+      alert('提交审批失败，请稍后重试')
+    } finally {
+      setSubmittingApproval(false)
     }
   }
 
@@ -239,6 +360,10 @@ export default function SupplierPrices() {
     }
     if (formData.billingType === 'fixed' && formData.unitPrice <= 0) {
       alert('固定价格类型需要填写单价')
+      return
+    }
+    if (formData.billingType === 'percentage' && formData.unitPrice <= 0) {
+      alert('按百分比类型需要填写百分比值')
       return
     }
     if (!selectedSupplier) return
@@ -347,12 +472,27 @@ export default function SupplierPrices() {
     }
   }
 
-  // 过滤采购价列表
+  // 过滤采购价列表（支持搜索所有显示字段）
   const filteredPrices = prices.filter(price => {
-    if (searchValue && !price.name.includes(searchValue) && !price.nameEn?.includes(searchValue)) {
-      return false
-    }
-    return true
+    if (!searchValue) return true
+    
+    const search = searchValue.toLowerCase()
+    
+    // 搜索所有显示的字段
+    return (
+      price.name?.toLowerCase().includes(search) ||           // 费用名称
+      price.nameEn?.toLowerCase().includes(search) ||         // 英文名称
+      price.category?.toLowerCase().includes(search) ||       // 分类
+      price.transportMode?.toLowerCase().includes(search) ||  // 运输方式
+      price.routeFrom?.toLowerCase().includes(search) ||      // 起运地
+      price.routeTo?.toLowerCase().includes(search) ||        // 目的地
+      price.city?.toLowerCase().includes(search) ||           // 城市
+      price.returnPoint?.toLowerCase().includes(search) ||    // 还柜点
+      price.unit?.toLowerCase().includes(search) ||           // 单位
+      price.currency?.toLowerCase().includes(search) ||       // 币种
+      price.notes?.toLowerCase().includes(search) ||          // 备注
+      String(price.unitPrice).includes(search)                // 单价
+    )
   })
 
   // 按类别分组
@@ -366,7 +506,7 @@ export default function SupplierPrices() {
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader
-        title="报价管理"
+        title="供应商报价"
         tabs={tabs}
         activeTab="/suppliers/prices"
         onTabChange={(path) => navigate(path)}
@@ -444,7 +584,8 @@ export default function SupplierPrices() {
                         type="text"
                         value={searchValue}
                         onChange={e => setSearchValue(e.target.value)}
-                        placeholder="搜索费用名称..."
+                        onKeyDown={(e) => e.key === 'Enter' && selectedSupplier && loadPrices(selectedSupplier.id)}
+                        placeholder="搜索费用名称/路线/城市/备注..."
                         className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                       />
                     </div>
@@ -560,6 +701,10 @@ export default function SupplierPrices() {
                                       <span className="inline-flex px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">
                                         按实际
                                       </span>
+                                    ) : price.billingType === 'percentage' ? (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-xs">
+                                        {price.unitPrice}%
+                                      </span>
                                     ) : (
                                       <>
                                         <span className="font-medium text-gray-900">
@@ -660,12 +805,19 @@ export default function SupplierPrices() {
                   </label>
                   <select
                     value={formData.category}
-                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    onChange={e => {
+                      setFormData({ ...formData, category: e.target.value, name: '' })
+                      setShowFeeNameInput(false)
+                      setIsNewFeeName(false)
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">请选择</option>
-                    {feeCategories.map(cat => (
-                      <option key={cat.id} value={cat.name}>{cat.name}</option>
+                    {/* 只显示顶级分类 */}
+                    {feeCategories.filter(cat => !cat.parentId).map(cat => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -697,18 +849,95 @@ export default function SupplierPrices() {
                 </div>
               </div>
 
-              {/* 费用名称 */}
+              {/* 费用名称 - 关联子分类 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   费用名称（中文） <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                  placeholder="如：海运费"
-                />
+                
+                {/* 有子分类时显示下拉选择 */}
+                {formData.category && subCategories.length > 0 && !showFeeNameInput ? (
+                  <div className="space-y-2">
+                    <select
+                      value={formData.name}
+                      onChange={e => {
+                        const value = e.target.value
+                        if (value === '__NEW__') {
+                          setShowFeeNameInput(true)
+                          setFormData({ ...formData, name: '' })
+                        } else {
+                          setFormData({ ...formData, name: value })
+                          setIsNewFeeName(false)
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">请选择费用名称</option>
+                      {subCategories.map(sub => (
+                        <option key={sub.id} value={sub.name}>{sub.name}</option>
+                      ))}
+                      <option value="__NEW__">➕ 新增费用名称（需审批）</option>
+                    </select>
+                  </div>
+                ) : formData.category && showFeeNameInput ? (
+                  /* 输入新费用名称 */
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={e => {
+                          setFormData({ ...formData, name: e.target.value })
+                          setIsNewFeeName(true)
+                        }}
+                        className="flex-1 px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 bg-orange-50"
+                        placeholder="输入新的费用名称"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowFeeNameInput(false)
+                          setFormData({ ...formData, name: '' })
+                          setIsNewFeeName(false)
+                        }}
+                        className="px-3 py-2 text-gray-500 hover:text-gray-700"
+                      >
+                        取消
+                      </button>
+                    </div>
+                    {formData.name && (
+                      <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                        <span className="text-orange-600 text-sm">
+                          ⚠️ 新费用名称「{formData.name}」需要提交审批
+                        </span>
+                        <button
+                          type="button"
+                          onClick={submitNewCategoryApproval}
+                          disabled={submittingApproval}
+                          className="ml-auto px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 disabled:opacity-50"
+                        >
+                          {submittingApproval ? '提交中...' : '提交审批'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* 未选择类别或无子分类时直接输入 */
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    placeholder={formData.category ? "直接输入或选择已有分类" : "请先选择费用类别"}
+                  />
+                )}
+                
+                {/* 提示信息 */}
+                {formData.category && subCategories.length === 0 && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    该类别暂无子分类，请直接输入费用名称
+                  </p>
+                )}
               </div>
 
               {/* 英文名称 */}
@@ -796,28 +1025,57 @@ export default function SupplierPrices() {
                     />
                     <span className="text-sm text-gray-700">按实际计算</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="billingType"
+                      value="percentage"
+                      checked={formData.billingType === 'percentage'}
+                      onChange={e => setFormData({ ...formData, billingType: e.target.value })}
+                      className="w-4 h-4 text-primary-600"
+                    />
+                    <span className="text-sm text-gray-700">按百分比</span>
+                  </label>
                 </div>
+                {formData.billingType === 'percentage' && (
+                  <p className="text-xs text-blue-600 mt-1">📊 按垫付金额的百分比收取手续费（如：关税代垫、增值税代垫）</p>
+                )}
               </div>
 
               {/* 单价和单位 */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    单价 {formData.billingType === 'fixed' && <span className="text-red-500">*</span>}
+                    {formData.billingType === 'percentage' ? '百分比率 (%)' : '单价'} {(formData.billingType === 'fixed' || formData.billingType === 'percentage') && <span className="text-red-500">*</span>}
                   </label>
                   <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={formData.billingType === 'actual' ? 0 : formData.unitPrice}
-                      onChange={e => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
-                      min="0"
-                      step="0.01"
-                      disabled={formData.billingType === 'actual'}
-                      placeholder={formData.billingType === 'actual' ? '按实际计算' : ''}
-                      className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 ${
-                        formData.billingType === 'actual' ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
-                      }`}
-                    />
+                    {formData.billingType === 'percentage' ? (
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          value={formData.unitPrice}
+                          onChange={e => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
+                          min="0"
+                          step="0.1"
+                          placeholder="如：2 表示 2%"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 pr-8"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                      </div>
+                    ) : (
+                      <input
+                        type="number"
+                        value={formData.billingType === 'actual' ? 0 : formData.unitPrice}
+                        onChange={e => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
+                        min="0"
+                        step="0.01"
+                        disabled={formData.billingType === 'actual'}
+                        placeholder={formData.billingType === 'actual' ? '按实际计算' : ''}
+                        className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                          formData.billingType === 'actual' ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''
+                        }`}
+                      />
+                    )}
                     <select
                       value={formData.currency}
                       onChange={e => setFormData({ ...formData, currency: e.target.value })}
@@ -828,6 +1086,11 @@ export default function SupplierPrices() {
                       ))}
                     </select>
                   </div>
+                  {formData.billingType === 'percentage' && formData.unitPrice > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      例：垫付 €1000，收取 {formData.unitPrice}% = €{(formData.unitPrice * 10).toFixed(2)}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">单位</label>

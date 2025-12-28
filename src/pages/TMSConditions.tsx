@@ -500,6 +500,7 @@ export default function TMSConditions() {
               placeholder="搜索条件..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchConditions()}
               className="pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 w-60 bg-white"
             />
           </div>

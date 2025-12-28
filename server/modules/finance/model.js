@@ -632,7 +632,7 @@ export async function deletePayment(id) {
 export async function getFees(params = {}) {
   const db = getDatabase()
   const { 
-    category, billId, customerId, supplierId, supplierName, feeType,
+    category, feeName, billId, customerId, supplierId, supplierName, feeType,
     startDate, endDate, search,
     page = 1, pageSize = 20 
   } = params
@@ -642,6 +642,7 @@ export async function getFees(params = {}) {
     return getFeesSimple({
       billId,
       category,
+      feeName,
       feeType,
       startDate,
       endDate,
@@ -659,9 +660,32 @@ export async function getFees(params = {}) {
     queryParams.push(feeType)
   }
   
+  // 支持按费用名称筛选（从统计卡片点击）
+  if (feeName) {
+    whereClause += ' AND f.fee_name = ?'
+    queryParams.push(feeName)
+  }
+  
   if (category) {
-    whereClause += ' AND f.category = ?'
-    queryParams.push(category)
+    // 支持按父级分类筛选：先查找是否有匹配的子分类
+    // 如果 category 是父级分类名称，则需要匹配所有子分类
+    whereClause += ` AND (
+      f.category = ? 
+      OR f.fee_name = ?
+      OR f.category IN (
+        SELECT code FROM service_fee_categories 
+        WHERE parent_id IN (
+          SELECT id FROM service_fee_categories WHERE name = ? OR code = ?
+        )
+      )
+      OR f.fee_name IN (
+        SELECT name FROM service_fee_categories 
+        WHERE parent_id IN (
+          SELECT id FROM service_fee_categories WHERE name = ? OR code = ?
+        )
+      )
+    )`
+    queryParams.push(category, category, category, category, category, category)
   }
   
   if (billId) {
@@ -709,16 +733,25 @@ export async function getFees(params = {}) {
     queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
-  // 步骤1: 获取不重复的订单分组数量（用于分页）
-  // 使用 COALESCE(b.order_number, f.bill_number, f.id) 作为分组键
+  // 步骤1: 获取费用总条数（用于显示）和订单分组数量（用于分页）
+  const countQuery = `
+    SELECT COUNT(*) as total_fees
+    FROM fees f 
+    LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
+    ${whereClause}
+  `
+  const totalFeesResult = await db.prepare(countQuery).get(...queryParams)
+  const totalFees = totalFeesResult?.total_fees || 0
+  
+  // 获取不重复的订单分组数量（用于分页）
   const countGroupQuery = `
     SELECT COUNT(DISTINCT COALESCE(b.order_number, f.bill_number, f.id)) as total
     FROM fees f 
     LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
     ${whereClause}
   `
-  const totalResult = await db.prepare(countGroupQuery).get(...queryParams)
-  const totalGroups = totalResult?.total || 0
+  const totalGroupsResult = await db.prepare(countGroupQuery).get(...queryParams)
+  const totalGroups = totalGroupsResult?.total || 0
   
   // 步骤2: 获取当前页的订单分组键列表
   const groupKeysQuery = `
@@ -765,7 +798,8 @@ export async function getFees(params = {}) {
   
   return {
     list: list.map(convertFeeToCamelCase),
-    total: totalGroups,  // 返回订单组总数，而不是费用记录总数
+    total: totalFees,  // 返回费用条数（与统计卡片一致）
+    totalGroups,  // 返回订单分组数（用于分页计算）
     page,
     pageSize
   }
@@ -776,7 +810,7 @@ export async function getFees(params = {}) {
  */
 async function getFeesSimple(params = {}) {
   const db = getDatabase()
-  const { billId, category, feeType, startDate, endDate, page = 1, pageSize = 20 } = params
+  const { billId, category, feeName, feeType, startDate, endDate, page = 1, pageSize = 20 } = params
   
   let whereClause = 'WHERE f.bill_id = ?'
   const queryParams = [billId]
@@ -786,9 +820,31 @@ async function getFeesSimple(params = {}) {
     queryParams.push(feeType)
   }
   
+  // 支持按费用名称筛选（从统计卡片点击）
+  if (feeName) {
+    whereClause += ' AND f.fee_name = ?'
+    queryParams.push(feeName)
+  }
+  
   if (category) {
-    whereClause += ' AND f.category = ?'
-    queryParams.push(category)
+    // 支持按父级分类筛选
+    whereClause += ` AND (
+      f.category = ? 
+      OR f.fee_name = ?
+      OR f.category IN (
+        SELECT code FROM service_fee_categories 
+        WHERE parent_id IN (
+          SELECT id FROM service_fee_categories WHERE name = ? OR code = ?
+        )
+      )
+      OR f.fee_name IN (
+        SELECT name FROM service_fee_categories 
+        WHERE parent_id IN (
+          SELECT id FROM service_fee_categories WHERE name = ? OR code = ?
+        )
+      )
+    )`
+    queryParams.push(category, category, category, category, category, category)
   }
   
   if (startDate) {
@@ -832,6 +888,7 @@ async function getFeesSimple(params = {}) {
 
 /**
  * 获取费用统计（按类别）
+ * 按照服务费分类的父级进行聚合
  */
 export async function getFeeStats(params = {}) {
   const db = getDatabase()
@@ -841,47 +898,103 @@ export async function getFeeStats(params = {}) {
   const queryParams = []
   
   if (billId) {
-    whereClause += ' AND bill_id = ?'
+    whereClause += ' AND f.bill_id = ?'
     queryParams.push(billId)
   }
   
   if (startDate) {
-    whereClause += ' AND fee_date >= ?'
+    whereClause += ' AND f.fee_date >= ?'
     queryParams.push(startDate)
   }
   
   if (endDate) {
-    whereClause += ' AND fee_date <= ?'
+    whereClause += ' AND f.fee_date <= ?'
     queryParams.push(endDate)
   }
   
   // 如果指定了费用类型，只统计该类型
   if (feeType) {
-    whereClause += ' AND fee_type = ?'
+    whereClause += ' AND f.fee_type = ?'
     queryParams.push(feeType)
   }
   
+  // 按服务费分类的父级进行分组统计
+  // 1. 先通过 category 或 fee_name 匹配服务费分类
+  // 2. 如果有父级分类，使用父级分类；否则使用自身分类
+  // 3. 按父级分类进行聚合统计
   const stats = await db.prepare(`
+    WITH fee_with_parent AS (
+      SELECT 
+        f.id,
+        f.category,
+        f.fee_name,
+        f.amount,
+        -- 尝试匹配服务费分类（通过 code 或 name）
+        COALESCE(
+          sfc_code.id,
+          sfc_name.id,
+          sfc_fee_name.id
+        ) as matched_category_id,
+        COALESCE(
+          sfc_code.parent_id,
+          sfc_name.parent_id,
+          sfc_fee_name.parent_id
+        ) as parent_id,
+        COALESCE(
+          sfc_code.name,
+          sfc_name.name,
+          sfc_fee_name.name,
+          f.category
+        ) as category_name
+      FROM fees f
+      LEFT JOIN service_fee_categories sfc_code 
+        ON LOWER(sfc_code.code) = LOWER(f.category)
+      LEFT JOIN service_fee_categories sfc_name 
+        ON LOWER(sfc_name.name) = LOWER(f.category)
+      LEFT JOIN service_fee_categories sfc_fee_name 
+        ON LOWER(sfc_fee_name.name) = LOWER(f.fee_name)
+      ${whereClause}
+    ),
+    fee_with_final_category AS (
+      SELECT 
+        fwp.*,
+        -- 如果有父级，获取父级分类信息
+        COALESCE(
+          parent_cat.name,
+          fwp.category_name,
+          fwp.category
+        ) as final_category,
+        COALESCE(
+          parent_cat.code,
+          (SELECT code FROM service_fee_categories WHERE id = fwp.matched_category_id),
+          fwp.category
+        ) as final_category_code
+      FROM fee_with_parent fwp
+      LEFT JOIN service_fee_categories parent_cat 
+        ON parent_cat.id = fwp.parent_id
+    )
     SELECT 
-      category,
+      final_category as category,
+      final_category_code as category_code,
       COUNT(*) as count,
       COALESCE(SUM(amount), 0) as total
-    FROM fees 
-    ${whereClause}
-    GROUP BY category
+    FROM fee_with_final_category
+    GROUP BY final_category, final_category_code
+    ORDER BY total DESC
   `).all(...queryParams)
   
-  // 按费用类型统计总额（应收/应付）
+  // 按费用类型统计总额（应收/应付）- 使用无别名的 whereClause
+  const simpleWhereClause = whereClause.replace(/f\./g, '')
   const receivableResult = await db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count
     FROM fees 
-    ${whereClause.replace('WHERE 1=1', 'WHERE 1=1')} AND (fee_type = 'receivable' OR fee_type IS NULL)
+    ${simpleWhereClause} AND (fee_type = 'receivable' OR fee_type IS NULL)
   `).get(...queryParams)
   
   const payableResult = await db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count
     FROM fees 
-    ${whereClause.replace('WHERE 1=1', 'WHERE 1=1')} AND fee_type = 'payable'
+    ${simpleWhereClause} AND fee_type = 'payable'
   `).get(...queryParams)
   
   // 确保数值类型正确（PostgreSQL返回字符串）
@@ -892,6 +1005,7 @@ export async function getFeeStats(params = {}) {
   return {
     byCategory: stats.map(s => ({
       category: s.category,
+      categoryCode: s.category_code,  // 添加code用于筛选
       count: Number(s.count || 0),
       total: Number(s.total || 0)
     })),

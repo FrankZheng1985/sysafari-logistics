@@ -298,11 +298,11 @@ export default function Inquiry() {
   return (
     <PageContainer>
       <PageHeader
-        title="报价管理"
+        title="服务费配置"
         icon={<DollarSign className="w-4 h-4 text-primary-600" />}
         breadcrumbs={[
-          { label: '工具', path: '/tools/inquiry' },
-          { label: '报价管理' }
+          { label: '工具', path: '/tools' },
+          { label: '服务费配置' }
         ]}
       />
       

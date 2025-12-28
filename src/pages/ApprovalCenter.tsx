@@ -478,6 +478,7 @@ export default function ApprovalCenter() {
               placeholder="搜索审批单号、标题..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadRequests()}
               className="w-48 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
             />
             <button

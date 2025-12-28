@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Receipt, FileText, Loader2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { Plus, Receipt, FileText, Loader2, ArrowDownCircle, ArrowUpCircle, Lock } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -23,6 +23,8 @@ interface OrderFeePanelProps {
   customerId?: string
   customerName?: string
   onAddFee: (feeType: 'receivable' | 'payable') => void
+  disabled?: boolean
+  disabledMessage?: string
 }
 
 const CATEGORY_LABELS: Record<string, { label: string; bgClass: string; textClass: string }> = {
@@ -40,7 +42,9 @@ export default function OrderFeePanel({
   billNumber,
   customerId,
   customerName,
-  onAddFee
+  onAddFee,
+  disabled = false,
+  disabledMessage = ''
 }: OrderFeePanelProps) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'receivable' | 'payable'>('receivable')
@@ -128,15 +132,26 @@ export default function OrderFeePanel({
 
       {/* 操作按钮 */}
       <div className="flex flex-wrap gap-2 items-center">
+        {/* 禁用提示 */}
+        {disabled && disabledMessage && (
+          <div className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+            <Lock className="w-3 h-3" />
+            <span>{disabledMessage}</span>
+          </div>
+        )}
         <button
           onClick={() => onAddFee(activeTab)}
-          className={`px-3 py-1.5 text-xs text-white rounded flex items-center gap-1 ${
-            activeTab === 'receivable'
-              ? 'bg-green-600 hover:bg-green-700'
-              : 'bg-orange-600 hover:bg-orange-700'
+          disabled={disabled}
+          className={`px-3 py-1.5 text-xs rounded flex items-center gap-1 ${
+            disabled 
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              : activeTab === 'receivable'
+                ? 'bg-green-600 hover:bg-green-700 text-white'
+                : 'bg-orange-600 hover:bg-orange-700 text-white'
           }`}
+          title={disabled ? disabledMessage : ''}
         >
-          <Plus className="w-3.5 h-3.5" />
+          {disabled ? <Lock className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
           录入{activeTab === 'receivable' ? '应收' : '应付'}费用
         </button>
         <button

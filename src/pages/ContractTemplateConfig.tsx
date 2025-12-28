@@ -190,12 +190,14 @@ export default function ContractTemplateConfig() {
   // 保存赔偿标准
   const saveCompensationRule = async (rule: Partial<CompensationRule>) => {
     try {
-      const url = editingCompensation?.id 
-        ? `${API_BASE}/api/contract-template/compensation/${editingCompensation.id}`
+      // 修复：使用 editingCompensation 对象存在性判断
+      const isEditing = Boolean(editingCompensation && editingCompensation.id)
+      const url = isEditing 
+        ? `${API_BASE}/api/contract-template/compensation/${editingCompensation!.id}`
         : `${API_BASE}/api/contract-template/compensation`
       
       const res = await fetch(url, {
-        method: editingCompensation?.id ? 'PUT' : 'POST',
+        method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rule)
       })
@@ -255,12 +257,14 @@ export default function ContractTemplateConfig() {
   // 保存高峰期
   const savePeakSeason = async (season: Partial<PeakSeason>) => {
     try {
-      const url = editingPeakSeason?.id 
-        ? `${API_BASE}/api/contract-template/peak-seasons/${editingPeakSeason.id}`
+      // 修复：使用 editingPeakSeason 对象存在性判断
+      const isEditing = Boolean(editingPeakSeason && editingPeakSeason.id)
+      const url = isEditing 
+        ? `${API_BASE}/api/contract-template/peak-seasons/${editingPeakSeason!.id}`
         : `${API_BASE}/api/contract-template/peak-seasons`
       
       const res = await fetch(url, {
-        method: editingPeakSeason?.id ? 'PUT' : 'POST',
+        method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(season)
       })

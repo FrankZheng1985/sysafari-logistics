@@ -3439,16 +3439,21 @@ export interface ServiceFeeCategory {
   sortOrder: number
   status: 'active' | 'inactive'
   createTime: string
+  parentId?: string | null  // 父级分类ID
+  level?: number            // 层级（1=一级，2=二级）
+  children?: ServiceFeeCategory[]  // 子分类（树形结构时使用）
 }
 
 /**
  * 获取服务费类别列表
+ * @param params.tree 是否返回树形结构
  */
-export async function getServiceFeeCategories(params?: { search?: string; status?: string }): Promise<ApiResponse<ServiceFeeCategory[]>> {
+export async function getServiceFeeCategories(params?: { search?: string; status?: string; tree?: boolean }): Promise<ApiResponse<ServiceFeeCategory[]>> {
   try {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.append('search', params.search)
     if (params?.status) searchParams.append('status', params.status)
+    if (params?.tree) searchParams.append('tree', 'true')
     
     const queryString = searchParams.toString()
     const url = `${API_BASE_URL}/api/service-fee-categories${queryString ? `?${queryString}` : ''}`
@@ -3460,6 +3465,28 @@ export async function getServiceFeeCategories(params?: { search?: string; status
     return await response.json()
   } catch (error) {
     console.error('获取服务费类别失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取顶级分类列表（用于选择父级）
+ */
+export async function getTopLevelCategories(status?: string): Promise<ApiResponse<ServiceFeeCategory[]>> {
+  try {
+    const searchParams = new URLSearchParams()
+    if (status) searchParams.append('status', status)
+    
+    const queryString = searchParams.toString()
+    const url = `${API_BASE_URL}/api/service-fee-categories/top-level${queryString ? `?${queryString}` : ''}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取顶级分类失败:', error)
     throw error
   }
 }
@@ -3483,7 +3510,7 @@ export async function getServiceFeeCategoryNames(): Promise<ApiResponse<string[]
 /**
  * 创建服务费类别
  */
-export async function createServiceFeeCategory(data: Omit<ServiceFeeCategory, 'id' | 'createTime'>): Promise<ApiResponse<{ id: string }>> {
+export async function createServiceFeeCategory(data: Omit<ServiceFeeCategory, 'id' | 'createTime' | 'children' | 'level'>): Promise<ApiResponse<{ id: string }>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/service-fee-categories`, {
       method: 'POST',

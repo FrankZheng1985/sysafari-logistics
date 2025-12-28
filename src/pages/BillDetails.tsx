@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useTabs } from '../contexts/TabsContext'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Copy } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Copy, Lock } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { copyToClipboard } from '../components/Toast'
 import { formatDate, formatDateTime } from '../utils/dateFormat'
@@ -36,6 +37,51 @@ const mockDeclarations: Declaration[] = [
   },
 ]
 
+// 根据分类代码智能获取样式
+const getFeeCategoryStyle = (code: string) => {
+  const lowerCode = code?.toLowerCase() || ''
+  if (lowerCode.includes('transport') || lowerCode.includes('freight') || lowerCode.includes('运输')) {
+    return { bgClass: 'bg-blue-50', textClass: 'text-blue-600' }
+  }
+  if (lowerCode.includes('customs') || lowerCode.includes('clearance') || lowerCode.includes('关税') || lowerCode.includes('清关')) {
+    return { bgClass: 'bg-red-50', textClass: 'text-red-600' }
+  }
+  if (lowerCode.includes('duty') || lowerCode.includes('进口税')) {
+    return { bgClass: 'bg-rose-50', textClass: 'text-rose-600' }
+  }
+  if (lowerCode.includes('tax') || lowerCode.includes('vat') || lowerCode.includes('增值税')) {
+    return { bgClass: 'bg-pink-50', textClass: 'text-pink-600' }
+  }
+  if (lowerCode.includes('warehouse') || lowerCode.includes('storage') || lowerCode.includes('仓储')) {
+    return { bgClass: 'bg-amber-50', textClass: 'text-amber-600' }
+  }
+  if (lowerCode.includes('insurance') || lowerCode.includes('保险')) {
+    return { bgClass: 'bg-green-50', textClass: 'text-green-600' }
+  }
+  if (lowerCode.includes('handling') || lowerCode.includes('操作') || lowerCode.includes('thc') || lowerCode.includes('港杂')) {
+    return { bgClass: 'bg-purple-50', textClass: 'text-purple-600' }
+  }
+  if (lowerCode.includes('document') || lowerCode.includes('文件') || lowerCode.includes('换单')) {
+    return { bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' }
+  }
+  if (lowerCode.includes('port') || lowerCode.includes('港口')) {
+    return { bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' }
+  }
+  if (lowerCode.includes('service') || lowerCode.includes('服务')) {
+    return { bgClass: 'bg-teal-50', textClass: 'text-teal-600' }
+  }
+  if (lowerCode.includes('package') || lowerCode.includes('清提派')) {
+    return { bgClass: 'bg-emerald-50', textClass: 'text-emerald-600' }
+  }
+  if (lowerCode.includes('agency') || lowerCode.includes('代理') || lowerCode.includes('税号')) {
+    return { bgClass: 'bg-amber-50', textClass: 'text-amber-600' }
+  }
+  if (lowerCode.includes('management') || lowerCode.includes('管理')) {
+    return { bgClass: 'bg-slate-50', textClass: 'text-slate-600' }
+  }
+  return { bgClass: 'bg-gray-50', textClass: 'text-gray-600' }
+}
+
 // 费用分类配置 - 支持所有数据库中的分类（包括服务费类别的英文代码）
 const getFeeCategoryConfig = (category: string) => {
   const configs: Record<string, { label: string; bgClass: string; textClass: string }> = {
@@ -52,7 +98,7 @@ const getFeeCategoryConfig = (category: string) => {
     documentation: { label: '文件', bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' },
     port: { label: '港口', bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' },
     service: { label: '服务', bgClass: 'bg-teal-50', textClass: 'text-teal-600' },
-    package: { label: '包装', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    package: { label: '清提派业务', bgClass: 'bg-emerald-50', textClass: 'text-emerald-600' },
     other: { label: '其他服务', bgClass: 'bg-gray-50', textClass: 'text-gray-600' },
     clearance: { label: '清关服务', bgClass: 'bg-red-50', textClass: 'text-red-600' },
     thc: { label: '港杂费', bgClass: 'bg-purple-50', textClass: 'text-purple-600' },
@@ -61,12 +107,20 @@ const getFeeCategoryConfig = (category: string) => {
     'document fees': { label: '文件费', bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' },
     'document exchange fee': { label: '换单费', bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' },
     'tax fees': { label: '税务费', bgClass: 'bg-green-50', textClass: 'text-green-600' },
-    "importer's agency fee": { label: '进口商代理费', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    "importer's agency fee": { label: '税号使用费', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
     'management fee': { label: '管理费', bgClass: 'bg-slate-50', textClass: 'text-slate-600' },
   }
   // 先转换为小写再匹配
   const lowerCategory = category?.toLowerCase() || ''
-  return configs[lowerCategory] || { label: category || '其他', bgClass: 'bg-gray-50', textClass: 'text-gray-600' }
+  
+  // 1. 从硬编码映射中查找
+  if (configs[lowerCategory]) {
+    return configs[lowerCategory]
+  }
+  
+  // 2. 智能匹配样式（根据关键词）
+  const style = getFeeCategoryStyle(category)
+  return { label: category || '其他', ...style }
 }
 
 // 提取为独立组件，避免在渲染循环中重新创建
@@ -151,6 +205,7 @@ export default function BillDetails() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { updateTabTitle } = useTabs()
+  const { hasPermission } = useAuth()
   
   // 检测来源：支持财务模块访问
   const source = searchParams.get('source') || (location.state as any)?.source || ''
@@ -639,6 +694,20 @@ export default function BillDetails() {
       ]
   
   const backPath = isFromFinance ? '/finance/order-report' : '/bookings/bill'
+  
+  // 判断提单是否已完成（已完成或已归档状态）
+  const isCompleted = billDetail?.status === '已完成' || billDetail?.status === '已归档'
+  
+  // 判断用户是否有财务管理权限（财务人员可以修改已完成的提单）
+  const hasFinancePermission = hasPermission('finance:manage') || hasPermission('finance:fee_manage')
+  
+  // 判断是否可以编辑（未完成 或 有财务权限）
+  const canEdit = !isCompleted || hasFinancePermission
+  
+  // 提示信息
+  const completedMessage = isCompleted && !hasFinancePermission 
+    ? '此提单已完成，仅财务人员可修改' 
+    : ''
 
   return (
     <div className="h-full flex flex-col">
@@ -648,13 +717,32 @@ export default function BillDetails() {
         breadcrumbs={breadcrumbs}
         actionButtons={
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowEditModal(true)}
-              className="px-2 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 flex items-center gap-1"
-            >
-              <Edit className="w-4 h-4" />
-              <span>编辑</span>
-            </button>
+            {/* 已完成状态提示 */}
+            {isCompleted && (
+              <div className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                <Lock className="w-3 h-3" />
+                <span>已完成</span>
+                {!hasFinancePermission && <span className="text-amber-500">（仅财务可改）</span>}
+              </div>
+            )}
+            {canEdit ? (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="px-2 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 flex items-center gap-1"
+              >
+                <Edit className="w-4 h-4" />
+                <span>编辑</span>
+              </button>
+            ) : (
+              <button
+                disabled
+                className="px-2 py-1 text-xs text-gray-400 bg-gray-200 rounded cursor-not-allowed flex items-center gap-1"
+                title={completedMessage}
+              >
+                <Lock className="w-4 h-4" />
+                <span>编辑</span>
+              </button>
+            )}
             <button
               onClick={() => navigate(backPath)}
               className="px-1.5 py-0.5 text-xs text-gray-700 bg-gray-100 rounded hover:bg-gray-200 flex items-center gap-1"
@@ -1265,14 +1353,27 @@ export default function BillDetails() {
 
             {/* 操作按钮 */}
             <div className="flex items-center gap-2">
+              {/* 已完成提示 */}
+              {isCompleted && !hasFinancePermission && (
+                <div className="flex items-center gap-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>提单已完成，仅财务可录入费用</span>
+                </div>
+              )}
               <button
                 onClick={() => {
                   setCurrentFeeType('receivable')
                   setShowFeeModal(true)
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                disabled={!canEdit}
+                className={`px-4 py-2 text-sm rounded-lg flex items-center gap-2 ${
+                  canEdit 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+                title={!canEdit ? completedMessage : ''}
               >
-                <Plus className="w-4 h-4" />
+                {canEdit ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                 录入应收
               </button>
               <button
@@ -1280,9 +1381,15 @@ export default function BillDetails() {
                   setCurrentFeeType('payable')
                   setShowFeeModal(true)
                 }}
-                className="px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center gap-2"
+                disabled={!canEdit}
+                className={`px-4 py-2 text-sm rounded-lg flex items-center gap-2 ${
+                  canEdit 
+                    ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+                title={!canEdit ? completedMessage : ''}
               >
-                <Plus className="w-4 h-4" />
+                {canEdit ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                 录入应付
               </button>
               <button
@@ -1527,7 +1634,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="查验操作" icon={<ClipboardCheck className="w-4 h-4" />} iconColor="text-yellow-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2">
-                        {billDetail.inspection === '-' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && billDetail.inspection === '-' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要将此提单标记为待查验吗？')) return
@@ -1551,7 +1665,7 @@ export default function BillDetails() {
                             标记查验
                           </button>
                         )}
-                        {billDetail.inspection === '待查验' && (
+                        {canEdit && billDetail.inspection === '待查验' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要开始查验吗？')) return
@@ -1575,7 +1689,7 @@ export default function BillDetails() {
                             开始查验
                           </button>
                         )}
-                        {billDetail.inspection === '查验中' && (
+                        {canEdit && billDetail.inspection === '查验中' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要完成查验吗？')) return
@@ -1599,7 +1713,7 @@ export default function BillDetails() {
                             完成查验
                           </button>
                         )}
-                        {billDetail.inspection === '已查验' && (
+                        {canEdit && billDetail.inspection === '已查验' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要放行此提单吗？放行后将转移到TMS管理。')) return
@@ -1654,7 +1768,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="船状态操作" icon={<Ship className="w-4 h-4" />} iconColor="text-cyan-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2 items-center">
-                        {billDetail.shipStatus !== '未到港' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && billDetail.shipStatus !== '未到港' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要将船状态设为未到港吗？')) return
@@ -1678,7 +1799,7 @@ export default function BillDetails() {
                             未到港
                           </button>
                         )}
-                        {billDetail.shipStatus !== '已到港' && (
+                        {canEdit && billDetail.shipStatus !== '已到港' && (
                           <button
                             onClick={() => {
                               setActualArrivalDate(new Date().toISOString().split('T')[0])
@@ -1690,7 +1811,7 @@ export default function BillDetails() {
                             已到港
                           </button>
                         )}
-                        {billDetail.shipStatus !== '跳港' && (
+                        {canEdit && billDetail.shipStatus !== '跳港' && (
                           <div className="flex items-center gap-2">
                             <div className="relative" ref={skipPortDropdownRef}>
                               <input
@@ -1776,7 +1897,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="换单操作" icon={<Repeat className="w-4 h-4" />} iconColor="text-amber-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2 items-center">
-                        {billDetail.docSwapStatus !== '已换单' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && billDetail.docSwapStatus !== '已换单' && (
                           <button
                             onClick={async () => {
                               setDocSwapAgent('')
@@ -1804,7 +1932,7 @@ export default function BillDetails() {
                             换单完成
                           </button>
                         )}
-                        {billDetail.docSwapStatus === '已换单' && (
+                        {canEdit && billDetail.docSwapStatus === '已换单' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要取消换单状态吗？取消后，系统自动创建的换单费也会一并撤销。')) return
@@ -1847,23 +1975,32 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="派送操作" icon={<Truck className="w-4 h-4" />} iconColor="text-blue-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2">
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
                         {/* 预计提货时间按钮 */}
-                        <button
-                          onClick={() => {
-                            // 初始化值（如果已有数据则显示）
-                            setPickupEstimatedTime(billDetail.cmrEstimatedPickupTime || '')
-                            setPickupNote('')
-                            setShowPickupTimeModal(true)
-                          }}
-                          className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 flex items-center gap-1"
-                        >
-                          <Clock className="w-3.5 h-3.5" />
-                          预计提货时间
-                          {billDetail.cmrEstimatedPickupTime && (
-                            <span className="ml-1 text-amber-500">✓</span>
-                          )}
-                        </button>
-                        {billDetail.deliveryStatus === '待派送' && (
+                        {canEdit && (
+                          <button
+                            onClick={() => {
+                              // 初始化值（如果已有数据则显示）
+                              setPickupEstimatedTime(billDetail.cmrEstimatedPickupTime || '')
+                              setPickupNote('')
+                              setShowPickupTimeModal(true)
+                            }}
+                            className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 flex items-center gap-1"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            预计提货时间
+                            {billDetail.cmrEstimatedPickupTime && (
+                              <span className="ml-1 text-amber-500">✓</span>
+                            )}
+                          </button>
+                        )}
+                        {canEdit && billDetail.deliveryStatus === '待派送' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要开始派送吗？')) return
@@ -1923,7 +2060,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="清关操作" icon={<ShieldCheck className="w-4 h-4" />} iconColor="text-purple-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2 items-center">
-                        {billDetail.customsStatus !== '已放行' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && billDetail.customsStatus !== '已放行' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要将清关状态设为已放行吗？')) return
@@ -1947,7 +2091,7 @@ export default function BillDetails() {
                             清关放行
                           </button>
                         )}
-                        {billDetail.customsStatus === '已放行' && (
+                        {canEdit && billDetail.customsStatus === '已放行' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要取消清关放行状态吗？')) return
@@ -1994,9 +2138,12 @@ export default function BillDetails() {
                         customerId={billDetail.customerId}
                         customerName={billDetail.customerName}
                         onAddFee={(feeType) => {
+                          if (!canEdit) return
                           setCurrentFeeType(feeType)
                           setShowFeeModal(true)
                         }}
+                        disabled={!canEdit}
+                        disabledMessage={completedMessage}
                       />
                     </ModuleWrapper>
                   )
@@ -2005,7 +2152,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="订单操作" icon={<FileText className="w-4 h-4" />} iconColor="text-gray-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2">
-                        {!billDetail.isVoid ? (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && !billDetail.isVoid ? (
                           <button
                             onClick={async () => {
                               if (!confirm(`确定要作废订单 ${billDetail.billNumber} 吗？`)) return
@@ -2028,7 +2182,7 @@ export default function BillDetails() {
                             <Ban className="w-3.5 h-3.5" />
                             作废订单
                           </button>
-                        ) : (
+                        ) : canEdit && billDetail.isVoid ? (
                           <>
                             <button
                               onClick={async () => {
@@ -2056,7 +2210,7 @@ export default function BillDetails() {
                               作废原因: {billDetail.voidReason}
                             </div>
                           </>
-                        )}
+                        ) : null}
                         <div className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded">
                           订单状态: <span className={`font-medium ${billDetail.isVoid ? 'text-red-600' : 'text-green-600'}`}>
                             {billDetail.isVoid ? '已作废' : '有效'}
@@ -2085,12 +2239,25 @@ export default function BillDetails() {
                 
                 {/* 操作按钮 */}
                 <div className="p-3 border-b border-gray-100">
+                  {/* 已完成提示 */}
+                  {isCompleted && !hasFinancePermission && (
+                    <div className="flex items-center gap-1 px-2 py-1.5 mb-2 text-[10px] bg-amber-50 text-amber-700 rounded border border-amber-200">
+                      <Lock className="w-3 h-3" />
+                      <span>提单已完成，仅财务可操作</span>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setShowFeeModal(true)}
-                      className="flex-1 px-3 py-2 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1"
+                      disabled={!canEdit}
+                      className={`flex-1 px-3 py-2 text-xs rounded-lg flex items-center justify-center gap-1 ${
+                        canEdit 
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                      title={!canEdit ? completedMessage : ''}
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      {canEdit ? <Plus className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                       录入费用
                     </button>
                     <button

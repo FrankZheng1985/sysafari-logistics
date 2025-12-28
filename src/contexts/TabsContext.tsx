@@ -100,10 +100,10 @@ const routeTitleMap: Record<string, string> = {
   '/contracts/config': '合同管理 - 合同模板配置',
   // 工具
   '/tools': '工具',
-  '/tools/inquiry': '工具 - 询价',
+  '/tools/inquiry': '工具 - 服务费配置',
   '/tools/tariff-calculator': '工具 - 关税计算',
   '/tools/shared-tax': '工具 - 共享税号库',
-  '/tools/product-pricing': '工具 - 报价管理',
+  '/tools/product-pricing': '工具 - 产品定价',
   // 系统管理
   '/system': '系统管理',
   '/system/info-center': '系统管理 - 信息中心',

@@ -968,6 +968,7 @@ export default function SecurityCenter() {
           aria-label="搜索用户名"
           value={auditFilters.username}
           onChange={(e) => setAuditFilters(prev => ({ ...prev, username: e.target.value }))}
+          onKeyDown={(e) => e.key === 'Enter' && loadAuditLogs()}
           className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
         />
         <select

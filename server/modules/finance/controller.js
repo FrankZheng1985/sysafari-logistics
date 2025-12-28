@@ -523,10 +523,11 @@ export async function viewPaymentReceipt(req, res) {
  */
 export async function getFees(req, res) {
   try {
-    const { category, billId, customerId, supplierId, supplierName, feeType, startDate, endDate, search, page, pageSize } = req.query
+    const { category, feeName, billId, customerId, supplierId, supplierName, feeType, startDate, endDate, search, page, pageSize } = req.query
     
     const result = await model.getFees({
       category,
+      feeName,         // 按费用名称筛选（从统计卡片点击时传入）
       billId,
       customerId,
       supplierId,      // 供应商ID过滤
@@ -541,6 +542,7 @@ export async function getFees(req, res) {
     
     return successWithPagination(res, result.list, {
       total: result.total,
+      totalGroups: result.totalGroups,  // 用于前端分页计算
       page: result.page,
       pageSize: result.pageSize
     })

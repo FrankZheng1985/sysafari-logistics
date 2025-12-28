@@ -322,6 +322,7 @@ export default function CustomsContracts() {
               placeholder="搜索合同编号、客户名称..."
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadContracts()}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
             />
           </div>

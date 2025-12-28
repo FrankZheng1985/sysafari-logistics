@@ -429,6 +429,7 @@ export default function FinanceInvoices() {
               placeholder="搜索发票号、客户名..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadInvoices()}
               className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
             />
           </div>

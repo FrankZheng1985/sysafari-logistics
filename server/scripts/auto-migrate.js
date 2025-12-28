@@ -2209,6 +2209,19 @@ export async function runMigrations() {
       console.log('  ✅ service_fee_categories.name_en 字段已添加')
     }
 
+    // ==================== 重置 service_fee_categories 序列 ====================
+    try {
+      await client.query(`
+        SELECT setval('service_fee_categories_id_seq', 
+          COALESCE((SELECT MAX(id) FROM service_fee_categories), 0) + 1, 
+          false
+        )
+      `)
+      console.log('  ✅ service_fee_categories 序列已重置')
+    } catch (seqErr) {
+      console.log('  ⏭️ service_fee_categories 序列重置跳过:', seqErr.message)
+    }
+
     // ==================== 同步缺失的产品数据 ====================
     // 检查并插入缺失的产品: 欧洲运输
     const prod1 = await client.query(`SELECT id FROM products WHERE id = $1`, ['70f1aa1f-3ec8-45cb-b652-e176998b6796'])
@@ -2323,6 +2336,48 @@ export async function runMigrations() {
     `)
     if (fixedSupplierNames.rowCount > 0) {
       console.log('  ✅ 已修复 ' + fixedSupplierNames.rowCount + ' 个费用项的供应商名称')
+    }
+
+    // ==================== 通用序列修复 ====================
+    // 自动检测并修复所有表的序列值（防止主键冲突）
+    try {
+      const sequences = await client.query(`
+        SELECT 
+          s.relname as seq_name,
+          t.relname as table_name,
+          a.attname as column_name
+        FROM pg_class s
+        JOIN pg_depend d ON d.objid = s.oid
+        JOIN pg_class t ON d.refobjid = t.oid
+        JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid
+        WHERE s.relkind = 'S'
+        AND t.relkind = 'r'
+        ORDER BY t.relname
+      `)
+      
+      let fixedCount = 0
+      for (const seq of sequences.rows) {
+        try {
+          const seqVal = await client.query(`SELECT last_value FROM ${seq.seq_name}`)
+          const maxId = await client.query(`SELECT MAX(${seq.column_name}) as max_id FROM ${seq.table_name}`)
+          
+          const lastValue = parseInt(seqVal.rows[0]?.last_value) || 0
+          const maxIdValue = parseInt(maxId.rows[0]?.max_id) || 0
+          
+          if (lastValue <= maxIdValue) {
+            await client.query(`SELECT setval('${seq.seq_name}', COALESCE((SELECT MAX(${seq.column_name}) FROM ${seq.table_name}), 0) + 1, false)`)
+            fixedCount++
+          }
+        } catch (seqErr) {
+          // 忽略单个序列的错误
+        }
+      }
+      
+      if (fixedCount > 0) {
+        console.log(`  ✅ 已修复 ${fixedCount} 个序列`)
+      }
+    } catch (seqErr) {
+      console.log('  ⏭️ 序列检查跳过:', seqErr.message)
     }
 
     console.log('✅ 数据库迁移完成！')

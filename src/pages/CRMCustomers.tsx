@@ -1276,6 +1276,7 @@ export default function CRMCustomers() {
               placeholder="搜索客户名称、编号、联系人..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadCustomers()}
               className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
             />
           </div>

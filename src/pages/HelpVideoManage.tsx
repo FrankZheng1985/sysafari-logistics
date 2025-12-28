@@ -486,6 +486,7 @@ export default function HelpVideoManage() {
                       placeholder="搜索视频..."
                       value={searchKeyword}
                       onChange={(e) => setSearchKeyword(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && loadData()}
                       className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                     />
                   </div>

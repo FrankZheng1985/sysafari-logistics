@@ -757,6 +757,7 @@ export default function CRMCustomerDetail() {
                         setSearchValue(e.target.value)
                         setPage(1)
                       }}
+                      onKeyDown={(e) => e.key === 'Enter' && loadOrders()}
                       className="w-48 px-3 py-1.5 pl-8 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                     />
                     <Ship className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />

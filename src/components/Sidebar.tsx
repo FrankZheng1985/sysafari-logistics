@@ -162,7 +162,7 @@ const menuItems: MenuItem[] = [
     label: '工具',
     icon: Settings,
     children: [
-      { path: '/tools/product-pricing', label: '报价管理', icon: FileText },
+      { path: '/tools/product-pricing', label: '产品定价', icon: FileText },
       { path: '/tools/tariff-calculator', label: '关税计算', icon: FileText },
       { path: '/tools/shared-tax', label: '共享税号库', icon: FileText },
     ],

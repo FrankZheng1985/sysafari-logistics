@@ -630,6 +630,12 @@ export async function updateSupplierPrice(id, data) {
   const values = []
   let paramIndex = 1
   
+  // 支持更新供应商名称（用于修复历史数据）
+  if (data.supplierName !== undefined) {
+    fields.push(`supplier_name = $${paramIndex++}`)
+    values.push(data.supplierName)
+  }
+  
   if (data.category !== undefined) {
     fields.push(`fee_category = $${paramIndex++}`)
     values.push(data.category)

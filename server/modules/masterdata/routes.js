@@ -177,8 +177,11 @@ router.delete('/transport-methods/:id', controller.deleteTransportMethod)
 
 // ==================== 服务费类别相关路由 ====================
 
-// 获取服务费类别列表
+// 获取服务费类别列表（支持树形结构：?tree=true）
 router.get('/service-fee-categories', controller.getServiceFeeCategories)
+
+// 获取顶级分类列表（用于选择父级）
+router.get('/service-fee-categories/top-level', controller.getTopLevelCategories)
 
 // 创建服务费类别
 router.post('/service-fee-categories', controller.createServiceFeeCategory)

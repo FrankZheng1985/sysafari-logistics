@@ -355,6 +355,7 @@ CREATE INDEX IF NOT EXISTS idx_cities_name ON cities(city_name_cn);
 CREATE TABLE IF NOT EXISTS service_fee_categories (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
+    name_en TEXT,
     code TEXT NOT NULL UNIQUE,
     description TEXT,
     sort_order INTEGER DEFAULT 0,
