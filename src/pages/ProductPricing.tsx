@@ -1164,9 +1164,36 @@ export default function ProductPricing() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
             <option value="">全部分类</option>
-            {serviceCategories.map(cat => (
-              <option key={cat.id} value={cat.name}>{cat.name}</option>
-            ))}
+            {/* 按父子级分组显示分类筛选 */}
+            {(() => {
+              const parents = serviceCategories.filter(cat => !cat.parentId)
+              const childrenMap = new Map<string, ServiceFeeCategory[]>()
+              serviceCategories.forEach(cat => {
+                if (cat.parentId) {
+                  if (!childrenMap.has(cat.parentId)) {
+                    childrenMap.set(cat.parentId, [])
+                  }
+                  childrenMap.get(cat.parentId)!.push(cat)
+                }
+              })
+              
+              return parents.map(parent => {
+                const children = childrenMap.get(parent.id) || []
+                if (children.length === 0) {
+                  return (
+                    <option key={parent.id} value={parent.name}>{parent.name}</option>
+                  )
+                }
+                return (
+                  <optgroup key={parent.id} label={parent.name}>
+                    <option value={parent.name}>{parent.name}（全部）</option>
+                    {children.map(child => (
+                      <option key={child.id} value={child.name}>{child.name}</option>
+                    ))}
+                  </optgroup>
+                )
+              })
+            })()}
           </select>
           
           <button
@@ -1599,9 +1626,36 @@ export default function ProductPricing() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">请选择服务类别</option>
-                  {serviceCategories.map(cat => (
-                    <option key={cat.id} value={cat.name}>{cat.name}</option>
-                  ))}
+                  {/* 按父子级分组显示服务类别 */}
+                  {(() => {
+                    const parents = serviceCategories.filter(cat => !cat.parentId)
+                    const childrenMap = new Map<string, ServiceFeeCategory[]>()
+                    serviceCategories.forEach(cat => {
+                      if (cat.parentId) {
+                        if (!childrenMap.has(cat.parentId)) {
+                          childrenMap.set(cat.parentId, [])
+                        }
+                        childrenMap.get(cat.parentId)!.push(cat)
+                      }
+                    })
+                    
+                    return parents.map(parent => {
+                      const children = childrenMap.get(parent.id) || []
+                      if (children.length === 0) {
+                        return (
+                          <option key={parent.id} value={parent.name}>{parent.name}</option>
+                        )
+                      }
+                      return (
+                        <optgroup key={parent.id} label={parent.name}>
+                          <option value={parent.name}>{parent.name}（全部）</option>
+                          {children.map(child => (
+                            <option key={child.id} value={child.name}>{child.name}</option>
+                          ))}
+                        </optgroup>
+                      )
+                    })
+                  })()}
                 </select>
               </div>
               
@@ -1810,15 +1864,47 @@ export default function ProductPricing() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">请选择类别</option>
-                    {serviceCategories.map((cat) => {
-                      const isSubCategory = !!cat.parentId
-                      const prefix = isSubCategory ? '　└─ ' : ''
-                      return (
-                        <option key={cat.id} value={cat.code}>
-                          {prefix}{cat.name}
-                        </option>
-                      )
-                    })}
+                    {/* 按父子级分组显示费用类别 */}
+                    {(() => {
+                      // 分离父级和子级
+                      const parents = serviceCategories.filter(cat => !cat.parentId)
+                      const childrenMap = new Map<string, ServiceFeeCategory[]>()
+                      serviceCategories.forEach(cat => {
+                        if (cat.parentId) {
+                          if (!childrenMap.has(cat.parentId)) {
+                            childrenMap.set(cat.parentId, [])
+                          }
+                          childrenMap.get(cat.parentId)!.push(cat)
+                        }
+                      })
+                      
+                      return parents.map(parent => {
+                        const children = childrenMap.get(parent.id) || []
+                        if (children.length === 0) {
+                          // 没有子级的父级直接作为选项
+                          return (
+                            <option key={parent.id} value={parent.code}>
+                              {parent.name}
+                            </option>
+                          )
+                        }
+                        // 有子级的父级使用 optgroup 分组
+                        return (
+                          <optgroup key={parent.id} label={parent.name}>
+                            {/* 父级本身也可选 */}
+                            <option value={parent.code}>
+                              {parent.name}（全部）
+                            </option>
+                            {/* 子级选项 */}
+                            {children.map(child => (
+                              <option key={child.id} value={child.code}>
+                                {child.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )
+                      })
+                    })()}
                   </select>
                 </div>
                 <div>
