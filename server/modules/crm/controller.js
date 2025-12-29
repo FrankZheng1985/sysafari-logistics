@@ -231,22 +231,31 @@ export async function createCustomer(req, res) {
 export async function updateCustomer(req, res) {
   try {
     const { id } = req.params
+    console.log(`[API] 更新客户请求, ID: ${id}`)
     
     const existing = await model.getCustomerById(id)
     if (!existing) {
+      console.log(`[API] 客户不存在, ID: ${id}`)
       return notFound(res, '客户不存在')
     }
     
     const updated = await model.updateCustomer(id, req.body)
     if (!updated) {
+      console.log(`[API] 没有需要更新的字段, ID: ${id}`)
       return badRequest(res, '没有需要更新的字段')
     }
     
     const updatedCustomer = await model.getCustomerById(id)
+    console.log(`[API] 客户更新成功, ID: ${id}`)
     return success(res, updatedCustomer, '更新成功')
   } catch (error) {
-    console.error('更新客户失败:', error)
-    return serverError(res, '更新客户失败')
+    console.error('更新客户失败:', error.message)
+    console.error('错误详情:', error.stack)
+    // 返回更详细的错误信息（仅在非生产环境）
+    const errorMsg = process.env.NODE_ENV === 'production' 
+      ? '更新客户失败' 
+      : `更新客户失败: ${error.message}`
+    return serverError(res, errorMsg)
   }
 }
 

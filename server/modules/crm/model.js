@@ -328,13 +328,17 @@ export async function updateCustomer(id, data) {
   const values = []
   
   // 如果更新了公司中文名称，自动重新翻译英文名称
+  // 翻译服务设置了 5 秒超时，不会阻塞主流程
   if (data.companyName !== undefined && data.companyName) {
     try {
       const companyNameEn = await translateText(data.companyName, 'zh-CN', 'en')
-      console.log(`[客户更新] 自动翻译公司名称: ${data.companyName} -> ${companyNameEn}`)
-      data.companyNameEn = companyNameEn
+      // 只有翻译成功且结果不同于原文时才更新
+      if (companyNameEn && companyNameEn !== data.companyName) {
+        console.log(`[客户更新] 自动翻译公司名称: ${data.companyName} -> ${companyNameEn}`)
+        data.companyNameEn = companyNameEn
+      }
     } catch (error) {
-      console.error('[客户更新] 翻译公司名称失败:', error.message)
+      console.warn('[客户更新] 翻译公司名称失败，跳过翻译:', error.message)
       // 翻译失败不影响其他字段更新
     }
   }
@@ -382,13 +386,24 @@ export async function updateCustomer(id, data) {
     values.push(JSON.stringify(data.tags))
   }
   
-  if (fields.length === 0) return false
+  if (fields.length === 0) {
+    console.log('[客户更新] 没有需要更新的字段')
+    return false
+  }
   
   fields.push("updated_at = NOW()")
   values.push(id)
   
-  const result = await db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-  return result.changes > 0
+  try {
+    const sql = `UPDATE customers SET ${fields.join(', ')} WHERE id = ?`
+    console.log(`[客户更新] 执行SQL, 客户ID: ${id}, 更新字段数: ${fields.length - 1}`)
+    const result = await db.prepare(sql).run(...values)
+    console.log(`[客户更新] 更新结果: ${result.changes > 0 ? '成功' : '无变化'}`)
+    return result.changes > 0
+  } catch (error) {
+    console.error('[客户更新] 数据库执行失败:', error.message)
+    throw error // 重新抛出错误，让 controller 捕获
+  }
 }
 
 /**

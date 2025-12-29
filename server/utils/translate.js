@@ -8,9 +8,10 @@
  * @param {string} text - 要翻译的文本
  * @param {string} from - 源语言 (默认: 'zh-CN')
  * @param {string} to - 目标语言 (默认: 'en')
+ * @param {number} timeout - 超时时间（毫秒，默认: 5000）
  * @returns {Promise<string>} - 翻译后的文本
  */
-export async function translateText(text, from = 'zh-CN', to = 'en') {
+export async function translateText(text, from = 'zh-CN', to = 'en', timeout = 5000) {
   if (!text || !text.trim()) {
     return ''
   }
@@ -19,12 +20,19 @@ export async function translateText(text, from = 'zh-CN', to = 'en') {
     // 使用免费的 Google Translate API
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`
     
+    // 创建超时控制器
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
+      },
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       throw new Error(`翻译请求失败: ${response.status}`)
@@ -43,7 +51,12 @@ export async function translateText(text, from = 'zh-CN', to = 'en') {
 
     return text // 翻译失败时返回原文
   } catch (error) {
-    console.error('[翻译错误]', error.message)
+    // 检查是否是超时错误
+    if (error.name === 'AbortError') {
+      console.warn('[翻译超时] 翻译服务超时，跳过翻译:', text.substring(0, 30))
+    } else {
+      console.error('[翻译错误]', error.message)
+    }
     return text // 出错时返回原文
   }
 }
