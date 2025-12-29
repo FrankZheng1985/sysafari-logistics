@@ -18,7 +18,7 @@ const FIELD_MAPPING = {
   '型号*': { field: 'container_type', required: true, hint: '20/40HQ/45HQ' },
   '船公司*': { field: 'shipping_company', required: true, hint: '中远海运' },
   '船名航次*': { field: 'vessel_voyage', required: true, hint: 'VY2501' },
-  '提单号': { field: 'bill_number', required: false, unique: true, hint: 'COSU0000000000' },
+  '提单号*': { field: 'bill_number', required: true, unique: true, hint: 'COSU0000000000' },
   // === 港口信息 ===
   '起运港*': { field: 'port_of_loading', required: true, hint: '深圳蛇口' },
   '目的港*': { field: 'port_of_discharge', required: true, hint: '汉堡港' },
@@ -266,9 +266,6 @@ export async function validateData(data) {
     
     // 检查所有必填字段
     for (const { field, label } of requiredFields) {
-      // 提单号是特殊情况：非必填，系统可自动生成
-      if (field === 'bill_number') continue
-      
       const value = row[field]
       if (value === null || value === undefined || value === '') {
         rowErrors.push(`${label}不能为空`)

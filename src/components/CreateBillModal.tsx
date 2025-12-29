@@ -2246,14 +2246,30 @@ export default function CreateBillModal({
                   {/* 操作按钮 */}
                   <div className="flex items-center gap-3 flex-wrap">
                     {/* 下载模板按钮 */}
-                    <a
-                      href={`${import.meta.env.VITE_API_URL || ''}/api/data-import/templates/orders`}
-                      download
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/data-import/templates/orders`)
+                          const blob = await response.blob()
+                          const url = window.URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = '订单数据导入模板.xlsx'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          window.URL.revokeObjectURL(url)
+                        } catch (error) {
+                          console.error('下载模板失败:', error)
+                          alert('下载模板失败，请重试')
+                        }
+                      }}
                       className="px-3 py-2 bg-white border border-blue-300 text-blue-600 rounded hover:bg-blue-50 cursor-pointer text-xs flex items-center gap-1.5 transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>下载导入模板</span>
-                    </a>
+                    </button>
                     
                     {/* 上传模板按钮 */}
                     <label className={`px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer text-xs flex items-center gap-1.5 transition-colors ${templateImporting ? 'opacity-50 cursor-not-allowed' : ''}`}>
