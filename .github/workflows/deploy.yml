@@ -31,17 +31,29 @@ jobs:
             npm install --production
             pm2 restart sysafari-prod
             
-            # 构建前端（设置 API URL 指向后端服务器）
+            # 构建前端
             cd /var/www/sysafari-logistics
-            npm install
-            VITE_API_BASE_URL=https://api.xianfeng-eu.com npm run build
             
-            # 部署前端到 nginx 目录（清理旧文件后复制）
+            # 清除可能存在的旧环境变量文件（防止使用错误的 API 地址）
+            rm -f .env .env.local .env.production .env.production.local 2>/dev/null || true
+            
+            # 创建正确的环境变量文件
+            echo "VITE_API_BASE_URL=https://api.xianfeng-eu.com" > .env.production
+            
+            # 清除 Vite 构建缓存确保全新构建
+            rm -rf node_modules/.vite 2>/dev/null || true
+            rm -rf dist 2>/dev/null || true
+            
+            # 安装依赖并构建
+            npm install
+            npm run build
+            
+            # 部署前端到 nginx 目录（彻底清理后复制）
             rm -rf /var/www/prod/dist/*
             cp -r dist/* /var/www/prod/dist/
             
-            # 重载 nginx 并清除缓存
+            # 重载 nginx
             nginx -s reload
             
-            echo "✅ 部署完成！"
+            echo "✅ 部署完成！API 地址: https://api.xianfeng-eu.com"
 
