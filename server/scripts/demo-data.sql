@@ -32,55 +32,30 @@ INSERT INTO customers (id, customer_code, customer_name, company_name, company_n
 ON CONFLICT (id) DO NOTHING;
 
 -- ==================== 3. 订单/提单数据 (15个) ====================
-INSERT INTO bills_of_lading (id, bill_number, order_number, order_seq, container_number, vessel, voyage, shipping_company, etd, eta, pieces, weight, volume, description, port_of_loading, port_of_discharge, shipper, consignee, status, ship_status, customs_status, creator, create_time, created_at) VALUES
--- 已完成订单
-('BL20250001', 'COSU1234567890', 'BP2500001', 1, 'CSLU1234567', 'COSCO SHIPPING ARIES', '025E', 'COSCO', '2025-12-01', '2025-12-20', 500, 12500.00, 45.5, '电子产品 / Electronics', 'CNSHA', 'DEHAM', '深圳华为技术有限公司', 'Hamburg Import GmbH', '已完成', '已到港', '已放行', 'admin', '2025-12-01 10:00:00', '2025-12-01 10:00:00'),
-('BL20250002', 'MAEU2345678901', 'BP2500002', 2, 'MSKU2345678', 'MAERSK SELETAR', '051W', 'MAERSK', '2025-12-03', '2025-12-22', 320, 8000.00, 32.0, '机械配件 / Machinery Parts', 'CNNBO', 'NLRTM', '宁波海天塑机', 'Rotterdam Trading B.V.', '已完成', '已到港', '已放行', 'admin', '2025-12-03 09:30:00', '2025-12-03 09:30:00'),
-('BL20250003', 'EGLV3456789012', 'BP2500003', 3, 'EGLU3456789', 'EVER GIVEN', '088E', 'EVERGREEN', '2025-12-05', '2025-12-24', 1200, 30000.00, 120.0, '汽车零部件 / Auto Parts', 'CNSHA', 'FRLEH', '上海比亚迪', 'Paris Logistics SARL', '已完成', '已到港', '已放行', 'admin', '2025-12-05 14:00:00', '2025-12-05 14:00:00'),
-
--- 进行中订单
-('BL20250004', 'ONEY4567890123', 'BP2500004', 4, 'ONEU4567890', 'ONE COMMITMENT', '032E', 'ONE', '2025-12-15', '2026-01-05', 800, 20000.00, 80.0, '服装纺织品 / Textiles', 'CNGZU', 'ITMIL', '广州小米科技', 'Milan Fashion SRL', '进行中', '在途', '待申报', 'sales_wang', '2025-12-15 11:00:00', '2025-12-15 11:00:00'),
-('BL20250005', 'HLCU5678901234', 'BP2500005', 5, 'HLXU5678901', 'HAPAG TOKYO', '066W', 'HAPAG-LLOYD', '2025-12-18', '2026-01-08', 450, 11250.00, 40.5, '家用电器 / Home Appliances', 'CNSZX', 'DEHAM', '东莞三星电子', 'Hamburg Import GmbH', '进行中', '在途', '待申报', 'ops_li', '2025-12-18 16:00:00', '2025-12-18 16:00:00'),
-('BL20250006', 'YMLU6789012345', 'BP2500006', 6, 'YMLU6789012', 'YM UNANIMITY', '045E', 'YANG MING', '2025-12-20', '2026-01-10', 600, 15000.00, 55.0, '塑料制品 / Plastic Products', 'CNNBO', 'ESBCN', '宁波海天塑机', 'Barcelona Imports S.L.', '进行中', '在途', '待申报', 'sales_wang', '2025-12-20 08:30:00', '2025-12-20 08:30:00'),
-('BL20250007', 'MSCU7890123456', 'BP2500007', 7, 'MSCU7890123', 'MSC GULSUN', '089W', 'MSC', '2025-12-22', '2026-01-12', 280, 7000.00, 25.0, '五金工具 / Hardware Tools', 'CNSHA', 'NLRTM', '深圳华为技术有限公司', 'Rotterdam Trading B.V.', '进行中', '在途', '待申报', 'admin', '2025-12-22 10:00:00', '2025-12-22 10:00:00'),
-
--- 待处理订单
-('BL20250008', 'COSU8901234567', 'BP2500008', 8, 'CCLU8901234', 'COSCO PRIDE', '033E', 'COSCO', '2025-12-28', '2026-01-18', 950, 23750.00, 90.0, '电子元器件 / Electronic Components', 'CNSZX', 'DEHAM', '东莞三星电子', 'Hamburg Import GmbH', '待处理', '未启运', '未申报', 'ops_li', '2025-12-26 09:00:00', '2025-12-26 09:00:00'),
-('BL20250009', 'MAEU9012345678', 'BP2500009', 9, 'MSKU9012345', 'MAERSK EMERALD', '067E', 'MAERSK', '2025-12-29', '2026-01-19', 400, 10000.00, 36.0, '医疗设备 / Medical Equipment', 'CNSHA', 'FRLEH', '上海比亚迪', 'Paris Logistics SARL', '待处理', '未启运', '未申报', 'sales_wang', '2025-12-27 14:30:00', '2025-12-27 14:30:00'),
-('BL20250010', 'EGLV0123456789', 'BP2500010', 10, 'EGLU0123456', 'EVER GLORY', '100W', 'EVERGREEN', '2025-12-30', '2026-01-20', 720, 18000.00, 65.0, '家具 / Furniture', 'CNGZU', 'ITMIL', '广州小米科技', 'Milan Fashion SRL', '待处理', '未启运', '未申报', 'admin', '2025-12-28 11:00:00', '2025-12-28 11:00:00'),
-
--- 更多订单
-('BL20250011', 'ONEY1234509876', 'BP2500011', 11, 'ONEU1234509', 'ONE INNOVATION', '055E', 'ONE', '2025-12-25', '2026-01-15', 550, 13750.00, 50.0, '玩具 / Toys', 'CNSHA', 'ESBCN', '深圳华为技术有限公司', 'Barcelona Imports S.L.', '进行中', '在途', '待申报', 'sales_wang', '2025-12-23 15:00:00', '2025-12-23 15:00:00'),
-('BL20250012', 'HLCU2345609876', 'BP2500012', 12, 'HLXU2345609', 'HAPAG BERLIN', '078W', 'HAPAG-LLOYD', '2025-12-26', '2026-01-16', 380, 9500.00, 34.0, '化工产品 / Chemical Products', 'CNNBO', 'NLRTM', '宁波海天塑机', 'Rotterdam Trading B.V.', '进行中', '在途', '待申报', 'ops_li', '2025-12-24 10:30:00', '2025-12-24 10:30:00'),
-('BL20250013', 'YMLU3456709876', 'BP2500013', 13, 'YMLU3456709', 'YM ULTIMATE', '056E', 'YANG MING', '2025-12-27', '2026-01-17', 680, 17000.00, 62.0, '陶瓷制品 / Ceramics', 'CNGZU', 'DEHAM', '广州小米科技', 'Hamburg Import GmbH', '待处理', '未启运', '未申报', 'admin', '2025-12-25 09:00:00', '2025-12-25 09:00:00'),
-('BL20250014', 'MSCU4567809876', 'BP2500014', 14, 'MSCU4567809', 'MSC MAGNIFICA', '099E', 'MSC', '2025-12-28', '2026-01-18', 420, 10500.00, 38.0, 'LED照明 / LED Lighting', 'CNSZX', 'FRLEH', '东莞三星电子', 'Paris Logistics SARL', '待处理', '未启运', '未申报', 'sales_wang', '2025-12-26 13:00:00', '2025-12-26 13:00:00'),
-('BL20250015', 'COSU5678909876', 'BP2500015', 15, 'CCLU5678909', 'COSCO GALAXY', '042W', 'COSCO', '2025-12-29', '2026-01-19', 850, 21250.00, 78.0, '纺织机械 / Textile Machinery', 'CNSHA', 'ITMIL', '上海比亚迪', 'Milan Fashion SRL', '待处理', '未启运', '未申报', 'ops_li', '2025-12-27 16:30:00', '2025-12-27 16:30:00')
-ON CONFLICT (id) DO NOTHING;
-
--- ==================== 4. 更新序列号 ====================
-INSERT INTO order_sequences (business_type, current_seq, prefix, description) VALUES
-('bill_of_lading', 15, 'BP25', '提单订单序号')
-ON CONFLICT (business_type) DO UPDATE SET current_seq = 15;
-
--- ==================== 5. 添加一些费用记录 ====================
-INSERT INTO fee_items (id, bill_id, fee_type, fee_name, currency, amount, status, created_at) VALUES
-('FEE001', 'BL20250001', 'ocean_freight', '海运费', 'EUR', 2500.00, 'confirmed', '2025-12-01 10:30:00'),
-('FEE002', 'BL20250001', 'thc', 'THC费', 'EUR', 180.00, 'confirmed', '2025-12-01 10:30:00'),
-('FEE003', 'BL20250002', 'ocean_freight', '海运费', 'EUR', 1800.00, 'confirmed', '2025-12-03 10:00:00'),
-('FEE004', 'BL20250002', 'customs', '报关费', 'EUR', 120.00, 'confirmed', '2025-12-03 10:00:00'),
-('FEE005', 'BL20250003', 'ocean_freight', '海运费', 'EUR', 4500.00, 'confirmed', '2025-12-05 15:00:00'),
-('FEE006', 'BL20250004', 'ocean_freight', '海运费', 'EUR', 3200.00, 'pending', '2025-12-15 12:00:00'),
-('FEE007', 'BL20250005', 'ocean_freight', '海运费', 'EUR', 2100.00, 'pending', '2025-12-18 17:00:00'),
-('FEE008', 'BL20250006', 'ocean_freight', '海运费', 'EUR', 2800.00, 'pending', '2025-12-20 09:00:00')
+INSERT INTO bills_of_lading (id, bill_number, container_number, vessel, voyage, shipping_company, etd, eta, pieces, weight, volume, description, port_of_loading, port_of_discharge, shipper, consignee, status, ship_status, customs_status, creator, create_time, created_at) VALUES
+('BL20250001', 'COSU1234567890', 'CSLU1234567', 'COSCO SHIPPING ARIES', '025E', 'COSCO', '2025-12-01', '2025-12-20', 500, 12500.00, 45.5, 'Electronics', 'CNSHA', 'DEHAM', 'Huawei Tech', 'Hamburg Import', 'completed', 'arrived', 'cleared', 'admin', '2025-12-01 10:00:00', '2025-12-01 10:00:00'),
+('BL20250002', 'MAEU2345678901', 'MSKU2345678', 'MAERSK SELETAR', '051W', 'MAERSK', '2025-12-03', '2025-12-22', 320, 8000.00, 32.0, 'Machinery Parts', 'CNNBO', 'NLRTM', 'Haitian Plastics', 'Rotterdam Trading', 'completed', 'arrived', 'cleared', 'admin', '2025-12-03 09:30:00', '2025-12-03 09:30:00'),
+('BL20250003', 'EGLV3456789012', 'EGLU3456789', 'EVER GIVEN', '088E', 'EVERGREEN', '2025-12-05', '2025-12-24', 1200, 30000.00, 120.0, 'Auto Parts', 'CNSHA', 'FRLEH', 'BYD Auto', 'Paris Logistics', 'completed', 'arrived', 'cleared', 'admin', '2025-12-05 14:00:00', '2025-12-05 14:00:00'),
+('BL20250004', 'ONEY4567890123', 'ONEU4567890', 'ONE COMMITMENT', '032E', 'ONE', '2025-12-15', '2026-01-05', 800, 20000.00, 80.0, 'Textiles', 'CNGZU', 'ITMIL', 'Xiaomi Tech', 'Milan Fashion', 'in_progress', 'in_transit', 'pending', 'admin', '2025-12-15 11:00:00', '2025-12-15 11:00:00'),
+('BL20250005', 'HLCU5678901234', 'HLXU5678901', 'HAPAG TOKYO', '066W', 'HAPAG-LLOYD', '2025-12-18', '2026-01-08', 450, 11250.00, 40.5, 'Home Appliances', 'CNSZX', 'DEHAM', 'Samsung Dongguan', 'Hamburg Import', 'in_progress', 'in_transit', 'pending', 'admin', '2025-12-18 16:00:00', '2025-12-18 16:00:00'),
+('BL20250006', 'YMLU6789012345', 'YMLU6789012', 'YM UNANIMITY', '045E', 'YANG MING', '2025-12-20', '2026-01-10', 600, 15000.00, 55.0, 'Plastic Products', 'CNNBO', 'ESBCN', 'Haitian Plastics', 'Barcelona Imports', 'in_progress', 'in_transit', 'pending', 'admin', '2025-12-20 08:30:00', '2025-12-20 08:30:00'),
+('BL20250007', 'MSCU7890123456', 'MSCU7890123', 'MSC GULSUN', '089W', 'MSC', '2025-12-22', '2026-01-12', 280, 7000.00, 25.0, 'Hardware Tools', 'CNSHA', 'NLRTM', 'Huawei Tech', 'Rotterdam Trading', 'in_progress', 'in_transit', 'pending', 'admin', '2025-12-22 10:00:00', '2025-12-22 10:00:00'),
+('BL20250008', 'COSU8901234567', 'CCLU8901234', 'COSCO PRIDE', '033E', 'COSCO', '2025-12-28', '2026-01-18', 950, 23750.00, 90.0, 'Electronic Components', 'CNSZX', 'DEHAM', 'Samsung Dongguan', 'Hamburg Import', 'pending', 'not_shipped', 'not_declared', 'admin', '2025-12-26 09:00:00', '2025-12-26 09:00:00'),
+('BL20250009', 'MAEU9012345678', 'MSKU9012345', 'MAERSK EMERALD', '067E', 'MAERSK', '2025-12-29', '2026-01-19', 400, 10000.00, 36.0, 'Medical Equipment', 'CNSHA', 'FRLEH', 'BYD Auto', 'Paris Logistics', 'pending', 'not_shipped', 'not_declared', 'admin', '2025-12-27 14:30:00', '2025-12-27 14:30:00'),
+('BL20250010', 'EGLV0123456789', 'EGLU0123456', 'EVER GLORY', '100W', 'EVERGREEN', '2025-12-30', '2026-01-20', 720, 18000.00, 65.0, 'Furniture', 'CNGZU', 'ITMIL', 'Xiaomi Tech', 'Milan Fashion', 'pending', 'not_shipped', 'not_declared', 'admin', '2025-12-28 11:00:00', '2025-12-28 11:00:00'),
+('BL20250011', 'ONEY1234509876', 'ONEU1234509', 'ONE INNOVATION', '055E', 'ONE', '2025-12-25', '2026-01-15', 550, 13750.00, 50.0, 'Toys', 'CNSHA', 'ESBCN', 'Huawei Tech', 'Barcelona Imports', 'in_progress', 'in_transit', 'pending', 'admin', '2025-12-23 15:00:00', '2025-12-23 15:00:00'),
+('BL20250012', 'HLCU2345609876', 'HLXU2345609', 'HAPAG BERLIN', '078W', 'HAPAG-LLOYD', '2025-12-26', '2026-01-16', 380, 9500.00, 34.0, 'Chemical Products', 'CNNBO', 'NLRTM', 'Haitian Plastics', 'Rotterdam Trading', 'in_progress', 'in_transit', 'pending', 'admin', '2025-12-24 10:30:00', '2025-12-24 10:30:00'),
+('BL20250013', 'YMLU3456709876', 'YMLU3456709', 'YM ULTIMATE', '056E', 'YANG MING', '2025-12-27', '2026-01-17', 680, 17000.00, 62.0, 'Ceramics', 'CNGZU', 'DEHAM', 'Xiaomi Tech', 'Hamburg Import', 'pending', 'not_shipped', 'not_declared', 'admin', '2025-12-25 09:00:00', '2025-12-25 09:00:00'),
+('BL20250014', 'MSCU4567809876', 'MSCU4567809', 'MSC MAGNIFICA', '099E', 'MSC', '2025-12-28', '2026-01-18', 420, 10500.00, 38.0, 'LED Lighting', 'CNSZX', 'FRLEH', 'Samsung Dongguan', 'Paris Logistics', 'pending', 'not_shipped', 'not_declared', 'admin', '2025-12-26 13:00:00', '2025-12-26 13:00:00'),
+('BL20250015', 'COSU5678909876', 'CCLU5678909', 'COSCO GALAXY', '042W', 'COSCO', '2025-12-29', '2026-01-19', 850, 21250.00, 78.0, 'Textile Machinery', 'CNSHA', 'ITMIL', 'BYD Auto', 'Milan Fashion', 'pending', 'not_shipped', 'not_declared', 'admin', '2025-12-27 16:30:00', '2025-12-27 16:30:00')
 ON CONFLICT (id) DO NOTHING;
 
 -- 提交事务
 COMMIT;
 
 -- 验证数据
-SELECT '=== 演示数据导入完成 ===' as message;
-SELECT '用户数量: ' || COUNT(*) FROM users;
-SELECT '客户数量: ' || COUNT(*) FROM customers;
-SELECT '订单数量: ' || COUNT(*) FROM bills_of_lading;
-SELECT '费用记录: ' || COUNT(*) FROM fee_items;
+SELECT '=== Demo Data Import Complete ===' as message;
+SELECT 'Users: ' || COUNT(*) as count FROM users;
+SELECT 'Customers: ' || COUNT(*) as count FROM customers;
+SELECT 'Bills: ' || COUNT(*) as count FROM bills_of_lading;
 
