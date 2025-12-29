@@ -2250,7 +2250,17 @@ export default function CreateBillModal({
                       type="button"
                       onClick={async () => {
                         try {
-                          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/data-import/templates/orders`)
+                          const token = localStorage.getItem('token') || ''
+                          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/data-import/templates/orders`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            }
+                          })
+                          
+                          if (!response.ok) {
+                            throw new Error(`下载失败: ${response.status}`)
+                          }
+                          
                           const blob = await response.blob()
                           const url = window.URL.createObjectURL(blob)
                           const a = document.createElement('a')
