@@ -254,19 +254,19 @@ export default function CRMCustomers() {
         customerLevel: customer.customerLevel,
         customerName: customer.customerName,
         companyName: customer.companyName || '',
-        taxNumber: '',
-        legalPerson: '',
-        registeredCapital: '',
-        establishmentDate: '',
-        businessScope: '',
+        taxNumber: customer.taxNumber || '',
+        legalPerson: customer.legalPerson || '',
+        registeredCapital: customer.registeredCapital || '',
+        establishmentDate: customer.establishmentDate || '',
+        businessScope: customer.businessScope || '',
         contactPerson: customer.contactPerson || '',
         contactPhone: customer.contactPhone || '',
         contactEmail: customer.contactEmail || '',
         countryCode: customer.countryCode || '',
-        province: '',
+        province: customer.province || '',
         city: customer.city || '',
         address: customer.address || '',
-        notes: ''
+        notes: customer.notes || ''
       })
       setCurrentStep(2) // 编辑模式直接跳到第二步
     } else {
