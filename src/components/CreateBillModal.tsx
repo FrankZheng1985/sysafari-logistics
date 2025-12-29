@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { X, Play, Plane, Ship, Train, Truck, Upload, Download, HelpCircle, Plus, Trash2, FileText, ChevronDown, Loader2, Users, CheckCircle, AlertCircle, Eye } from 'lucide-react'
 import DatePicker from './DatePicker'
-import { createBill, updateBill, getShippingCompanyByContainerCode, searchContainerCodes, parseBillFile, getPortsOfLoadingList, getDestinationPortsList, getCustomers, parseTransportDocument, getTrackingSupplementInfo, getCustomerTaxNumbers, getCustomerAddresses, smartTrack, type ContainerCode, type PortOfLoadingItem, type DestinationPortItem, type Customer, type ParsedTransportData, type TrackingSupplementInfo, type CustomerTaxNumber, type CustomerAddress, type ScraperTrackingResult } from '../utils/api'
+import { createBill, updateBill, getShippingCompanyByContainerCode, searchContainerCodes, parseBillFile, getPortsOfLoadingList, getDestinationPortsList, getCustomers, parseTransportDocument, getTrackingSupplementInfo, getCustomerTaxNumbers, getCustomerAddresses, smartTrack, getApiBaseUrl, type ContainerCode, type PortOfLoadingItem, type DestinationPortItem, type Customer, type ParsedTransportData, type TrackingSupplementInfo, type CustomerTaxNumber, type CustomerAddress, type ScraperTrackingResult } from '../utils/api'
 
 // 编辑模式下传入的提单数据类型
 interface EditBillData {
@@ -2250,8 +2250,9 @@ export default function CreateBillModal({
                       type="button"
                       onClick={async () => {
                         try {
-                          // 下载模板不需要认证，直接请求
-                          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/data-import/templates/orders`)
+                          // 下载模板不需要认证，使用正确的 API 地址
+                          const apiBase = getApiBaseUrl()
+                          const response = await fetch(`${apiBase}/api/data-import/templates/orders`)
                           
                           if (!response.ok) {
                             throw new Error(`下载失败: ${response.status}`)
