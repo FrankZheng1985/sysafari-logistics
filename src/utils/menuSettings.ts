@@ -21,6 +21,9 @@ const defaultConfig: Record<string, boolean> = {
 // 内存缓存
 let cachedSettings: Record<string, boolean> | null = null
 
+// 进行中的请求（用于去重）
+let pendingRequest: Promise<Record<string, boolean>> | null = null
+
 // 获取所有菜单项配置（同步版本，使用缓存）
 export function getMenuSettings(): Record<string, boolean> {
   if (cachedSettings) {
@@ -31,22 +34,42 @@ export function getMenuSettings(): Record<string, boolean> {
   return { ...defaultConfig }
 }
 
-// 异步加载菜单设置
+// 异步加载菜单设置（带请求去重）
 export async function loadMenuSettingsAsync(): Promise<Record<string, boolean>> {
-  try {
-    const response = await getSystemSettings(STORAGE_KEY)
-    if (response.errCode === 200 && response.data && response.data[STORAGE_KEY]) {
-      const settings = response.data[STORAGE_KEY]
-      const mergedSettings = { ...defaultConfig, ...settings }
-      cachedSettings = mergedSettings
-      return mergedSettings
-    }
-  } catch (error) {
-    console.error('Failed to load menu settings from API:', error)
+  // 如果已有缓存，直接返回
+  if (cachedSettings) {
+    return { ...cachedSettings }
   }
-  const defaultSettings = { ...defaultConfig }
-  cachedSettings = defaultSettings
-  return defaultSettings
+  
+  // 如果已有进行中的请求，复用它（请求去重）
+  if (pendingRequest) {
+    return pendingRequest
+  }
+  
+  // 创建新请求
+  pendingRequest = (async () => {
+    try {
+      const response = await getSystemSettings(STORAGE_KEY)
+      if (response.errCode === 200 && response.data && response.data[STORAGE_KEY]) {
+        const settings = response.data[STORAGE_KEY]
+        const mergedSettings = { ...defaultConfig, ...settings }
+        cachedSettings = mergedSettings
+        return mergedSettings
+      }
+    } catch (error) {
+      console.debug('Failed to load menu settings from API:', error)
+    }
+    const defaultSettings = { ...defaultConfig }
+    cachedSettings = defaultSettings
+    return defaultSettings
+  })()
+  
+  try {
+    return await pendingRequest
+  } finally {
+    // 请求完成后清除 pending 状态
+    pendingRequest = null
+  }
 }
 
 // 保存菜单项配置

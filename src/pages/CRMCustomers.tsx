@@ -9,6 +9,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
+import { useDebounce } from '../hooks/useDebounce'
 
 const API_BASE = getApiBaseUrl()
 
@@ -109,6 +110,8 @@ export default function CRMCustomers() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [searchValue, setSearchValue] = useState('')
+  // 防抖搜索值，延迟 500ms 触发请求，优化输入体验
+  const debouncedSearchValue = useDebounce(searchValue, 500)
   const [filterLevel, setFilterLevel] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
   
@@ -172,7 +175,7 @@ export default function CRMCustomers() {
   useEffect(() => {
     loadCustomers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, searchValue, filterLevel, filterType])
+  }, [page, pageSize, debouncedSearchValue, filterLevel, filterType])
 
   const loadCustomers = async () => {
     setLoading(true)
@@ -181,7 +184,7 @@ export default function CRMCustomers() {
         page: page.toString(),
         pageSize: pageSize.toString()
       })
-      if (searchValue) params.append('search', searchValue)
+      if (debouncedSearchValue) params.append('search', debouncedSearchValue)
       if (filterLevel) params.append('level', filterLevel)
       if (filterType) params.append('type', filterType)
 

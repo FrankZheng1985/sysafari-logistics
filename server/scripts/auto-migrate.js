@@ -1160,6 +1160,16 @@ export async function runMigrations() {
       `)
     }
     console.log('  ✅ customers 表字段就绪')
+    
+    // ==================== 客户表索引优化 ====================
+    // 添加常用查询字段索引以提升查询性能
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_updated_at ON customers(updated_at DESC)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_level ON customers(customer_level)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_type ON customers(customer_type)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_assigned ON customers(assigned_to)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_status_updated ON customers(status, updated_at DESC)`)
+    console.log('  ✅ customers 表索引优化就绪')
 
     // ==================== 客户联系人表字段补充 ====================
     const contactColumns = [

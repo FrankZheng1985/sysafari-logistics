@@ -35,6 +35,7 @@ import { useState, useEffect } from 'react'
 import clsx from 'clsx'
 import { loadMenuSettingsAsync } from '../utils/menuSettings'
 import { getApiBaseUrl } from '../utils/api'
+import { getCachedSystemSettings, invalidateSystemSettings } from '../utils/apiCache'
 import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE = getApiBaseUrl()
@@ -244,28 +245,31 @@ export default function Sidebar() {
     }
   }, [])
 
-  // 加载 Logo
+  // 加载 Logo（使用缓存）
   useEffect(() => {
-    const loadLogo = async () => {
+    const loadLogo = async (forceRefresh = false) => {
       try {
-        const res = await fetch(`${API_BASE}/api/system-settings?key=systemLogo`)
-        const data = await res.json()
+        // 如果强制刷新，先清除缓存
+        if (forceRefresh) {
+          invalidateSystemSettings('systemLogo')
+        }
+        const data = await getCachedSystemSettings('systemLogo', API_BASE)
         if (data.errCode === 200 && data.data?.systemLogo) {
           setLogoUrl(data.data.systemLogo)
         } else {
           setLogoUrl(null)
         }
       } catch (error) {
-        console.error('加载Logo失败:', error)
+        console.debug('加载Logo失败:', error)
         setLogoUrl(null)
       }
     }
 
     loadLogo()
 
-    // 监听 Logo 变化事件
+    // 监听 Logo 变化事件（强制刷新）
     const handleLogoChange = () => {
-      loadLogo()
+      loadLogo(true)
     }
 
     window.addEventListener('logoChanged', handleLogoChange)

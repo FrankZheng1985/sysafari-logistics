@@ -3,7 +3,7 @@
  * 显示未读消息、待审批、活跃预警的数量
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Bell, 
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getApiBaseUrl } from '../utils/api'
+import { getCachedNotificationOverview, invalidateNotificationCache } from '../utils/apiCache'
 
 const API_BASE = getApiBaseUrl()
 
@@ -51,20 +52,23 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // 获取通知概览数据
-  const fetchOverview = async () => {
+  // 获取通知概览数据（使用缓存）
+  const fetchOverview = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return
     
     try {
-      const response = await fetch(`${API_BASE}/api/notifications/overview?userId=${user.id}`)
-      const data = await response.json()
+      // 如果强制刷新，先清除缓存
+      if (forceRefresh) {
+        invalidateNotificationCache(user.id)
+      }
+      const data = await getCachedNotificationOverview(user.id, API_BASE)
       if (data.errCode === 200) {
         setOverview(data.data)
       }
     } catch (error) {
-      console.error('获取通知概览失败:', error)
+      console.debug('获取通知概览失败:', error)
     }
-  }
+  }, [user?.id])
 
   // 获取最近消息
   const fetchRecentMessages = async () => {
@@ -88,11 +92,11 @@ export default function NotificationBell() {
   const markAsRead = async (messageId: string) => {
     try {
       await fetch(`${API_BASE}/api/messages/${messageId}/read`, { method: 'PUT' })
-      // 刷新数据
-      fetchOverview()
+      // 清除缓存并刷新数据
+      fetchOverview(true)
       fetchRecentMessages()
     } catch (error) {
-      console.error('标记已读失败:', error)
+      console.debug('标记已读失败:', error)
     }
   }
 
@@ -106,10 +110,11 @@ export default function NotificationBell() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ receiverId: user.id })
       })
-      fetchOverview()
+      // 清除缓存并刷新数据
+      fetchOverview(true)
       fetchRecentMessages()
     } catch (error) {
-      console.error('标记全部已读失败:', error)
+      console.debug('标记全部已读失败:', error)
     }
   }
 
@@ -153,15 +158,41 @@ export default function NotificationBell() {
     }
   }, [showDropdown])
 
-  // 初始加载和定时刷新
+  // 初始加载和定时刷新（仅在页面可见时轮询）
   useEffect(() => {
     fetchOverview()
     
-    // 每30秒刷新一次
-    const interval = setInterval(fetchOverview, 30000)
+    let interval: ReturnType<typeof setInterval> | null = null
     
-    return () => clearInterval(interval)
-  }, [user?.id])
+    // 页面可见性变化处理
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // 页面不可见，停止轮询
+        if (interval) {
+          clearInterval(interval)
+          interval = null
+        }
+      } else {
+        // 页面变为可见，立即刷新并恢复轮询
+        fetchOverview(true) // 强制刷新
+        if (!interval) {
+          interval = setInterval(() => fetchOverview(true), 60000)
+        }
+      }
+    }
+    
+    // 初始设置轮询（每60秒刷新一次）
+    if (!document.hidden) {
+      interval = setInterval(() => fetchOverview(true), 60000)
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      if (interval) clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [user?.id, fetchOverview])
 
   // 展开时加载最近消息
   useEffect(() => {

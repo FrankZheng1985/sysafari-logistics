@@ -134,7 +134,7 @@ export default function CreateInvoice() {
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null)
   const [selectedBills, setSelectedBills] = useState<Bill[]>([]) // 多选订单
   const [loadingFees, setLoadingFees] = useState(false)
-  const [paymentDays, setPaymentDays] = useState<number | ''>('')  // 账期天数
+  const [paymentDays, setPaymentDays] = useState<number | ''>(7)  // 账期天数，默认7天
   const [customerBillCounts, setCustomerBillCounts] = useState<Record<string, number>>({})  // 每个客户的可开票订单数
   
   // 采购发票专用状态
@@ -154,10 +154,17 @@ export default function CreateInvoice() {
   const billDropdownRef = useRef<HTMLDivElement>(null)
   const supplierDropdownRef = useRef<HTMLDivElement>(null)
   
+  // 计算初始到期日期（发票日期 + 7天）
+  const getInitialDueDate = () => {
+    const date = new Date()
+    date.setDate(date.getDate() + 7)
+    return date.toISOString().split('T')[0]
+  }
+
   const [formData, setFormData] = useState<InvoiceFormData>({
     invoiceType: initialType,
     invoiceDate: new Date().toISOString().split('T')[0],
-    dueDate: '',
+    dueDate: getInitialDueDate(),
     customerId: '',
     customerName: '',
     supplierId: '',
