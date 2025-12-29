@@ -223,6 +223,10 @@ export default function CRMCustomerDetail() {
       alert('请输入新密码')
       return
     }
+    if (newPassword.length < 8) {
+      alert('新密码长度不能少于8位')
+      return
+    }
     try {
       const response = await resetCustomerAccountPassword(editingAccount.id, newPassword)
       if (response.errCode === 200) {
@@ -230,6 +234,8 @@ export default function CRMCustomerDetail() {
         setNewPassword('')
         setEditingAccount(null)
         alert('密码重置成功')
+      } else {
+        alert(response.msg || response.errMessage || '重置密码失败')
       }
     } catch (error) {
       console.error('重置密码失败:', error)
@@ -1178,14 +1184,15 @@ export default function CRMCustomerDetail() {
                 为账户 <span className="font-medium text-gray-900">{editingAccount.username}</span> 设置新密码
               </p>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">新密码 *</label>
+                <label className="block text-sm text-gray-600 mb-1">新密码 * <span className="text-gray-400 font-normal">(至少8位)</span></label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 pr-10"
-                    placeholder="请输入新密码"
+                    placeholder="请输入新密码（至少8位）"
+                    minLength={8}
                   />
                   <button
                     type="button"
@@ -1901,7 +1908,7 @@ function TaxModal({
   const loadSharedTaxNumbers = async () => {
     setLoadingSharedTax(true)
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/shared-tax-numbers?status=active`)
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/shared-tax-numbers?status=active`)
       const data = await response.json()
       if (data.errCode === 200 && data.data) {
         // API返回的是 {list: [...], total: ...} 格式

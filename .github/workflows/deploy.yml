@@ -34,12 +34,13 @@ jobs:
             # 构建前端（设置 API URL 指向后端服务器）
             cd /var/www/sysafari-logistics
             npm install
-            VITE_API_URL=https://api.xianfeng-eu.com npm run build
+            VITE_API_BASE_URL=https://api.xianfeng-eu.com npm run build
             
-            # 部署前端到 nginx 目录
+            # 部署前端到 nginx 目录（清理旧文件后复制）
+            rm -rf /var/www/prod/dist/*
             cp -r dist/* /var/www/prod/dist/
             
-            # 重载 nginx
+            # 重载 nginx 并清除缓存
             nginx -s reload
             
             echo "✅ 部署完成！"

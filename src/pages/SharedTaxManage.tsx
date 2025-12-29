@@ -53,7 +53,7 @@ function ValidationLight({ status, error }: { status: ValidationStatus; error?: 
 }
 
 // API 基础URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 // 欧盟国家代码映射表
 const euCountryCodeMap: Record<string, string> = {

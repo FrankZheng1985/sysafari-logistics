@@ -860,7 +860,7 @@ export default function CreateBillModal({
       const formData = new FormData()
       formData.append('file', file)
       
-      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || ''
       const response = await fetch(`${apiUrl}/api/data-import/preview/orders`, {
         method: 'POST',
         body: formData,
@@ -900,7 +900,7 @@ export default function CreateBillModal({
     setTemplateSuccess(null)
     
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || ''
       const response = await fetch(`${apiUrl}/api/data-import/confirm/orders`, {
         method: 'POST',
         headers: {
@@ -2253,7 +2253,7 @@ export default function CreateBillModal({
                           // 从 bp_logistics_test_mode 中获取 token
                           const loginData = localStorage.getItem('bp_logistics_test_mode')
                           const token = loginData ? JSON.parse(loginData).token : ''
-                          const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/data-import/templates/orders`, {
+                          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/data-import/templates/orders`, {
                             headers: {
                               'Authorization': `Bearer ${token}`
                             }

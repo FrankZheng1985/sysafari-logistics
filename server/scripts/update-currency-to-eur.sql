@@ -4,7 +4,7 @@
 -- 
 -- 执行方式：
 -- 1. 本地数据库：psql -d sysafari_dev -f server/scripts/update-currency-to-eur.sql
--- 2. 云端数据库：通过 Render 控制台或 psql 连接执行
+-- 2. 云端数据库：通过阿里云 DMS 控制台或 psql 连接执行
 -- ============================================================
 
 -- 开始事务

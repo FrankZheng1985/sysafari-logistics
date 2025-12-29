@@ -142,27 +142,39 @@ ON CONFLICT (api_code) DO UPDATE SET
     health_check_url = EXCLUDED.health_check_url,
     updated_at = CURRENT_TIMESTAMP;
 
--- 9. Render 后端服务器
+-- 9. 阿里云 ECS 后端服务器
 INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
-VALUES ('render_backend', 'Render后端服务器', 'Render', 'infrastructure', 'https://sysafari-logistics-api.onrender.com', 'https://sysafari-logistics-api.onrender.com/api/health', 'subscription', 'https://dashboard.render.com', '后端API服务器，托管于Render平台', 'Server', 9)
+VALUES ('aliyun_ecs', '阿里云ECS服务器', '阿里云', 'infrastructure', 'https://api.xianfeng-eu.com', 'https://api.xianfeng-eu.com/api/health', 'subscription', 'https://ecs.console.aliyun.com', '后端API服务器，托管于阿里云ECS', 'Server', 9)
 ON CONFLICT (api_code) DO UPDATE SET
     api_name = EXCLUDED.api_name,
     provider = EXCLUDED.provider,
     health_check_url = EXCLUDED.health_check_url,
     updated_at = CURRENT_TIMESTAMP;
 
--- 10. Vercel 前端
+-- 10. 阿里云 OSS 前端静态托管
 INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
-VALUES ('vercel_frontend', 'Vercel前端', 'Vercel', 'infrastructure', 'https://sysafari-logistics.vercel.app', 'https://sysafari-logistics.vercel.app', 'subscription', 'https://vercel.com/dashboard', '前端应用，托管于Vercel平台', 'Globe', 10)
+VALUES ('aliyun_oss', '阿里云OSS静态托管', '阿里云', 'infrastructure', 'https://erp.xianfeng-eu.com', 'https://erp.xianfeng-eu.com', 'subscription', 'https://oss.console.aliyun.com', '前端静态资源，托管于阿里云OSS+CDN', 'Globe', 10)
 ON CONFLICT (api_code) DO UPDATE SET
     api_name = EXCLUDED.api_name,
     provider = EXCLUDED.provider,
     health_check_url = EXCLUDED.health_check_url,
     updated_at = CURRENT_TIMESTAMP;
+
+-- 11. 阿里云 RDS PostgreSQL 数据库
+INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
+VALUES ('aliyun_rds', '阿里云RDS数据库', '阿里云', 'infrastructure', 'https://api.xianfeng-eu.com', 'https://api.xianfeng-eu.com/api/health', 'subscription', 'https://rdsnext.console.aliyun.com', 'PostgreSQL数据库，托管于阿里云RDS', 'Database', 11)
+ON CONFLICT (api_code) DO UPDATE SET
+    api_name = EXCLUDED.api_name,
+    provider = EXCLUDED.provider,
+    health_check_url = EXCLUDED.health_check_url,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- 删除旧的 Render 和 Vercel 配置（如果存在）
+DELETE FROM api_integrations WHERE api_code IN ('render_backend', 'vercel_frontend');
 
 -- 完成提示
 DO $$
 BEGIN
     RAISE NOTICE '✅ API对接管理模块数据库表创建完成！';
-    RAISE NOTICE '📊 已初始化9个API服务配置';
+    RAISE NOTICE '📊 已初始化10个API服务配置（阿里云部署）';
 END $$;

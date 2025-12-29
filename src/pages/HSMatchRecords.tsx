@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
 interface MatchRecord {
   id: number

@@ -1,6 +1,6 @@
 -- 添加银行账户表
 -- 执行方式：psql -h host -U user -d database -f add-bank-accounts-table.sql
--- 或在 Render 控制台的 PostgreSQL Shell 中执行
+-- 或在阿里云 DMS 控制台中执行
 
 -- ==================== 银行账户表 ====================
 CREATE TABLE IF NOT EXISTS bank_accounts (

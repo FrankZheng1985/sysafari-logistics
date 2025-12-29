@@ -311,8 +311,8 @@ async function main() {
     console.log('✅ 生产数据库初始化完成！')
     console.log('')
     console.log('📋 下一步操作:')
-    console.log('   1. 在 Render Dashboard 更新 API 服务的 DATABASE_URL')
-    console.log('   2. 重新部署 API 服务')
+    console.log('   1. 在阿里云 ECS 服务器上更新 .env 文件中的 DATABASE_URL')
+    console.log('   2. 使用 PM2 重启 API 服务')
     console.log('   3. 测试生产环境登录')
     console.log('═══════════════════════════════════════════════════════')
     

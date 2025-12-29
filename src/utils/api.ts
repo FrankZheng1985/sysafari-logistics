@@ -5,25 +5,30 @@
 
 import { isTestMode, mockAPI, createWriteBlockedResponse } from '../services/mockDataService'
 
-// API 基础地址配置 - 根据域名自动选择
+// API 基础地址配置 - 根据域名自动选择（阿里云部署）
 export function getApiBaseUrl(): string {
   // 优先使用环境变量
   if (import.meta.env?.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL as string
   }
   
-  // 根据当前域名自动选择 API
+  // 根据当前域名自动选择 API（全部指向阿里云）
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname
     
-    // 演示环境 -> 演示 API
+    // 演示环境 -> 阿里云演示 API
     if (hostname === 'demo.xianfeng-eu.com') {
-      return 'https://sysafari-logistics-demo-api.onrender.com'
+      return 'https://api.xianfeng-eu.com'
     }
     
-    // 生产环境 -> 新加坡生产 API (与数据库同区域)
+    // 生产环境 -> 阿里云 API
     if (hostname === 'erp.xianfeng-eu.com') {
-      return 'https://sysafari-logistics-api-sg.onrender.com'
+      return 'https://api.xianfeng-eu.com'
+    }
+    
+    // 阿里云 OSS 直接访问时
+    if (hostname.includes('oss-cn-hongkong.aliyuncs.com')) {
+      return 'https://api.xianfeng-eu.com'
     }
   }
   

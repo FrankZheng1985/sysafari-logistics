@@ -8,7 +8,7 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from './AuthContext'
 
-// 获取 Socket 服务器地址
+// 获取 Socket 服务器地址（阿里云部署）
 function getSocketUrl(): string {
   if (import.meta.env.DEV) {
     return 'http://localhost:3001'
@@ -17,12 +17,14 @@ function getSocketUrl(): string {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname
     
+    // 演示环境 -> 阿里云 API
     if (hostname === 'demo.xianfeng-eu.com') {
-      return 'https://sysafari-logistics-demo-api.onrender.com'
+      return 'https://api.xianfeng-eu.com'
     }
     
+    // 生产环境 -> 阿里云 API
     if (hostname === 'erp.xianfeng-eu.com') {
-      return 'https://sysafari-logistics-api.onrender.com'
+      return 'https://api.xianfeng-eu.com'
     }
   }
   

@@ -111,9 +111,9 @@ function isProductionEnvironment() {
     return true
   }
   
-  // 方式2: 检查是否使用 Render 的 PostgreSQL（生产数据库）
+  // 方式2: 检查是否使用阿里云 RDS 或其他云数据库（生产数据库）
   const dbUrl = process.env.DATABASE_URL || ''
-  if (dbUrl.includes('render.com') || dbUrl.includes('oregon-postgres')) {
+  if (dbUrl.includes('aliyuncs.com') || dbUrl.includes('rds.aliyuncs')) {
     return true
   }
   

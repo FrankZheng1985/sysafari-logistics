@@ -86,7 +86,7 @@ const app = express()
 // 安全响应头（最先执行）
 app.use(securityHeaders())
 
-// CORS配置
+// CORS配置（阿里云部署 - 已完全迁移）
 app.use(cors({
   origin: [
     // 本地开发
@@ -97,17 +97,17 @@ app.use(cors({
     // 客户门户本地开发
     'http://localhost:5174',
     'http://localhost:5175',
-    // 生产环境
+    // 阿里云生产环境
     'https://erp.xianfeng-eu.com',
     'https://www.erp.xianfeng-eu.com',
-    // 客户门户生产环境
+    'https://api.xianfeng-eu.com',
+    // 阿里云客户门户
     'https://portal.xianfeng-eu.com',
     'https://customer.xianfeng-eu.com',
+    // 阿里云 OSS 直接访问
+    /\.oss-cn-hongkong\.aliyuncs\.com$/,
     // 演示环境
-    'https://demo.xianfeng-eu.com',
-    'https://sysafari-logistics.vercel.app',
-    // Vercel 预览域名
-    /\.vercel\.app$/
+    'https://demo.xianfeng-eu.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],

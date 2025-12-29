@@ -25,25 +25,22 @@ const __dirname = path.dirname(__filename)
 // 加载环境变量
 dotenv.config({ path: path.join(__dirname, '../.env') })
 
-// 数据库连接配置（优先使用环境变量，否则使用默认值）
-const PROD_URL = process.env.PROD_DATABASE_URL || process.env.DATABASE_URL_PROD || 
-  'postgresql://logistics_production_db_iv4r_user:0DcEcyjLIABWFuGNroV2mfFvLCyXP5NB@dpg-d4vmk8pr0fns739omrrg-a.virginia-postgres.render.com/logistics_production_db_iv4r?sslmode=require'
-const DEMO_URL = process.env.DEMO_DATABASE_URL || process.env.DATABASE_URL_TEST ||
-  'postgresql://logistics_quotation_db_user:KEE4NdbTz4xrDKNjEnO8oOHhnkSKAeym@dpg-d4t44e56ubrc73ectgq0-a.virginia-postgres.render.com/logistics_quotation_db?sslmode=require'
+// 数据库连接配置（使用环境变量，连接阿里云 RDS）
+const PROD_URL = process.env.PROD_DATABASE_URL || process.env.DATABASE_URL_PROD
+const DEMO_URL = process.env.DEMO_DATABASE_URL || process.env.DATABASE_URL_TEST
 
 // 检查数据库连接配置
 if (!PROD_URL) {
   console.error('❌ 错误: 未配置生产数据库连接')
   console.error('   请设置 PROD_DATABASE_URL 或 DATABASE_URL_PROD 环境变量')
+  console.error('   阿里云 RDS 连接格式: postgresql://user:password@xxx.pg.rds.aliyuncs.com:5432/dbname')
   process.exit(1)
 }
 
 if (!DEMO_URL) {
   console.error('❌ 错误: 未配置演示数据库连接')
   console.error('   请设置 DEMO_DATABASE_URL 或 DATABASE_URL_TEST 环境变量')
-  console.error('')
-  console.error('   提示: 可以从 Render Dashboard 获取演示数据库的 External URL')
-  console.error('   https://dashboard.render.com/d/dpg-d4t44e56ubrc73ectgq0-a')
+  console.error('   阿里云 RDS 连接格式: postgresql://user:password@xxx.pg.rds.aliyuncs.com:5432/dbname')
   process.exit(1)
 }
 

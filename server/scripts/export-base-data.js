@@ -309,7 +309,7 @@ async function main() {
   
   console.log(`\n📊 总计导出: ${totalCount} 条数据`)
   console.log(`📂 文件位置: ${outputDir}`)
-  console.log('\n💡 提示: 将导出的 SQL 文件通过 Render PostgreSQL Shell 执行即可同步数据')
+  console.log('\n💡 提示: 将导出的 SQL 文件通过阿里云 DMS 控制台或 psql 执行即可同步数据')
   
   await pool.end()
 }

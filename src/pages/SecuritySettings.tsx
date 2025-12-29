@@ -5,25 +5,25 @@ import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { useAuth } from '../contexts/AuthContext'
 
-// API 基础地址 - 根据域名自动选择
+// API 基础地址 - 根据域名自动选择（阿里云部署）
 function getApiBaseUrl(): string {
   // 开发环境
   if (import.meta.env.DEV) {
     return 'http://localhost:3001'
   }
   
-  // 根据当前域名自动选择 API
+  // 根据当前域名自动选择 API（全部指向阿里云）
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname
     
-    // 演示环境 -> 演示 API
+    // 演示环境 -> 阿里云 API
     if (hostname === 'demo.xianfeng-eu.com') {
-      return 'https://sysafari-logistics-demo-api.onrender.com'
+      return 'https://api.xianfeng-eu.com'
     }
     
-    // 生产环境 -> 生产 API
+    // 生产环境 -> 阿里云 API
     if (hostname === 'erp.xianfeng-eu.com') {
-      return 'https://sysafari-logistics-api.onrender.com'
+      return 'https://api.xianfeng-eu.com'
     }
   }
   

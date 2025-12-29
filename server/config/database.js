@@ -4,7 +4,7 @@
  * 
  * 使用方法：
  * - 本地开发：设置 DATABASE_URL 连接本地 PostgreSQL
- * - 生产环境：设置 DATABASE_URL 环境变量连接 Render PostgreSQL
+ * - 生产环境：设置 DATABASE_URL 环境变量连接阿里云 RDS PostgreSQL
  */
 
 import pg from 'pg'
@@ -307,18 +307,33 @@ class PostgresTransactionDb {
  */
 export function getDatabase() {
   if (!pgPool) {
-    // 判断是否需要 SSL（本地连接不需要，Render 连接需要）
+    // 判断数据库类型
     const isLocalhost = DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
-    const needSSL = !isLocalhost && (DATABASE_URL.includes('sslmode=require') || isProduction)
+    const isAliyunRDS = DATABASE_URL.includes('aliyuncs.com') || DATABASE_URL.includes('rds.aliyuncs')
+    
+    // SSL 配置：
+    // - 本地开发：不使用 SSL
+    // - 阿里云 RDS：使用 SSL
+    // - 其他云服务：使用 SSL，不验证证书
+    let sslConfig = false
+    if (!isLocalhost) {
+      if (isAliyunRDS) {
+        // 阿里云 RDS SSL 配置
+        // 如果需要严格验证证书，可以设置 rejectUnauthorized: true
+        sslConfig = { rejectUnauthorized: false }
+      } else if (DATABASE_URL.includes('sslmode=require') || isProduction) {
+        // 其他云服务
+        sslConfig = { rejectUnauthorized: false }
+      }
+    }
     
     pgPool = new pg.Pool({
       connectionString: DATABASE_URL,
-      // 本地连接不使用 SSL，Render 连接需要 SSL
-      ssl: needSSL ? { rejectUnauthorized: false } : false,
+      ssl: sslConfig,
       max: 20,                        // 最大连接数
       min: 2,                         // 保持最小连接数，减少冷启动延迟
-      idleTimeoutMillis: 60000,       // 空闲连接超时 60s（从30s增加）
-      connectionTimeoutMillis: 10000, // 连接超时 10s（从5s增加，应对网络波动）
+      idleTimeoutMillis: 60000,       // 空闲连接超时 60s
+      connectionTimeoutMillis: 10000, // 连接超时 10s
       allowExitOnIdle: false,         // 防止空闲时退出连接池
     })
     
@@ -340,8 +355,14 @@ export function getDatabase() {
       }, 5 * 60 * 1000) // 5 分钟
     }
     
-    const dbType = isLocalhost ? '本地' : (isProduction ? '生产' : '测试')
-    console.log(`🌐 PostgreSQL 数据库连接已建立 (${dbType}环境)`)
+    // 数据库类型标识
+    let dbProvider = '本地'
+    if (!isLocalhost) {
+      if (isAliyunRDS) dbProvider = '阿里云RDS'
+      else dbProvider = '云端'
+    }
+    const dbType = isProduction ? '生产' : '开发'
+    console.log(`🌐 PostgreSQL 数据库连接已建立 (${dbProvider} - ${dbType}环境)`)
   }
   return new PostgresDatabase(pgPool)
 }
