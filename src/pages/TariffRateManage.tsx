@@ -36,12 +36,12 @@ function ImportModal({
 
   // 下载模板
   const handleDownloadTemplate = () => {
-    const templateContent = `hs_code,hs_code_10,description,description_cn,origin_country_code,duty_rate,vat_rate,anti_dumping_rate,unit_code,unit_name
-61091000,6109100010,T-shirts singlets and other vests of cotton knitted,棉制针织T恤衫,CN,12,19,0,KGM,千克
-84713000,8471300000,Portable automatic data processing machines,便携式自动数据处理设备,CN,0,19,0,PCE,台
-85171200,8517120000,Telephones for cellular networks,蜂窝网络电话,CN,0,19,0,PCE,台
-42022200,4202220000,Handbags with outer surface of plastic or textile,塑料或纺织材料面手提包,CN,3,19,0,PCE,件
-64039900,6403990090,Other footwear with outer soles of rubber plastics,其他皮革面鞋靴,CN,8,19,0,PA2,双`
+    const templateContent = `hs_code,hs_code_10,description,description_cn,origin_country_code,duty_rate,vat_rate,anti_dumping_rate,unit_code,unit_name,material,usage_scenario,min_declaration_value
+61091000,6109100010,T-shirts singlets and other vests of cotton knitted,棉制针织T恤衫,CN,12,19,0,KGM,千克,棉,服装,2.50
+84713000,8471300000,Portable automatic data processing machines,便携式自动数据处理设备,CN,0,19,0,PCE,台,金属/塑料,电子产品,150.00
+85171200,8517120000,Telephones for cellular networks,蜂窝网络电话,CN,0,19,0,PCE,台,金属/玻璃,电子产品,80.00
+42022200,4202220000,Handbags with outer surface of plastic or textile,塑料或纺织材料面手提包,CN,3,19,0,PCE,件,塑料/纺织,箱包,5.00
+64039900,6403990090,Other footwear with outer soles of rubber plastics,其他皮革面鞋靴,CN,8,19,0,PA2,双,皮革/橡胶,鞋类,8.00`
 
     const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -102,6 +102,12 @@ function ImportModal({
             rate.unitCode = value
           } else if (header === 'unit_name' || header === 'unit') {
             rate.unitName = value
+          } else if (header === 'material' || header === '材质' || header === '货物材质') {
+            rate.material = value
+          } else if (header === 'usage_scenario' || header === 'usage' || header === '用途' || header === '货物用途') {
+            rate.usageScenario = value
+          } else if (header === 'min_declaration_value' || header === 'declaration_value' || header === '申报价值' || header === '最低申报') {
+            rate.minDeclarationValue = parseFloat(value) || 0
           }
         })
         
@@ -151,7 +157,7 @@ function ImportModal({
               支持 CSV 格式文件，包含以下列：
             </p>
             <p className="text-xs text-gray-500 mb-3">
-              hs_code, description, origin_country_code, duty_rate, vat_rate, unit_name
+              hs_code, description, origin_country_code, duty_rate, vat_rate, unit_name, material, usage_scenario, min_declaration_value
             </p>
             <input
               ref={fileInputRef}
@@ -198,6 +204,7 @@ function ImportModal({
               <li>• 必填列：hs_code（HS编码）、description（商品描述）</li>
               <li>• 可选列：duty_rate（关税率%）、vat_rate（增值税率%）、origin_country_code（原产国代码）</li>
               <li>• 可选列：description_cn（中文描述）、unit_code（单位代码）、unit_name（单位名称）</li>
+              <li>• 可选列：material（货物材质）、usage_scenario（货物用途）、min_declaration_value（申报价值EUR）</li>
             </ul>
           </div>
         </div>

@@ -40,7 +40,8 @@ router.get('/', async (req, res) => {
         unit_code, unit_name, measure_type, measure_code,
         start_date, end_date, regulation_id,
         data_source, taric_version, is_active,
-        last_sync_time, created_at, updated_at
+        last_sync_time, created_at, updated_at,
+        declaration_type, min_declaration_value, material, usage_scenario
       FROM tariff_rates 
       WHERE 1=1
     `
@@ -135,7 +136,11 @@ router.get('/', async (req, res) => {
       isActive: r.is_active === 1,
       lastSyncTime: r.last_sync_time,
       createdAt: r.created_at,
-      updatedAt: r.updated_at
+      updatedAt: r.updated_at,
+      declarationType: r.declaration_type,
+      minDeclarationValue: r.min_declaration_value,
+      material: r.material,
+      usageScenario: r.usage_scenario
     }))
     
     // 前端期望: data 直接是数组, total/page/pageSize 在顶层
@@ -360,7 +365,11 @@ router.get('/:id', async (req, res) => {
       isActive: rate.is_active === 1,
       lastSyncTime: rate.last_sync_time,
       createdAt: rate.created_at,
-      updatedAt: rate.updated_at
+      updatedAt: rate.updated_at,
+      declarationType: rate.declaration_type,
+      minDeclarationValue: rate.min_declaration_value,
+      material: rate.material,
+      usageScenario: rate.usage_scenario
     }
     
     return success(res, data)
@@ -403,9 +412,10 @@ router.post('/', async (req, res) => {
         origin_country, origin_country_code, duty_rate, vat_rate,
         anti_dumping_rate, countervailing_rate, preferential_rate,
         unit_code, unit_name, measure_type,
-        start_date, end_date, data_source, is_active
+        start_date, end_date, declaration_type, min_declaration_value,
+        material, usage_scenario, data_source, is_active
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'manual', 1
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'manual', 1
       )
     `).run(
       data.hsCode,
@@ -423,7 +433,11 @@ router.post('/', async (req, res) => {
       data.unitName || null,
       data.measureType || null,
       data.startDate || null,
-      data.endDate || null
+      data.endDate || null,
+      data.declarationType || 'per_unit',
+      data.minDeclarationValue ?? 0,
+      data.material || null,
+      data.usageScenario || null
     )
     
     return success(res, { message: '创建成功' })
@@ -468,8 +482,12 @@ router.put('/:id', async (req, res) => {
         start_date = $15,
         end_date = $16,
         is_active = $17,
+        declaration_type = $18,
+        min_declaration_value = $19,
+        material = $20,
+        usage_scenario = $21,
         updated_at = NOW()
-      WHERE id = $18
+      WHERE id = $22
     `).run(
       data.hsCode,
       data.hsCode10 || null,
@@ -488,6 +506,10 @@ router.put('/:id', async (req, res) => {
       data.startDate || null,
       data.endDate || null,
       data.isActive !== undefined ? (data.isActive ? 1 : 0) : 1,
+      data.declarationType || 'per_unit',
+      data.minDeclarationValue ?? 0,
+      data.material || null,
+      data.usageScenario || null,
       id
     )
     
@@ -570,6 +592,120 @@ router.post('/batch-status', async (req, res) => {
   } catch (error) {
     console.error('批量更新状态失败:', error)
     return serverError(res, '批量更新状态失败')
+  }
+})
+
+/**
+ * 批量导入税率
+ * POST /api/tariff-rates/import
+ */
+router.post('/import', async (req, res) => {
+  try {
+    const db = getDatabase()
+    const { rates } = req.body
+    
+    if (!rates || !Array.isArray(rates) || rates.length === 0) {
+      return badRequest(res, '请提供要导入的税率数据')
+    }
+    
+    let successCount = 0
+    let failCount = 0
+    const errors = []
+    
+    for (const rate of rates) {
+      try {
+        if (!rate.hsCode) {
+          failCount++
+          errors.push({ hsCode: rate.hsCode || '未知', error: 'HS编码不能为空' })
+          continue
+        }
+        
+        // 检查是否已存在
+        const existing = await db.prepare(`
+          SELECT id FROM tariff_rates 
+          WHERE hs_code = $1 
+            AND COALESCE(origin_country_code, '') = COALESCE($2, '')
+        `).get(rate.hsCode, rate.originCountryCode || '')
+        
+        if (existing) {
+          // 更新现有记录
+          await db.prepare(`
+            UPDATE tariff_rates SET
+              hs_code_10 = COALESCE($1, hs_code_10),
+              goods_description = COALESCE($2, goods_description),
+              goods_description_cn = COALESCE($3, goods_description_cn),
+              origin_country = COALESCE($4, origin_country),
+              duty_rate = COALESCE($5, duty_rate),
+              vat_rate = COALESCE($6, vat_rate),
+              anti_dumping_rate = COALESCE($7, anti_dumping_rate),
+              unit_code = COALESCE($8, unit_code),
+              unit_name = COALESCE($9, unit_name),
+              material = COALESCE($10, material),
+              usage_scenario = COALESCE($11, usage_scenario),
+              min_declaration_value = COALESCE($12, min_declaration_value),
+              data_source = 'import',
+              updated_at = NOW()
+            WHERE id = $13
+          `).run(
+            rate.hsCode10 || null,
+            rate.goodsDescription || null,
+            rate.goodsDescriptionCn || null,
+            rate.originCountry || null,
+            rate.dutyRate ?? null,
+            rate.vatRate ?? null,
+            rate.antiDumpingRate ?? null,
+            rate.unitCode || null,
+            rate.unitName || null,
+            rate.material || null,
+            rate.usageScenario || null,
+            rate.minDeclarationValue ?? null,
+            existing.id
+          )
+        } else {
+          // 插入新记录
+          await db.prepare(`
+            INSERT INTO tariff_rates (
+              hs_code, hs_code_10, goods_description, goods_description_cn,
+              origin_country, origin_country_code, duty_rate, vat_rate,
+              anti_dumping_rate, unit_code, unit_name,
+              material, usage_scenario, min_declaration_value,
+              data_source, is_active
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'import', 1
+            )
+          `).run(
+            rate.hsCode,
+            rate.hsCode10 || null,
+            rate.goodsDescription || '',
+            rate.goodsDescriptionCn || null,
+            rate.originCountry || null,
+            rate.originCountryCode || null,
+            rate.dutyRate ?? 0,
+            rate.vatRate ?? 19,
+            rate.antiDumpingRate ?? 0,
+            rate.unitCode || null,
+            rate.unitName || null,
+            rate.material || null,
+            rate.usageScenario || null,
+            rate.minDeclarationValue ?? 0
+          )
+        }
+        successCount++
+      } catch (err) {
+        failCount++
+        errors.push({ hsCode: rate.hsCode || '未知', error: err.message })
+        console.error(`导入税率 ${rate.hsCode} 失败:`, err.message)
+      }
+    }
+    
+    return success(res, {
+      successCount,
+      failCount,
+      errors: errors.slice(0, 10) // 只返回前10个错误
+    })
+  } catch (error) {
+    console.error('批量导入税率失败:', error)
+    return serverError(res, '批量导入税率失败')
   }
 })
 
