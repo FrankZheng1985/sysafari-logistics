@@ -1,0 +1,46 @@
+name: Deploy to Aliyun ECS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            cd /var/www/sysafari-logistics
+            
+            # 拉取最新代码
+            git pull origin main
+            
+            # 更新后端
+            cd server
+            npm install --production
+            pm2 restart sysafari-prod
+            
+            # 构建前端
+            cd /var/www/sysafari-logistics
+            npm install
+            npm run build
+            
+            # 部署前端到 nginx 目录
+            cp -r dist/* /var/www/prod/dist/
+            
+            # 重载 nginx
+            nginx -s reload
+            
+            echo "✅ 部署完成！"
+
