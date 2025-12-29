@@ -297,7 +297,8 @@ function App() {
           </Routes>
         </Router>
       </AuthProvider>
-      <SpeedInsights />
+      {/* Vercel Speed Insights 仅在 Vercel 托管的演示环境启用 */}
+      {typeof window !== 'undefined' && window.location.hostname === 'demo.xianfeng-eu.com' && <SpeedInsights />}
     </ToastProvider>
   )
 }
