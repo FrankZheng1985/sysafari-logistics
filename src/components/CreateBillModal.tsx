@@ -2250,7 +2250,9 @@ export default function CreateBillModal({
                       type="button"
                       onClick={async () => {
                         try {
-                          const token = localStorage.getItem('token') || ''
+                          // 从 bp_logistics_test_mode 中获取 token
+                          const loginData = localStorage.getItem('bp_logistics_test_mode')
+                          const token = loginData ? JSON.parse(loginData).token : ''
                           const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/data-import/templates/orders`, {
                             headers: {
                               'Authorization': `Bearer ${token}`
