@@ -113,9 +113,9 @@ export async function getInvoices(params = {}) {
   }
   
   if (search) {
-    query += ` AND (invoice_number LIKE ? OR customer_name LIKE ? OR description LIKE ?)`
+    query += ` AND (invoice_number LIKE ? OR customer_name LIKE ? OR description LIKE ? OR bill_number LIKE ? OR container_numbers LIKE ?)`
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   // 获取总数

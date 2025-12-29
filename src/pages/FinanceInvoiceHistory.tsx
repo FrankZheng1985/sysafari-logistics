@@ -168,13 +168,30 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'customerName',
       label: '客户/供应商',
-      width: 150,
+      width: 120,
       sorter: true,
       render: (_value, record) => (
-        <div>
-          <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
-          {record.containerNumbers && record.containerNumbers.length > 0 && (
-            <div className="text-xs text-gray-400">柜号: {record.containerNumbers.join(', ')}</div>
+        <div className="text-sm text-gray-900 truncate" title={record.customerName || '-'}>
+          {record.customerName || '-'}
+        </div>
+      )
+    },
+    {
+      key: 'containerNumbers',
+      label: '集装箱号/提单号',
+      width: 160,
+      render: (_value, record) => (
+        <div className="max-w-[150px]">
+          {record.containerNumbers && record.containerNumbers.length > 0 ? (
+            <div className="text-xs text-gray-900 truncate" title={record.containerNumbers.join(', ')}>
+              {record.containerNumbers.join(', ')}
+            </div>
+          ) : record.billNumber ? (
+            <div className="text-xs text-gray-500 truncate" title={record.billNumber}>
+              {record.billNumber}
+            </div>
+          ) : (
+            <span className="text-gray-400">-</span>
           )}
         </div>
       )
@@ -318,11 +335,11 @@ export default function FinanceInvoiceHistory() {
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="搜索发票号、客户名..."
+              placeholder="搜索发票号、客户名、集装箱号、提单号..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && fetchInvoices()}
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-72 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
             />
           </div>
 
