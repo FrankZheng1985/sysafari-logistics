@@ -640,13 +640,20 @@ export async function getServiceProviders(params = {}) {
   const db = getDatabase()
   const { type, status = 'active', search, page = 1, pageSize = 20 } = params
   
-  // 只获取运输相关类型的供应商
-  let query = `SELECT * FROM suppliers WHERE supplier_type IN (${TRANSPORT_SUPPLIER_TYPES.map(() => '?').join(',')})`
-  const queryParams = [...TRANSPORT_SUPPLIER_TYPES]
+  // 只获取运输相关类型的供应商（支持多类型字段，使用 LIKE 匹配）
+  const typeConditions = TRANSPORT_SUPPLIER_TYPES.map(t => 
+    `(supplier_type = ? OR supplier_type LIKE ? OR supplier_type LIKE ? OR supplier_type LIKE ?)`
+  ).join(' OR ')
+  let query = `SELECT * FROM suppliers WHERE (${typeConditions})`
+  const queryParams = []
+  TRANSPORT_SUPPLIER_TYPES.forEach(t => {
+    queryParams.push(t, `${t},%`, `%,${t},%`, `%,${t}`)
+  })
   
   if (type) {
-    query += ' AND supplier_type = ?'
-    queryParams.push(type)
+    // 支持精确匹配单类型或包含在多类型中
+    query += ` AND (supplier_type = ? OR supplier_type LIKE ? OR supplier_type LIKE ? OR supplier_type LIKE ?)`
+    queryParams.push(type, `${type},%`, `%,${type},%`, `%,${type}`)
   }
   
   if (status) {

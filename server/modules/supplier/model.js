@@ -8,13 +8,27 @@ import { getDatabase, generateId } from '../../config/database.js'
 // ==================== 供应商类型常量 ====================
 
 export const SUPPLIER_TYPES = {
+  // === 服务费类别父级（与服务费分类对应） ===
+  WAREHOUSE_OPERATION: 'warehouse_operation',   // 仓储操作
+  TRANSPORT: 'transport',                       // 运输
+  EXPRESS: 'express',                           // 快递
+  CUSTOMS_CLEARANCE: 'customs_clearance',       // 清关服务
+  DOCUMENT: 'document',                         // 单证费
+  DOC_SWAP: 'doc_swap',                         // 换单费
+  PORT: 'port',                                 // 港口费
+  TAX: 'tax',                                   // 税务
+  IMPORT_AGENCY: 'import_agency',               // 进口商代理
+  MISC_FEE: 'misc_fee',                         // 费用杂项
+  TRUCK_WAITING: 'truck_waiting',               // 卡车等待费
+  INSPECTION_FEE: 'inspection_fee',             // 查验费
+  CLEARING_DISPATCHING: 'clearing_dispatching', // 清提派业务
+  // === 传统供应商类型 ===
   MANUFACTURER: 'manufacturer',    // 生产厂家
   TRADER: 'trader',                // 贸易商
   AGENT: 'agent',                  // 代理商
   DISTRIBUTOR: 'distributor',      // 分销商
   DOC_SWAP_AGENT: 'doc_swap_agent', // 换单代理
   CUSTOMS_AGENT: 'customs_agent',  // 清关代理
-  TRANSPORT: 'transport',          // 运输公司
   WAREHOUSE: 'warehouse',          // 仓储服务商
   OTHER: 'other'                   // 其他
 }
@@ -135,19 +149,22 @@ export async function getSupplierList(params = {}) {
     queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
-  // 单类型筛选
+  // 单类型筛选 - 使用 LIKE 支持多类型字段（supplier_type 存储为逗号分隔的字符串）
   if (type) {
-    query += ' AND supplier_type = ?'
-    queryParams.push(type)
+    // 支持精确匹配单类型或包含在多类型中
+    query += ` AND (supplier_type = ? OR supplier_type LIKE ? OR supplier_type LIKE ? OR supplier_type LIKE ?)`
+    queryParams.push(type, `${type},%`, `%,${type},%`, `%,${type}`)
   }
   
-  // 多类型筛选（用于运输供应商等场景）
+  // 多类型筛选（用于运输供应商等场景）- 查找包含任意指定类型的供应商
   if (types && !type) {
     const typeArray = types.split(',').map(t => t.trim()).filter(Boolean)
     if (typeArray.length > 0) {
-      const placeholders = typeArray.map(() => '?').join(',')
-      query += ` AND supplier_type IN (${placeholders})`
-      queryParams.push(...typeArray)
+      const conditions = typeArray.map(() => `(supplier_type = ? OR supplier_type LIKE ? OR supplier_type LIKE ? OR supplier_type LIKE ?)`).join(' OR ')
+      query += ` AND (${conditions})`
+      typeArray.forEach(t => {
+        queryParams.push(t, `${t},%`, `%,${t},%`, `%,${t}`)
+      })
     }
   }
   

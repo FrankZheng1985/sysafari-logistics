@@ -53,7 +53,8 @@ interface SupplierFormData {
   supplierCode: string
   supplierName: string
   shortName: string
-  supplierType: string
+  supplierType: string  // 存储为逗号分隔的字符串，如 "doc_swap_agent,overseas_trucking"
+  supplierTypes: string[]  // 用于多选组件的数组形式
   contactPerson: string
   contactPhone: string
   contactEmail: string
@@ -96,9 +97,25 @@ interface SupplierStats {
 // ==================== 常量定义 ====================
 
 const SUPPLIER_TYPES = [
+  // === 服务费类别父级（与服务费分类对应） ===
+  { value: 'warehouse_operation', label: '仓储操作' },
+  { value: 'transport', label: '运输' },
+  { value: 'express', label: '快递' },
+  { value: 'customs_clearance', label: '清关服务' },
+  { value: 'document', label: '单证费' },
+  { value: 'doc_swap', label: '换单费' },
+  { value: 'port', label: '港口费' },
+  { value: 'tax', label: '税务' },
+  { value: 'import_agency', label: '进口商代理' },
+  { value: 'misc_fee', label: '费用杂项' },
+  { value: 'truck_waiting', label: '卡车等待费' },
+  { value: 'inspection_fee', label: '查验费' },
+  { value: 'clearing_dispatching', label: '清提派业务' },
+  // === 传统供应商类型 ===
   { value: 'overseas_trucking', label: '海外卡车运输' },
   { value: 'customs_agent', label: '清关代理' },
   { value: 'import_agent', label: '进口代理商' },
+  { value: 'doc_swap_agent', label: '换单代理' },
   { value: 'manufacturer', label: '生产厂家' },
   { value: 'trader', label: '贸易商' },
   { value: 'agent', label: '代理商' },
@@ -144,7 +161,8 @@ const initialFormData: SupplierFormData = {
   supplierCode: '',
   supplierName: '',
   shortName: '',
-  supplierType: 'trader',
+  supplierType: '',
+  supplierTypes: [],  // 多选数组
   contactPerson: '',
   contactPhone: '',
   contactEmail: '',
@@ -291,11 +309,14 @@ export default function SupplierManage() {
   const handleOpenModal = async (supplier?: Supplier) => {
     if (supplier) {
       setEditingSupplier(supplier)
+      // 将逗号分隔的字符串转为数组
+      const typesArray = supplier.supplierType ? supplier.supplierType.split(',').filter(t => t.trim()) : []
       setFormData({
         supplierCode: supplier.supplierCode,
         supplierName: supplier.supplierName,
         shortName: supplier.shortName || '',
-        supplierType: supplier.supplierType,
+        supplierType: supplier.supplierType || '',
+        supplierTypes: typesArray,
         contactPerson: supplier.contactPerson || '',
         contactPhone: supplier.contactPhone || '',
         contactEmail: supplier.contactEmail || '',
@@ -519,8 +540,18 @@ export default function SupplierManage() {
     return SUPPLIER_LEVELS.find(l => l.value === level) || SUPPLIER_LEVELS[4]
   }
 
+  // 获取单个类型标签
   const getTypeLabel = (type: string) => {
     return SUPPLIER_TYPES.find(t => t.value === type)?.label || type
+  }
+  
+  // 获取多类型标签（支持逗号分隔的字符串）
+  const getTypeLabels = (typeString: string) => {
+    if (!typeString) return []
+    return typeString.split(',').filter(t => t.trim()).map(t => ({
+      value: t.trim(),
+      label: getTypeLabel(t.trim())
+    }))
   }
 
   const columns: Column<Supplier>[] = [
@@ -556,13 +587,30 @@ export default function SupplierManage() {
     {
       key: 'supplierType',
       label: '类型',
-      width: '90px',
+      width: '150px',
       sorter: true,
-      render: (_value, record) => (
-        <span className="text-xs text-gray-600">
-          {getTypeLabel(record.supplierType)}
-        </span>
-      ),
+      render: (_value, record) => {
+        const types = getTypeLabels(record.supplierType)
+        if (types.length === 0) return <span className="text-xs text-gray-400">-</span>
+        if (types.length === 1) {
+          return <span className="text-xs text-gray-600">{types[0].label}</span>
+        }
+        // 多类型显示为标签组
+        return (
+          <div className="flex flex-wrap gap-1">
+            {types.slice(0, 2).map((t, idx) => (
+              <span key={idx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">
+                {t.label}
+              </span>
+            ))}
+            {types.length > 2 && (
+              <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded text-[10px]" title={types.map(t => t.label).join(', ')}>
+                +{types.length - 2}
+              </span>
+            )}
+          </div>
+        )
+      },
     },
     {
       key: 'level',
@@ -921,19 +969,57 @@ export default function SupplierManage() {
                       />
                     </div>
 
-                    {/* 供应商类型 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">供应商类型</label>
-                      <select
-                        value={formData.supplierType}
-                        onChange={(e) => setFormData(prev => ({ ...prev, supplierType: e.target.value }))}
-                        title="选择供应商类型"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      >
+                    {/* 供应商类型 - 多选 */}
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-700 mb-2">供应商类型（可多选）</label>
+                      <div className="grid grid-cols-4 gap-2 p-3 border border-gray-300 rounded bg-gray-50 max-h-[160px] overflow-y-auto">
                         {SUPPLIER_TYPES.map(type => (
-                          <option key={type.value} value={type.value}>{type.label}</option>
+                          <label key={type.value} className="flex items-center gap-1.5 cursor-pointer hover:bg-white px-2 py-1 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={formData.supplierTypes.includes(type.value)}
+                              onChange={(e) => {
+                                const newTypes = e.target.checked
+                                  ? [...formData.supplierTypes, type.value]
+                                  : formData.supplierTypes.filter(t => t !== type.value)
+                                setFormData(prev => ({
+                                  ...prev,
+                                  supplierTypes: newTypes,
+                                  supplierType: newTypes.join(',')  // 同步更新字符串形式
+                                }))
+                              }}
+                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-xs text-gray-700">{type.label}</span>
+                          </label>
                         ))}
-                      </select>
+                      </div>
+                      {formData.supplierTypes.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {formData.supplierTypes.map(typeValue => {
+                            const typeInfo = SUPPLIER_TYPES.find(t => t.value === typeValue)
+                            return (
+                              <span key={typeValue} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs">
+                                {typeInfo?.label || typeValue}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newTypes = formData.supplierTypes.filter(t => t !== typeValue)
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      supplierTypes: newTypes,
+                                      supplierType: newTypes.join(',')
+                                    }))
+                                  }}
+                                  className="hover:text-primary-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* 供应商级别 */}

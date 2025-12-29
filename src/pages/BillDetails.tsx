@@ -1641,7 +1641,7 @@ export default function BillDetails() {
                             <span>提单已完成，仅财务人员可修改状态</span>
                           </div>
                         )}
-                        {canEdit && billDetail.inspection === '-' && (
+                        {canEdit && (!billDetail.inspection || billDetail.inspection === '-') && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要将此提单标记为待查验吗？')) return
@@ -1737,7 +1737,7 @@ export default function BillDetails() {
                             放行
                           </button>
                         )}
-                        {billDetail.inspection !== '-' && (
+                        {billDetail.inspection && billDetail.inspection !== '-' && (
                           <button
                             onClick={() => {
                               // 根据查验状态决定跳转到哪个标签页
@@ -1758,7 +1758,7 @@ export default function BillDetails() {
                             billDetail.inspection === '已查验' ? 'text-blue-600' :
                             billDetail.inspection === '已放行' ? 'text-green-600' :
                             'text-gray-600'
-                          }`}>{billDetail.inspection}</span>
+                          }`}>{billDetail.inspection || '-'}</span>
                         </div>
                       </div>
                     </ModuleWrapper>

@@ -40,10 +40,29 @@ interface RecentSupplier {
 // ==================== 常量定义 ====================
 
 const SUPPLIER_TYPES: Record<string, string> = {
+  // === 服务费类别父级 ===
+  warehouse_operation: '仓储操作',
+  transport: '运输',
+  express: '快递',
+  customs_clearance: '清关服务',
+  document: '单证费',
+  doc_swap: '换单费',
+  port: '港口费',
+  tax: '税务',
+  import_agency: '进口商代理',
+  misc_fee: '费用杂项',
+  truck_waiting: '卡车等待费',
+  inspection_fee: '查验费',
+  clearing_dispatching: '清提派业务',
+  // === 传统供应商类型 ===
   manufacturer: '生产厂家',
   trader: '贸易商',
   agent: '代理商',
   distributor: '分销商',
+  doc_swap_agent: '换单代理',
+  customs_agent: '清关代理',
+  import_agent: '进口代理商',
+  overseas_trucking: '海外卡车运输',
   shipping: '船运公司',
   trucking: '拖车公司',
   delivery: '派送服务',
@@ -118,8 +137,23 @@ export default function SupplierDashboard() {
     return SUPPLIER_STATUS[status] || SUPPLIER_STATUS.active
   }
 
+  // 获取单个类型标签
   const getTypeLabel = (type: string) => {
     return SUPPLIER_TYPES[type] || type
+  }
+  
+  // 获取多类型标签（支持逗号分隔的字符串）
+  const getTypeLabelsString = (typeString: string) => {
+    if (!typeString) return '-'
+    const types = typeString.split(',').filter(t => t.trim())
+    if (types.length === 0) return '-'
+    if (types.length === 1) return getTypeLabel(types[0].trim())
+    // 显示前两个，其余显示数量
+    const labels = types.slice(0, 2).map(t => getTypeLabel(t.trim()))
+    if (types.length > 2) {
+      return `${labels.join('、')} +${types.length - 2}`
+    }
+    return labels.join('、')
   }
 
   // 快捷操作卡片
@@ -342,7 +376,7 @@ export default function SupplierDashboard() {
                           <div className="text-xs text-gray-500 flex items-center gap-2">
                             <span>{supplier.supplierCode}</span>
                             <span>·</span>
-                            <span>{getTypeLabel(supplier.supplierType)}</span>
+                            <span>{getTypeLabelsString(supplier.supplierType)}</span>
                           </div>
                         </div>
                       </div>
