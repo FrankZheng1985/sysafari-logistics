@@ -117,7 +117,7 @@ import { SocketProvider } from './contexts/SocketContext'
 import { TabsProvider } from './contexts/TabsContext'
 import { ToastProvider } from './components/Toast'
 import { Loader2 } from 'lucide-react'
-import { SpeedInsights } from '@vercel/speed-insights/react'
+// Vercel Speed Insights 已移除 - 系统已迁移至阿里云
 
 // 保护路由组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -297,8 +297,6 @@ function App() {
           </Routes>
         </Router>
       </AuthProvider>
-      {/* Vercel Speed Insights 仅在 Vercel 托管的演示环境启用 */}
-      {typeof window !== 'undefined' && window.location.hostname === 'demo.xianfeng-eu.com' && <SpeedInsights />}
     </ToastProvider>
   )
 }

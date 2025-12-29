@@ -2348,6 +2348,16 @@ export async function runMigrations() {
       console.log('  ✅ 已修复 ' + fixedSupplierNames.rowCount + ' 个费用项的供应商名称')
     }
 
+    // ==================== 发票表添加 language 字段 ====================
+    const invoiceLanguageCol = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'invoices' AND column_name = 'language'
+    `)
+    if (invoiceLanguageCol.rows.length === 0) {
+      await client.query(`ALTER TABLE invoices ADD COLUMN language TEXT DEFAULT 'en'`)
+      console.log('  ✅ invoices.language 字段已添加')
+    }
+
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）
     try {

@@ -137,7 +137,20 @@ function getFeeNameEnglish(chineseName, descriptionEn = null) {
   return chineseName
 }
 
+// 根据语言获取费用名称
+// language: 'en' = 英文, 'zh' = 中文
+function getFeeName(chineseName, descriptionEn, language = 'en') {
+  if (language === 'zh') {
+    // 中文发票：优先使用原始的中文名称
+    return chineseName || descriptionEn || 'Other Charges'
+  } else {
+    // 英文发票：使用翻译后的英文名称
+    return getFeeNameEnglish(chineseName, descriptionEn)
+  }
+}
+
 // PDF发票HTML模板
+// language: 'en' = 英文发票, 'zh' = 中文发票（仅影响费用品名显示）
 export function generateInvoiceHTML(data) {
   const {
     invoiceNumber,
@@ -150,7 +163,8 @@ export function generateInvoiceHTML(data) {
     subtotal,
     total,
     currency = 'EUR',
-    exchangeRate = 1
+    exchangeRate = 1,
+    language = 'en'  // 发票语言，默认英文
   } = data
 
   const logoBase64 = getLogoBase64()
@@ -412,7 +426,7 @@ export function generateInvoiceHTML(data) {
     <tbody>
       ${items.map(item => `
       <tr>
-        <td>${getFeeNameEnglish(item.description, item.descriptionEn)}</td>
+        <td>${getFeeName(item.description, item.descriptionEn, language)}</td>
         <td class="quantity">${item.quantity}</td>
         ${isMultiContainerInvoice ? '' : `<td class="amount">${formatNumber(item.unitValue)}</td>`}
         <td class="amount">${formatNumber(item.amount)}</td>

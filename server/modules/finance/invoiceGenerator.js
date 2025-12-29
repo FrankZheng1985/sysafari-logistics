@@ -764,10 +764,11 @@ export async function regenerateInvoiceFiles(invoiceId) {
     subtotal: invoiceData ? invoiceData.total : (parseFloat(invoice.subtotal) || parseFloat(invoice.total_amount) || 0),
     total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
     currency: invoice.currency || 'EUR',
-    exchangeRate: parseFloat(invoice.exchange_rate) || 1
+    exchangeRate: parseFloat(invoice.exchange_rate) || 1,
+    language: invoice.language || 'en'  // 发票语言
   }
 
-  console.log(`[regenerateInvoiceFiles] 准备生成 PDF, items 数量: ${items.length}, 客户: ${pdfData.customer.name}`)
+  console.log(`[regenerateInvoiceFiles] 准备生成 PDF, items 数量: ${items.length}, 客户: ${pdfData.customer.name}, 语言: ${pdfData.language}`)
   console.log(`[regenerateInvoiceFiles] 开始生成 PDF...`)
   const pdfBuffer = await generatePDF(pdfData)
   console.log(`[regenerateInvoiceFiles] PDF 生成成功, 大小: ${pdfBuffer?.length || 0} bytes`)
@@ -1035,7 +1036,8 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       subtotal: parseFloat(invoice.subtotal) || parseFloat(invoice.total_amount) || 0,
       total: parseFloat(invoice.total_amount) || 0,
       currency: invoice.currency || 'EUR',
-      exchangeRate: parseFloat(invoice.exchange_rate) || 1
+      exchangeRate: parseFloat(invoice.exchange_rate) || 1,
+      language: invoice.language || 'en'  // 发票语言
     }
 
     // 生成PDF

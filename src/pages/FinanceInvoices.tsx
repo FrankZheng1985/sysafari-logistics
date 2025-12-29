@@ -3,13 +3,20 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Search, Plus, FileText, Edit2, Trash2, Eye,
   CheckCircle, Clock, AlertTriangle, XCircle,
-  Download, FileSpreadsheet, CreditCard
+  Download, FileSpreadsheet, CreditCard, X, Loader2
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
+
+interface BankAccount {
+  id: string
+  accountName: string
+  bankName: string
+  currency: string
+}
 
 interface Invoice {
   id: string
@@ -69,6 +76,19 @@ export default function FinanceInvoices() {
   const [searchValue, setSearchValue] = useState('')
   const [filterType, setFilterType] = useState(searchParams.get('type') || '')
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || '')
+  
+  // 多选核销状态
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([])
+  const [showBatchPayment, setShowBatchPayment] = useState(false)
+  const [batchPaymentData, setBatchPaymentData] = useState({
+    paymentMethod: 'bank_transfer',
+    paymentDate: new Date().toISOString().split('T')[0],
+    referenceNumber: '',
+    bankAccountId: '',
+    description: ''
+  })
+  const [batchPaymentLoading, setBatchPaymentLoading] = useState(false)
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   
   // 当 URL 参数变化时更新筛选状态
   useEffect(() => {
@@ -132,6 +152,120 @@ export default function FinanceInvoices() {
       }
     } catch (error) {
       console.error('获取发票统计失败:', error)
+    }
+  }
+
+  const fetchBankAccounts = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/bank-accounts`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setBankAccounts(data.data || [])
+      }
+    } catch (error) {
+      console.error('获取银行账户失败:', error)
+    }
+  }
+
+  // 获取选中发票的汇总信息
+  const getSelectedInvoicesSummary = () => {
+    const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.includes(inv.id))
+    const totalUnpaid = selectedInvoices.reduce((sum, inv) => 
+      sum + (Number(inv.totalAmount) - Number(inv.paidAmount)), 0
+    )
+    const currencies = [...new Set(selectedInvoices.map(inv => inv.currency || 'EUR'))]
+    return { count: selectedInvoices.length, totalUnpaid, currencies }
+  }
+
+  // 打开批量核销弹窗
+  const handleOpenBatchPayment = () => {
+    if (selectedInvoiceIds.length === 0) {
+      alert('请先选择要核销的发票')
+      return
+    }
+    
+    // 检查选中的发票是否都是同一类型
+    const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.includes(inv.id))
+    const types = [...new Set(selectedInvoices.map(inv => inv.invoiceType))]
+    if (types.length > 1) {
+      alert('请选择同一类型的发票进行批量核销（销售发票或采购发票）')
+      return
+    }
+    
+    // 检查是否有已收款/已付款的发票
+    const hasPaidInvoice = selectedInvoices.some(inv => inv.status === 'paid')
+    if (hasPaidInvoice) {
+      alert('选中的发票中包含已收款/已付款的发票，请取消选择后重试')
+      return
+    }
+    
+    fetchBankAccounts()
+    setShowBatchPayment(true)
+    const invoiceType = types[0]
+    setBatchPaymentData({
+      paymentMethod: 'bank_transfer',
+      paymentDate: new Date().toISOString().split('T')[0],
+      referenceNumber: '',
+      bankAccountId: '',
+      description: `批量${invoiceType === 'sales' ? '收款' : '付款'} - ${selectedInvoiceIds.length} 张发票`
+    })
+  }
+
+  // 提交批量核销
+  const handleBatchPaymentSubmit = async () => {
+    if (selectedInvoiceIds.length === 0) return
+    
+    if (batchPaymentData.paymentMethod === 'bank_transfer' && !batchPaymentData.bankAccountId) {
+      alert('请选择银行账户')
+      return
+    }
+    
+    setBatchPaymentLoading(true)
+    try {
+      const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.includes(inv.id))
+      const selectedBank = bankAccounts.find(a => String(a.id) === batchPaymentData.bankAccountId)
+      
+      for (const invoice of selectedInvoices) {
+        const unpaidAmount = Number(invoice.totalAmount) - Number(invoice.paidAmount)
+        
+        const paymentData = {
+          paymentType: invoice.invoiceType === 'sales' ? 'income' : 'expense',
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          customerName: invoice.customerName,
+          customerId: invoice.customerId,
+          amount: unpaidAmount,
+          currency: invoice.currency || 'EUR',
+          paymentMethod: batchPaymentData.paymentMethod,
+          paymentDate: batchPaymentData.paymentDate,
+          referenceNumber: batchPaymentData.referenceNumber,
+          bankAccount: selectedBank ? `${selectedBank.accountName} (${selectedBank.bankName})` : '',
+          description: batchPaymentData.description || `核销发票 ${invoice.invoiceNumber}`,
+          status: 'completed'
+        }
+        
+        const response = await fetch(`${API_BASE}/api/payments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(paymentData)
+        })
+        
+        const data = await response.json()
+        if (data.errCode !== 200) {
+          throw new Error(`发票 ${invoice.invoiceNumber} 核销失败: ${data.msg}`)
+        }
+      }
+      
+      alert(`成功核销 ${selectedInvoiceIds.length} 张发票`)
+      setShowBatchPayment(false)
+      setSelectedInvoiceIds([])
+      fetchInvoices()
+      fetchStats()
+    } catch (error: any) {
+      console.error('批量核销失败:', error)
+      alert(error.message || '批量核销失败')
+    } finally {
+      setBatchPaymentLoading(false)
     }
   }
 
@@ -479,6 +613,25 @@ export default function FinanceInvoices() {
             <option value="partial">{filterType === 'sales' ? '部分收款' : filterType === 'purchase' ? '部分付款' : '部分收/付款'}</option>
             <option value="overdue">已逾期</option>
           </select>
+          
+          {/* 批量登记收款按钮 */}
+          <button
+            onClick={handleOpenBatchPayment}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+              selectedInvoiceIds.length > 0 
+                ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100' 
+                : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+            }`}
+            disabled={selectedInvoiceIds.length === 0}
+          >
+            <CreditCard className="w-4 h-4" />
+            批量登记收款
+            {selectedInvoiceIds.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded-full text-[10px]">
+                {selectedInvoiceIds.length}
+              </span>
+            )}
+          </button>
         </div>
 
         <button
@@ -497,8 +650,47 @@ export default function FinanceInvoices() {
           data={invoices}
           loading={loading}
           rowKey="id"
+          rowSelection={{
+            type: 'checkbox',
+            selectedRowKeys: selectedInvoiceIds,
+            onChange: (selectedRowKeys) => {
+              setSelectedInvoiceIds(selectedRowKeys)
+            }
+          }}
         />
       </div>
+      
+      {/* 选中发票汇总信息 */}
+      {selectedInvoiceIds.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg border border-gray-200 px-4 py-3 flex items-center gap-4 z-50">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">已选择</span>
+            <span className="text-sm font-medium text-primary-600">{getSelectedInvoicesSummary().count}</span>
+            <span className="text-sm text-gray-600">张发票</span>
+          </div>
+          <div className="h-4 w-px bg-gray-300" />
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">待核销金额</span>
+            <span className="text-sm font-medium text-amber-600">
+              {formatCurrency(getSelectedInvoicesSummary().totalUnpaid)}
+            </span>
+          </div>
+          <div className="h-4 w-px bg-gray-300" />
+          <button
+            onClick={() => setSelectedInvoiceIds([])}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            取消选择
+          </button>
+          <button
+            onClick={handleOpenBatchPayment}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg hover:bg-amber-600 transition-colors"
+          >
+            <CreditCard className="w-4 h-4" />
+            批量核销
+          </button>
+        </div>
+      )}
 
       {/* 分页 */}
       {total > 0 && (
@@ -537,6 +729,158 @@ export default function FinanceInvoices() {
               <option value={50}>50 条/页</option>
               <option value={100}>100 条/页</option>
             </select>
+          </div>
+        </div>
+      )}
+
+      {/* 批量核销弹窗 */}
+      {showBatchPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+            {/* 弹窗头部 */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                批量{invoices.find(inv => selectedInvoiceIds.includes(inv.id))?.invoiceType === 'sales' ? '收款' : '付款'}核销
+              </h3>
+              <button
+                onClick={() => setShowBatchPayment(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            {/* 选中发票列表 */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 max-h-48 overflow-y-auto">
+              <div className="text-xs text-gray-500 mb-2">选中的发票 ({selectedInvoiceIds.length})</div>
+              <div className="space-y-2">
+                {invoices.filter(inv => selectedInvoiceIds.includes(inv.id)).map(invoice => (
+                  <div key={invoice.id} className="flex items-center justify-between text-sm">
+                    <div>
+                      <span className="font-medium text-gray-900">{invoice.invoiceNumber}</span>
+                      <span className="text-gray-500 ml-2">{invoice.customerName}</span>
+                    </div>
+                    <span className="text-amber-600 font-medium">
+                      {formatCurrency(Number(invoice.totalAmount) - Number(invoice.paidAmount), invoice.currency)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">合计待核销金额</span>
+                <span className="text-base font-semibold text-amber-600">
+                  {formatCurrency(getSelectedInvoicesSummary().totalUnpaid)}
+                </span>
+              </div>
+            </div>
+            
+            {/* 核销表单 */}
+            <div className="px-6 py-4 space-y-4">
+              {/* 收款方式 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {invoices.find(inv => selectedInvoiceIds.includes(inv.id))?.invoiceType === 'sales' ? '收款' : '付款'}方式
+                </label>
+                <select
+                  value={batchPaymentData.paymentMethod}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="bank_transfer">银行转账</option>
+                  <option value="cash">现金</option>
+                  <option value="check">支票</option>
+                  <option value="credit_card">信用卡</option>
+                  <option value="wechat">微信支付</option>
+                  <option value="alipay">支付宝</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+              
+              {/* 银行账户（银行转账时显示） */}
+              {batchPaymentData.paymentMethod === 'bank_transfer' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    银行账户 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={batchPaymentData.bankAccountId}
+                    onChange={(e) => setBatchPaymentData(prev => ({ ...prev, bankAccountId: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">请选择银行账户</option>
+                    {bankAccounts.map(account => (
+                      <option key={account.id} value={account.id}>
+                        {account.accountName} ({account.bankName}) - {account.currency}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              {/* 收款日期 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {invoices.find(inv => selectedInvoiceIds.includes(inv.id))?.invoiceType === 'sales' ? '收款' : '付款'}日期
+                </label>
+                <input
+                  type="date"
+                  value={batchPaymentData.paymentDate}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, paymentDate: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              
+              {/* 参考号/交易号 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">参考号/交易号</label>
+                <input
+                  type="text"
+                  value={batchPaymentData.referenceNumber}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, referenceNumber: e.target.value }))}
+                  placeholder="银行流水号、交易单号等"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              
+              {/* 备注 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <textarea
+                  value={batchPaymentData.description}
+                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                />
+              </div>
+            </div>
+            
+            {/* 弹窗底部 */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowBatchPayment(false)}
+                disabled={batchPaymentLoading}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleBatchPaymentSubmit}
+                disabled={batchPaymentLoading || (batchPaymentData.paymentMethod === 'bank_transfer' && !batchPaymentData.bankAccountId)}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {batchPaymentLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    核销中...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    确认核销 ({selectedInvoiceIds.length} 张)
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

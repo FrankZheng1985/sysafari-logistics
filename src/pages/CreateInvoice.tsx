@@ -109,6 +109,7 @@ interface InvoiceFormData {
   notes: string
   status: string
   items: InvoiceItem[]
+  language: 'en' | 'zh'  // 发票语言：en=英文, zh=中文
   // 采购发票专用字段
   supplierInvoiceNumber: string  // 供应商发票号
   supplierInvoiceDate: string    // 供应商发票日期
@@ -177,6 +178,7 @@ export default function CreateInvoice() {
     notes: '',
     status: 'pending',
     items: [],
+    language: 'en',  // 默认英文发票
     supplierInvoiceNumber: '',
     supplierInvoiceDate: ''
   })
@@ -361,6 +363,7 @@ export default function CreateInvoice() {
           notes: invoice.notes || '',
           status: invoice.status || 'issued',
           items: items.length > 0 ? items : [{ id: '1', description: '', quantity: 1, unitPrice: 0, currency: 'EUR', amount: 0, taxRate: 0, taxAmount: 0, discountPercent: 0, discountAmount: 0, finalAmount: 0, isFromOrder: false }],
+          language: invoice.language || 'en',  // 发票语言
           supplierInvoiceNumber: invoice.supplierInvoiceNumber || '',
           supplierInvoiceDate: invoice.supplierInvoiceDate || ''
         })
@@ -1260,6 +1263,7 @@ export default function CreateInvoice() {
         totalAmount: totals.totalAmount,
         currency: formData.currency,
         exchangeRate: formData.exchangeRate,
+        language: formData.language,  // 发票语言
         description: formData.description || formData.items.map(i => i.description).join('; '),
         items: JSON.stringify(formData.items.map(item => ({
           description: item.description,
@@ -2325,6 +2329,26 @@ export default function CreateInvoice() {
                         </button>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* 第三行：发票语言选择 */}
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  {/* 发票语言 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      费用品名语言
+                    </label>
+                    <select
+                      value={formData.language}
+                      onChange={(e) => setFormData(prev => ({ ...prev, language: e.target.value as 'en' | 'zh' }))}
+                      title="选择发票费用品名显示语言"
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
+                    >
+                      <option value="en">英文 (English)</option>
+                      <option value="zh">中文 (Chinese)</option>
+                    </select>
+                    <p className="mt-1 text-[10px] text-gray-400">影响PDF发票中费用品名的显示语言</p>
                   </div>
                 </div>
               </div>

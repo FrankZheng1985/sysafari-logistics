@@ -779,6 +779,7 @@ CREATE TABLE IF NOT EXISTS invoices (
     fee_ids TEXT DEFAULT '[]',
     notes TEXT,
     status TEXT DEFAULT 'draft',
+    language TEXT DEFAULT 'en',
     pdf_url TEXT,
     excel_url TEXT,
     pdf_generated_at TIMESTAMP,
