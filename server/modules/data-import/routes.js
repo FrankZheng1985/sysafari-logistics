@@ -10,9 +10,6 @@ import { authenticate } from '../../middleware/auth.js'
 
 const router = express.Router()
 
-// 所有导入相关路由都需要认证
-router.use(authenticate)
-
 // 配置文件上传
 const storage = multer.memoryStorage()
 const upload = multer({
@@ -35,9 +32,12 @@ const upload = multer({
   }
 })
 
-// ==================== 模板下载 ====================
-// 下载导入模板
+// ==================== 模板下载（无需认证）====================
+// 下载导入模板 - 公开接口，不需要登录
 router.get('/templates/:type', controller.downloadTemplate)
+
+// 以下路由需要认证
+router.use(authenticate)
 
 // ==================== 数据预览 ====================
 // 上传并预览数据（不入库）
