@@ -35,9 +35,10 @@ export async function getCountries(req, res) {
 export async function getCountryContinents(req, res) {
   try {
     const db = getDatabase()
-    const continents = await db.prepare(
+    const rows = await db.prepare(
       "SELECT DISTINCT continent FROM countries WHERE continent IS NOT NULL AND continent != '' ORDER BY continent"
-    ).all().map(r => r.continent)
+    ).all()
+    const continents = rows.map(r => r.continent)
     
     return success(res, continents)
   } catch (error) {
@@ -295,9 +296,10 @@ export async function getPortsOfLoading(req, res) {
 export async function getPortOfLoadingCountries(req, res) {
   try {
     const db = getDatabase()
-    const countries = await db.prepare(
+    const rows = await db.prepare(
       'SELECT DISTINCT country, country_code FROM ports_of_loading WHERE country IS NOT NULL ORDER BY country'
-    ).all().map(r => ({ country: r.country, countryCode: r.country_code }))
+    ).all()
+    const countries = rows.map(r => ({ country: r.country, countryCode: r.country_code }))
     
     return success(res, countries)
   } catch (error) {
@@ -449,9 +451,10 @@ export async function getDestinationPorts(req, res) {
 export async function getDestinationPortCountries(req, res) {
   try {
     const db = getDatabase()
-    const countries = await db.prepare(
+    const rows = await db.prepare(
       'SELECT DISTINCT country, country_code FROM destination_ports WHERE country IS NOT NULL ORDER BY country'
-    ).all().map(r => ({ country: r.country, countryCode: r.country_code }))
+    ).all()
+    const countries = rows.map(r => ({ country: r.country, countryCode: r.country_code }))
     
     return success(res, countries)
   } catch (error) {

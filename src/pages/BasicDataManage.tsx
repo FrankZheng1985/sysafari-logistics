@@ -30,9 +30,7 @@ import {
   VatRate
 } from '../utils/api'
 import { 
-  getBasicDataList, 
   deleteBasicData, 
-  getBasicDataCategories,
   type BasicDataItem,
   getContainerCodesList,
   deleteContainerCode,
@@ -125,7 +123,7 @@ export default function BasicDataManage() {
   const [basicError, setBasicError] = useState<string | null>(null)
   const [basicModalVisible, setBasicModalVisible] = useState(false)
   const [editingBasicData, setEditingBasicData] = useState<BasicDataItem | null>(null)
-  const [categories, setCategories] = useState<string[]>([])
+  // categories 已废弃，不再使用
   
   // 集装箱代码相关状态
   const [containerData, setContainerData] = useState<ContainerCodeItem[]>([])
@@ -188,26 +186,7 @@ export default function BasicDataManage() {
     }
   }
 
-  // 加载基础数据（保留用于其他用途）
-  const loadBasicData = async () => {
-    setBasicLoading(true)
-    setBasicError(null)
-    try {
-      const response = await getBasicDataList({
-        search: activeTab === 'basic' && searchValue ? searchValue : undefined,
-      })
-      if (response.errCode === 200 && response.data) {
-        setBasicData(response.data)
-      } else {
-        setBasicError('加载数据失败')
-      }
-    } catch (err: any) {
-      console.error('加载基础数据失败:', err)
-      setBasicError(err.message || '加载数据失败')
-    } finally {
-      setBasicLoading(false)
-    }
-  }
+  // loadBasicData 已废弃，现在使用 loadShippingCompanyData
 
   // 加载集装箱代码数据
   const loadContainerData = async () => {
@@ -230,16 +209,7 @@ export default function BasicDataManage() {
     }
   }
 
-  const loadCategories = async () => {
-    try {
-      const response = await getBasicDataCategories()
-      if (response.errCode === 200 && response.data) {
-        setCategories(response.data)
-      }
-    } catch (err) {
-      console.error('加载分类列表失败:', err)
-    }
-  }
+  // loadCategories 已废弃，不再需要
 
   const loadShippingCompanies = async () => {
     try {
@@ -482,7 +452,6 @@ export default function BasicDataManage() {
     loadFeeCategoryData() // 初始加载服务费类别数据
     loadTransportMethodData() // 初始加载运输方式数据
     loadVatRateData() // 初始加载增值税率数据
-    loadCategories()
     loadShippingCompanies()
     loadCountries()
     loadDestinationCountries()
@@ -1583,7 +1552,7 @@ export default function BasicDataManage() {
     try {
       const response = await deleteBasicData(id)
       if (response.errCode === 200) {
-        loadBasicData()
+        loadShippingCompanyData()
       } else {
         alert(response.msg || '删除失败')
       }
@@ -1594,8 +1563,7 @@ export default function BasicDataManage() {
   }
 
   const handleBasicModalSuccess = () => {
-    loadBasicData()
-    loadCategories()
+    loadShippingCompanyData()
   }
 
   const handleBasicModalClose = () => {
@@ -1615,7 +1583,7 @@ export default function BasicDataManage() {
         status: newStatus,
       })
       if (response.errCode === 200) {
-        loadBasicData()
+        loadShippingCompanyData()
       } else {
         alert(response.msg || '更新状态失败')
       }
