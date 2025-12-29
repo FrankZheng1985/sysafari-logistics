@@ -2250,14 +2250,8 @@ export default function CreateBillModal({
                       type="button"
                       onClick={async () => {
                         try {
-                          // 从 bp_logistics_test_mode 中获取 token
-                          const loginData = localStorage.getItem('bp_logistics_test_mode')
-                          const token = loginData ? JSON.parse(loginData).token : ''
-                          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/data-import/templates/orders`, {
-                            headers: {
-                              'Authorization': `Bearer ${token}`
-                            }
-                          })
+                          // 下载模板不需要认证，直接请求
+                          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/data-import/templates/orders`)
                           
                           if (!response.ok) {
                             throw new Error(`下载失败: ${response.status}`)

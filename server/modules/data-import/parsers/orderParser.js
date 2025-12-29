@@ -6,14 +6,14 @@
 import XLSX from 'xlsx'
 import { getDatabase, generateId } from '../../../config/database.js'
 
-// 字段映射配置（基于用户模板 2025-12-24 更新）
+// 字段映射配置（基于用户模板 2025-12-29 更新）
 // 带 * 的字段为必填项
+// 注意：以下字段已从模板中移除，但系统中仍保留：正本提单、提单类型、发货人、运输安排、还柜、整柜运输、尾程运输、拆箱、备注
 const FIELD_MAPPING = {
   // === 基础信息 ===
   '收单日期*': { field: 'create_time', required: true, type: 'date', hint: '2025/1/15' },
   '客户名称*': { field: 'customer_name', required: true, hint: '深圳电子科技' },
   '柜号*': { field: 'container_number', required: true, hint: 'OOLU1234567' },
-  '正本提单*': { field: 'original_bill_received', required: true, hint: '是/否' },
   '运输方式*': { field: 'transport_method', required: true, hint: '海运/空运/铁运/卡航' },
   '型号*': { field: 'container_type', required: true, hint: '20/40HQ/45HQ' },
   '船公司*': { field: 'shipping_company', required: true, hint: '中远海运' },
@@ -35,19 +35,9 @@ const FIELD_MAPPING = {
   '货重量*': { field: 'weight', required: true, type: 'weight', hint: '16000kg' },
   '体积*': { field: 'volume', required: true, type: 'volume', hint: '68cbm' },
   // === 提单信息 ===
-  '提单类型*': { field: 'bill_type', required: true, hint: '电放/SWB/原件' },
-  '发货人*': { field: 'shipper', required: true, hint: '公司信息' },
   '收货人': { field: 'consignee', required: false, hint: '公司信息' },
   '通知方': { field: 'notify_party', required: false, hint: '公司信息' },
-  '货物描述': { field: 'description', required: false, hint: '是' },
-  // === 运输安排 ===
-  '运输安排*': { field: 'transport_arrangement', required: true, hint: '客户自己安排/我们公司安排' },
-  '还柜*': { field: 'container_return', required: true, hint: '异地还柜/码头还柜' },
-  '整柜运输*': { field: 'full_container_transport', required: true, hint: '拆柜/整柜' },
-  '尾程运输*': { field: 'last_mile_transport', required: true, hint: '卡车/卡铁' },
-  '拆箱*': { field: 'devanning', required: true, hint: '是/否' },
-  // === 备注 ===
-  '备注': { field: 'remark', required: false, hint: '' }
+  '货物描述': { field: 'description', required: false, hint: '是' }
 }
 
 // 用于解析时的字段名映射（去掉*号）

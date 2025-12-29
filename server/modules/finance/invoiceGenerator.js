@@ -735,11 +735,17 @@ export async function regenerateInvoiceFiles(invoiceId) {
   // 获取客户信息（如果发票中没有，从 customers 表获取）
   let customerAddress = invoice.customer_address || ''
   let customerName = invoice.customer_name || ''
+  const invoiceLanguage = invoice.language || 'en'
+  
   if (invoice.customer_id) {
-    const customer = await db.prepare('SELECT company_name, customer_name, address, city, country_code FROM customers WHERE id = ?').get(invoice.customer_id)
+    const customer = await db.prepare('SELECT company_name, company_name_en, customer_name, address, city, country_code FROM customers WHERE id = ?').get(invoice.customer_id)
     if (customer) {
-      // 优先使用公司全称
-      if (!customerName || customerName === customer.customer_name) {
+      // 根据发票语言选择客户名称
+      if (invoiceLanguage === 'en') {
+        // 英文发票：优先使用英文公司名称
+        customerName = customer.company_name_en || customer.company_name || customer.customer_name || customerName
+      } else {
+        // 中文发票：使用中文公司名称
         customerName = customer.company_name || customer.customer_name || customerName
       }
       if (!customerAddress) {
@@ -1021,6 +1027,29 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       if (paymentDays <= 0) paymentDays = null
     }
 
+    // 根据发票语言获取客户名称
+    const invoiceLanguage = invoice.language || 'en'
+    let customerName = invoice.customer_name || ''
+    let customerAddress = invoice.customer_address || ''
+    
+    if (invoice.customer_id) {
+      const customer = await db.prepare('SELECT company_name, company_name_en, customer_name, address, city, country_code FROM customers WHERE id = ?').get(invoice.customer_id)
+      if (customer) {
+        // 根据发票语言选择客户名称
+        if (invoiceLanguage === 'en') {
+          // 英文发票：优先使用英文公司名称
+          customerName = customer.company_name_en || customer.company_name || customer.customer_name || customerName
+        } else {
+          // 中文发票：使用中文公司名称
+          customerName = customer.company_name || customer.customer_name || customerName
+        }
+        if (!customerAddress) {
+          const addressParts = [customer.address, customer.city, customer.country_code].filter(Boolean)
+          customerAddress = addressParts.join(', ')
+        }
+      }
+    }
+
     // 准备PDF数据
     const pdfData = {
       invoiceNumber: invoice.invoice_number,
@@ -1028,8 +1057,8 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       dueDate: invoice.due_date || null,
       paymentDays: paymentDays,
       customer: {
-        name: invoice.customer_name || '',
-        address: invoice.customer_address || ''
+        name: customerName,
+        address: customerAddress
       },
       containerNumbers,
       items,
@@ -1037,7 +1066,7 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       total: parseFloat(invoice.total_amount) || 0,
       currency: invoice.currency || 'EUR',
       exchangeRate: parseFloat(invoice.exchange_rate) || 1,
-      language: invoice.language || 'en'  // 发票语言
+      language: invoiceLanguage
     }
 
     // 生成PDF
