@@ -3260,7 +3260,7 @@ export default function CreateBillModal({
                     </div>
                   </div>
 
-                  {/* 第二行：体积 + 每公斤运费单价 */}
+                  {/* 第二行：体积 + 每公斤运费单价（仅卡航和铁路显示） */}
                   <div className="grid grid-cols-2 gap-x-6">
                     {/* 体积 */}
                     <div>
@@ -3284,30 +3284,32 @@ export default function CreateBillModal({
                       </div>
                     </div>
 
-                    {/* 每公斤运费单价 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                        每公斤运费单价 <span className="text-red-500">*</span>
-                        <HelpCircle className="w-3 h-3 text-gray-400" />
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={formData.freightRate}
-                          onChange={(e) => handleInputChange('freightRate', e.target.value)}
-                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                        />
-                        <select
-                          value={formData.freightRateUnit}
-                          onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
-                          className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
-                        >
-                          <option value="CNY">CNY</option>
-                          <option value="EUR">EUR</option>
-                          <option value="USD">USD</option>
-                        </select>
+                    {/* 每公斤运费单价 - 仅卡航(truck)和铁路(rail)显示 */}
+                    {(selectedTransport === 'truck' || selectedTransport === 'rail') && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                          每公斤运费单价 <span className="text-red-500">*</span>
+                          <HelpCircle className="w-3 h-3 text-gray-400" />
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            value={formData.freightRate}
+                            onChange={(e) => handleInputChange('freightRate', e.target.value)}
+                            className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                          />
+                          <select
+                            value={formData.freightRateUnit}
+                            onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
+                            className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                          >
+                            <option value="CNY">CNY</option>
+                            <option value="EUR">EUR</option>
+                            <option value="USD">USD</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* 第三行：派送 */}

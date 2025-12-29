@@ -749,7 +749,19 @@ export async function regenerateInvoiceFiles(invoiceId) {
         customerName = customer.company_name || customer.customer_name || customerName
       }
       if (!customerAddress) {
-        const addressParts = [customer.address, customer.city, customer.country_code].filter(Boolean)
+        // 根据发票语言获取国家名称
+        let countryName = customer.country_code || ''
+        if (customer.country_code) {
+          // 先按国家代码查询，如果找不到再按中文名称查询
+          let country = await db.prepare('SELECT country_name_cn, country_name_en FROM countries WHERE country_code = ?').get(customer.country_code)
+          if (!country) {
+            country = await db.prepare('SELECT country_name_cn, country_name_en FROM countries WHERE country_name_cn = ?').get(customer.country_code)
+          }
+          if (country) {
+            countryName = invoiceLanguage === 'en' ? (country.country_name_en || customer.country_code) : (country.country_name_cn || customer.country_code)
+          }
+        }
+        const addressParts = [customer.address, customer.city, countryName].filter(Boolean)
         customerAddress = addressParts.join(', ')
       }
     }
@@ -1044,7 +1056,19 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
           customerName = customer.company_name || customer.customer_name || customerName
         }
         if (!customerAddress) {
-          const addressParts = [customer.address, customer.city, customer.country_code].filter(Boolean)
+          // 根据发票语言获取国家名称
+          let countryName = customer.country_code || ''
+          if (customer.country_code) {
+            // 先按国家代码查询，如果找不到再按中文名称查询
+            let country = await db.prepare('SELECT country_name_cn, country_name_en FROM countries WHERE country_code = ?').get(customer.country_code)
+            if (!country) {
+              country = await db.prepare('SELECT country_name_cn, country_name_en FROM countries WHERE country_name_cn = ?').get(customer.country_code)
+            }
+            if (country) {
+              countryName = invoiceLanguage === 'en' ? (country.country_name_en || customer.country_code) : (country.country_name_cn || customer.country_code)
+            }
+          }
+          const addressParts = [customer.address, customer.city, countryName].filter(Boolean)
           customerAddress = addressParts.join(', ')
         }
       }
