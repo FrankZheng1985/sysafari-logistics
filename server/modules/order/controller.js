@@ -712,7 +712,7 @@ export async function updateDocSwapStatus(req, res) {
 export async function updateCustomsStatus(req, res) {
   try {
     const { id } = req.params
-    const { customsStatus } = req.body
+    const { customsStatus, customsReleaseTime } = req.body
     
     if (!customsStatus) {
       return badRequest(res, '清关状态为必填项')
@@ -724,19 +724,24 @@ export async function updateCustomsStatus(req, res) {
     }
     
     const oldStatus = existing.customsStatus
-    const updated = await model.updateBillCustomsStatus(id, customsStatus)
+    const updated = await model.updateBillCustomsStatus(id, customsStatus, customsReleaseTime)
     
     if (!updated) {
       return serverError(res, '更新失败')
     }
     
-    // 记录操作日志
+    // 记录操作日志，包含放行时间信息
+    const logRemark = customsReleaseTime 
+      ? `放行时间: ${new Date(customsReleaseTime).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
+      : null
+    
     await model.addOperationLog({
       billId: id,
       operationType: 'status_change',
       operationName: '更新清关状态',
       oldValue: oldStatus,
       newValue: customsStatus,
+      remark: logRemark,
       operator: req.user?.name || '系统',
       operatorId: req.user?.id,
       module: 'customs'

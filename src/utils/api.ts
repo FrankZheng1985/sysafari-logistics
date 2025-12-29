@@ -1103,7 +1103,7 @@ export async function updateBillDocSwapStatus(
 export async function updateBillCustomsStatus(
   id: string, 
   customsStatus: '未放行' | '已放行',
-  customsNote?: string
+  customsReleaseTime?: string  // ISO 格式的时间字符串
 ): Promise<ApiResponse<BillOfLading>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/bills/${id}/customs-status`, {
@@ -1111,7 +1111,7 @@ export async function updateBillCustomsStatus(
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ customsStatus, customsNote }),
+      body: JSON.stringify({ customsStatus, customsReleaseTime }),
     })
     
     if (!response.ok) {

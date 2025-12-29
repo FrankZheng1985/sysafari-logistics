@@ -255,6 +255,11 @@ export default function BillDetails() {
   // 编辑提单模态窗口状态
   const [showEditModal, setShowEditModal] = useState(false)
   
+  // 清关放行模态窗口状态
+  const [showCustomsReleaseModal, setShowCustomsReleaseModal] = useState(false)
+  const [customsReleaseDate, setCustomsReleaseDate] = useState('')
+  const [customsReleaseSubmitting, setCustomsReleaseSubmitting] = useState(false)
+  
   // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -2069,21 +2074,14 @@ export default function BillDetails() {
                         )}
                         {canEdit && billDetail.customsStatus !== '已放行' && (
                           <button
-                            onClick={async () => {
-                              if (!confirm('确定要将清关状态设为已放行吗？')) return
-                              try {
-                                const response = await updateBillCustomsStatus(String(billDetail.id), '已放行')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, customsStatus: '已放行', customsReleaseTime: new Date().toISOString() })
-                                  loadOperationLogs()
-                                  alert('已标记为清关放行')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
-                                }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
-                              }
+                            onClick={() => {
+                              // 默认设置为当前日期时间
+                              const now = new Date()
+                              const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+                                .toISOString()
+                                .slice(0, 16)
+                              setCustomsReleaseDate(localDateTime)
+                              setShowCustomsReleaseModal(true)
                             }}
                             className="px-3 py-1.5 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 flex items-center gap-1"
                           >
@@ -2704,6 +2702,102 @@ export default function BillDetails() {
                 className="px-3 py-1.5 text-xs text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {docSwapSubmitting ? '提交中...' : '确认换单'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 清关放行时间选择模态窗口 */}
+      {showCustomsReleaseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-purple-600" />
+                <h3 className="text-sm font-semibold text-gray-900">清关放行</h3>
+              </div>
+              <button
+                onClick={() => setShowCustomsReleaseModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  放行时间 <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="datetime-local"
+                    value={customsReleaseDate}
+                    onChange={(e) => setCustomsReleaseDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                  />
+                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  选择实际清关放行的日期和时间
+                </p>
+              </div>
+              
+              {/* 提示信息 */}
+              <div className="p-2 bg-purple-50 rounded-lg border border-purple-200">
+                <p className="text-xs text-purple-700">
+                  <span className="font-medium">提示：</span>
+                  确认放行后，清关状态将更新为"已放行"
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowCustomsReleaseModal(false)}
+                className="px-3 py-1.5 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  if (!customsReleaseDate) {
+                    alert('请选择放行时间')
+                    return
+                  }
+                  setCustomsReleaseSubmitting(true)
+                  try {
+                    // 将本地时间转换为 ISO 格式
+                    const releaseTime = new Date(customsReleaseDate).toISOString()
+                    const response = await updateBillCustomsStatus(String(billDetail.id), '已放行', releaseTime)
+                    if (response.errCode === 200) {
+                      setBillDetail({ 
+                        ...billDetail, 
+                        customsStatus: '已放行', 
+                        customsReleaseTime: releaseTime 
+                      })
+                      loadOperationLogs()
+                      setShowCustomsReleaseModal(false)
+                      alert('已标记为清关放行')
+                    } else {
+                      alert(`操作失败: ${response.msg}`)
+                    }
+                  } catch (error) {
+                    console.error('操作失败:', error)
+                    alert('操作失败，请稍后重试')
+                  } finally {
+                    setCustomsReleaseSubmitting(false)
+                  }
+                }}
+                disabled={!customsReleaseDate || customsReleaseSubmitting}
+                className="px-3 py-1.5 text-xs text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {customsReleaseSubmitting ? '提交中...' : '确认放行'}
               </button>
             </div>
           </div>

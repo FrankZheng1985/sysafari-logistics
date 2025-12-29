@@ -502,16 +502,39 @@ export async function updateBillDocSwapStatus(id, docSwapStatus, docSwapAgent, d
 
 /**
  * 更新清关状态
+ * @param {string} id - 提单ID
+ * @param {string} customsStatus - 清关状态 ('已放行' | '未放行')
+ * @param {string} customsReleaseTime - 可选，清关放行时间（ISO格式）
  */
-export async function updateBillCustomsStatus(id, customsStatus) {
+export async function updateBillCustomsStatus(id, customsStatus, customsReleaseTime = null) {
   const db = getDatabase()
-  const result = await db.prepare(`
-    UPDATE bills_of_lading 
-    SET customs_status = ?,
-        updated_at = NOW()
-    WHERE id = ?
-  `).run(customsStatus, id)
   
+  // 如果是放行状态，设置放行时间；如果取消放行，清空放行时间
+  let sql, params
+  if (customsStatus === '已放行') {
+    // 如果提供了自定义时间则使用，否则使用当前时间
+    const releaseTime = customsReleaseTime || new Date().toISOString()
+    sql = `
+      UPDATE bills_of_lading 
+      SET customs_status = ?,
+          customs_release_time = ?,
+          updated_at = NOW()
+      WHERE id = ?
+    `
+    params = [customsStatus, releaseTime, id]
+  } else {
+    // 取消放行时清空放行时间
+    sql = `
+      UPDATE bills_of_lading 
+      SET customs_status = ?,
+          customs_release_time = NULL,
+          updated_at = NOW()
+      WHERE id = ?
+    `
+    params = [customsStatus, id]
+  }
+  
+  const result = await db.prepare(sql).run(...params)
   return result.changes > 0
 }
 
