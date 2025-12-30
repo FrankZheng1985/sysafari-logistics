@@ -407,6 +407,68 @@ export async function getPayables(req, res) {
   }
 }
 
+// ==================== 客户询价接口 ====================
+
+/**
+ * 获取我的询价列表
+ */
+export async function getMyInquiries(req, res) {
+  try {
+    const customerId = req.customer.customerId
+    const { status, page, pageSize } = req.query
+    
+    const result = await model.getCustomerInquiries(customerId, {
+      status,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取询价列表失败:', error)
+    return serverError(res, '获取询价列表失败')
+  }
+}
+
+/**
+ * 获取询价详情
+ */
+export async function getMyInquiryById(req, res) {
+  try {
+    const customerId = req.customer.customerId
+    const { id } = req.params
+    
+    const inquiry = await model.getCustomerInquiryById(customerId, id)
+    
+    if (!inquiry) {
+      return notFound(res, '询价不存在')
+    }
+    
+    return success(res, inquiry)
+  } catch (error) {
+    console.error('获取询价详情失败:', error)
+    return serverError(res, '获取询价详情失败')
+  }
+}
+
+/**
+ * 获取询价统计
+ */
+export async function getMyInquiryStats(req, res) {
+  try {
+    const customerId = req.customer.customerId
+    const stats = await model.getCustomerInquiryStats(customerId)
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取询价统计失败:', error)
+    return serverError(res, '获取询价统计失败')
+  }
+}
+
 // ==================== API 密钥管理接口 ====================
 
 /**
@@ -611,6 +673,11 @@ export default {
   
   // 应付账款
   getPayables,
+  
+  // 询价
+  getMyInquiries,
+  getMyInquiryById,
+  getMyInquiryStats,
   
   // API 密钥
   getMyApiKeys,

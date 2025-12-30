@@ -1,6 +1,6 @@
 /**
  * 客户询价模块 - 数据模型
- * 包含：询价管理、卡车类型、报价计算
+ * 包含：询价管理、卡车类型、报价计算、工作流分配
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
@@ -15,11 +15,26 @@ export const INQUIRY_TYPE = {
 
 export const INQUIRY_STATUS = {
   PENDING: 'pending',         // 待报价
+  PROCESSING: 'processing',   // 处理中
   QUOTED: 'quoted',           // 已报价
   ACCEPTED: 'accepted',       // 已接受
   REJECTED: 'rejected',       // 已拒绝
   EXPIRED: 'expired',         // 已过期
   CONVERTED: 'converted'      // 已转订单
+}
+
+export const INQUIRY_PRIORITY = {
+  URGENT: 'urgent',           // 紧急
+  HIGH: 'high',               // 高
+  NORMAL: 'normal',           // 普通
+  LOW: 'low'                  // 低
+}
+
+export const TASK_STATUS = {
+  PENDING: 'pending',         // 待处理
+  PROCESSING: 'processing',   // 处理中
+  COMPLETED: 'completed',     // 已完成
+  OVERDUE: 'overdue'          // 已超时
 }
 
 export const TRUCK_CATEGORY = {
@@ -30,6 +45,9 @@ export const TRUCK_CATEGORY = {
   FLATBED: 'flatbed',         // 平板车
   HAZMAT: 'hazmat'            // 危险品车
 }
+
+// 默认处理时限（小时）
+const DEFAULT_DUE_HOURS = 24
 
 // ==================== 询价编号生成 ====================
 
@@ -53,10 +71,70 @@ export async function generateInquiryNumber() {
   return `INQ${year}${String(seq).padStart(6, '0')}`
 }
 
+// ==================== 用户和分配相关 ====================
+
+/**
+ * 获取客户的负责跟单员
+ * 优先查找 customers 表的 sales_id，否则返回 null
+ */
+export async function getCustomerAssignee(customerId) {
+  const db = getDatabase()
+  
+  // 从客户表查找负责的跟单员/业务员
+  const customer = await db.prepare(`
+    SELECT c.sales_id, c.sales_name, u.supervisor_id, s.name as supervisor_name,
+           ss.supervisor_id as super_supervisor_id, ss2.name as super_supervisor_name
+    FROM customers c
+    LEFT JOIN users u ON c.sales_id = u.id
+    LEFT JOIN users s ON u.supervisor_id = s.id
+    LEFT JOIN users ss ON s.supervisor_id = ss.id
+    LEFT JOIN users ss2 ON ss.supervisor_id = ss2.id
+    WHERE c.id = $1
+  `).get(customerId)
+  
+  if (!customer || !customer.sales_id) {
+    return null
+  }
+  
+  return {
+    assigneeId: customer.sales_id,
+    assigneeName: customer.sales_name,
+    supervisorId: customer.supervisor_id || null,
+    supervisorName: customer.supervisor_name || null,
+    superSupervisorId: customer.super_supervisor_id || null,
+    superSupervisorName: customer.super_supervisor_name || null
+  }
+}
+
+/**
+ * 获取用户的上级链
+ */
+export async function getUserSupervisorChain(userId) {
+  const db = getDatabase()
+  
+  const user = await db.prepare(`
+    SELECT u.id, u.name, u.role, u.supervisor_id,
+           s.id as sup_id, s.name as sup_name, s.supervisor_id as sup_supervisor_id,
+           ss.id as sup_sup_id, ss.name as sup_sup_name
+    FROM users u
+    LEFT JOIN users s ON u.supervisor_id = s.id
+    LEFT JOIN users ss ON s.supervisor_id = ss.id
+    WHERE u.id = $1
+  `).get(userId)
+  
+  if (!user) return null
+  
+  return {
+    user: { id: user.id, name: user.name, role: user.role },
+    supervisor: user.sup_id ? { id: user.sup_id, name: user.sup_name } : null,
+    superSupervisor: user.sup_sup_id ? { id: user.sup_sup_id, name: user.sup_sup_name } : null
+  }
+}
+
 // ==================== 询价管理 ====================
 
 /**
- * 创建询价
+ * 创建询价（包含自动分配和待办任务）
  */
 export async function createInquiry(data) {
   const db = getDatabase()
@@ -67,11 +145,20 @@ export async function createInquiry(data) {
   const validUntil = new Date()
   validUntil.setDate(validUntil.getDate() + 7)
   
+  // 计算处理截止时间
+  const dueAt = new Date()
+  dueAt.setHours(dueAt.getHours() + (data.priority === 'urgent' ? 4 : DEFAULT_DUE_HOURS))
+  
+  // 获取客户的负责跟单员
+  const assignee = await getCustomerAssignee(data.customerId)
+  
+  // 创建询价记录
   await db.prepare(`
     INSERT INTO customer_inquiries (
       id, inquiry_number, customer_id, customer_name, inquiry_type, status,
-      clearance_data, transport_data, attachments, notes, valid_until
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      clearance_data, transport_data, attachments, notes, valid_until,
+      assigned_to, assigned_to_name, assigned_at, due_at, priority, source
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
   `).run(
     id,
     inquiryNumber,
@@ -83,10 +170,105 @@ export async function createInquiry(data) {
     data.transportData ? JSON.stringify(data.transportData) : null,
     data.attachments ? JSON.stringify(data.attachments) : '[]',
     data.notes || null,
-    validUntil.toISOString().split('T')[0]
+    validUntil.toISOString().split('T')[0],
+    assignee?.assigneeId || null,
+    assignee?.assigneeName || null,
+    assignee ? new Date().toISOString() : null,
+    dueAt.toISOString(),
+    data.priority || INQUIRY_PRIORITY.NORMAL,
+    data.source || 'portal'
   )
   
-  return { id, inquiryNumber }
+  // 如果有分配的跟单员，创建待办任务
+  if (assignee) {
+    await createInquiryTask({
+      inquiryId: id,
+      inquiryNumber,
+      assigneeId: assignee.assigneeId,
+      assigneeName: assignee.assigneeName,
+      supervisorId: assignee.supervisorId,
+      supervisorName: assignee.supervisorName,
+      superSupervisorId: assignee.superSupervisorId,
+      superSupervisorName: assignee.superSupervisorName,
+      dueAt
+    })
+  }
+  
+  return { id, inquiryNumber, assignee }
+}
+
+/**
+ * 创建询价待办任务
+ */
+export async function createInquiryTask(data) {
+  const db = getDatabase()
+  
+  // 为跟单员创建处理任务
+  await db.prepare(`
+    INSERT INTO inquiry_tasks (
+      inquiry_id, inquiry_number, assignee_id, assignee_name, assignee_role,
+      supervisor_id, supervisor_name, super_supervisor_id, super_supervisor_name,
+      task_type, status, due_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  `).run(
+    data.inquiryId,
+    data.inquiryNumber,
+    data.assigneeId,
+    data.assigneeName,
+    'operator',
+    data.supervisorId || null,
+    data.supervisorName || null,
+    data.superSupervisorId || null,
+    data.superSupervisorName || null,
+    'process',
+    TASK_STATUS.PENDING,
+    data.dueAt.toISOString()
+  )
+  
+  return true
+}
+
+/**
+ * 手动分配询价给跟单员
+ */
+export async function assignInquiry(inquiryId, assigneeId, assignedBy) {
+  const db = getDatabase()
+  
+  // 获取被分配用户的上级链
+  const chain = await getUserSupervisorChain(assigneeId)
+  if (!chain) {
+    throw new Error('找不到指定的用户')
+  }
+  
+  // 计算截止时间
+  const dueAt = new Date()
+  dueAt.setHours(dueAt.getHours() + DEFAULT_DUE_HOURS)
+  
+  // 更新询价的分配信息
+  await db.prepare(`
+    UPDATE customer_inquiries
+    SET assigned_to = $1, assigned_to_name = $2, assigned_at = CURRENT_TIMESTAMP,
+        due_at = $3, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $4
+  `).run(assigneeId, chain.user.name, dueAt.toISOString(), inquiryId)
+  
+  // 获取询价编号
+  const inquiry = await getInquiryById(inquiryId)
+  
+  // 创建待办任务
+  await createInquiryTask({
+    inquiryId,
+    inquiryNumber: inquiry.inquiryNumber,
+    assigneeId: chain.user.id,
+    assigneeName: chain.user.name,
+    supervisorId: chain.supervisor?.id || null,
+    supervisorName: chain.supervisor?.name || null,
+    superSupervisorId: chain.superSupervisor?.id || null,
+    superSupervisorName: chain.superSupervisor?.name || null,
+    dueAt
+  })
+  
+  return { success: true, assignee: chain }
 }
 
 /**
@@ -289,8 +471,11 @@ export async function setInquiryQuote(id, quoteData) {
       quoted_by = $8,
       quoted_by_name = $9,
       valid_until = $10,
+      processed_at = CURRENT_TIMESTAMP,
+      crm_quote_id = $11,
+      transport_price_id = $12,
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = $11
+    WHERE id = $13
   `).run(
     quoteData.estimatedDuty || 0,
     quoteData.estimatedVat || 0,
@@ -302,10 +487,176 @@ export async function setInquiryQuote(id, quoteData) {
     quoteData.quotedBy || null,
     quoteData.quotedByName || null,
     quoteData.validUntil || null,
+    quoteData.crmQuoteId || null,
+    quoteData.transportPriceId || null,
     id
   )
   
+  // 完成对应的待办任务
+  await completeInquiryTask(id, quoteData.quotedBy)
+  
   return true
+}
+
+// ==================== 待办任务管理 ====================
+
+/**
+ * 获取待处理询价任务列表
+ */
+export async function getPendingInquiryTasks(params = {}) {
+  const db = getDatabase()
+  const { userId, role, status, page = 1, pageSize = 20 } = params
+  
+  let query = `
+    SELECT t.*, i.customer_name, i.inquiry_type, i.status as inquiry_status,
+           i.transport_data, i.clearance_data, i.priority, i.source
+    FROM inquiry_tasks t
+    JOIN customer_inquiries i ON t.inquiry_id = i.id
+    WHERE 1=1
+  `
+  const queryParams = []
+  let paramIndex = 1
+  
+  // 根据角色筛选
+  if (userId) {
+    // 跟单员看自己的，上级看下属的
+    query += ` AND (t.assignee_id = $${paramIndex} OR t.supervisor_id = $${paramIndex} OR t.super_supervisor_id = $${paramIndex})`
+    queryParams.push(userId)
+    paramIndex++
+  }
+  
+  if (status) {
+    query += ` AND t.status = $${paramIndex++}`
+    queryParams.push(status)
+  } else {
+    // 默认只查待处理的
+    query += ` AND t.status IN ('pending', 'processing')`
+  }
+  
+  // 计数
+  const countQuery = query.replace(/SELECT t\.\*, i\.[^F]+FROM/, 'SELECT COUNT(*) as total FROM')
+  const countResult = await db.prepare(countQuery).get(...queryParams)
+  
+  // 排序和分页
+  query += ` ORDER BY 
+    CASE WHEN i.priority = 'urgent' THEN 1 
+         WHEN i.priority = 'high' THEN 2 
+         WHEN i.priority = 'normal' THEN 3 
+         ELSE 4 END,
+    t.due_at ASC
+    LIMIT $${paramIndex++} OFFSET $${paramIndex++}`
+  queryParams.push(pageSize, (page - 1) * pageSize)
+  
+  const list = await db.prepare(query).all(...queryParams)
+  
+  return {
+    list: list.map(convertTaskToCamelCase),
+    total: countResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 获取询价的待办任务
+ */
+export async function getInquiryTask(inquiryId) {
+  const db = getDatabase()
+  const task = await db.prepare(`
+    SELECT * FROM inquiry_tasks WHERE inquiry_id = $1 ORDER BY created_at DESC LIMIT 1
+  `).get(inquiryId)
+  return task ? convertTaskToCamelCase(task) : null
+}
+
+/**
+ * 更新任务状态为处理中
+ */
+export async function startInquiryTask(inquiryId, userId) {
+  const db = getDatabase()
+  
+  await db.prepare(`
+    UPDATE inquiry_tasks 
+    SET status = 'processing', started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE inquiry_id = $1 AND assignee_id = $2 AND status = 'pending'
+  `).run(inquiryId, userId)
+  
+  // 同时更新询价状态
+  await db.prepare(`
+    UPDATE customer_inquiries
+    SET status = 'processing', updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1 AND status = 'pending'
+  `).run(inquiryId)
+  
+  return true
+}
+
+/**
+ * 完成询价待办任务
+ */
+export async function completeInquiryTask(inquiryId, userId) {
+  const db = getDatabase()
+  
+  await db.prepare(`
+    UPDATE inquiry_tasks 
+    SET status = 'completed', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE inquiry_id = $1
+  `).run(inquiryId)
+  
+  return true
+}
+
+/**
+ * 检查并标记超时任务
+ */
+export async function checkOverdueTasks() {
+  const db = getDatabase()
+  
+  // 更新超时的任务
+  const result = await db.prepare(`
+    UPDATE inquiry_tasks 
+    SET status = 'overdue', updated_at = CURRENT_TIMESTAMP
+    WHERE status IN ('pending', 'processing') 
+      AND due_at < CURRENT_TIMESTAMP
+    RETURNING id, inquiry_id, assignee_id, supervisor_id, super_supervisor_id
+  `).all()
+  
+  // 同时更新询价的超时标记
+  if (result.length > 0) {
+    const inquiryIds = result.map(r => r.inquiry_id)
+    for (const inquiryId of inquiryIds) {
+      await db.prepare(`
+        UPDATE customer_inquiries
+        SET is_overdue = TRUE, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `).run(inquiryId)
+    }
+  }
+  
+  return result
+}
+
+/**
+ * 获取待办任务统计
+ */
+export async function getTaskStats(userId) {
+  const db = getDatabase()
+  
+  const stats = await db.prepare(`
+    SELECT 
+      COUNT(*) FILTER (WHERE t.status = 'pending') as pending_count,
+      COUNT(*) FILTER (WHERE t.status = 'processing') as processing_count,
+      COUNT(*) FILTER (WHERE t.status = 'overdue') as overdue_count,
+      COUNT(*) FILTER (WHERE t.status = 'completed' AND DATE(t.completed_at) = CURRENT_DATE) as today_completed
+    FROM inquiry_tasks t
+    WHERE t.assignee_id = $1 OR t.supervisor_id = $1 OR t.super_supervisor_id = $1
+  `).get(userId)
+  
+  return {
+    pendingCount: parseInt(stats?.pending_count) || 0,
+    processingCount: parseInt(stats?.processing_count) || 0,
+    overdueCount: parseInt(stats?.overdue_count) || 0,
+    todayCompleted: parseInt(stats?.today_completed) || 0
+  }
 }
 
 // ==================== 卡车类型管理 ====================
@@ -436,14 +787,85 @@ function convertInquiryToCamelCase(row) {
     quotedBy: row.quoted_by,
     quotedByName: row.quoted_by_name,
     
+    // 分配信息
+    assignedTo: row.assigned_to,
+    assignedToName: row.assigned_to_name,
+    assignedAt: row.assigned_at,
+    dueAt: row.due_at,
+    processedAt: row.processed_at,
+    isOverdue: row.is_overdue,
+    priority: row.priority || 'normal',
+    source: row.source || 'portal',
+    
     // 关联
     crmOpportunityId: row.crm_opportunity_id,
+    crmQuoteId: row.crm_quote_id,
+    transportPriceId: row.transport_price_id,
     billId: row.bill_id,
     
     attachments,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+}
+
+function convertTaskToCamelCase(row) {
+  // 解析可能的 JSON 字段
+  let transportData = null
+  let clearanceData = null
+  
+  try {
+    if (row.transport_data) {
+      transportData = typeof row.transport_data === 'string' 
+        ? JSON.parse(row.transport_data) 
+        : row.transport_data
+    }
+    if (row.clearance_data) {
+      clearanceData = typeof row.clearance_data === 'string' 
+        ? JSON.parse(row.clearance_data) 
+        : row.clearance_data
+    }
+  } catch (e) {
+    // 解析失败保持原值
+  }
+  
+  return {
+    id: row.id,
+    inquiryId: row.inquiry_id,
+    inquiryNumber: row.inquiry_number,
+    
+    // 分配信息
+    assigneeId: row.assignee_id,
+    assigneeName: row.assignee_name,
+    assigneeRole: row.assignee_role,
+    supervisorId: row.supervisor_id,
+    supervisorName: row.supervisor_name,
+    superSupervisorId: row.super_supervisor_id,
+    superSupervisorName: row.super_supervisor_name,
+    
+    // 任务状态
+    taskType: row.task_type,
+    status: row.status,
+    
+    // 时间
+    dueAt: row.due_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    
+    // 提醒
+    reminderSent: row.reminder_sent,
+    overdueNotified: row.overdue_notified,
+    
+    // 询价信息（JOIN查询时）
+    customerName: row.customer_name,
+    inquiryType: row.inquiry_type,
+    inquiryStatus: row.inquiry_status,
+    transportData,
+    clearanceData,
+    priority: row.priority,
+    source: row.source
   }
 }
 
@@ -473,7 +895,13 @@ export default {
   // 常量
   INQUIRY_TYPE,
   INQUIRY_STATUS,
+  INQUIRY_PRIORITY,
+  TASK_STATUS,
   TRUCK_CATEGORY,
+  
+  // 用户和分配
+  getCustomerAssignee,
+  getUserSupervisorChain,
   
   // 询价
   generateInquiryNumber,
@@ -485,6 +913,16 @@ export default {
   updateInquiry,
   updateInquiryStatus,
   setInquiryQuote,
+  assignInquiry,
+  
+  // 待办任务
+  createInquiryTask,
+  getPendingInquiryTasks,
+  getInquiryTask,
+  startInquiryTask,
+  completeInquiryTask,
+  checkOverdueTasks,
+  getTaskStats,
   
   // 卡车类型
   getTruckTypes,

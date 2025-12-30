@@ -139,4 +139,71 @@ router.get('/documents/imports/:importId/price-check', controller.checkPriceAnom
 // 检测单个商品价格异常
 router.post('/documents/price-check', controller.checkSinglePriceAnomaly)
 
+// ==================== HS编码税率优化 ====================
+// 分析HS编码税率风险
+router.get('/hs-optimize/analyze/:hsCode', controller.analyzeHsTaxRisk)
+
+// 获取低税率替代编码
+router.get('/hs-optimize/alternatives/:hsCode', controller.findTaxAlternatives)
+
+// 搜索同前缀HS编码
+router.get('/hs-optimize/prefix/:prefix', controller.searchHsByPrefix)
+
+// 获取反倾销税风险编码列表
+router.get('/hs-optimize/anti-dumping-risks', controller.getAntiDumpingRisks)
+
+// 批量分析导入批次税率风险
+router.post('/hs-optimize/batch-analyze/:importId', controller.batchAnalyzeTaxRisk)
+
+// ==================== 申报价值分析 ====================
+// 记录申报价值
+router.post('/declaration-value/record', controller.recordDeclaration)
+
+// 更新申报结果
+router.put('/declaration-value/record/:id/result', controller.updateDeclarationResultCtrl)
+
+// 获取HS编码申报统计
+router.get('/declaration-value/stats/:hsCode', controller.getDeclarationStatsCtrl)
+
+// 检查申报价值风险
+router.post('/declaration-value/check-risk', controller.checkDeclarationRiskCtrl)
+
+// 批量检查导入批次申报风险
+router.post('/declaration-value/batch-check/:importId', controller.batchCheckDeclarationRiskCtrl)
+
+// 从导入批次创建申报记录
+router.post('/declaration-value/create-from-import/:importId', controller.createDeclarationFromImport)
+
+// 获取申报历史
+router.get('/declaration-value/history', controller.getDeclarationHistoryCtrl)
+
+// ==================== 查验风险管理 ====================
+// 记录查验信息
+router.post('/inspection/record', controller.recordInspectionCtrl)
+
+// 更新查验结果
+router.put('/inspection/record/:id', controller.updateInspectionCtrl)
+
+// 获取HS编码查验率统计
+router.get('/inspection/stats/:hsCode', controller.getInspectionStatsCtrl)
+
+// 获取高查验率编码列表
+router.get('/inspection/high-risk-codes', controller.getHighRiskCodesCtrl)
+
+// 分析导入批次查验风险
+router.post('/inspection/analyze-risk/:importId', controller.analyzeInspectionRiskCtrl)
+
+// 从导入批次创建查验记录
+router.post('/inspection/create-from-import/:importId', controller.createInspectionFromImport)
+
+// 获取查验历史
+router.get('/inspection/history', controller.getInspectionHistoryCtrl)
+
+// 获取查验类型统计
+router.get('/inspection/type-summary', controller.getInspectionTypeSummaryCtrl)
+
+// ==================== 综合风险分析 ====================
+// 分析导入批次的综合风险（税率+申报价值+查验）
+router.post('/risk-analysis/full/:importId', controller.analyzeFullRisk)
+
 export default router

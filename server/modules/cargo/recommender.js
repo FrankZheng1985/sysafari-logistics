@@ -142,6 +142,17 @@ export async function getRecommendations(params, limit = 5) {
 }
 
 /**
+ * 规范化 HS 编码为 10 位（欧盟 TARIC 标准）
+ * 如果编码少于 10 位，在末尾补 0
+ */
+function normalizeHsCode(hsCode) {
+  if (!hsCode) return hsCode
+  const cleaned = hsCode.replace(/[^0-9]/g, '')
+  if (cleaned.length >= 10) return cleaned.substring(0, 10)
+  return cleaned.padEnd(10, '0')
+}
+
+/**
  * 根据HS编码搜索税率库
  */
 export async function searchTariffByHsCode(hsCodePrefix, limit = 20) {
@@ -159,7 +170,7 @@ export async function searchTariffByHsCode(hsCodePrefix, limit = 20) {
   `).all(hsCodePrefix + '%', limit)
 
   return (rows || []).map(row => ({
-    hsCode: row.hs_code,
+    hsCode: normalizeHsCode(row.hs_code),
     productName: row.goods_description_cn || row.goods_description,
     productNameEn: row.goods_description,
     material: row.material,
@@ -192,7 +203,7 @@ export async function searchTariffByName(keyword, limit = 20) {
   `).all(`%${keyword}%`, `%${keyword}%`, limit)
   
   return (rows || []).map(row => ({
-    hsCode: row.hs_code,
+    hsCode: normalizeHsCode(row.hs_code),
     productName: row.goods_description_cn || row.goods_description,
     productNameEn: row.goods_description,
     material: row.material,

@@ -9,6 +9,9 @@ import * as taxCalc from './taxCalc.js'
 import * as recommender from './recommender.js'
 import * as taxConfirmPdf from './taxConfirmPdf.js'
 import * as hsMatchRecords from './hsMatchRecords.js'
+import * as hsOptimizer from './hsOptimizer.js'
+import * as declarationValue from './declarationValue.js'
+import * as inspectionRisk from './inspectionRisk.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -863,6 +866,471 @@ export async function checkSinglePriceAnomaly(req, res) {
   }
 }
 
+// ==================== HS编码税率优化 ====================
+
+/**
+ * 分析HS编码税率风险
+ */
+export async function analyzeHsTaxRisk(req, res) {
+  try {
+    const { hsCode } = req.params
+    const { originCountry } = req.query
+    
+    if (!hsCode) {
+      return badRequest(res, '请提供HS编码')
+    }
+    
+    const result = await hsOptimizer.analyzeHsCodeTaxRisk(hsCode, originCountry)
+    return success(res, result)
+  } catch (error) {
+    console.error('分析HS税率风险失败:', error)
+    return serverError(res, '分析HS税率风险失败')
+  }
+}
+
+/**
+ * 获取低税率替代编码
+ */
+export async function findTaxAlternatives(req, res) {
+  try {
+    const { hsCode } = req.params
+    const { productName, originCountry, limit } = req.query
+    
+    if (!hsCode) {
+      return badRequest(res, '请提供HS编码')
+    }
+    
+    const result = await hsOptimizer.findLowerTaxAlternatives(
+      hsCode, 
+      productName, 
+      originCountry, 
+      parseInt(limit) || 10
+    )
+    return success(res, result)
+  } catch (error) {
+    console.error('获取替代编码失败:', error)
+    return serverError(res, '获取替代编码失败')
+  }
+}
+
+/**
+ * 搜索同前缀HS编码
+ */
+export async function searchHsByPrefix(req, res) {
+  try {
+    const { prefix } = req.params
+    const { limit } = req.query
+    
+    if (!prefix || prefix.length < 4) {
+      return badRequest(res, '前缀长度至少为4位')
+    }
+    
+    const result = await hsOptimizer.searchByPrefix(prefix, parseInt(limit) || 50)
+    return success(res, result)
+  } catch (error) {
+    console.error('搜索HS编码失败:', error)
+    return serverError(res, '搜索HS编码失败')
+  }
+}
+
+/**
+ * 获取反倾销税风险编码列表
+ */
+export async function getAntiDumpingRisks(req, res) {
+  try {
+    const { originCountry } = req.query
+    const result = await hsOptimizer.getAntiDumpingRiskCodes(originCountry || 'China')
+    return success(res, result)
+  } catch (error) {
+    console.error('获取反倾销风险编码失败:', error)
+    return serverError(res, '获取反倾销风险编码失败')
+  }
+}
+
+/**
+ * 批量分析导入批次税率风险
+ */
+export async function batchAnalyzeTaxRisk(req, res) {
+  try {
+    const { importId } = req.params
+    
+    if (!importId) {
+      return badRequest(res, '请提供导入批次ID')
+    }
+    
+    const result = await hsOptimizer.batchAnalyzeImportRisk(parseInt(importId))
+    return success(res, result)
+  } catch (error) {
+    console.error('批量分析税率风险失败:', error)
+    return serverError(res, '批量分析税率风险失败')
+  }
+}
+
+// ==================== 申报价值分析 ====================
+
+/**
+ * 记录申报价值
+ */
+export async function recordDeclaration(req, res) {
+  try {
+    const recordId = await declarationValue.recordDeclarationValue(req.body)
+    return success(res, { id: recordId }, '申报记录已保存')
+  } catch (error) {
+    console.error('记录申报价值失败:', error)
+    return serverError(res, '记录申报价值失败')
+  }
+}
+
+/**
+ * 更新申报结果
+ */
+export async function updateDeclarationResultCtrl(req, res) {
+  try {
+    const { id } = req.params
+    const { result, adjustedPrice, adjustmentReason } = req.body
+    
+    if (!['pending', 'passed', 'questioned', 'rejected'].includes(result)) {
+      return badRequest(res, '无效的申报结果')
+    }
+    
+    await declarationValue.updateDeclarationResult(
+      parseInt(id), 
+      result, 
+      adjustedPrice, 
+      adjustmentReason
+    )
+    return success(res, null, '申报结果已更新')
+  } catch (error) {
+    console.error('更新申报结果失败:', error)
+    return serverError(res, '更新申报结果失败')
+  }
+}
+
+/**
+ * 获取HS编码申报统计
+ */
+export async function getDeclarationStatsCtrl(req, res) {
+  try {
+    const { hsCode } = req.params
+    const { originCountry, priceUnit } = req.query
+    
+    const result = await declarationValue.getDeclarationStats(hsCode, originCountry, priceUnit)
+    return success(res, result)
+  } catch (error) {
+    console.error('获取申报统计失败:', error)
+    return serverError(res, '获取申报统计失败')
+  }
+}
+
+/**
+ * 检查申报价值风险
+ */
+export async function checkDeclarationRiskCtrl(req, res) {
+  try {
+    const { hsCode, declaredPrice, originCountry, priceUnit } = req.body
+    
+    if (!hsCode || !declaredPrice) {
+      return badRequest(res, '请提供HS编码和申报价格')
+    }
+    
+    const result = await declarationValue.checkDeclarationRisk(
+      hsCode, 
+      parseFloat(declaredPrice), 
+      originCountry, 
+      priceUnit
+    )
+    return success(res, result)
+  } catch (error) {
+    console.error('检查申报风险失败:', error)
+    return serverError(res, '检查申报风险失败')
+  }
+}
+
+/**
+ * 批量检查导入批次申报风险
+ */
+export async function batchCheckDeclarationRiskCtrl(req, res) {
+  try {
+    const { importId } = req.params
+    
+    const result = await declarationValue.batchCheckDeclarationRisk(parseInt(importId))
+    return success(res, result)
+  } catch (error) {
+    console.error('批量检查申报风险失败:', error)
+    return serverError(res, '批量检查申报风险失败')
+  }
+}
+
+/**
+ * 从导入批次创建申报记录
+ */
+export async function createDeclarationFromImport(req, res) {
+  try {
+    const { importId } = req.params
+    const { billNo } = req.body
+    const userId = req.user?.id
+    
+    const result = await declarationValue.createDeclarationRecordsFromImport(
+      parseInt(importId), 
+      billNo, 
+      userId
+    )
+    return success(res, result, `已创建 ${result.createdCount} 条申报记录`)
+  } catch (error) {
+    console.error('创建申报记录失败:', error)
+    return serverError(res, '创建申报记录失败')
+  }
+}
+
+/**
+ * 获取申报历史
+ */
+export async function getDeclarationHistoryCtrl(req, res) {
+  try {
+    const { hsCode, originCountry, result, startDate, endDate, page, pageSize } = req.query
+    
+    const data = await declarationValue.getDeclarationHistory({
+      hsCode, originCountry, result, startDate, endDate,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, data.list, {
+      total: data.total,
+      page: data.page,
+      pageSize: data.pageSize
+    })
+  } catch (error) {
+    console.error('获取申报历史失败:', error)
+    return serverError(res, '获取申报历史失败')
+  }
+}
+
+// ==================== 查验风险管理 ====================
+
+/**
+ * 记录查验信息
+ */
+export async function recordInspectionCtrl(req, res) {
+  try {
+    const userId = req.user?.id
+    const recordId = await inspectionRisk.recordInspection({ ...req.body, createdBy: userId })
+    return success(res, { id: recordId }, '查验记录已保存')
+  } catch (error) {
+    console.error('记录查验信息失败:', error)
+    return serverError(res, '记录查验信息失败')
+  }
+}
+
+/**
+ * 更新查验结果
+ */
+export async function updateInspectionCtrl(req, res) {
+  try {
+    const { id } = req.params
+    await inspectionRisk.updateInspectionResult(parseInt(id), req.body)
+    return success(res, null, '查验结果已更新')
+  } catch (error) {
+    console.error('更新查验结果失败:', error)
+    return serverError(res, '更新查验结果失败')
+  }
+}
+
+/**
+ * 获取HS编码查验率统计
+ */
+export async function getInspectionStatsCtrl(req, res) {
+  try {
+    const { hsCode } = req.params
+    const { originCountry } = req.query
+    
+    const result = await inspectionRisk.getInspectionStats(hsCode, originCountry)
+    return success(res, result)
+  } catch (error) {
+    console.error('获取查验统计失败:', error)
+    return serverError(res, '获取查验统计失败')
+  }
+}
+
+/**
+ * 获取高查验率编码列表
+ */
+export async function getHighRiskCodesCtrl(req, res) {
+  try {
+    const { originCountry, minRate } = req.query
+    
+    const result = await inspectionRisk.getHighInspectionRateCodes(
+      originCountry, 
+      parseInt(minRate) || 15
+    )
+    return success(res, result)
+  } catch (error) {
+    console.error('获取高风险编码失败:', error)
+    return serverError(res, '获取高风险编码失败')
+  }
+}
+
+/**
+ * 分析导入批次查验风险
+ */
+export async function analyzeInspectionRiskCtrl(req, res) {
+  try {
+    const { importId } = req.params
+    
+    const result = await inspectionRisk.analyzeImportInspectionRisk(parseInt(importId))
+    return success(res, result)
+  } catch (error) {
+    console.error('分析查验风险失败:', error)
+    return serverError(res, '分析查验风险失败')
+  }
+}
+
+/**
+ * 从导入批次创建查验记录
+ */
+export async function createInspectionFromImport(req, res) {
+  try {
+    const { importId } = req.params
+    const { containerNo, billNo } = req.body
+    const userId = req.user?.id
+    
+    const result = await inspectionRisk.createInspectionRecordsFromImport(
+      parseInt(importId), 
+      containerNo, 
+      billNo, 
+      userId
+    )
+    return success(res, result, `已创建 ${result.createdCount} 条查验记录`)
+  } catch (error) {
+    console.error('创建查验记录失败:', error)
+    return serverError(res, '创建查验记录失败')
+  }
+}
+
+/**
+ * 获取查验历史
+ */
+export async function getInspectionHistoryCtrl(req, res) {
+  try {
+    const { 
+      hsCode, originCountry, inspectionType, inspectionResult, 
+      containerNo, startDate, endDate, page, pageSize 
+    } = req.query
+    
+    const data = await inspectionRisk.getInspectionHistory({
+      hsCode, originCountry, inspectionType, inspectionResult, 
+      containerNo, startDate, endDate,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, data.list, {
+      total: data.total,
+      page: data.page,
+      pageSize: data.pageSize
+    })
+  } catch (error) {
+    console.error('获取查验历史失败:', error)
+    return serverError(res, '获取查验历史失败')
+  }
+}
+
+/**
+ * 获取查验类型统计
+ */
+export async function getInspectionTypeSummaryCtrl(req, res) {
+  try {
+    const result = await inspectionRisk.getInspectionTypeSummary()
+    return success(res, result)
+  } catch (error) {
+    console.error('获取查验类型统计失败:', error)
+    return serverError(res, '获取查验类型统计失败')
+  }
+}
+
+// ==================== 综合风险分析 ====================
+
+/**
+ * 分析导入批次的综合风险
+ */
+export async function analyzeFullRisk(req, res) {
+  try {
+    const { importId } = req.params
+    const id = parseInt(importId)
+    
+    // 并行执行三种风险分析
+    const [taxRisk, declarationRisk, inspectionRiskResult] = await Promise.all([
+      hsOptimizer.batchAnalyzeImportRisk(id),
+      declarationValue.batchCheckDeclarationRisk(id),
+      inspectionRisk.analyzeImportInspectionRisk(id)
+    ])
+    
+    // 计算综合风险评分
+    const taxScore = taxRisk.riskScore || 0
+    const declScore = declarationRisk.highRiskCount > 0 ? 80 : (declarationRisk.mediumRiskCount > 0 ? 50 : 20)
+    const inspScore = inspectionRiskResult.avgRiskScore || 0
+    
+    // 综合评分 (税率风险30% + 申报风险40% + 查验风险30%)
+    const compositeScore = Math.round(taxScore * 0.3 + declScore * 0.4 + inspScore * 0.3)
+    
+    // 确定综合风险等级
+    let overallRiskLevel = 'low'
+    if (compositeScore >= 60 || 
+        taxRisk.overallRiskLevel === 'high' || 
+        declarationRisk.highRiskCount > 0 ||
+        inspectionRiskResult.overallRiskLevel === 'high') {
+      overallRiskLevel = 'high'
+    } else if (compositeScore >= 35 || 
+               taxRisk.overallRiskLevel === 'medium' || 
+               declarationRisk.mediumRiskCount > 0 ||
+               inspectionRiskResult.overallRiskLevel === 'medium') {
+      overallRiskLevel = 'medium'
+    }
+    
+    // 汇总风险警告
+    const warnings = []
+    if (taxRisk.highRiskCount > 0) {
+      warnings.push(`${taxRisk.highRiskCount} 个商品存在高税率/反倾销税风险`)
+    }
+    if (declarationRisk.highRiskCount > 0) {
+      warnings.push(`${declarationRisk.highRiskCount} 个商品申报价值存在风险`)
+    }
+    if (inspectionRiskResult.highRiskCount > 0) {
+      warnings.push(`${inspectionRiskResult.highRiskCount} 个商品查验率较高`)
+    }
+    
+    return success(res, {
+      importId: id,
+      compositeScore,
+      overallRiskLevel,
+      taxRisk: {
+        score: taxScore,
+        level: taxRisk.overallRiskLevel,
+        highRiskCount: taxRisk.highRiskCount,
+        items: taxRisk.riskItems?.slice(0, 5)
+      },
+      declarationRisk: {
+        score: declScore,
+        highRiskCount: declarationRisk.highRiskCount,
+        mediumRiskCount: declarationRisk.mediumRiskCount,
+        items: declarationRisk.riskItems?.slice(0, 5)
+      },
+      inspectionRisk: {
+        score: inspScore,
+        level: inspectionRiskResult.overallRiskLevel,
+        highRiskCount: inspectionRiskResult.highRiskCount,
+        items: inspectionRiskResult.riskItems?.slice(0, 5)
+      },
+      warnings,
+      needsAttention: overallRiskLevel !== 'low',
+      analyzedAt: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('综合风险分析失败:', error)
+    return serverError(res, '综合风险分析失败')
+  }
+}
+
 export default {
   // 导入管理
   getStats,
@@ -872,6 +1340,7 @@ export default {
   createImport,
   previewImport,
   deleteImport,
+  updateShipperAndImporter,
   
   // HS匹配
   runBatchMatch,
@@ -904,5 +1373,34 @@ export default {
   
   // 价格异常检测
   checkPriceAnomaly,
-  checkSinglePriceAnomaly
+  checkSinglePriceAnomaly,
+  
+  // HS编码税率优化
+  analyzeHsTaxRisk,
+  findTaxAlternatives,
+  searchHsByPrefix,
+  getAntiDumpingRisks,
+  batchAnalyzeTaxRisk,
+  
+  // 申报价值分析
+  recordDeclaration,
+  updateDeclarationResultCtrl,
+  getDeclarationStatsCtrl,
+  checkDeclarationRiskCtrl,
+  batchCheckDeclarationRiskCtrl,
+  createDeclarationFromImport,
+  getDeclarationHistoryCtrl,
+  
+  // 查验风险管理
+  recordInspectionCtrl,
+  updateInspectionCtrl,
+  getInspectionStatsCtrl,
+  getHighRiskCodesCtrl,
+  analyzeInspectionRiskCtrl,
+  createInspectionFromImport,
+  getInspectionHistoryCtrl,
+  getInspectionTypeSummaryCtrl,
+  
+  // 综合风险分析
+  analyzeFullRisk
 }

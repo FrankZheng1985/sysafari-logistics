@@ -666,6 +666,168 @@ function convertFeeItemToCamelCase(row) {
   }
 }
 
+// ==================== 客户询价同步 ====================
+
+/**
+ * 获取客户的询价列表（客户门户使用）
+ */
+export async function getCustomerInquiries(customerId, params = {}) {
+  const db = getDatabase()
+  const { status, page = 1, pageSize = 20 } = params
+  
+  let sql = `
+    SELECT 
+      id, inquiry_number, customer_id, customer_name, inquiry_type, status,
+      clearance_data, transport_data, transport_quote,
+      estimated_duty, estimated_vat, estimated_other_tax, clearance_fee, transport_fee,
+      total_quote, currency, valid_until, quoted_at, quoted_by_name,
+      assigned_to_name, due_at, processed_at, is_overdue, priority, source,
+      crm_quote_id, transport_price_id, notes, created_at, updated_at
+    FROM customer_inquiries
+    WHERE customer_id = $1
+  `
+  const conditions = [customerId]
+  let paramIndex = 2
+  
+  if (status) {
+    sql += ` AND status = $${paramIndex++}`
+    conditions.push(status)
+  }
+  
+  // 计数
+  const countSql = sql.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM')
+  const countResult = await db.prepare(countSql).get(...conditions)
+  
+  // 分页
+  sql += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`
+  conditions.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(sql).all(...conditions)
+  
+  return {
+    list: rows.map(convertInquiryToCamelCase),
+    total: countResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 获取客户的单个询价详情
+ */
+export async function getCustomerInquiryById(customerId, inquiryId) {
+  const db = getDatabase()
+  
+  const row = await db.prepare(`
+    SELECT 
+      id, inquiry_number, customer_id, customer_name, inquiry_type, status,
+      clearance_data, transport_data, transport_quote,
+      estimated_duty, estimated_vat, estimated_other_tax, clearance_fee, transport_fee,
+      total_quote, currency, valid_until, quoted_at, quoted_by_name,
+      assigned_to_name, due_at, processed_at, is_overdue, priority, source,
+      crm_quote_id, transport_price_id, notes, created_at, updated_at
+    FROM customer_inquiries
+    WHERE customer_id = $1 AND id = $2
+  `).get(customerId, inquiryId)
+  
+  return row ? convertInquiryToCamelCase(row) : null
+}
+
+/**
+ * 获取客户的询价统计
+ */
+export async function getCustomerInquiryStats(customerId) {
+  const db = getDatabase()
+  
+  const stats = await db.prepare(`
+    SELECT
+      COUNT(*) as total,
+      COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+      COUNT(CASE WHEN status = 'quoted' THEN 1 END) as quoted,
+      COUNT(CASE WHEN status = 'accepted' THEN 1 END) as accepted
+    FROM customer_inquiries
+    WHERE customer_id = $1
+  `).get(customerId)
+  
+  return {
+    total: parseInt(stats?.total) || 0,
+    pending: parseInt(stats?.pending) || 0,
+    quoted: parseInt(stats?.quoted) || 0,
+    accepted: parseInt(stats?.accepted) || 0
+  }
+}
+
+function convertInquiryToCamelCase(row) {
+  // 解析 JSON 字段
+  let clearanceData = null
+  let transportData = null
+  let transportQuote = null
+  
+  try {
+    if (row.clearance_data) {
+      clearanceData = typeof row.clearance_data === 'string' 
+        ? JSON.parse(row.clearance_data) 
+        : row.clearance_data
+    }
+    if (row.transport_data) {
+      transportData = typeof row.transport_data === 'string' 
+        ? JSON.parse(row.transport_data) 
+        : row.transport_data
+    }
+    if (row.transport_quote) {
+      transportQuote = typeof row.transport_quote === 'string' 
+        ? JSON.parse(row.transport_quote) 
+        : row.transport_quote
+    }
+  } catch (e) {
+    // 解析失败保持原值
+  }
+  
+  return {
+    id: row.id,
+    inquiryNumber: row.inquiry_number,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    inquiryType: row.inquiry_type,
+    status: row.status,
+    
+    // 清关数据
+    clearanceData,
+    estimatedDuty: parseFloat(row.estimated_duty) || 0,
+    estimatedVat: parseFloat(row.estimated_vat) || 0,
+    estimatedOtherTax: parseFloat(row.estimated_other_tax) || 0,
+    clearanceFee: parseFloat(row.clearance_fee) || 0,
+    
+    // 运输数据
+    transportData,
+    transportQuote,
+    transportFee: parseFloat(row.transport_fee) || 0,
+    
+    // 报价
+    totalQuote: parseFloat(row.total_quote) || 0,
+    currency: row.currency || 'EUR',
+    validUntil: row.valid_until,
+    quotedAt: row.quoted_at,
+    quotedByName: row.quoted_by_name,
+    
+    // 分配信息
+    assignedToName: row.assigned_to_name,
+    dueAt: row.due_at,
+    processedAt: row.processed_at,
+    isOverdue: row.is_overdue,
+    priority: row.priority || 'normal',
+    source: row.source || 'portal',
+    
+    // 关联
+    crmQuoteId: row.crm_quote_id,
+    transportPriceId: row.transport_price_id,
+    
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
 export default {
   // 订单查询
   getCustomerOrders,
@@ -680,6 +842,11 @@ export default {
   getCustomerPayables,
   
   // 订单创建
-  createOrderDraft
+  createOrderDraft,
+  
+  // 客户询价
+  getCustomerInquiries,
+  getCustomerInquiryById,
+  getCustomerInquiryStats
 }
 

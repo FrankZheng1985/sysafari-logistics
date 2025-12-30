@@ -770,6 +770,16 @@ export async function runMigrations() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_cargo_imports_importer ON cargo_imports(importer_customer_id)`)
       console.log('  ✅ cargo_imports 发货方和进口商字段已添加')
     }
+    
+    // 检查并添加 clearance_type 字段（清关类型：40-普通清关，42-递延清关）
+    const clearanceTypeCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'cargo_imports' AND column_name = 'clearance_type'
+    `)
+    if (clearanceTypeCheck.rows.length === 0) {
+      await client.query(`ALTER TABLE cargo_imports ADD COLUMN clearance_type TEXT DEFAULT '40'`)
+      console.log('  ✅ cargo_imports.clearance_type 字段已添加')
+    }
     console.log('  ✅ cargo_imports 表就绪')
 
     // ==================== 18. 创建 cargo_items 货物明细表 ====================
@@ -2357,6 +2367,187 @@ export async function runMigrations() {
       await client.query(`ALTER TABLE invoices ADD COLUMN language TEXT DEFAULT 'en'`)
       console.log('  ✅ invoices.language 字段已添加')
     }
+
+    // ==================== 风险管理系统表 ====================
+    // 1. 申报价值记录表
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS declaration_value_records (
+        id SERIAL PRIMARY KEY,
+        hs_code VARCHAR(10) NOT NULL,
+        product_name TEXT,
+        product_name_en TEXT,
+        origin_country VARCHAR(50),
+        origin_country_code VARCHAR(10),
+        declared_unit_price NUMERIC(12,4),
+        price_unit VARCHAR(20) DEFAULT 'PCS',
+        declared_quantity NUMERIC(12,2),
+        declared_total_value NUMERIC(14,2),
+        currency VARCHAR(10) DEFAULT 'EUR',
+        declaration_result VARCHAR(20) DEFAULT 'pending',
+        customs_adjusted_price NUMERIC(12,4),
+        adjustment_reason TEXT,
+        declaration_date DATE,
+        customs_office VARCHAR(50),
+        bill_no VARCHAR(50),
+        import_id INTEGER,
+        item_id INTEGER,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_dvr_hs_code ON declaration_value_records(hs_code)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_dvr_origin_country ON declaration_value_records(origin_country)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_dvr_result ON declaration_value_records(declaration_result)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_dvr_import_id ON declaration_value_records(import_id)`)
+    console.log('  ✅ declaration_value_records 表就绪')
+
+    // 2. 查验记录表
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS inspection_records (
+        id SERIAL PRIMARY KEY,
+        hs_code VARCHAR(10),
+        product_name TEXT,
+        product_name_en TEXT,
+        origin_country VARCHAR(50),
+        origin_country_code VARCHAR(10),
+        container_no VARCHAR(30),
+        bill_no VARCHAR(50),
+        inspection_type VARCHAR(50),
+        inspection_result VARCHAR(20),
+        inspection_date DATE,
+        inspection_notes TEXT,
+        customs_office VARCHAR(50),
+        inspector_name VARCHAR(100),
+        penalty_amount NUMERIC(12,2),
+        delay_days INTEGER DEFAULT 0,
+        import_id INTEGER,
+        item_id INTEGER,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ir_hs_code ON inspection_records(hs_code)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ir_origin_country ON inspection_records(origin_country)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ir_inspection_type ON inspection_records(inspection_type)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ir_import_id ON inspection_records(import_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ir_container ON inspection_records(container_no)`)
+    console.log('  ✅ inspection_records 表就绪')
+
+    // 3. 添加 cargo_imports 风险评估字段
+    const riskFields = ['risk_score', 'risk_level', 'risk_analyzed_at', 'risk_notes']
+    for (const field of riskFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'cargo_imports' AND column_name = $1
+      `, [field])
+      if (colCheck.rows.length === 0) {
+        if (field === 'risk_score') {
+          await client.query(`ALTER TABLE cargo_imports ADD COLUMN risk_score NUMERIC(5,2) DEFAULT 0`)
+        } else if (field === 'risk_level') {
+          await client.query(`ALTER TABLE cargo_imports ADD COLUMN risk_level VARCHAR(20) DEFAULT 'low'`)
+        } else if (field === 'risk_analyzed_at') {
+          await client.query(`ALTER TABLE cargo_imports ADD COLUMN risk_analyzed_at TIMESTAMP`)
+        } else if (field === 'risk_notes') {
+          await client.query(`ALTER TABLE cargo_imports ADD COLUMN risk_notes TEXT`)
+        }
+        console.log(`    + cargo_imports.${field} 字段已添加`)
+      }
+    }
+
+    // 4. 添加 cargo_items 风险字段
+    const itemRiskFields = ['declaration_risk', 'inspection_risk', 'min_safe_price', 'price_warning']
+    for (const field of itemRiskFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'cargo_items' AND column_name = $1
+      `, [field])
+      if (colCheck.rows.length === 0) {
+        if (field === 'declaration_risk') {
+          await client.query(`ALTER TABLE cargo_items ADD COLUMN declaration_risk VARCHAR(20) DEFAULT 'low'`)
+        } else if (field === 'inspection_risk') {
+          await client.query(`ALTER TABLE cargo_items ADD COLUMN inspection_risk VARCHAR(20) DEFAULT 'low'`)
+        } else if (field === 'min_safe_price') {
+          await client.query(`ALTER TABLE cargo_items ADD COLUMN min_safe_price NUMERIC(12,4)`)
+        } else if (field === 'price_warning') {
+          await client.query(`ALTER TABLE cargo_items ADD COLUMN price_warning TEXT`)
+        }
+        console.log(`    + cargo_items.${field} 字段已添加`)
+      }
+    }
+    console.log('  ✅ 风险管理系统表就绪')
+
+    // ==================== 询价工作流模块 ====================
+    // 扩展 customer_inquiries 表（如果表存在）
+    const inquiryTableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'customer_inquiries'
+      )
+    `)
+    
+    if (inquiryTableCheck.rows[0]?.exists) {
+      const inquiryFields = [
+        { name: 'assigned_to', type: 'INTEGER REFERENCES users(id)' },
+        { name: 'assigned_to_name', type: 'TEXT' },
+        { name: 'assigned_at', type: 'TIMESTAMP' },
+        { name: 'due_at', type: 'TIMESTAMP' },
+        { name: 'processed_at', type: 'TIMESTAMP' },
+        { name: 'is_overdue', type: 'BOOLEAN DEFAULT FALSE' },
+        { name: 'crm_quote_id', type: 'TEXT' },
+        { name: 'transport_price_id', type: 'INTEGER' },
+        { name: 'priority', type: 'TEXT DEFAULT \'normal\'' },
+        { name: 'source', type: 'TEXT DEFAULT \'portal\'' }
+      ]
+      
+      for (const field of inquiryFields) {
+        const colCheck = await client.query(`
+          SELECT column_name FROM information_schema.columns 
+          WHERE table_name = 'customer_inquiries' AND column_name = $1
+        `, [field.name])
+        if (colCheck.rows.length === 0) {
+          await client.query(`ALTER TABLE customer_inquiries ADD COLUMN ${field.name} ${field.type}`)
+          console.log(`    + customer_inquiries.${field.name} 字段已添加`)
+        }
+      }
+      
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiries_assigned_to ON customer_inquiries(assigned_to)`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiries_due_at ON customer_inquiries(due_at)`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiries_is_overdue ON customer_inquiries(is_overdue)`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiries_priority ON customer_inquiries(priority)`)
+    }
+    
+    // 创建询价待办任务表
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS inquiry_tasks (
+        id SERIAL PRIMARY KEY,
+        inquiry_id TEXT NOT NULL,
+        inquiry_number TEXT NOT NULL,
+        assignee_id INTEGER NOT NULL,
+        assignee_name TEXT,
+        assignee_role TEXT,
+        supervisor_id INTEGER,
+        supervisor_name TEXT,
+        super_supervisor_id INTEGER,
+        super_supervisor_name TEXT,
+        task_type TEXT NOT NULL DEFAULT 'process',
+        status TEXT DEFAULT 'pending',
+        due_at TIMESTAMP,
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        reminder_sent BOOLEAN DEFAULT FALSE,
+        overdue_notified BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_inquiry_id ON inquiry_tasks(inquiry_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_assignee ON inquiry_tasks(assignee_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_supervisor ON inquiry_tasks(supervisor_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_status ON inquiry_tasks(status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_due_at ON inquiry_tasks(due_at)`)
+    console.log('  ✅ 询价工作流模块表就绪')
 
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）

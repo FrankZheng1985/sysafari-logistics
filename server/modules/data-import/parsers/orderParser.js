@@ -88,10 +88,62 @@ export async function generateTemplate() {
 }
 
 /**
+ * 检测第2行是数据行还是提示词行
+ * 提示词行的特征：全是字符串，且第一列不是日期
+ */
+function isHintRow(row, headers) {
+  if (!row || row.length === 0) return true
+  
+  // 如果第一个单元格是日期类型，则是数据行
+  const firstValue = row[0]
+  if (firstValue instanceof Date) {
+    return false
+  }
+  
+  // 如果所有值都是字符串且没有日期/数字特征，认为是提示词行
+  // 检查前5个非空单元格
+  let stringCount = 0
+  let dateCount = 0
+  let checked = 0
+  
+  for (let i = 0; i < Math.min(row.length, 10); i++) {
+    const value = row[i]
+    if (value === null || value === undefined || value === '') continue
+    
+    checked++
+    if (value instanceof Date) {
+      dateCount++
+    } else if (typeof value === 'string') {
+      stringCount++
+    }
+    
+    if (checked >= 5) break
+  }
+  
+  // 如果发现了日期类型，肯定是数据行
+  if (dateCount > 0) return false
+  
+  // 如果检查的单元格全是字符串，且数量较少，可能是提示词
+  // 但如果第一个字符串看起来像客户名，则是数据行
+  const firstNonEmpty = row.find(v => v !== null && v !== undefined && v !== '')
+  if (typeof firstNonEmpty === 'string') {
+    // 如果字符串很长或包含常见的示例词，认为是提示词行
+    const hintKeywords = ['例如', '示例', '如：', '如:', '填写', '2025/', 'OOLU', '深圳', '宁波', '盐田']
+    const isLikelyHint = hintKeywords.some(kw => String(firstNonEmpty).includes(kw))
+    if (isLikelyHint && firstNonEmpty.length < 15) {
+      return true
+    }
+  }
+  
+  return false
+}
+
+/**
  * 解析Excel文件
- * 第1行：标题行
- * 第2行：提示词行（跳过）
- * 第3行开始：实际数据
+ * 智能检测数据起始行：
+ * - 第1行：标题行
+ * - 第2行：如果是提示词行则跳过，如果是数据行则包含
+ * - 后续行：实际数据
  */
 export async function parseExcel(buffer) {
   try {
@@ -102,17 +154,31 @@ export async function parseExcel(buffer) {
     // 转换为JSON
     const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
     
-    if (rawData.length < 3) {
-      return { success: false, error: '文件为空或没有数据行（第1行为标题，第2行为提示词，第3行开始为数据）' }
+    if (rawData.length < 2) {
+      return { success: false, error: '文件为空或没有数据行' }
     }
     
     // 处理标题行（去掉*号以便匹配）
     const headers = rawData[0].map(h => String(h).trim())
     const columns = headers
     
-    // 解析数据行（从第3行开始，即索引2）
+    // 智能检测数据起始行
+    // 检查第2行（索引1）是提示词行还是数据行
+    let dataStartIndex = 1 // 默认从第2行开始（索引1）
+    
+    if (rawData.length >= 2) {
+      const secondRow = rawData[1]
+      if (isHintRow(secondRow, headers)) {
+        dataStartIndex = 2 // 跳过提示词行，从第3行开始
+        console.log('[订单导入] 检测到提示词行，从第3行开始读取数据')
+      } else {
+        console.log('[订单导入] 第2行为数据行，从第2行开始读取数据')
+      }
+    }
+    
+    // 解析数据行
     const data = []
-    for (let i = 2; i < rawData.length; i++) {
+    for (let i = dataStartIndex; i < rawData.length; i++) {
       const row = rawData[i]
       
       // 跳过空行
@@ -140,9 +206,16 @@ export async function parseExcel(buffer) {
       data.push(record)
     }
     
+    console.log(`[订单导入] 解析完成，共 ${data.length} 条数据`)
+    
+    if (data.length === 0) {
+      return { success: false, error: '没有找到有效数据行' }
+    }
+    
     return { success: true, data, columns }
     
   } catch (err) {
+    console.error('[订单导入] 解析失败:', err)
     return { success: false, error: '解析Excel文件失败: ' + err.message }
   }
 }
@@ -222,6 +295,8 @@ function getRequiredFields() {
  * 校验数据
  */
 export async function validateData(data) {
+  console.log(`[订单导入] 开始校验 ${data.length} 条数据`)
+  
   const errors = []
   const warnings = []
   let validCount = 0
@@ -233,8 +308,12 @@ export async function validateData(data) {
   const containerNumbers = new Set()
   const requiredFields = getRequiredFields()
   
+  console.log(`[订单导入] 必填字段:`, requiredFields.map(f => f.label).join(', '))
+  
   // 预先批量查询所有客户（用于校验客户是否存在）
   const customerNames = [...new Set(data.map(r => r.customer_name).filter(Boolean))]
+  console.log(`[订单导入] 待校验的客户名:`, customerNames.join(', '))
+  
   const existingCustomerSet = new Set()
   
   if (customerNames.length > 0) {
@@ -244,15 +323,22 @@ export async function validateData(data) {
       WHERE customer_name IN (${placeholders}) OR company_name IN (${placeholders})
     `).all(...customerNames, ...customerNames)
     
+    console.log(`[订单导入] 数据库中找到 ${existingCustomers.length} 个匹配客户`)
+    
     for (const c of existingCustomers) {
       if (c.customer_name) existingCustomerSet.add(c.customer_name)
       if (c.company_name) existingCustomerSet.add(c.company_name)
     }
+    
+    console.log(`[订单导入] 有效客户名集合:`, [...existingCustomerSet].join(', '))
   }
   
   for (const row of data) {
     const rowErrors = []
     const rowWarnings = []
+    
+    // 调试：显示当前行的关键字段
+    console.log(`[订单导入] 校验第${row._rowIndex}行: 客户=${row.customer_name}, 柜号=${row.container_number}, 提单号=${row.bill_number}`)
     
     // 检查所有必填字段
     for (const { field, label } of requiredFields) {
@@ -260,6 +346,11 @@ export async function validateData(data) {
       if (value === null || value === undefined || value === '') {
         rowErrors.push(`${label}不能为空`)
       }
+    }
+    
+    // 如果有必填字段缺失，输出详细信息
+    if (rowErrors.length > 0) {
+      console.log(`[订单导入] 第${row._rowIndex}行校验失败:`, rowErrors.join('; '))
     }
     
     // 检查客户是否存在（如果提供了客户名称，必须是已存在的客户）
@@ -437,7 +528,6 @@ export async function importData(data, options = {}) {
             container_number = COALESCE(?, container_number),
             customer_id = COALESCE(?, customer_id),
             customer_name = COALESCE(?, customer_name),
-            original_bill_received = COALESCE(?, original_bill_received),
             transport_method = COALESCE(?, transport_method),
             container_type = COALESCE(?, container_type),
             shipping_company = COALESCE(?, shipping_company),
@@ -475,38 +565,37 @@ export async function importData(data, options = {}) {
           row.container_number,                              // 1 container_number
           customerId,                                        // 2 customer_id
           row.customer_name,                                 // 3 customer_name
-          row.original_bill_received,                        // 4 original_bill_received
-          row.transport_method,                              // 5 transport_method
-          row.container_type,                                // 6 container_type
-          row.shipping_company,                              // 7 shipping_company
-          row.vessel_voyage,                                 // 8 vessel
-          row.port_of_loading,                               // 9 port_of_loading
-          row.port_of_discharge,                             // 10 port_of_discharge
-          row.destination,                                   // 11 place_of_delivery
-          row.service_type,                                  // 12 service_type
-          row.delivery_address,                              // 13 cmr_delivery_address
-          row.cargo_value,                                   // 14 cargo_value
-          row.etd,                                           // 15 etd
-          row.eta,                                           // 16 eta
-          isEtaPassed ? row.eta : null,                      // 17 ata
-          row.package_count,                                 // 18 pieces
-          row.weight,                                        // 19 weight
-          row.volume,                                        // 20 volume
-          row.bill_type,                                     // 21 bill_type
-          row.shipper,                                       // 22 shipper
-          row.consignee,                                     // 23 consignee
-          row.notify_party,                                  // 24 notify_party
-          row.description,                                   // 25 description
-          row.transport_arrangement,                         // 26 transport_arrangement
-          row.container_return,                              // 27 container_return
-          row.full_container_transport,                      // 28 full_container_transport
-          row.last_mile_transport,                           // 29 last_mile_transport
-          row.devanning,                                     // 30 devanning
-          row.remark,                                        // 31 remark
-          isEtaPassed ? '已到港' : null,                      // 32 ship_status
-          importerId,                                        // 33 imported_by
-          importerName,                                      // 34 imported_by_name
-          existingId                                         // 35 id (WHERE)
+          row.transport_method,                              // 4 transport_method
+          row.container_type,                                // 5 container_type
+          row.shipping_company,                              // 6 shipping_company
+          row.vessel_voyage,                                 // 7 vessel
+          row.port_of_loading,                               // 8 port_of_loading
+          row.port_of_discharge,                             // 9 port_of_discharge
+          row.destination,                                   // 10 place_of_delivery
+          row.service_type,                                  // 11 service_type
+          row.delivery_address,                              // 12 cmr_delivery_address
+          row.cargo_value,                                   // 13 cargo_value
+          row.etd,                                           // 14 etd
+          row.eta,                                           // 15 eta
+          isEtaPassed ? row.eta : null,                      // 16 ata
+          row.package_count,                                 // 17 pieces
+          row.weight,                                        // 18 weight
+          row.volume,                                        // 19 volume
+          row.bill_type,                                     // 20 bill_type
+          row.shipper,                                       // 21 shipper
+          row.consignee,                                     // 22 consignee
+          row.notify_party,                                  // 23 notify_party
+          row.description,                                   // 24 description
+          row.transport_arrangement,                         // 25 transport_arrangement
+          row.container_return,                              // 26 container_return
+          row.full_container_transport,                      // 27 full_container_transport
+          row.last_mile_transport,                           // 28 last_mile_transport
+          row.devanning,                                     // 29 devanning
+          row.remark,                                        // 30 remark
+          isEtaPassed ? '已到港' : null,                      // 31 ship_status
+          importerId,                                        // 32 imported_by
+          importerName,                                      // 33 imported_by_name
+          existingId                                         // 34 id (WHERE)
         )
       } else {
         // 创建新记录
@@ -526,7 +615,7 @@ export async function importData(data, options = {}) {
         await db.prepare(`
           INSERT INTO bills_of_lading (
             id, order_seq, order_number, bill_number, container_number, customer_id, customer_name,
-            original_bill_received, transport_method, container_type, shipping_company, vessel,
+            transport_method, container_type, shipping_company, vessel,
             port_of_loading, port_of_discharge, place_of_delivery, service_type, cmr_delivery_address,
             cargo_value, etd, eta, ata, pieces, weight, volume,
             bill_type, shipper, consignee, notify_party, description,
@@ -535,7 +624,7 @@ export async function importData(data, options = {}) {
             imported_by, imported_by_name, import_time, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
@@ -551,38 +640,37 @@ export async function importData(data, options = {}) {
           row.container_number,                              // 5 container_number
           customerId,                                        // 6 customer_id
           row.customer_name,                                 // 7 customer_name
-          row.original_bill_received,                        // 8 original_bill_received
-          row.transport_method,                              // 9 transport_method
-          row.container_type,                                // 10 container_type
-          row.shipping_company,                              // 11 shipping_company
-          row.vessel_voyage,                                 // 12 vessel
-          row.port_of_loading,                               // 13 port_of_loading
-          row.port_of_discharge,                             // 14 port_of_discharge
-          row.destination,                                   // 15 place_of_delivery
-          row.service_type,                                  // 16 service_type
-          row.delivery_address,                              // 17 cmr_delivery_address
-          row.cargo_value,                                   // 18 cargo_value
-          row.etd,                                           // 19 etd
-          row.eta,                                           // 20 eta
-          isEtaPassed ? row.eta : null,                      // 21 ata
-          row.package_count,                                 // 22 pieces
-          row.weight,                                        // 23 weight
-          row.volume,                                        // 24 volume
-          row.bill_type,                                     // 25 bill_type
-          row.shipper,                                       // 26 shipper
-          row.consignee,                                     // 27 consignee
-          row.notify_party,                                  // 28 notify_party
-          row.description,                                   // 29 description
-          row.transport_arrangement,                         // 30 transport_arrangement
-          row.container_return,                              // 31 container_return
-          row.full_container_transport,                      // 32 full_container_transport
-          row.last_mile_transport,                           // 33 last_mile_transport
-          row.devanning,                                     // 34 devanning
-          row.remark,                                        // 35 remark
-          isEtaPassed ? '已到港' : null,                      // 36 ship_status
-          row.create_time,                                   // 37 create_time
-          importerId,                                        // 38 imported_by
-          importerName                                       // 39 imported_by_name
+          row.transport_method,                              // 8 transport_method
+          row.container_type,                                // 9 container_type
+          row.shipping_company,                              // 10 shipping_company
+          row.vessel_voyage,                                 // 11 vessel
+          row.port_of_loading,                               // 12 port_of_loading
+          row.port_of_discharge,                             // 13 port_of_discharge
+          row.destination,                                   // 14 place_of_delivery
+          row.service_type,                                  // 15 service_type
+          row.delivery_address,                              // 16 cmr_delivery_address
+          row.cargo_value,                                   // 17 cargo_value
+          row.etd,                                           // 18 etd
+          row.eta,                                           // 19 eta
+          isEtaPassed ? row.eta : null,                      // 20 ata
+          row.package_count,                                 // 21 pieces
+          row.weight,                                        // 22 weight
+          row.volume,                                        // 23 volume
+          row.bill_type,                                     // 24 bill_type
+          row.shipper,                                       // 25 shipper
+          row.consignee,                                     // 26 consignee
+          row.notify_party,                                  // 27 notify_party
+          row.description,                                   // 28 description
+          row.transport_arrangement,                         // 29 transport_arrangement
+          row.container_return,                              // 30 container_return
+          row.full_container_transport,                      // 31 full_container_transport
+          row.last_mile_transport,                           // 32 last_mile_transport
+          row.devanning,                                     // 33 devanning
+          row.remark,                                        // 34 remark
+          isEtaPassed ? '已到港' : null,                      // 35 ship_status
+          row.create_time,                                   // 36 create_time
+          importerId,                                        // 37 imported_by
+          importerName                                       // 38 imported_by_name
         )
         
         // 添加到已存在集合，避免重复插入

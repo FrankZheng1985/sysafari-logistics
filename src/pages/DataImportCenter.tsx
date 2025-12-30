@@ -15,8 +15,15 @@ import { getApiBaseUrl } from '../utils/api'
 const API_BASE = getApiBaseUrl()
 
 // 获取认证 Token
-const getAuthToken = () => {
-  return localStorage.getItem('token') || ''
+const getAuthToken = (): string => {
+  const testData = localStorage.getItem('bp_logistics_test_mode')
+  if (!testData) return ''
+  try {
+    const data = JSON.parse(testData)
+    return data.token || ''
+  } catch {
+    return ''
+  }
 }
 
 // 导入类型配置

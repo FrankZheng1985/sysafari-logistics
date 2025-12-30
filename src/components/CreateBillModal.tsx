@@ -845,6 +845,18 @@ export default function CreateBillModal({
     }
   }
 
+  // 获取存储的认证 Token
+  const getStoredToken = (): string | null => {
+    const testData = localStorage.getItem('bp_logistics_test_mode')
+    if (!testData) return null
+    try {
+      const data = JSON.parse(testData)
+      return data.token || null
+    } catch {
+      return null
+    }
+  }
+
   // 处理模板上传
   const handleTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -860,11 +872,27 @@ export default function CreateBillModal({
       const formData = new FormData()
       formData.append('file', file)
       
-      const apiUrl = import.meta.env.VITE_API_BASE_URL || ''
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || getApiBaseUrl()
+      
+      // 获取认证 Token
+      const token = getStoredToken()
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const response = await fetch(`${apiUrl}/api/data-import/preview/orders`, {
         method: 'POST',
+        headers,
         body: formData,
       })
+      
+      // 检查响应状态，先处理非 OK 响应
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('上传文件失败，服务器响应:', response.status, errorText)
+        throw new Error(`服务器返回错误 (${response.status}): ${errorText.slice(0, 100)}`)
+      }
       
       const result = await response.json()
       
@@ -900,17 +928,32 @@ export default function CreateBillModal({
     setTemplateSuccess(null)
     
     try {
-      const apiUrl = import.meta.env.VITE_API_BASE_URL || ''
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || getApiBaseUrl()
+      
+      // 获取认证 Token
+      const token = getStoredToken()
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const response = await fetch(`${apiUrl}/api/data-import/confirm/orders`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           previewId: templatePreview.previewId,
           skipErrors: false,
         }),
       })
+      
+      // 检查响应状态
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('确认导入失败，服务器响应:', response.status, errorText)
+        throw new Error(`服务器返回错误 (${response.status}): ${errorText.slice(0, 100)}`)
+      }
       
       const result = await response.json()
       
@@ -2344,13 +2387,43 @@ export default function CreateBillModal({
                         </div>
                       </div>
                       
+                      {/* 警告信息提示 */}
+                      {templatePreview.warnings && templatePreview.warnings.length > 0 && (
+                        <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+                          <div className="font-medium mb-1 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            警告详情（{templatePreview.warnings.length}条）:
+                          </div>
+                          <div className="max-h-24 overflow-y-auto">
+                            {templatePreview.warnings.slice(0, 10).map((warn: any, idx: number) => (
+                              <div key={idx} className="py-0.5 border-b border-yellow-100 last:border-0">
+                                第{warn.row}行: {warn.warnings?.join(', ') || warn.warning}
+                              </div>
+                            ))}
+                            {templatePreview.warnings.length > 10 && (
+                              <div className="pt-1 text-yellow-500">...还有 {templatePreview.warnings.length - 10} 条警告</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
                       {/* 错误信息提示 */}
                       {templatePreview.errors && templatePreview.errors.length > 0 && (
-                        <div className="mb-3 p-2 bg-red-50 rounded text-xs text-red-700">
-                          <div className="font-medium mb-1">错误详情（前5条）:</div>
-                          {templatePreview.errors.slice(0, 5).map((err: any, idx: number) => (
-                            <div key={idx}>第{err.row}行: {err.errors?.join(', ') || err.error}</div>
-                          ))}
+                        <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                          <div className="font-medium mb-1 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            错误详情（{templatePreview.errors.length}条）:
+                          </div>
+                          <div className="max-h-24 overflow-y-auto">
+                            {templatePreview.errors.slice(0, 10).map((err: any, idx: number) => (
+                              <div key={idx} className="py-0.5 border-b border-red-100 last:border-0">
+                                第{err.row}行: {err.errors?.join(', ') || err.error}
+                              </div>
+                            ))}
+                            {templatePreview.errors.length > 10 && (
+                              <div className="pt-1 text-red-500">...还有 {templatePreview.errors.length - 10} 条错误</div>
+                            )}
+                          </div>
                         </div>
                       )}
                       

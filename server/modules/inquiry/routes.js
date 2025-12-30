@@ -50,5 +50,30 @@ router.post('/inquiries/:id/accept', controller.acceptQuote)
 // 拒绝报价
 router.post('/inquiries/:id/reject', controller.rejectQuote)
 
+// ==================== ERP后台管理接口 ====================
+
+// 获取所有询价列表（ERP后台）
+router.get('/manage/inquiries', controller.getAllInquiries)
+
+// 设置询价报价（ERP后台）
+router.post('/manage/inquiries/:id/quote', controller.setQuote)
+
+// 分配询价给跟单员
+router.post('/manage/inquiries/:id/assign', controller.assignInquiry)
+
+// 开始处理询价
+router.post('/manage/inquiries/:id/start', controller.startProcessing)
+
+// ==================== 待办任务管理 ====================
+
+// 获取待处理任务列表
+router.get('/tasks/pending', controller.getPendingTasks)
+
+// 获取任务统计
+router.get('/tasks/stats', controller.getTaskStats)
+
+// 检查超时任务（定时任务调用）
+router.post('/tasks/check-overdue', controller.checkOverdueTasks)
+
 export default router
 

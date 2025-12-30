@@ -96,11 +96,14 @@ router.post('/clearance/estimate', inquiryController.estimateClearance)
 // 创建询价
 router.post('/inquiries', inquiryController.createInquiry)
 
-// 获取询价列表
-router.get('/inquiries', inquiryController.getInquiries)
+// 获取询价列表（使用 portal controller 确保只返回当前客户的询价）
+router.get('/inquiries', controller.getMyInquiries)
+
+// 获取询价统计
+router.get('/inquiries/stats', controller.getMyInquiryStats)
 
 // 获取询价详情
-router.get('/inquiries/:id', inquiryController.getInquiryById)
+router.get('/inquiries/:id', controller.getMyInquiryById)
 
 // 接受报价
 router.post('/inquiries/:id/accept', inquiryController.acceptQuote)

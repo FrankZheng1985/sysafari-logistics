@@ -61,9 +61,11 @@ export async function matchHsCode(item) {
   // 4. 尝试历史学习匹配
   const historyMatch = await matchFromHistory(productName, productNameEn, material)
   if (historyMatch) {
-    const tariffData = await doExactMatch(historyMatch.matched_hs_code)
+    // 规范化历史记录中的 HS 编码为 10 位
+    const normalizedHsCode = normalizeHsCode(historyMatch.matched_hs_code)
+    const tariffData = await doExactMatch(normalizedHsCode)
     return {
-      matchedHsCode: historyMatch.matched_hs_code,
+      matchedHsCode: normalizedHsCode,
       matchConfidence: Math.min(MATCH_CONFIG.HISTORY_MATCH_CONFIDENCE, 70 + historyMatch.match_count * 5),
       matchSource: 'history',
       tariffData: tariffData
@@ -192,11 +194,22 @@ async function fuzzyMatchByName(productName) {
 }
 
 /**
+ * 规范化 HS 编码为 10 位（欧盟 TARIC 标准）
+ * 如果编码少于 10 位，在末尾补 0
+ */
+function normalizeHsCode(hsCode) {
+  if (!hsCode) return hsCode
+  const cleaned = hsCode.replace(/[^0-9]/g, '')
+  if (cleaned.length >= 10) return cleaned.substring(0, 10)
+  return cleaned.padEnd(10, '0')
+}
+
+/**
  * 转换税率行数据
  */
 function convertTariffRow(row) {
   return {
-    hsCode: row.hs_code,
+    hsCode: normalizeHsCode(row.hs_code),
     productName: row.goods_description_cn || row.goods_description,
     productNameEn: row.goods_description,
     material: row.material,

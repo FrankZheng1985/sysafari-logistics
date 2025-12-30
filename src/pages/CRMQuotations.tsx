@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, FileText, Edit, Trash2, X, 
-  Send, CheckCircle, XCircle, Clock, Languages, Loader2, Package, Download
+  Send, CheckCircle, XCircle, Clock, Languages, Loader2, Package, Download,
+  Truck, MapPin, AlertCircle, Play, User
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
 import { getApiBaseUrl } from '../utils/api'
+import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE = getApiBaseUrl()
 
@@ -65,8 +67,60 @@ interface ProductFeeItem {
   isRequired: boolean
 }
 
+// 客户询价接口
+interface CustomerInquiry {
+  id: string
+  inquiryNumber: string
+  customerId: string
+  customerName: string
+  inquiryType: 'clearance' | 'transport' | 'combined'
+  status: string
+  transportData: {
+    transportMode?: 'container' | 'truck'
+    containerType?: string
+    returnLocation?: 'same' | 'different'
+    returnAddress?: string
+    origin: string
+    destination: string
+  } | null
+  clearanceData: any
+  assignedTo: number | null
+  assignedToName: string | null
+  dueAt: string | null
+  isOverdue: boolean
+  priority: string
+  source: string
+  createdAt: string
+}
+
+// 待办任务接口
+interface InquiryTask {
+  id: number
+  inquiryId: string
+  inquiryNumber: string
+  assigneeId: number
+  assigneeName: string
+  supervisorId: number | null
+  supervisorName: string | null
+  taskType: string
+  status: string
+  dueAt: string | null
+  customerName: string
+  inquiryType: string
+  transportData: any
+  clearanceData: any
+  priority: string
+  source: string
+}
+
 export default function CRMQuotations() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  
+  // 视图切换：quotations / inquiries
+  const [activeView, setActiveView] = useState<'quotations' | 'inquiries'>('quotations')
+  
+  // 报价单状态
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -93,12 +147,27 @@ export default function CRMQuotations() {
   })
   const [translatingIndex, setTranslatingIndex] = useState<number | null>(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
+  
+  // 客户询价状态
+  const [inquiries, setInquiries] = useState<CustomerInquiry[]>([])
+  const [inquiryTotal, setInquiryTotal] = useState(0)
+  const [inquiryPage, setInquiryPage] = useState(1)
+  const [inquiryLoading, setInquiryLoading] = useState(false)
+  const [inquiryFilterStatus, setInquiryFilterStatus] = useState<string>('')
+  const [selectedInquiry, setSelectedInquiry] = useState<CustomerInquiry | null>(null)
+  const [showInquiryDetail, setShowInquiryDetail] = useState(false)
+  const [taskStats, setTaskStats] = useState({ pendingCount: 0, processingCount: 0, overdueCount: 0, todayCompleted: 0 })
 
    
   useEffect(() => {
-    loadData()
+    if (activeView === 'quotations') {
+      loadData()
+    } else {
+      loadInquiries()
+      loadTaskStats()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, searchValue, filterStatus])
+  }, [activeView, page, pageSize, searchValue, filterStatus, inquiryPage, inquiryFilterStatus])
 
   const loadData = async () => {
     setLoading(true)
@@ -133,6 +202,104 @@ export default function CRMQuotations() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // 加载客户询价列表
+  const loadInquiries = async () => {
+    setInquiryLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: inquiryPage.toString(),
+        pageSize: pageSize.toString()
+      })
+      if (inquiryFilterStatus) params.append('status', inquiryFilterStatus)
+
+      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`)
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        setInquiries(data.data.list || [])
+        setInquiryTotal(data.data.total || 0)
+      }
+    } catch (error) {
+      console.error('加载客户询价失败:', error)
+    } finally {
+      setInquiryLoading(false)
+    }
+  }
+
+  // 加载任务统计
+  const loadTaskStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/inquiry/tasks/stats`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setTaskStats(data.data)
+      }
+    } catch (error) {
+      console.error('加载任务统计失败:', error)
+    }
+  }
+
+  // 开始处理询价
+  const handleStartProcessing = async (inquiry: CustomerInquiry) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries/${inquiry.id}/start`, {
+        method: 'POST'
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        loadInquiries()
+        loadTaskStats()
+      } else {
+        alert(data.msg || '操作失败')
+      }
+    } catch (error) {
+      console.error('开始处理失败:', error)
+      alert('操作失败')
+    }
+  }
+
+  // 查看询价详情
+  const handleViewInquiry = (inquiry: CustomerInquiry) => {
+    setSelectedInquiry(inquiry)
+    setShowInquiryDetail(true)
+  }
+
+  // 获取询价类型标签
+  const getInquiryTypeLabel = (type: string) => {
+    const types: Record<string, string> = {
+      clearance: '清关询价',
+      transport: '运输询价',
+      combined: '综合询价'
+    }
+    return types[type] || type
+  }
+
+  // 获取询价状态信息
+  const getInquiryStatusInfo = (status: string, isOverdue: boolean) => {
+    if (isOverdue) {
+      return { label: '已超时', color: 'text-red-600', bg: 'bg-red-100' }
+    }
+    const statusMap: Record<string, { label: string; color: string; bg: string }> = {
+      pending: { label: '待处理', color: 'text-amber-600', bg: 'bg-amber-100' },
+      processing: { label: '处理中', color: 'text-blue-600', bg: 'bg-blue-100' },
+      quoted: { label: '已报价', color: 'text-green-600', bg: 'bg-green-100' },
+      accepted: { label: '已接受', color: 'text-green-700', bg: 'bg-green-200' },
+      rejected: { label: '已拒绝', color: 'text-gray-600', bg: 'bg-gray-100' },
+      expired: { label: '已过期', color: 'text-gray-500', bg: 'bg-gray-100' }
+    }
+    return statusMap[status] || statusMap.pending
+  }
+
+  // 格式化时间
+  const formatDateTime = (dateStr: string | null) => {
+    if (!dateStr) return '-'
+    const date = new Date(dateStr)
+    return date.toLocaleString('zh-CN', { 
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    })
   }
 
   // 加载产品费用项
@@ -538,6 +705,170 @@ export default function CRMQuotations() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [generatingPdf])
 
+  // 客户询价表格列
+  const inquiryColumns: Column<CustomerInquiry>[] = useMemo(() => [
+    {
+      key: 'inquiryNumber',
+      label: '询价编号',
+      width: 130,
+      render: (_value, record) => (
+        <span className="text-primary-600 font-medium text-xs">{record.inquiryNumber}</span>
+      )
+    },
+    {
+      key: 'customerName',
+      label: '客户',
+      width: 120,
+      render: (_value, record) => (
+        <span className="text-xs text-gray-900">{record.customerName || '-'}</span>
+      )
+    },
+    {
+      key: 'inquiryType',
+      label: '类型',
+      width: 90,
+      render: (_value, record) => {
+        const typeIcons: Record<string, any> = {
+          transport: Truck,
+          clearance: FileText,
+          combined: Package
+        }
+        const Icon = typeIcons[record.inquiryType] || Package
+        return (
+          <span className="inline-flex items-center gap-1 text-xs text-gray-700">
+            <Icon className="w-3 h-3" />
+            {getInquiryTypeLabel(record.inquiryType)}
+          </span>
+        )
+      }
+    },
+    {
+      key: 'transportData',
+      label: '路线/内容',
+      width: 200,
+      render: (_value, record) => {
+        if (record.transportData) {
+          return (
+            <div className="text-xs">
+              <div className="flex items-center gap-1 text-gray-700">
+                <MapPin className="w-3 h-3 text-green-500" />
+                <span className="truncate max-w-[80px]">{record.transportData.origin}</span>
+                <span>→</span>
+                <MapPin className="w-3 h-3 text-red-500" />
+                <span className="truncate max-w-[80px]">{record.transportData.destination}</span>
+              </div>
+              {record.transportData.transportMode === 'container' && (
+                <span className="text-gray-400 text-[10px]">
+                  {record.transportData.containerType} / {record.transportData.returnLocation === 'same' ? '同地还柜' : '异地还柜'}
+                </span>
+              )}
+            </div>
+          )
+        }
+        return <span className="text-xs text-gray-400">-</span>
+      }
+    },
+    {
+      key: 'assignedToName',
+      label: '处理人',
+      width: 80,
+      render: (_value, record) => (
+        <span className="text-xs text-gray-600">
+          {record.assignedToName || <span className="text-amber-500">未分配</span>}
+        </span>
+      )
+    },
+    {
+      key: 'priority',
+      label: '优先级',
+      width: 70,
+      render: (_value, record) => {
+        const priorityMap: Record<string, { label: string; color: string }> = {
+          urgent: { label: '紧急', color: 'text-red-600 bg-red-100' },
+          high: { label: '高', color: 'text-orange-600 bg-orange-100' },
+          normal: { label: '普通', color: 'text-gray-600 bg-gray-100' },
+          low: { label: '低', color: 'text-gray-400 bg-gray-50' }
+        }
+        const info = priorityMap[record.priority] || priorityMap.normal
+        return (
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${info.color}`}>
+            {info.label}
+          </span>
+        )
+      }
+    },
+    {
+      key: 'status',
+      label: '状态',
+      width: 80,
+      render: (_value, record) => {
+        const info = getInquiryStatusInfo(record.status, record.isOverdue)
+        return (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
+            {record.isOverdue && <AlertCircle className="w-3 h-3" />}
+            {info.label}
+          </span>
+        )
+      }
+    },
+    {
+      key: 'dueAt',
+      label: '截止时间',
+      width: 100,
+      render: (_value, record) => {
+        if (!record.dueAt) return <span className="text-xs text-gray-400">-</span>
+        const isNearDue = new Date(record.dueAt).getTime() - Date.now() < 4 * 60 * 60 * 1000 // 4小时内
+        return (
+          <span className={`text-[10px] ${record.isOverdue ? 'text-red-500' : isNearDue ? 'text-amber-500' : 'text-gray-500'}`}>
+            {formatDateTime(record.dueAt)}
+          </span>
+        )
+      }
+    },
+    {
+      key: 'createdAt',
+      label: '创建时间',
+      width: 100,
+      render: (_value, record) => (
+        <span className="text-[10px] text-gray-400">{formatDateTime(record.createdAt)}</span>
+      )
+    },
+    {
+      key: 'actions',
+      label: '操作',
+      width: 140,
+      render: (_value, record) => (
+        <div className="flex items-center gap-1">
+          {record.status === 'pending' && record.assignedTo === user?.id && (
+            <button
+              onClick={() => handleStartProcessing(record)}
+              className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100 flex items-center gap-1"
+            >
+              <Play className="w-3 h-3" />
+              开始处理
+            </button>
+          )}
+          {(record.status === 'pending' || record.status === 'processing') && (
+            <button
+              onClick={() => handleViewInquiry(record)}
+              className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
+            >
+              报价
+            </button>
+          )}
+          <button
+            onClick={() => handleViewInquiry(record)}
+            className="p-1 hover:bg-gray-100 rounded text-gray-500"
+            title="查看详情"
+          >
+            <FileText className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [user?.id])
+
   const tabs = [
     { label: '仪表盘', path: '/crm' },
     { label: '客户管理', path: '/crm/customers' },
@@ -562,89 +893,242 @@ export default function CRMQuotations() {
         onTabChange={(path) => navigate(path)}
       />
 
-      {/* 工具栏 */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="搜索报价单号、客户..."
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && loadData()}
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-            />
-          </div>
-
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-            title="筛选报价状态"
-          >
-            <option value="">全部状态</option>
-            <option value="draft">草稿</option>
-            <option value="sent">已发送</option>
-            <option value="accepted">已接受</option>
-            <option value="rejected">已拒绝</option>
-            <option value="expired">已过期</option>
-          </select>
-        </div>
-
+      {/* 视图切换标签 */}
+      <div className="flex items-center gap-4 bg-white rounded-lg border border-gray-200 p-2">
         <button
-          onClick={() => handleOpenModal()}
-          className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700"
+          onClick={() => setActiveView('quotations')}
+          className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+            activeView === 'quotations'
+              ? 'bg-primary-600 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          新建报价
+          <FileText className="w-4 h-4 inline-block mr-1" />
+          报价单管理
+        </button>
+        <button
+          onClick={() => setActiveView('inquiries')}
+          className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+            activeView === 'inquiries'
+              ? 'bg-primary-600 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          客户询价
+          {taskStats.pendingCount > 0 && (
+            <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${
+              activeView === 'inquiries' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-600'
+            }`}>
+              {taskStats.pendingCount}
+            </span>
+          )}
+          {taskStats.overdueCount > 0 && (
+            <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${
+              activeView === 'inquiries' ? 'bg-red-400 text-white' : 'bg-red-100 text-red-600'
+            }`}>
+              超时 {taskStats.overdueCount}
+            </span>
+          )}
         </button>
       </div>
 
-      {/* 数据表格 */}
-      <DataTable
-        columns={columns}
-        data={quotations}
-        loading={loading}
-        rowKey="id"
-      />
+      {/* 报价单视图 */}
+      {activeView === 'quotations' && (
+        <>
+          {/* 工具栏 */}
+          <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="搜索报价单号、客户..."
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && loadData()}
+                  className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                />
+              </div>
 
-      {/* 分页 */}
-      {total > pageSize && (
-        <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
-          <div className="text-xs text-gray-500">
-            共 {total} 条记录
-          </div>
-          <div className="flex items-center gap-2">
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                title="筛选报价状态"
+              >
+                <option value="">全部状态</option>
+                <option value="draft">草稿</option>
+                <option value="sent">已发送</option>
+                <option value="accepted">已接受</option>
+                <option value="rejected">已拒绝</option>
+                <option value="expired">已过期</option>
+              </select>
+            </div>
+
             <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => handleOpenModal()}
+              className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700"
             >
-              上一页
+              <Plus className="w-4 h-4" />
+              新建报价
             </button>
-            <button
-              onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
-              disabled={page >= Math.ceil(total / pageSize)}
-              className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
-            >
-              下一页
-            </button>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value))
-                setPage(1)
-              }}
-              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-              title="每页显示条数"
-            >
-              <option value={20}>20 条/页</option>
-              <option value={50}>50 条/页</option>
-              <option value={100}>100 条/页</option>
-            </select>
           </div>
-        </div>
+        </>
+      )}
+
+      {/* 客户询价视图 */}
+      {activeView === 'inquiries' && (
+        <>
+          {/* 统计卡片 */}
+          <div className="grid grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-gray-500">待处理</div>
+                  <div className="text-2xl font-bold text-amber-600">{taskStats.pendingCount}</div>
+                </div>
+                <Clock className="w-8 h-8 text-amber-200" />
+              </div>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-gray-500">处理中</div>
+                  <div className="text-2xl font-bold text-blue-600">{taskStats.processingCount}</div>
+                </div>
+                <Play className="w-8 h-8 text-blue-200" />
+              </div>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-gray-500">已超时</div>
+                  <div className="text-2xl font-bold text-red-600">{taskStats.overdueCount}</div>
+                </div>
+                <AlertCircle className="w-8 h-8 text-red-200" />
+              </div>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-gray-500">今日完成</div>
+                  <div className="text-2xl font-bold text-green-600">{taskStats.todayCompleted}</div>
+                </div>
+                <CheckCircle className="w-8 h-8 text-green-200" />
+              </div>
+            </div>
+          </div>
+
+          {/* 询价工具栏 */}
+          <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-3">
+              <select
+                value={inquiryFilterStatus}
+                onChange={(e) => {
+                  setInquiryFilterStatus(e.target.value)
+                  setInquiryPage(1)
+                }}
+                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                title="筛选询价状态"
+              >
+                <option value="">全部状态</option>
+                <option value="pending">待处理</option>
+                <option value="processing">处理中</option>
+                <option value="quoted">已报价</option>
+                <option value="accepted">已接受</option>
+                <option value="rejected">已拒绝</option>
+              </select>
+            </div>
+
+            <div className="text-xs text-gray-500">
+              共 {inquiryTotal} 条询价
+            </div>
+          </div>
+
+          {/* 询价表格 */}
+          <DataTable
+            columns={inquiryColumns}
+            data={inquiries}
+            loading={inquiryLoading}
+            rowKey="id"
+          />
+
+          {/* 询价分页 */}
+          {inquiryTotal > pageSize && (
+            <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
+              <div className="text-xs text-gray-500">
+                共 {inquiryTotal} 条记录
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setInquiryPage(p => Math.max(1, p - 1))}
+                  disabled={inquiryPage === 1}
+                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  上一页
+                </button>
+                <button
+                  onClick={() => setInquiryPage(p => Math.min(Math.ceil(inquiryTotal / pageSize), p + 1))}
+                  disabled={inquiryPage >= Math.ceil(inquiryTotal / pageSize)}
+                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* 报价单数据表格 */}
+      {activeView === 'quotations' && (
+        <>
+          <DataTable
+            columns={columns}
+            data={quotations}
+            loading={loading}
+            rowKey="id"
+          />
+
+          {/* 分页 */}
+          {total > pageSize && (
+            <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
+              <div className="text-xs text-gray-500">
+                共 {total} 条记录
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  上一页
+                </button>
+                <button
+                  onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
+                  disabled={page >= Math.ceil(total / pageSize)}
+                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  下一页
+                </button>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value))
+                    setPage(1)
+                  }}
+                  className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                  title="每页显示条数"
+                >
+                  <option value={20}>20 条/页</option>
+                  <option value={50}>50 条/页</option>
+                  <option value={100}>100 条/页</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* 新增/编辑弹窗 */}
@@ -935,6 +1419,163 @@ export default function CRMQuotations() {
                 <Download className="w-3.5 h-3.5" />
                 导入 ({selectedProducts.length})
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 询价详情弹窗 */}
+      {showInquiryDetail && selectedInquiry && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-[600px] max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium">询价详情</h3>
+                <span className="text-xs text-gray-400">{selectedInquiry.inquiryNumber}</span>
+              </div>
+              <button onClick={() => setShowInquiryDetail(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* 基本信息 */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="text-xs font-medium text-gray-700 mb-3">基本信息</h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-gray-500">客户：</span>
+                    <span className="text-gray-900 ml-1">{selectedInquiry.customerName}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">类型：</span>
+                    <span className="text-gray-900 ml-1">{getInquiryTypeLabel(selectedInquiry.inquiryType)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">来源：</span>
+                    <span className="text-gray-900 ml-1">{selectedInquiry.source === 'portal' ? '客户门户' : 'CRM'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">优先级：</span>
+                    <span className={`ml-1 ${selectedInquiry.priority === 'urgent' ? 'text-red-600' : 'text-gray-900'}`}>
+                      {selectedInquiry.priority === 'urgent' ? '紧急' : selectedInquiry.priority === 'high' ? '高' : '普通'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">处理人：</span>
+                    <span className="text-gray-900 ml-1">{selectedInquiry.assignedToName || '未分配'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">状态：</span>
+                    <span className={`ml-1 ${getInquiryStatusInfo(selectedInquiry.status, selectedInquiry.isOverdue).color}`}>
+                      {getInquiryStatusInfo(selectedInquiry.status, selectedInquiry.isOverdue).label}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 运输信息 */}
+              {selectedInquiry.transportData && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h4 className="text-xs font-medium text-blue-700 mb-3 flex items-center gap-1">
+                    <Truck className="w-4 h-4" />
+                    运输信息
+                  </h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-3 h-3 text-green-500" />
+                      <span className="text-gray-600">起点：</span>
+                      <span className="text-gray-900">{selectedInquiry.transportData.origin}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-3 h-3 text-red-500" />
+                      <span className="text-gray-600">终点：</span>
+                      <span className="text-gray-900">{selectedInquiry.transportData.destination}</span>
+                    </div>
+                    {selectedInquiry.transportData.transportMode === 'container' && (
+                      <>
+                        <div>
+                          <span className="text-gray-600">运输方式：</span>
+                          <span className="text-gray-900 ml-1">集装箱原柜</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">柜型：</span>
+                          <span className="text-gray-900 ml-1">{selectedInquiry.transportData.containerType || '-'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">还柜方式：</span>
+                          <span className="text-gray-900 ml-1">
+                            {selectedInquiry.transportData.returnLocation === 'same' ? '同地还柜' : '异地还柜'}
+                          </span>
+                        </div>
+                        {selectedInquiry.transportData.returnLocation === 'different' && selectedInquiry.transportData.returnAddress && (
+                          <div>
+                            <span className="text-gray-600">还柜地址：</span>
+                            <span className="text-gray-900 ml-1">{selectedInquiry.transportData.returnAddress}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {selectedInquiry.transportData.transportMode === 'truck' && (
+                      <div>
+                        <span className="text-gray-600">运输方式：</span>
+                        <span className="text-gray-900 ml-1">卡车运输</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 时间信息 */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="text-xs font-medium text-gray-700 mb-3">时间信息</h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-gray-500">创建时间：</span>
+                    <span className="text-gray-900 ml-1">{formatDateTime(selectedInquiry.createdAt)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">截止时间：</span>
+                    <span className={`ml-1 ${selectedInquiry.isOverdue ? 'text-red-600' : 'text-gray-900'}`}>
+                      {formatDateTime(selectedInquiry.dueAt)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 p-4 border-t sticky bottom-0 bg-white">
+              <button
+                onClick={() => setShowInquiryDetail(false)}
+                className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-50"
+              >
+                关闭
+              </button>
+              {(selectedInquiry.status === 'pending' || selectedInquiry.status === 'processing') && (
+                <button
+                  onClick={() => {
+                    // TODO: 跳转到报价页面或打开报价弹窗
+                    setShowInquiryDetail(false)
+                    // 创建报价单并预填信息
+                    setFormData({
+                      customerId: selectedInquiry.customerId,
+                      customerName: selectedInquiry.customerName,
+                      subject: `${getInquiryTypeLabel(selectedInquiry.inquiryType)} - ${selectedInquiry.inquiryNumber}`,
+                      quoteDate: new Date().toISOString().split('T')[0],
+                      validUntil: '',
+                      currency: 'EUR',
+                      terms: '',
+                      notes: `关联询价：${selectedInquiry.inquiryNumber}`,
+                      items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+                    })
+                    setActiveView('quotations')
+                    setShowModal(true)
+                  }}
+                  className="px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
+                >
+                  创建报价单
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -6,6 +6,17 @@
 import { getDatabase } from '../../config/database.js'
 
 /**
+ * 规范化 HS 编码为 10 位（欧盟 TARIC 标准）
+ * 如果编码少于 10 位，在末尾补 0
+ */
+function normalizeHsCode(hsCode) {
+  if (!hsCode) return hsCode
+  const cleaned = hsCode.replace(/[^0-9]/g, '')
+  if (cleaned.length >= 10) return cleaned.substring(0, 10)
+  return cleaned.padEnd(10, '0')
+}
+
+/**
  * 计算单个商品的税费
  * @param {Object} item - 商品数据
  * @param {number} item.totalValue - CIF货值
@@ -363,15 +374,29 @@ export async function updateCargoItemTax(itemId, updates) {
   
   // 如果修改了HS编码，尝试从税率库获取新的税率
   let newTariffData = null
-  const matchedHsCode = updates.matchedHsCode !== undefined ? updates.matchedHsCode : item.matched_hs_code
+  // 规范化 HS 编码为 10 位
+  const normalizedInputHsCode = updates.matchedHsCode ? normalizeHsCode(updates.matchedHsCode) : null
+  const matchedHsCode = normalizedInputHsCode || item.matched_hs_code
   
-  if (updates.matchedHsCode && updates.matchedHsCode !== item.matched_hs_code) {
+  if (normalizedInputHsCode && normalizedInputHsCode !== item.matched_hs_code) {
     // HS编码发生变化，尝试从税率库获取税率
-    const tariff = await db.prepare(`
-      SELECT duty_rate, vat_rate, anti_dumping_rate, countervailing_rate, goods_description_cn
+    // 优先精确匹配 10 位编码
+    let tariff = await db.prepare(`
+      SELECT duty_rate, vat_rate, anti_dumping_rate, countervailing_rate, goods_description_cn, hs_code
       FROM tariff_rates 
       WHERE hs_code = ?
-    `).get(updates.matchedHsCode)
+    `).get(normalizedInputHsCode)
+    
+    // 如果精确匹配失败，尝试前缀匹配
+    if (!tariff) {
+      tariff = await db.prepare(`
+        SELECT duty_rate, vat_rate, anti_dumping_rate, countervailing_rate, goods_description_cn, hs_code
+        FROM tariff_rates 
+        WHERE hs_code LIKE ?
+        ORDER BY hs_code ASC
+        LIMIT 1
+      `).get(normalizedInputHsCode.substring(0, 8) + '%')
+    }
     
     if (tariff) {
       newTariffData = {

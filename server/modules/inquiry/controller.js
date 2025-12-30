@@ -388,7 +388,9 @@ export async function setQuote(req, res) {
       transportQuote,
       totalQuote,
       validUntil,
-      notes
+      notes,
+      crmQuoteId,
+      transportPriceId
     } = req.body
     
     const inquiry = await model.getInquiryById(id)
@@ -408,7 +410,9 @@ export async function setQuote(req, res) {
       totalQuote,
       quotedBy: req.user?.id,
       quotedByName: req.user?.name,
-      validUntil
+      validUntil,
+      crmQuoteId,
+      transportPriceId
     })
     
     // 更新备注
@@ -416,12 +420,134 @@ export async function setQuote(req, res) {
       await model.updateInquiry(id, { notes })
     }
     
-    // TODO: 同步到CRM商机
-    
     return success(res, { id }, '报价已设置')
   } catch (error) {
     console.error('设置报价失败:', error)
     return serverError(res, '设置报价失败')
+  }
+}
+
+// ==================== 待办任务管理 ====================
+
+/**
+ * 获取待处理询价任务列表
+ */
+export async function getPendingTasks(req, res) {
+  try {
+    const userId = req.user?.id
+    const { status, page, pageSize } = req.query
+    
+    const result = await model.getPendingInquiryTasks({
+      userId,
+      status,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取待处理任务失败:', error)
+    return serverError(res, '获取待处理任务失败')
+  }
+}
+
+/**
+ * 获取任务统计
+ */
+export async function getTaskStats(req, res) {
+  try {
+    const userId = req.user?.id
+    
+    if (!userId) {
+      return badRequest(res, '用户信息缺失')
+    }
+    
+    const stats = await model.getTaskStats(userId)
+    
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取任务统计失败:', error)
+    return serverError(res, '获取任务统计失败')
+  }
+}
+
+/**
+ * 分配询价给跟单员
+ */
+export async function assignInquiry(req, res) {
+  try {
+    const { id } = req.params
+    const { assigneeId } = req.body
+    
+    if (!assigneeId) {
+      return badRequest(res, '请选择要分配的跟单员')
+    }
+    
+    const inquiry = await model.getInquiryById(id)
+    
+    if (!inquiry) {
+      return notFound(res, '询价不存在')
+    }
+    
+    const result = await model.assignInquiry(id, assigneeId, req.user?.id)
+    
+    return success(res, result, '询价已分配')
+  } catch (error) {
+    console.error('分配询价失败:', error)
+    return serverError(res, error.message || '分配询价失败')
+  }
+}
+
+/**
+ * 开始处理询价
+ */
+export async function startProcessing(req, res) {
+  try {
+    const { id } = req.params
+    const userId = req.user?.id
+    
+    if (!userId) {
+      return badRequest(res, '用户信息缺失')
+    }
+    
+    const inquiry = await model.getInquiryById(id)
+    
+    if (!inquiry) {
+      return notFound(res, '询价不存在')
+    }
+    
+    // 验证是否是分配给当前用户的
+    if (inquiry.assignedTo && inquiry.assignedTo !== userId) {
+      return badRequest(res, '您没有权限处理此询价')
+    }
+    
+    await model.startInquiryTask(id, userId)
+    
+    return success(res, { id }, '已开始处理')
+  } catch (error) {
+    console.error('开始处理询价失败:', error)
+    return serverError(res, '开始处理询价失败')
+  }
+}
+
+/**
+ * 检查超时任务（定时任务调用）
+ */
+export async function checkOverdueTasks(req, res) {
+  try {
+    const result = await model.checkOverdueTasks()
+    
+    return success(res, { 
+      overdueCount: result.length,
+      tasks: result 
+    }, `已标记 ${result.length} 个超时任务`)
+  } catch (error) {
+    console.error('检查超时任务失败:', error)
+    return serverError(res, '检查超时任务失败')
   }
 }
 
@@ -447,7 +573,14 @@ export default {
   
   // ERP内部
   getAllInquiries,
-  setQuote
+  setQuote,
+  
+  // 待办任务
+  getPendingTasks,
+  getTaskStats,
+  assignInquiry,
+  startProcessing,
+  checkOverdueTasks
 }
 
 /**

@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   FileCheck, Calculator, Download, CheckCircle, RefreshCw,
-  ChevronDown, FileText, AlertTriangle, Edit2, X, Save, User, Building, MapPin, Phone, Hash, Check
+  ChevronDown, FileText, AlertTriangle, Edit2, X, Save, User, Building, MapPin, Phone, Hash, Check,
+  Shield, TrendingDown
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getCustomers, getCustomerTaxNumbers, type Customer, type CustomerTaxNumber } from '../utils/api'
 import { useToast } from '../components/Toast'
 import { useDownload } from '../hooks/useDownload'
+import RiskAnalysisDashboard from '../components/RiskAnalysisDashboard'
 
 const API_BASE = getApiBaseUrl()
 
@@ -178,6 +180,9 @@ export default function DocumentTaxCalc() {
   const [loadingTaxNumbers, setLoadingTaxNumbers] = useState(false)
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
+  
+  // 风险分析相关状态
+  const [showRiskAnalysis, setShowRiskAnalysis] = useState(false)
 
   useEffect(() => {
     loadBatches()
@@ -879,6 +884,32 @@ export default function DocumentTaxCalc() {
               )}
             </div>
           </div>
+          
+          {/* 风险分析入口 */}
+          <div className="flex items-center justify-between bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg p-4 border border-primary-100">
+            <div className="flex items-center gap-3">
+              <Shield className="w-8 h-8 text-primary-600" />
+              <div>
+                <div className="font-medium text-gray-900">智能风险分析</div>
+                <div className="text-sm text-gray-500">分析税率优化、申报价值、查验风险</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowRiskAnalysis(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <TrendingDown className="w-4 h-4" />
+              开始分析
+            </button>
+          </div>
+          
+          {/* 风险分析弹窗 */}
+          {showRiskAnalysis && taxDetails && (
+            <RiskAnalysisDashboard
+              importId={taxDetails.batch.id}
+              onClose={() => setShowRiskAnalysis(false)}
+            />
+          )}
 
           {/* 客户确认状态 */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">

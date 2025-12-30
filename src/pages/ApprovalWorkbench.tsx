@@ -20,7 +20,9 @@ import {
   Building2,
   Package,
   Eye,
-  Filter
+  Filter,
+  Truck,
+  MapPin
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../contexts/AuthContext'
@@ -52,6 +54,7 @@ const APPROVAL_TYPES: Record<string, { label: string; icon: React.ComponentType<
   payment: { label: '付款申请', icon: Wallet, color: 'text-green-600 bg-green-100' },
   supplier: { label: '供应商审批', icon: Building2, color: 'text-purple-600 bg-purple-100' },
   fee: { label: '费用审批', icon: FileText, color: 'text-orange-600 bg-orange-100' },
+  inquiry: { label: '客户询价', icon: Truck, color: 'text-teal-600 bg-teal-100' },
 }
 
 // 审批状态配置
@@ -178,6 +181,9 @@ export default function ApprovalWorkbench() {
       navigate(`/finance/invoices/${approval.business_id}`)
     } else if (approval.approval_type === 'supplier' && approval.business_id) {
       navigate('/suppliers/list')
+    } else if (approval.approval_type === 'inquiry') {
+      // 跳转到 CRM 报价管理的客户询价 Tab
+      navigate('/crm/quotations')
     }
   }
 
