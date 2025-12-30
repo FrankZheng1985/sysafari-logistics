@@ -1140,6 +1140,7 @@ export async function runMigrations() {
     // 添加所有可能缺失的客户表字段
     const customerColumns = [
       { name: 'customer_region', type: 'TEXT', default: "'china'" },
+      { name: 'company_name_en', type: 'TEXT', default: null },  // 公司英文名称
       { name: 'legal_person', type: 'TEXT', default: null },
       { name: 'registered_capital', type: 'TEXT', default: null },
       { name: 'establishment_date', type: 'TEXT', default: null },
