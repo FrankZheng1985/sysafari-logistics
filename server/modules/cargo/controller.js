@@ -559,23 +559,30 @@ export async function getSupplementList(req, res) {
     const db = getDatabase()
     const { page = 1, pageSize = 20, search, category } = req.query
     
-    // category: all | autoFillable | needMaterial | needManual
-    let baseWhere = `(goods_description_cn IS NULL OR goods_description_cn = '' OR material IS NULL OR material = '' OR unit_name IS NULL OR unit_name = '')`
-    
     // 不需要材质的章节（01-38章）
     const noMaterialChapters = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33','34','35','36','37','38']
-    const noMaterialPattern = noMaterialChapters.map(ch => `'${ch}%'`).join(',')
+    
+    // 修正：真正需要补充的数据条件
+    // 01-38章：只看单位是否缺失（不需要材质）
+    // 39-97章：看材质和单位是否缺失
+    let baseWhere = `(
+      (SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}') AND (unit_name IS NULL OR unit_name = ''))
+      OR
+      (SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}') AND ((material IS NULL OR material = '') OR (unit_name IS NULL OR unit_name = '')))
+    )`
     
     // 根据分类添加额外条件
     let categoryWhere = ''
     if (category === 'autoFillable') {
-      // 可自动补充：不需要材质的章节，且缺少单位
-      categoryWhere = ` AND (SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}')) AND (unit_name IS NULL OR unit_name = '')`
+      // 可自动补充：01-38章，且缺少单位
+      baseWhere = `SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}') AND (unit_name IS NULL OR unit_name = '')`
+      categoryWhere = ''
     } else if (category === 'needMaterial') {
-      // 需要补充材质：需要材质的章节，且缺少材质
-      categoryWhere = ` AND (SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}')) AND (material IS NULL OR material = '')`
+      // 需要补充材质：39-97章，缺少材质或单位
+      baseWhere = `SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}') AND ((material IS NULL OR material = '') OR (unit_name IS NULL OR unit_name = ''))`
+      categoryWhere = ''
     } else if (category === 'needManual') {
-      // 完全手动：需要材质且缺少材质，或需要单位但无默认值
+      // 完全手动：39-97章
       categoryWhere = ` AND (SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}'))`
     }
     
@@ -660,51 +667,60 @@ export async function getSupplementStats(req, res) {
     // 不需要材质的章节（01-38章）
     const noMaterialChapters = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33','34','35','36','37','38']
     
-    // 缺失数据的基础条件
-    const baseWhere = `(goods_description_cn IS NULL OR goods_description_cn = '' OR material IS NULL OR material = '' OR unit_name IS NULL OR unit_name = '')`
+    // 修正：根据章节判断真正缺失的数据
+    // 01-38章：只看单位是否缺失（不需要材质）
+    // 39-97章：看材质和单位是否缺失
     
-    // 统计总数
-    const totalResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM tariff_rates WHERE ${baseWhere}`
-    ).get()
-    
-    // 可自动补充：不需要材质的章节，且缺少单位
+    // 可自动补充：01-38章，只缺单位
     const autoFillableResult = await db.prepare(
       `SELECT COUNT(*) as count FROM tariff_rates 
-       WHERE ${baseWhere} 
-       AND SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}')
+       WHERE SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}')
        AND (unit_name IS NULL OR unit_name = '')`
     ).get()
     
-    // 需要补充材质的（39-97章，且缺少材质）
+    // 需要补充材质的（39-97章，缺少材质或单位）
     const needMaterialResult = await db.prepare(
       `SELECT COUNT(*) as count FROM tariff_rates 
-       WHERE ${baseWhere}
-       AND SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}')
-       AND (material IS NULL OR material = '')`
+       WHERE SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}')
+       AND ((material IS NULL OR material = '') OR (unit_name IS NULL OR unit_name = ''))`
     ).get()
     
-    // 只缺商品名称的
+    // 统计总数 = 可自动补充 + 需要材质
+    const totalCount = (parseInt(autoFillableResult?.count) || 0) + (parseInt(needMaterialResult?.count) || 0)
+    
+    // 只缺商品名称的（任意章节）
     const needNameResult = await db.prepare(
       `SELECT COUNT(*) as count FROM tariff_rates 
-       WHERE (goods_description_cn IS NULL OR goods_description_cn = '')
-       AND material IS NOT NULL AND material != ''
-       AND unit_name IS NOT NULL AND unit_name != ''`
+       WHERE (goods_description_cn IS NULL OR goods_description_cn = '')`
     ).get()
     
-    // 按章节统计
-    const chapterStats = await db.prepare(`
+    // 按章节统计（修正：01-38章只统计缺单位的，39+章统计缺材质或单位的）
+    const chapterStats01_38 = await db.prepare(`
       SELECT 
         SUBSTRING(hs_code, 1, 2) as chapter,
         COUNT(*) as count
       FROM tariff_rates 
-      WHERE ${baseWhere}
+      WHERE SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}')
+      AND (unit_name IS NULL OR unit_name = '')
       GROUP BY SUBSTRING(hs_code, 1, 2)
       ORDER BY chapter
     `).all()
     
+    const chapterStats39_plus = await db.prepare(`
+      SELECT 
+        SUBSTRING(hs_code, 1, 2) as chapter,
+        COUNT(*) as count
+      FROM tariff_rates 
+      WHERE SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}')
+      AND ((material IS NULL OR material = '') OR (unit_name IS NULL OR unit_name = ''))
+      GROUP BY SUBSTRING(hs_code, 1, 2)
+      ORDER BY chapter
+    `).all()
+    
+    const chapterStats = [...chapterStats01_38, ...chapterStats39_plus].sort((a, b) => a.chapter.localeCompare(b.chapter))
+    
     return success(res, {
-      total: parseInt(totalResult?.count) || 0,
+      total: totalCount,
       autoFillable: parseInt(autoFillableResult?.count) || 0,
       needMaterial: parseInt(needMaterialResult?.count) || 0,
       needName: parseInt(needNameResult?.count) || 0,
