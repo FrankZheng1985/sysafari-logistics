@@ -2,6 +2,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { type User } from '../utils/api'
+import { useSessionTimeout } from '../hooks/useSessionTimeout'
+import SessionTimeoutModal from '../components/SessionTimeoutModal'
 
 // API 基础地址 - 根据域名自动选择（阿里云部署）
 function getApiBaseUrl(): string {
@@ -43,7 +45,7 @@ interface AuthState {
 interface AuthContextType extends AuthState {
   login: () => void
   testLogin: (username: string, password: string) => Promise<{ success: boolean; message: string }>
-  logout: () => void
+  logout: (reason?: string) => void
   getAccessToken: () => Promise<string | null>
   hasPermission: (permission: string) => boolean
   hasAnyPermission: (permissions: string[]) => boolean
@@ -51,6 +53,7 @@ interface AuthContextType extends AuthState {
   canViewBill: (billId?: string, operatorId?: string) => boolean
   isAdmin: () => boolean
   isManager: () => boolean
+  extendSession: () => void // 延长会话（重置超时计时器）
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -260,12 +263,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // 登出
-  const logout = useCallback(() => {
+  const logout = useCallback((reason?: string) => {
+    // 检查是否是密码登录用户（localStorage 中有 TEST_MODE_KEY 表示是密码登录）
+    const isPasswordLogin = !!localStorage.getItem(TEST_MODE_KEY)
+    
+    // 清除会话超时相关的 localStorage
+    localStorage.removeItem('bp_logistics_last_activity')
+    localStorage.removeItem('bp_logistics_session_timeout')
     localStorage.removeItem(USER_CACHE_KEY)
     localStorage.removeItem(TEST_MODE_KEY)
     
-    if (state.isTestMode) {
-      // 测试模式直接清除状态
+    // 如果是超时登出，在控制台记录
+    if (reason === 'timeout') {
+      console.log('[Auth] 会话超时，自动登出')
+    }
+    
+    // 密码登录用户（包括测试用户和普通用户）直接清除状态
+    if (isPasswordLogin || state.isTestMode) {
       setState({
         user: null,
         permissions: [],
@@ -274,8 +288,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading: false,
         isTestMode: false,
       })
+      // 跳转到登录页
+      window.location.href = '/login'
     } else {
-      // 正式模式退出 Auth0
+      // Auth0 登录用户退出 Auth0
       auth0Logout({
         logoutParams: {
           returnTo: window.location.origin,
@@ -283,6 +299,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     }
   }, [auth0Logout, state.isTestMode])
+
+  // 会话超时处理
+  const handleSessionTimeout = useCallback(() => {
+    logout('timeout')
+  }, [logout])
+
+  // 会话超时监控 - 仅在已登录且非加载状态时启用
+  const {
+    showWarning: showTimeoutWarning,
+    remainingTime: sessionRemainingTime,
+    extendSession,
+  } = useSessionTimeout({
+    onTimeout: handleSessionTimeout,
+    enabled: state.isAuthenticated && !state.isLoading,
+  })
 
   // 获取 Access Token（用于 API 调用）
   const getAccessToken = useCallback(async (): Promise<string | null> => {
@@ -362,9 +393,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         canViewBill,
         isAdmin,
         isManager,
+        extendSession,
       }}
     >
       {children}
+      {/* 会话超时提醒弹窗 */}
+      <SessionTimeoutModal
+        isOpen={showTimeoutWarning}
+        remainingTime={sessionRemainingTime}
+        onExtend={extendSession}
+        onLogout={() => logout('timeout')}
+      />
     </AuthContext.Provider>
   )
 }
