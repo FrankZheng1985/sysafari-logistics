@@ -227,7 +227,11 @@ export async function checkDeclarationRisk(hsCode, declaredPrice, originCountry 
     return {
       riskLevel: 'unknown',
       message: '暂无历史申报数据参考',
-      suggestion: '建议参考市场价格合理申报'
+      suggestion: '建议参考市场价格合理申报',
+      warnings: [],
+      suggestions: [],
+      suggestedMinPrice: 0,
+      isRisky: false
     }
   }
   

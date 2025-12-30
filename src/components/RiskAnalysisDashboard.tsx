@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react'
 import { 
   AlertTriangle, Shield, TrendingDown, BarChart2, Eye, 
   CheckCircle, RefreshCw, ChevronDown, ChevronUp, X,
-  Zap, FileWarning, DollarSign
+  Zap, FileWarning, DollarSign, Search
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 
@@ -57,20 +57,49 @@ const riskBgColors = {
   high: 'bg-red-500'
 }
 
+// 生成处理建议
+const getSuggestions = (item: any) => {
+  const suggestions: string[] = []
+  
+  if (item.antiDumpingRate > 0) {
+    suggestions.push('⚠️ 该商品存在反倾销税，建议：')
+    suggestions.push('1. 确认产品是否真正属于该HS编码分类')
+    suggestions.push('2. 检查是否有更精确的10位HS编码可以使用')
+    suggestions.push('3. 核实原产地证明，部分国家可能免征反倾销税')
+    suggestions.push('4. 考虑寻找替代供应商（非反倾销措施国家）')
+  }
+  
+  if (item.dutyRate > 10) {
+    suggestions.push('💡 关税较高，可考虑：')
+    suggestions.push('• 申请税率优惠或减免')
+    suggestions.push('• 使用保税仓储或自贸区')
+  }
+  
+  return suggestions
+}
+
 export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [result, setResult] = useState<FullRiskResult | null>(null)
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
+  const [alternatives, setAlternatives] = useState<{[key: string]: any[]}>({})
+  const [loadingAlt, setLoadingAlt] = useState<string | null>(null)
+  const [replacingItem, setReplacingItem] = useState<string | null>(null)
+  const [replacedItems, setReplacedItems] = useState<{[key: number]: string}>({}) // itemId -> newHsCode
 
   const analyzeRisk = async () => {
     setLoading(true)
     try {
       const response = await fetch(`${API_BASE_URL}/api/cargo/risk-analysis/full/${importId}`, {
-        method: 'GET'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
       })
       const data = await response.json()
-      if (data?.success) {
+      // API返回 errCode: 200 表示成功
+      if (data?.errCode === 200 || data?.success) {
         setResult(data.data)
+      } else {
+        console.error('分析失败:', data?.msg || '未知错误')
       }
     } catch (error) {
       console.error('综合风险分析失败:', error)
@@ -84,6 +113,63 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
       analyzeRisk()
     }
   }, [importId])
+
+  // 替换HS编码并重新计算税费
+  const replaceHsCode = async (itemId: number, newHsCode: string, productName: string) => {
+    const key = `${itemId}-${newHsCode}`
+    setReplacingItem(key)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/cargo/documents/tax-calc/item/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchedHsCode: newHsCode,
+          productName: productName
+        })
+      })
+      const data = await response.json()
+      if (data?.errCode === 200 || data?.success) {
+        // 记录已替换的项目
+        setReplacedItems(prev => ({
+          ...prev,
+          [itemId]: newHsCode
+        }))
+        // 重新分析风险
+        await analyzeRisk()
+        alert(`✅ HS编码已替换为 ${newHsCode}，税费已重新计算！`)
+      } else {
+        alert(`❌ 替换失败: ${data?.msg || '未知错误'}`)
+      }
+    } catch (error) {
+      console.error('替换HS编码失败:', error)
+      alert('❌ 替换失败，请稍后重试')
+    } finally {
+      setReplacingItem(null)
+    }
+  }
+
+  // 查找替代HS编码
+  const findAlternatives = async (hsCode: string, productName: string) => {
+    setLoadingAlt(hsCode)
+    try {
+      const params = new URLSearchParams()
+      if (productName) params.append('productName', productName)
+      params.append('limit', '5')
+      const url = `${API_BASE_URL}/api/cargo/hs-optimize/alternatives/${hsCode}?${params.toString()}`
+      const response = await fetch(url)
+      const data = await response.json()
+      if (data?.errCode === 200 || data?.success) {
+        setAlternatives(prev => ({
+          ...prev,
+          [hsCode]: data.data.alternatives || []
+        }))
+      }
+    } catch (error) {
+      console.error('查找替代方案失败:', error)
+    } finally {
+      setLoadingAlt(null)
+    }
+  }
 
   const getRiskLabel = (level: string) => {
     switch (level) {
@@ -265,21 +351,126 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
                 <TrendingDown className="w-5 h-5 text-primary-600" />
                 税率风险商品 ({result.taxRisk.items.length})
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {result.taxRisk.items.map((item: any, idx: number) => (
-                  <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                  <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-mono text-primary-600">{item.hsCode}</span>
-                        <span className="ml-2 text-gray-600">{item.productName}</span>
+                        <span className="font-mono text-primary-600 font-medium">{item.hsCode}</span>
+                        <span className="ml-2 text-gray-700">{item.productName}</span>
                       </div>
-                      <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">
-                        高风险
+                      <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700 font-medium">
+                        反倾销 {item.antiDumpingRate}%
                       </span>
                     </div>
+                    
+                    {/* 风险原因 */}
                     {item.reasons && (
-                      <div className="mt-2 text-sm text-amber-600">
-                        {item.reasons.join(' | ')}
+                      <div className="mt-2 text-sm text-red-600 font-medium">
+                        ⚠️ {item.reasons.join(' | ')}
+                      </div>
+                    )}
+                    
+                    {/* 处理建议 */}
+                    <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-100">
+                      <div className="text-sm font-medium text-blue-800 mb-2">📋 处理建议：</div>
+                      <ul className="text-xs text-blue-700 space-y-1">
+                        <li>1. 核实产品是否真正属于该HS编码分类，确认商品描述准确</li>
+                        <li>2. 检查是否有更精确的10位HS编码可以使用（点击下方按钮查找）</li>
+                        <li>3. 确认原产地证明，部分国家可能免征反倾销税</li>
+                        <li>4. 考虑调整采购策略：选择非反倾销措施国家的供应商</li>
+                        <li>5. 咨询海关专业顾问，确认是否符合豁免条件</li>
+                      </ul>
+                    </div>
+                    
+                    {/* 查找替代方案按钮 */}
+                    <div className="mt-3">
+                      <button
+                        onClick={() => findAlternatives(item.hsCode, item.productName)}
+                        disabled={loadingAlt === item.hsCode}
+                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {loadingAlt === item.hsCode ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            搜索中...
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-3 h-3" />
+                            查找低税率替代HS编码
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    
+                    {/* 替代方案结果 */}
+                    {alternatives[item.hsCode] && alternatives[item.hsCode].length > 0 && (
+                      <div className="mt-3 p-3 bg-green-50 rounded border border-green-100">
+                        <div className="text-sm font-medium text-green-800 mb-2">
+                          ✅ 找到 {alternatives[item.hsCode].length} 个可能的替代方案：
+                        </div>
+                        <div className="space-y-2">
+                          {alternatives[item.hsCode].map((alt: any, altIdx: number) => {
+                            const isReplacing = replacingItem === `${item.itemId}-${alt.hsCode}`
+                            const isReplaced = replacedItems[item.itemId] === alt.hsCode
+                            return (
+                              <div key={altIdx} className={`text-xs p-3 bg-white rounded border ${isReplaced ? 'border-green-500 bg-green-50' : ''}`}>
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <span className="font-mono text-green-700 font-medium text-sm">{alt.hsCode}</span>
+                                    <div className="text-gray-600 mt-1">{alt.description}</div>
+                                  </div>
+                                  <div className="text-right ml-4">
+                                    <div className="text-green-600 font-medium">
+                                      关税 {alt.dutyRate}% | VAT {alt.vatRate}%
+                                    </div>
+                                    {alt.savings > 0 && (
+                                      <div className="text-green-700 text-xs">
+                                        可节省约 {alt.savings.toFixed(1)}%
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex justify-end">
+                                  {isReplaced ? (
+                                    <span className="px-3 py-1.5 text-xs bg-green-600 text-white rounded flex items-center gap-1">
+                                      <CheckCircle className="w-3 h-3" />
+                                      已选择
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => replaceHsCode(item.itemId, alt.hsCode, item.productName)}
+                                      disabled={isReplacing || !!replacedItems[item.itemId]}
+                                      className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                                    >
+                                      {isReplacing ? (
+                                        <>
+                                          <RefreshCw className="w-3 h-3 animate-spin" />
+                                          替换中...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Zap className="w-3 h-3" />
+                                          选择此方案
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="mt-2 text-xs text-amber-600">
+                          ⚠️ 注意：更换HS编码需确保商品描述准确匹配，建议咨询海关专家
+                        </div>
+                      </div>
+                    )}
+                    
+                    {alternatives[item.hsCode] && alternatives[item.hsCode].length === 0 && (
+                      <div className="mt-3 p-2 bg-gray-100 rounded text-xs text-gray-600">
+                        未找到更低税率的替代HS编码，建议联系海关顾问进行专业评估
                       </div>
                     )}
                   </div>

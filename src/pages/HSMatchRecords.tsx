@@ -9,8 +9,9 @@ import {
   Package, TrendingUp, History, X, Edit2, Save, FileCheck, Database
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+const API_BASE = getApiBaseUrl()
 
 interface MatchRecord {
   id: number

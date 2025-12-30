@@ -555,17 +555,35 @@ export async function updateItemTax(req, res) {
 export async function getSupplementList(req, res) {
   try {
     const { getDatabase } = await import('../../config/database.js')
+    const { getSupplementRule } = await import('../../config/hsSupplementRules.js')
     const db = getDatabase()
-    const { page = 1, pageSize = 20, search } = req.query
+    const { page = 1, pageSize = 20, search, category } = req.query
     
+    // category: all | autoFillable | needMaterial | needManual
     let baseWhere = `(goods_description_cn IS NULL OR goods_description_cn = '' OR material IS NULL OR material = '' OR unit_name IS NULL OR unit_name = '')`
+    
+    // 不需要材质的章节（01-38章）
+    const noMaterialChapters = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33','34','35','36','37','38']
+    const noMaterialPattern = noMaterialChapters.map(ch => `'${ch}%'`).join(',')
+    
+    // 根据分类添加额外条件
+    let categoryWhere = ''
+    if (category === 'autoFillable') {
+      // 可自动补充：不需要材质的章节，且缺少单位
+      categoryWhere = ` AND (SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}')) AND (unit_name IS NULL OR unit_name = '')`
+    } else if (category === 'needMaterial') {
+      // 需要补充材质：需要材质的章节，且缺少材质
+      categoryWhere = ` AND (SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}')) AND (material IS NULL OR material = '')`
+    } else if (category === 'needManual') {
+      // 完全手动：需要材质且缺少材质，或需要单位但无默认值
+      categoryWhere = ` AND (SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}'))`
+    }
     
     let countResult, rows
     
     if (search) {
-      // 有搜索条件
       countResult = await db.prepare(
-        `SELECT COUNT(*) as total FROM tariff_rates WHERE ${baseWhere} AND (hs_code ILIKE ? OR goods_description_cn ILIKE ?)`
+        `SELECT COUNT(*) as total FROM tariff_rates WHERE ${baseWhere}${categoryWhere} AND (hs_code ILIKE ? OR goods_description_cn ILIKE ?)`
       ).get(`%${search}%`, `%${search}%`)
       
       const offset = (parseInt(page) - 1) * parseInt(pageSize)
@@ -573,14 +591,13 @@ export async function getSupplementList(req, res) {
         SELECT hs_code, goods_description_cn, goods_description, material, unit_code, unit_name,
                duty_rate, vat_rate
         FROM tariff_rates 
-        WHERE ${baseWhere} AND (hs_code ILIKE ? OR goods_description_cn ILIKE ?)
+        WHERE ${baseWhere}${categoryWhere} AND (hs_code ILIKE ? OR goods_description_cn ILIKE ?)
         ORDER BY hs_code ASC
         LIMIT ? OFFSET ?
       `).all(`%${search}%`, `%${search}%`, parseInt(pageSize), offset)
     } else {
-      // 无搜索条件
       countResult = await db.prepare(
-        `SELECT COUNT(*) as total FROM tariff_rates WHERE ${baseWhere}`
+        `SELECT COUNT(*) as total FROM tariff_rates WHERE ${baseWhere}${categoryWhere}`
       ).get()
       
       const offset = (parseInt(page) - 1) * parseInt(pageSize)
@@ -588,22 +605,40 @@ export async function getSupplementList(req, res) {
         SELECT hs_code, goods_description_cn, goods_description, material, unit_code, unit_name,
                duty_rate, vat_rate
         FROM tariff_rates 
-        WHERE ${baseWhere}
+        WHERE ${baseWhere}${categoryWhere}
         ORDER BY hs_code ASC
         LIMIT ? OFFSET ?
       `).all(parseInt(pageSize), offset)
     }
     
-    return successWithPagination(res, (rows || []).map(row => ({
-      hsCode: row.hs_code,
-      productName: row.goods_description_cn,
-      productNameEn: row.goods_description,
-      material: row.material,
-      unitCode: row.unit_code,
-      unitName: row.unit_name,
-      dutyRate: parseFloat(row.duty_rate) || 0,
-      vatRate: parseFloat(row.vat_rate) || 19
-    })), {
+    // 应用智能规则，添加建议值
+    const list = (rows || []).map(row => {
+      const rule = getSupplementRule(row.hs_code)
+      const missingFields = []
+      if (!row.goods_description_cn) missingFields.push('商品名称')
+      if (!row.material && rule.needMaterial) missingFields.push('材质')
+      if (!row.unit_name) missingFields.push('单位')
+      
+      return {
+        hsCode: row.hs_code,
+        productName: row.goods_description_cn,
+        productNameEn: row.goods_description,
+        material: row.material,
+        unitCode: row.unit_code,
+        unitName: row.unit_name,
+        dutyRate: parseFloat(row.duty_rate) || 0,
+        vatRate: parseFloat(row.vat_rate) || 19,
+        // 智能规则信息
+        needMaterial: rule.needMaterial,
+        suggestedUnit: rule.defaultUnit,
+        suggestedUnitCode: rule.defaultUnitCode,
+        chapterName: rule.chapterName,
+        missingFields,
+        canAutoFill: !rule.needMaterial && rule.defaultUnit && !row.unit_name
+      }
+    })
+    
+    return successWithPagination(res, list, {
       total: parseInt(countResult?.total) || 0,
       page: parseInt(page),
       pageSize: parseInt(pageSize)
@@ -611,6 +646,155 @@ export async function getSupplementList(req, res) {
   } catch (error) {
     console.error('获取待补充列表失败:', error)
     return serverError(res, '获取待补充列表失败')
+  }
+}
+
+/**
+ * 获取数据补充统计信息
+ */
+export async function getSupplementStats(req, res) {
+  try {
+    const { getDatabase } = await import('../../config/database.js')
+    const db = getDatabase()
+    
+    // 不需要材质的章节（01-38章）
+    const noMaterialChapters = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33','34','35','36','37','38']
+    
+    // 缺失数据的基础条件
+    const baseWhere = `(goods_description_cn IS NULL OR goods_description_cn = '' OR material IS NULL OR material = '' OR unit_name IS NULL OR unit_name = '')`
+    
+    // 统计总数
+    const totalResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM tariff_rates WHERE ${baseWhere}`
+    ).get()
+    
+    // 可自动补充：不需要材质的章节，且缺少单位
+    const autoFillableResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM tariff_rates 
+       WHERE ${baseWhere} 
+       AND SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}')
+       AND (unit_name IS NULL OR unit_name = '')`
+    ).get()
+    
+    // 需要补充材质的（39-97章，且缺少材质）
+    const needMaterialResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM tariff_rates 
+       WHERE ${baseWhere}
+       AND SUBSTRING(hs_code, 1, 2) NOT IN ('${noMaterialChapters.join("','")}')
+       AND (material IS NULL OR material = '')`
+    ).get()
+    
+    // 只缺商品名称的
+    const needNameResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM tariff_rates 
+       WHERE (goods_description_cn IS NULL OR goods_description_cn = '')
+       AND material IS NOT NULL AND material != ''
+       AND unit_name IS NOT NULL AND unit_name != ''`
+    ).get()
+    
+    // 按章节统计
+    const chapterStats = await db.prepare(`
+      SELECT 
+        SUBSTRING(hs_code, 1, 2) as chapter,
+        COUNT(*) as count
+      FROM tariff_rates 
+      WHERE ${baseWhere}
+      GROUP BY SUBSTRING(hs_code, 1, 2)
+      ORDER BY chapter
+    `).all()
+    
+    return success(res, {
+      total: parseInt(totalResult?.count) || 0,
+      autoFillable: parseInt(autoFillableResult?.count) || 0,
+      needMaterial: parseInt(needMaterialResult?.count) || 0,
+      needName: parseInt(needNameResult?.count) || 0,
+      chapterStats: chapterStats || []
+    })
+  } catch (error) {
+    console.error('获取补充统计失败:', error)
+    return serverError(res, '获取补充统计失败')
+  }
+}
+
+/**
+ * 自动批量补充（仅补充不需要材质的默认单位）
+ */
+export async function autoSupplement(req, res) {
+  try {
+    const { getDatabase } = await import('../../config/database.js')
+    const { getSupplementRule } = await import('../../config/hsSupplementRules.js')
+    const db = getDatabase()
+    const { chapter, dryRun = false } = req.body
+    
+    // 不需要材质的章节
+    const noMaterialChapters = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33','34','35','36','37','38']
+    
+    // 构建查询条件
+    let chapterFilter = ''
+    if (chapter) {
+      if (!noMaterialChapters.includes(chapter)) {
+        return badRequest(res, `第${chapter}章需要材质信息，无法自动补充`)
+      }
+      chapterFilter = ` AND SUBSTRING(hs_code, 1, 2) = '${chapter}'`
+    } else {
+      chapterFilter = ` AND SUBSTRING(hs_code, 1, 2) IN ('${noMaterialChapters.join("','")}')`
+    }
+    
+    // 获取需要补充单位的记录
+    const rows = await db.prepare(`
+      SELECT hs_code, goods_description_cn
+      FROM tariff_rates 
+      WHERE (unit_name IS NULL OR unit_name = '')
+      ${chapterFilter}
+      LIMIT 10000
+    `).all()
+    
+    if (!rows || rows.length === 0) {
+      return success(res, { updatedCount: 0, items: [] }, '没有需要自动补充的数据')
+    }
+    
+    // 应用规则
+    const updates = []
+    for (const row of rows) {
+      const rule = getSupplementRule(row.hs_code)
+      if (rule.defaultUnit && rule.defaultUnitCode) {
+        updates.push({
+          hsCode: row.hs_code,
+          productName: row.goods_description_cn,
+          unitName: rule.defaultUnit,
+          unitCode: rule.defaultUnitCode,
+          chapterName: rule.chapterName
+        })
+      }
+    }
+    
+    if (dryRun) {
+      // 预览模式，不实际更新
+      return success(res, {
+        updatedCount: updates.length,
+        items: updates.slice(0, 100),
+        preview: true
+      }, `预览：将补充 ${updates.length} 条记录的单位`)
+    }
+    
+    // 实际更新
+    const now = new Date().toISOString()
+    let updatedCount = 0
+    
+    for (const item of updates) {
+      await db.prepare(
+        `UPDATE tariff_rates SET unit_name = ?, unit_code = ?, updated_at = ? WHERE hs_code = ?`
+      ).run(item.unitName, item.unitCode, now, item.hsCode)
+      updatedCount++
+    }
+    
+    return success(res, {
+      updatedCount,
+      items: updates.slice(0, 20)
+    }, `成功补充 ${updatedCount} 条记录`)
+  } catch (error) {
+    console.error('自动补充失败:', error)
+    return serverError(res, '自动补充失败')
   }
 }
 
@@ -693,7 +877,12 @@ export async function getMatchRecordsList(req, res) {
       hsCode,
       status
     })
-    return successWithPagination(res, result.list, result.total, parseInt(page), parseInt(pageSize))
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: parseInt(page),
+      pageSize: parseInt(pageSize),
+      stats: result.stats
+    })
   } catch (error) {
     console.error('获取匹配记录列表失败:', error)
     return serverError(res, '获取匹配记录列表失败')
@@ -1056,8 +1245,8 @@ export async function batchCheckDeclarationRiskCtrl(req, res) {
     const result = await declarationValue.batchCheckDeclarationRisk(parseInt(importId))
     return success(res, result)
   } catch (error) {
-    console.error('批量检查申报风险失败:', error)
-    return serverError(res, '批量检查申报风险失败')
+    console.error('批量检查申报风险失败:', error.message, error.stack)
+    return serverError(res, `批量检查申报风险失败: ${error.message}`)
   }
 }
 
@@ -1326,8 +1515,8 @@ export async function analyzeFullRisk(req, res) {
       analyzedAt: new Date().toISOString()
     })
   } catch (error) {
-    console.error('综合风险分析失败:', error)
-    return serverError(res, '综合风险分析失败')
+    console.error('综合风险分析失败:', error.message, error.stack)
+    return serverError(res, `综合风险分析失败: ${error.message}`)
   }
 }
 
@@ -1360,7 +1549,9 @@ export default {
 
   // 数据补充
   getSupplementList,
+  getSupplementStats,
   batchSupplement,
+  autoSupplement,
 
   // HS匹配记录
   getMatchRecordsList,

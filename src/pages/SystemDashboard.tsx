@@ -106,17 +106,15 @@ export default function SystemDashboard() {
 
       // 从 /api/bills/stats 获取真实统计数据
       const billStats = billStatsRes.data || {}
-      // 订单状态分布：
-      // - 待处理: 活跃订单 - 进行中 - 已完成（避免重复计算）
-      // - 进行中: 查验中 + 派送中
-      // - 已完成: 已送达
+      // 订单状态分布（优化后的逻辑）：
+      // - 待处理: 未到港 + 已到港未清关（订单还在运输或等待清关）
+      // - 进行中: 查验中 + 待派送 + 派送中（订单已在处理流程中）
+      // - 已完成: 已送达（订单已完成交付）
       // 使用 Number() 确保转换为数字，避免字符串拼接问题
-      const active = Number(billStats.active || 0)
-      const inProgress = Number(billStats.inspecting || 0) + Number(billStats.delivering || 0)
-      const completed = Number(billStats.delivered || 0)
-      // 待处理 = 活跃订单 - 进行中 - 已完成
-      const pending = Math.max(0, active - inProgress - completed)
-      const total = Number(billStats.total || active || 0)
+      const pending = Number(billStats.statusPending || 0)
+      const inProgress = Number(billStats.statusInProgress || 0)
+      const completed = Number(billStats.statusCompleted || 0)
+      const total = Number(billStats.active || 0)
 
       // 构建统计数据
       const dashboardStats: DashboardStats = {

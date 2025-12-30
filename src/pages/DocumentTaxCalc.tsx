@@ -885,6 +885,39 @@ export default function DocumentTaxCalc() {
             </div>
           </div>
           
+          {/* 反倾销/反补贴税警告 */}
+          {taxDetails.summary.totalOtherTax > 0 && (
+            <div className="bg-gradient-to-r from-red-50 to-amber-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-red-800 text-base">⚠️ 反倾销/反补贴税警告</div>
+                  <div className="text-sm text-red-700 mt-1">
+                    本批货物中包含需缴纳<span className="font-bold">反倾销税或反补贴税</span>的商品，
+                    合计 <span className="font-bold text-red-800">{formatCurrency(taxDetails.summary.totalOtherTax)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {taxDetails.items.filter(item => item.antiDumpingRate > 0 || item.countervailingRate > 0).map((item, idx) => (
+                      <div key={idx} className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-100 rounded text-xs">
+                        <span className="font-mono font-medium text-red-800">{item.matchedHsCode}</span>
+                        <span className="text-red-600">
+                          {item.antiDumpingRate > 0 && `反倾销${item.antiDumpingRate}%`}
+                          {item.antiDumpingRate > 0 && item.countervailingRate > 0 && ' + '}
+                          {item.countervailingRate > 0 && `反补贴${item.countervailingRate}%`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-xs text-amber-700">
+                    💡 建议：点击下方"智能风险分析"查看是否有低税率替代HS编码
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* 风险分析入口 */}
           <div className="flex items-center justify-between bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg p-4 border border-primary-100">
             <div className="flex items-center gap-3">

@@ -748,6 +748,16 @@ export async function getBillFileById(id) {
 
 /**
  * 获取提单统计数据
+ * 
+ * 订单状态分布逻辑（简化版，清晰的三分类）：
+ * - 已完成(completed): 派送状态为"已送达"
+ * - 进行中(inProgress): 未完成 且 已清关（订单已在处理流程中）
+ * - 待处理(pending): 未完成 且 未清关（订单还在运输或等待清关）
+ * 
+ * 分类标准：以"清关状态"作为分界点
+ * - 清关前 = 待处理（运输中、等待清关）
+ * - 清关后 = 进行中（等待派送、派送中）
+ * - 送达后 = 已完成
  */
 export async function getBillStats() {
   const db = getDatabase()
@@ -757,14 +767,34 @@ export async function getBillStats() {
       COUNT(*) as total,
       SUM(CASE WHEN is_void = 0 THEN 1 ELSE 0 END) as active,
       SUM(CASE WHEN is_void = 1 THEN 1 ELSE 0 END) as void,
-      SUM(CASE WHEN ship_status = '未到港' AND is_void = 0 THEN 1 ELSE 0 END) as notArrived,
+      SUM(CASE WHEN ship_status = '未到港' AND is_void = 0 THEN 1 ELSE 0 END) as "notArrived",
       SUM(CASE WHEN ship_status = '已到港' AND is_void = 0 THEN 1 ELSE 0 END) as arrived,
-      SUM(CASE WHEN customs_status = '未放行' AND is_void = 0 THEN 1 ELSE 0 END) as notCleared,
+      SUM(CASE WHEN customs_status = '未放行' AND is_void = 0 THEN 1 ELSE 0 END) as "notCleared",
       SUM(CASE WHEN customs_status = '已放行' AND is_void = 0 THEN 1 ELSE 0 END) as cleared,
-      SUM(CASE WHEN inspection != '-' AND inspection != '已放行' AND is_void = 0 THEN 1 ELSE 0 END) as inspecting,
+      SUM(CASE WHEN inspection IS NOT NULL AND inspection != '' AND inspection != '-' AND inspection != '已放行' AND is_void = 0 THEN 1 ELSE 0 END) as inspecting,
+      SUM(CASE WHEN delivery_status = '待派送' AND is_void = 0 THEN 1 ELSE 0 END) as "pendingDelivery",
       SUM(CASE WHEN delivery_status = '派送中' AND is_void = 0 THEN 1 ELSE 0 END) as delivering,
       SUM(CASE WHEN delivery_status = '已送达' AND is_void = 0 THEN 1 ELSE 0 END) as delivered,
-      SUM(CASE WHEN delivery_status = '订单异常' AND is_void = 0 THEN 1 ELSE 0 END) as exception
+      SUM(CASE WHEN (delivery_status = '订单异常' OR delivery_status = '异常关闭') AND is_void = 0 THEN 1 ELSE 0 END) as exception,
+      
+      -- ========== 预计算的状态分布（三分类，互斥且完整） ==========
+      
+      -- 1. 已完成: 派送状态为"已送达"
+      SUM(CASE WHEN is_void = 0 AND delivery_status = '已送达' 
+        THEN 1 ELSE 0 END) as "statusCompleted",
+      
+      -- 2. 进行中: 未完成 且 已清关（清关后的所有未完成订单）
+      SUM(CASE WHEN is_void = 0 
+        AND COALESCE(delivery_status, '') != '已送达'
+        AND customs_status = '已放行'
+        THEN 1 ELSE 0 END) as "statusInProgress",
+      
+      -- 3. 待处理: 未完成 且 未清关（清关前的所有订单）
+      SUM(CASE WHEN is_void = 0 
+        AND COALESCE(delivery_status, '') != '已送达'
+        AND COALESCE(customs_status, '') != '已放行'
+        THEN 1 ELSE 0 END) as "statusPending"
+      
     FROM bills_of_lading
   `).get()
   

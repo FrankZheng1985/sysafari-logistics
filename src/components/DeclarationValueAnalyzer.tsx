@@ -96,7 +96,7 @@ export default function DeclarationValueAnalyzer({
         const url = `${API_BASE_URL}/api/cargo/declaration-value/stats/${hsCode}${params.toString() ? '?' + params.toString() : ''}`
         const response = await fetch(url)
         const data = await response.json()
-        if (data?.success) {
+        if (data?.errCode === 200 || data?.success) {
           setStats(data.data)
         }
       } catch (error) {
@@ -124,7 +124,7 @@ export default function DeclarationValueAnalyzer({
           body: JSON.stringify({ hsCode, declaredPrice, originCountry, priceUnit })
         })
         const data = await response.json()
-        if (data?.success) {
+        if (data?.errCode === 200 || data?.success) {
           const result = data.data as RiskCheckResult
           setRiskCheck(result)
           
@@ -307,7 +307,7 @@ function DeclarationHistoryModal({
         const url = `${API_BASE_URL}/api/cargo/declaration-value/history?${params.toString()}`
         const response = await fetch(url)
         const data = await response.json()
-        if (data?.success) {
+        if (data?.errCode === 200 || data?.success) {
           setHistory(data.data || [])
         }
       } catch (error) {

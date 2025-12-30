@@ -81,7 +81,7 @@ export default function InspectionRiskAlert({
         method: 'POST'
       })
       const data = await response.json()
-      if (data?.success) {
+      if (data?.errCode === 200 || data?.success) {
         const result = data.data as InspectionRiskResult
         setResult(result)
         onAnalysisComplete?.(result)
@@ -376,7 +376,7 @@ export function InspectionRiskBadge({
         const url = `${API_BASE_URL}/api/cargo/inspection/stats/${hsCode}${params.toString() ? '?' + params.toString() : ''}`
         const response = await fetch(url)
         const data = await response.json()
-        if (data?.success && data.data.found) {
+        if ((data?.errCode === 200 || data?.success) && data.data.found) {
           setStats({
             inspectionRate: data.data.stats.inspectionRate,
             riskLevel: data.data.riskLevel

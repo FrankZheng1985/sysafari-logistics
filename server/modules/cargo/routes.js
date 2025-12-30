@@ -104,11 +104,17 @@ router.put('/documents/tax-calc/:importId/clearance-type', controller.updateClea
 router.put('/documents/tax-calc/item/:itemId', controller.updateItemTax)
 
 // ==================== 数据补充 ====================
-// 获取待补充列表
+// 获取待补充列表（支持智能分类）
 router.get('/documents/supplement', controller.getSupplementList)
+
+// 获取补充统计信息
+router.get('/documents/supplement/stats', controller.getSupplementStats)
 
 // 批量补充
 router.post('/documents/supplement/batch', controller.batchSupplement)
+
+// 自动批量补充（按规则自动填充单位）
+router.post('/documents/supplement/auto', controller.autoSupplement)
 
 // ==================== HS匹配记录管理 ====================
 // 获取匹配记录列表

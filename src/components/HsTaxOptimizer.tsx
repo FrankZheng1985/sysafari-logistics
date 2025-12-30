@@ -112,7 +112,7 @@ export default function HsTaxOptimizer({
         const url = `${API_BASE_URL}/api/cargo/hs-optimize/analyze/${hsCode}${params.toString() ? '?' + params.toString() : ''}`
         const response = await fetch(url)
         const data = await response.json()
-        if (data?.success) {
+        if (data?.errCode === 200 || data?.success) {
           setAnalysis(data.data)
         }
       } catch (error) {
@@ -136,7 +136,7 @@ export default function HsTaxOptimizer({
       const url = `${API_BASE_URL}/api/cargo/hs-optimize/alternatives/${hsCode}?${params.toString()}`
       const response = await fetch(url)
       const data = await response.json()
-      if (data?.success) {
+      if (data?.errCode === 200 || data?.success) {
         setAlternatives(data.data.alternatives || [])
       }
     } catch (error) {

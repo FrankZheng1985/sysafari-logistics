@@ -46,14 +46,15 @@ export default function DocumentSupplement() {
   const loadItems = async () => {
     setLoading(true)
     try {
-      const url = new URL(`${API_BASE}/api/cargo/documents/supplement`)
-      url.searchParams.append('page', String(page))
-      url.searchParams.append('pageSize', String(pageSize))
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize)
+      })
       if (search) {
-        url.searchParams.append('search', search)
+        params.append('search', search)
       }
       
-      const res = await fetch(url.toString())
+      const res = await fetch(`${API_BASE}/api/cargo/documents/supplement?${params}`)
       const data = await res.json()
       if (data.errCode === 200) {
         setItems((data.data?.list || []).map((item: TariffItem) => ({
