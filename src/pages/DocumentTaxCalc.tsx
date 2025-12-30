@@ -940,7 +940,11 @@ export default function DocumentTaxCalc() {
           {showRiskAnalysis && taxDetails && (
             <RiskAnalysisDashboard
               importId={taxDetails.batch.id}
-              onClose={() => setShowRiskAnalysis(false)}
+              onClose={() => {
+                setShowRiskAnalysis(false)
+                // 刷新税费数据，以便显示替换后的HS编码和税费
+                loadTaxDetails()
+              }}
             />
           )}
 
