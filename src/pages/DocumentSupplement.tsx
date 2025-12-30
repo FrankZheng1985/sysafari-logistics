@@ -252,33 +252,71 @@ export default function DocumentSupplement() {
     }
   }
 
-  // 自动批量补充
+  // 自动批量补充（分批处理避免超时）
   const handleAutoFill = async () => {
-    if (!confirm(`确定要自动补充 ${stats?.autoFillable || 0} 条记录的单位吗？\n\n这些记录属于不需要材质的品类（如活动物、食品、化学品等），系统将根据HS编码自动填充默认单位。`)) {
+    // 如果选择了特定章节，直接处理
+    if (selectedChapter) {
+      if (!confirm(`确定要自动补充第${selectedChapter}章的数据吗？`)) {
+        return
+      }
+      setAutoFilling(true)
+      try {
+        const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/auto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chapter: selectedChapter, dryRun: false })
+        })
+        const data = await res.json()
+        if (data.errCode === 200) {
+          alert(`✅ 第${selectedChapter}章补充完成！\n\n成功更新 ${data.data?.updatedCount || 0} 条记录`)
+          loadItems()
+          loadStats()
+        } else {
+          alert(data.msg || '自动补充失败')
+        }
+      } catch (error) {
+        console.error('自动补充失败:', error)
+        alert('自动补充失败，请稍后重试')
+      } finally {
+        setAutoFilling(false)
+      }
+      return
+    }
+
+    // 未选择章节时，分批处理所有章节
+    if (!confirm(`确定要自动补充全部 ${stats?.autoFillable || 0} 条记录吗？\n\n系统将按章节分批处理，可能需要几分钟时间。`)) {
       return
     }
 
     setAutoFilling(true)
+    const chapters = ['01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33','34','35','36','37','38']
+    let totalUpdated = 0
+    let processedChapters = 0
+
     try {
-      const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/auto`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chapter: selectedChapter || undefined,
-          dryRun: false
-        })
-      })
-      const data = await res.json()
-      if (data.errCode === 200) {
-        alert(`✅ 自动补充完成！\n\n成功更新 ${data.data?.updatedCount || 0} 条记录`)
-        loadItems()
-        loadStats()
-      } else {
-        alert(data.msg || '自动补充失败')
+      for (const chapter of chapters) {
+        try {
+          const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/auto`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chapter, dryRun: false })
+          })
+          const data = await res.json()
+          if (data.errCode === 200 && data.data?.updatedCount > 0) {
+            totalUpdated += data.data.updatedCount
+            processedChapters++
+          }
+        } catch (e) {
+          console.warn(`第${chapter}章处理失败:`, e)
+        }
       }
+      
+      alert(`✅ 自动补充完成！\n\n处理了 ${processedChapters} 个章节\n成功更新 ${totalUpdated} 条记录`)
+      loadItems()
+      loadStats()
     } catch (error) {
       console.error('自动补充失败:', error)
-      alert('自动补充失败')
+      alert(`部分完成：已更新 ${totalUpdated} 条记录\n\n请刷新页面查看结果`)
     } finally {
       setAutoFilling(false)
     }
