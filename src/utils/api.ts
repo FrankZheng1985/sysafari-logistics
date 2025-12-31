@@ -16,9 +16,9 @@ export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname
     
-    // 演示环境 -> 阿里云演示 API
+    // 演示环境 -> 演示 API
     if (hostname === 'demo.xianfeng-eu.com') {
-      return 'https://api.xianfeng-eu.com'
+      return 'https://demo-api.xianfeng-eu.com'
     }
     
     // 生产环境 -> 阿里云 API

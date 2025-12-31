@@ -57,8 +57,8 @@ interface ProductFeeItem {
   feeName: string
   feeNameEn: string
   feeCategory: string
-  unit: string
-  standardPrice: number
+  unit: string          // 计费单位: KG=按公斤, CBM=按体积, 票=按票, 柜=按柜
+  standardPrice: number // 单价
   currency: string
   // 路线信息（从关联的供应商报价获取）
   routeFrom?: string    // 起运地
@@ -74,8 +74,8 @@ interface SupplierPriceItem {
   feeName: string
   feeNameEn: string
   feeCategory: string
-  unit: string
-  price: number
+  unit: string          // 计费单位: KG=按公斤, CBM=按体积, 票=按票, 柜=按柜
+  price: number         // 单价
   currency: string
   routeFrom?: string    // 起运地
   routeTo?: string      // 目的地
@@ -91,6 +91,8 @@ interface Bill {
   containerNumber: string
   customerName: string
   customerId: string
+  weight: number  // 货物重量（KG）
+  volume: number  // 货物体积（CBM）
 }
 
 // 默认费用分类（API 加载前的备用）
@@ -206,7 +208,16 @@ export default function FeeModal({
     amount: '',
     currency: 'EUR',
     feeDate: new Date().toISOString().split('T')[0],
-    description: ''
+    description: '',
+    // 订单货物信息（用于自动计算费用）
+    weight: 0,   // 货物重量（KG）
+    volume: 0,   // 货物体积（CBM）
+    // 当前选择的计费单位
+    currentUnit: '' as string,
+    // 单价（用于显示和固定金额计算）
+    unitPrice: 0,
+    // 是否使用固定金额（而非按重量/体积自动计算）
+    useFixedAmount: false
   })
   
   const [bills, setBills] = useState<Bill[]>([])
@@ -307,13 +318,66 @@ export default function FeeModal({
         amount: '',
         currency: 'EUR',
         feeDate: new Date().toISOString().split('T')[0],
-        description: ''
+        description: '',
+        weight: 0,
+        volume: 0,
+        currentUnit: '',
+        unitPrice: 0,
+        useFixedAmount: false
       })
       // 清空供应商报价
       setSupplierPrices([])
     }
     setErrors({})
   }, [editingFee, visible, defaultBillId, defaultBillNumber, defaultCustomerId, defaultCustomerName, defaultFeeType])
+
+  // 当有默认订单ID时，自动获取该订单的重量/体积信息
+  useEffect(() => {
+    const fetchBillWeight = async () => {
+      if (!visible || !defaultBillId) return
+      
+      // 先从已加载的 bills 列表中查找
+      const matchedBill = bills.find(b => b.id === defaultBillId)
+      if (matchedBill) {
+        setFormData(prev => ({
+          ...prev,
+          weight: matchedBill.weight || 0,
+          volume: matchedBill.volume || 0
+        }))
+        console.log('从列表获取订单货物信息:', {
+          billId: defaultBillId,
+          weight: matchedBill.weight,
+          volume: matchedBill.volume
+        })
+        return
+      }
+      
+      // 如果列表中没有，单独获取该订单信息
+      if (bills.length > 0) {
+        try {
+          const response = await fetch(`${API_BASE}/api/bills/${defaultBillId}`)
+          const data = await response.json()
+          if (data.errCode === 200 && data.data) {
+            const bill = data.data
+            setFormData(prev => ({
+              ...prev,
+              weight: Number(bill.weight) || 0,
+              volume: Number(bill.volume) || 0
+            }))
+            console.log('单独获取订单货物信息:', {
+              billId: defaultBillId,
+              weight: bill.weight,
+              volume: bill.volume
+            })
+          }
+        } catch (error) {
+          console.error('获取订单信息失败:', error)
+        }
+      }
+    }
+    
+    fetchBillWeight()
+  }, [visible, defaultBillId, bills])
 
   const loadBills = async () => {
     try {
@@ -325,7 +389,9 @@ export default function FeeModal({
           billNumber: b.billNumber,
           containerNumber: b.containerNumber,
           customerName: b.customerName || '',
-          customerId: b.customerId || ''
+          customerId: b.customerId || '',
+          weight: Number(b.weight) || 0,  // 货物重量（KG）
+          volume: Number(b.volume) || 0   // 货物体积（CBM）
         })))
       }
     } catch (error) {
@@ -373,13 +439,32 @@ export default function FeeModal({
   }
 
   const handleBillSelect = (bill: Bill) => {
-    setFormData(prev => ({
-      ...prev,
-      billId: bill.id,
-      billNumber: bill.billNumber,
-      customerId: bill.customerId,
-      customerName: bill.customerName
-    }))
+    setFormData(prev => {
+      // 如果已有费用项且是按重量/体积计费，自动重新计算金额
+      const newFormData = {
+        ...prev,
+        billId: bill.id,
+        billNumber: bill.billNumber,
+        customerId: bill.customerId,
+        customerName: bill.customerName,
+        weight: bill.weight || 0,
+        volume: bill.volume || 0
+      }
+      
+      // 如果当前费用项是按KG或CBM计费，自动重新计算金额
+      if (prev.currentUnit && prev.amount) {
+        const unitPrice = parseFloat(prev.amount) / (prev.weight || 1) // 还原单价
+        if (prev.currentUnit.toUpperCase() === 'KG' && bill.weight > 0) {
+          // 按重量计费
+          newFormData.amount = (unitPrice * bill.weight).toFixed(2)
+        } else if (prev.currentUnit.toUpperCase() === 'CBM' && bill.volume > 0) {
+          // 按体积计费
+          newFormData.amount = (unitPrice * bill.volume).toFixed(2)
+        }
+      }
+      
+      return newFormData
+    })
     setShowBillDropdown(false)
     setBillSearch('')
   }
@@ -489,6 +574,26 @@ export default function FeeModal({
     return []
   }
 
+  // 计算按单位计费的金额
+  const calculateAmountByUnit = (unitPrice: number, unit: string, weight: number, volume: number): number => {
+    const upperUnit = (unit || '').toUpperCase()
+    if (upperUnit === 'KG' && weight > 0) {
+      // 按公斤计费
+      return unitPrice * weight
+    } else if (upperUnit === 'CBM' && volume > 0) {
+      // 按体积计费
+      return unitPrice * volume
+    }
+    // 其他单位（票、柜等）直接返回单价
+    return unitPrice
+  }
+  
+  // 判断是否为按量计费的单位
+  const isQuantityBasedUnit = (unit: string): boolean => {
+    const upperUnit = (unit || '').toUpperCase()
+    return upperUnit === 'KG' || upperUnit === 'CBM'
+  }
+
   const handleSelectProductFee = async (productId: string, feeItem: ProductFeeItem) => {
     setFormData(prev => {
       // 如果是编辑模式或用户已有金额，则保留原金额
@@ -496,13 +601,25 @@ export default function FeeModal({
       const hasExistingAmount = currentAmount && parseFloat(currentAmount) > 0
       const shouldPreserveAmount = editingFee || hasExistingAmount
       
+      // 计算金额：如果是按KG或CBM计费，且有关联订单的重量/体积，自动计算
+      const unitPrice = feeItem.standardPrice || 0
+      let calculatedAmount = unitPrice
+      const unit = feeItem.unit || ''
+      
+      if (!shouldPreserveAmount && isQuantityBasedUnit(unit)) {
+        calculatedAmount = calculateAmountByUnit(unitPrice, unit, prev.weight, prev.volume)
+      }
+      
       return {
         ...prev,
         category: feeItem.feeCategory || 'other',
         feeName: feeItem.feeName,
-        // 保留原有金额或使用产品标准价格
-        amount: shouldPreserveAmount ? currentAmount : String(feeItem.standardPrice || ''),
-        currency: feeItem.currency || 'EUR'
+        // 保留原有金额或使用计算后的金额
+        amount: shouldPreserveAmount ? currentAmount : String(calculatedAmount),
+        currency: feeItem.currency || 'EUR',
+        currentUnit: unit,  // 记录当前计费单位
+        unitPrice: unitPrice,  // 保存单价
+        useFixedAmount: false  // 默认使用自动计算
       }
     })
     // 标记为从产品库选择，不需要审批
@@ -518,13 +635,25 @@ export default function FeeModal({
       const hasExistingAmount = currentAmount && parseFloat(currentAmount) > 0
       const shouldPreserveAmount = editingFee || hasExistingAmount
       
+      // 计算金额：如果是按KG或CBM计费，且有关联订单的重量/体积，自动计算
+      const unitPrice = priceItem.price || 0
+      let calculatedAmount = unitPrice
+      const unit = priceItem.unit || ''
+      
+      if (!shouldPreserveAmount && isQuantityBasedUnit(unit)) {
+        calculatedAmount = calculateAmountByUnit(unitPrice, unit, prev.weight, prev.volume)
+      }
+      
       return {
         ...prev,
         category: priceItem.feeCategory || 'other',
         feeName: priceItem.feeName,
-        // 保留原有金额或使用报价金额
-        amount: shouldPreserveAmount ? currentAmount : String(priceItem.price || ''),
-        currency: priceItem.currency || 'EUR'
+        // 保留原有金额或使用计算后的金额
+        amount: shouldPreserveAmount ? currentAmount : String(calculatedAmount),
+        currency: priceItem.currency || 'EUR',
+        currentUnit: unit,  // 记录当前计费单位
+        unitPrice: unitPrice,  // 保存单价
+        useFixedAmount: false  // 默认使用自动计算
       }
     })
     // 标记为从供应商报价选择，不需要审批
@@ -568,6 +697,9 @@ export default function FeeModal({
       return
     }
     
+    // 检查应收费用时是否需要客户信息（可选，根据业务需求）
+    // 注：应收费用可以不关联客户，但如果有客户信息则保存
+    
     setSubmitting(true)
     let successCount = 0
     let failCount = 0
@@ -581,18 +713,21 @@ export default function FeeModal({
             body: JSON.stringify({
               billId: formData.billId || null,
               billNumber: formData.billNumber || '',
-              customerId: null,
-              customerName: '',
-              supplierId: formData.supplierId || null,
-              supplierName: formData.supplierName || '',
-              feeType: 'payable',
+              // 修复：根据费用类型正确设置客户/供应商信息
+              customerId: formData.feeType === 'receivable' ? (formData.customerId || null) : null,
+              customerName: formData.feeType === 'receivable' ? (formData.customerName || '') : '',
+              supplierId: formData.feeType === 'payable' ? (formData.supplierId || null) : null,
+              supplierName: formData.feeType === 'payable' ? (formData.supplierName || '') : '',
+              // 修复：使用用户实际选择的费用类型
+              feeType: formData.feeType,
               category: item.category || 'other',
               feeName: item.feeName,
               amount: item.amount,
               currency: item.currency || 'EUR',
               feeDate: formData.feeDate,
               description: item.routeInfo || '',
-              feeSource: 'supplier_price',
+              // 修复：使用实际的费用来源
+              feeSource: item.source || feeSource,
               needApproval: false
             })
           })
@@ -851,6 +986,36 @@ export default function FeeModal({
             {formData.feeType === 'receivable' && formData.customerName && (
               <div className="mt-1 text-xs text-gray-500">
                 客户：{formData.customerName}
+              </div>
+            )}
+            {/* 显示订单货物信息（重量/体积） */}
+            {formData.billId && (formData.weight > 0 || formData.volume > 0) && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-blue-600 font-medium">📦 货物信息：</span>
+                  {formData.weight > 0 && (
+                    <span className="text-gray-700">
+                      重量 <span className="font-medium text-blue-700">{formData.weight.toLocaleString('de-DE')} KG</span>
+                    </span>
+                  )}
+                  {formData.volume > 0 && (
+                    <span className="text-gray-700">
+                      体积 <span className="font-medium text-blue-700">{formData.volume.toLocaleString('de-DE', { minimumFractionDigits: 2 })} CBM</span>
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-blue-500">
+                  💡 选择按KG/CBM计费的费用项时，系统将自动计算金额
+                </div>
+              </div>
+            )}
+            {/* 订单没有重量/体积数据时的提示 */}
+            {formData.billId && formData.weight === 0 && formData.volume === 0 && (
+              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-center gap-2 text-xs text-amber-700">
+                  <span>⚠️</span>
+                  <span>该订单未录入重量/体积数据，按KG/CBM计费的费用项无法自动计算，请手动输入金额或先完善订单信息</span>
+                </div>
               </div>
             )}
           </div>
@@ -1259,6 +1424,81 @@ export default function FeeModal({
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   金额 <span className="text-red-500">*</span>
                 </label>
+                
+                {/* 当选择了费用项时，显示计费方式选择 */}
+                {formData.feeName && (
+                  <div className="mb-2 flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                    <span className="text-xs text-gray-600">计费方式：</span>
+                    {/* 按量计费（KG/CBM）显示自动计算选项 */}
+                    {formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && (
+                      <label className="inline-flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="amountType"
+                          checked={!formData.useFixedAmount}
+                          onChange={() => {
+                            // 切换为自动计算，重新计算金额
+                            const weight = formData.weight || 0
+                            const volume = formData.volume || 0
+                            const unitPrice = formData.unitPrice || 0
+                            let calculatedAmount = unitPrice
+                            if (formData.currentUnit.toUpperCase() === 'KG' && weight > 0) {
+                              calculatedAmount = unitPrice * weight
+                            } else if (formData.currentUnit.toUpperCase() === 'CBM' && volume > 0) {
+                              calculatedAmount = unitPrice * volume
+                            }
+                            setFormData(prev => ({ 
+                              ...prev, 
+                              useFixedAmount: false,
+                              amount: calculatedAmount > 0 ? calculatedAmount.toFixed(2) : prev.amount
+                            }))
+                          }}
+                          className="mr-1"
+                        />
+                        <span className={`text-xs ${!formData.useFixedAmount ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                          按{formData.currentUnit.toUpperCase()}自动计算
+                        </span>
+                      </label>
+                    )}
+                    {/* 非按量计费时显示标准价格选项 */}
+                    {(!formData.currentUnit || !isQuantityBasedUnit(formData.currentUnit)) && (
+                      <label className="inline-flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="amountType"
+                          checked={!formData.useFixedAmount}
+                          onChange={() => {
+                            // 切换为标准价格
+                            const unitPrice = formData.unitPrice || 0
+                            setFormData(prev => ({ 
+                              ...prev, 
+                              useFixedAmount: false,
+                              amount: unitPrice > 0 ? unitPrice.toFixed(2) : prev.amount
+                            }))
+                          }}
+                          className="mr-1"
+                        />
+                        <span className={`text-xs ${!formData.useFixedAmount ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                          标准价格
+                        </span>
+                      </label>
+                    )}
+                    {/* 固定金额选项始终显示 */}
+                    <label className="inline-flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="amountType"
+                        checked={formData.useFixedAmount}
+                        onChange={() => setFormData(prev => ({ ...prev, useFixedAmount: true }))}
+                        className="mr-1"
+                      />
+                      <span className={`text-xs ${formData.useFixedAmount ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
+                        固定金额
+                      </span>
+                    </label>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <select
                     value={formData.currency}
@@ -1273,13 +1513,41 @@ export default function FeeModal({
                     type="number"
                     step="0.01"
                     value={formData.amount}
-                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value, useFixedAmount: true }))}
                     placeholder="0.00"
                     className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                       errors.amount ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    } ${formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && !formData.useFixedAmount ? 'bg-green-50 border-green-300' : ''}`}
                   />
                 </div>
+                
+                {/* 显示计算说明 */}
+                {formData.feeName && !formData.useFixedAmount && (
+                  <p className="mt-1 text-xs text-green-600">
+                    {formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && formData.billId && formData.amount && (
+                      <>
+                        {formData.currentUnit.toUpperCase() === 'KG' && formData.weight > 0 && (
+                          <>✓ 自动计算：{formData.unitPrice?.toFixed(4) || '0'} × {formData.weight.toLocaleString('de-DE')} KG = {parseFloat(formData.amount).toFixed(2)}</>
+                        )}
+                        {formData.currentUnit.toUpperCase() === 'CBM' && formData.volume > 0 && (
+                          <>✓ 自动计算：{formData.unitPrice?.toFixed(4) || '0'} × {formData.volume.toLocaleString('de-DE')} CBM = {parseFloat(formData.amount).toFixed(2)}</>
+                        )}
+                        {((formData.currentUnit.toUpperCase() === 'KG' && formData.weight === 0) || 
+                          (formData.currentUnit.toUpperCase() === 'CBM' && formData.volume === 0)) && (
+                          <span className="text-amber-600">⚠️ 订单缺少{formData.currentUnit.toUpperCase() === 'KG' ? '重量' : '体积'}数据，请选择固定金额</span>
+                        )}
+                      </>
+                    )}
+                    {(!formData.currentUnit || !isQuantityBasedUnit(formData.currentUnit)) && formData.unitPrice > 0 && (
+                      <>✓ 标准价格：{formData.currency} {formData.unitPrice?.toFixed(2)}</>
+                    )}
+                  </p>
+                )}
+                {formData.feeName && formData.useFixedAmount && (
+                  <p className="mt-1 text-xs text-orange-600">
+                    ✓ 使用固定金额（手动输入）
+                  </p>
+                )}
                 {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount}</p>}
               </div>
             </div>
@@ -1315,7 +1583,7 @@ export default function FeeModal({
           {/* 待提交费用列表 */}
           {pendingFeeItems.length > 0 && (
             <div className="border-t border-gray-200 pt-4 mt-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-medium text-gray-700 flex items-center gap-2">
                   <Package className="w-4 h-4 text-orange-500" />
                   待提交费用 ({pendingFeeItems.length} 项)
@@ -1327,6 +1595,10 @@ export default function FeeModal({
                 >
                   清空全部
                 </button>
+              </div>
+              <div className="text-xs text-gray-500 mb-3 flex items-center gap-1">
+                <span>💡</span>
+                <span>金额可直接修改（点击输入框输入固定金额）</span>
               </div>
               <div className="space-y-2 max-h-[280px] overflow-y-auto">
                 {pendingFeeItems.map((item, index) => {
@@ -1404,21 +1676,25 @@ export default function FeeModal({
                           <option value="USD">USD</option>
                         </select>
                         
-                        {/* 金额输入 */}
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={item.amount}
-                          onChange={(e) => {
-                            const newItems = [...pendingFeeItems]
-                            newItems[index].amount = parseFloat(e.target.value) || 0
-                            setPendingFeeItems(newItems)
-                          }}
-                          className={`w-20 px-2 py-1 text-xs border rounded text-right ${
-                            item.amount === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
-                          }`}
-                          placeholder="0.00"
-                        />
+                        {/* 金额输入 - 可直接修改为任意固定金额 */}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.amount}
+                            onChange={(e) => {
+                              const newItems = [...pendingFeeItems]
+                              newItems[index].amount = parseFloat(e.target.value) || 0
+                              setPendingFeeItems(newItems)
+                            }}
+                            className={`w-20 px-2 py-1 text-xs border rounded text-right ${
+                              item.amount === 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
+                            }`}
+                            placeholder="0.00"
+                            title="可直接修改为任意金额"
+                          />
+                          <span className="text-gray-400 text-[10px]" title="可直接输入固定金额">✏️</span>
+                        </div>
                       </div>
                     </div>
                   )
@@ -1524,6 +1800,9 @@ export default function FeeModal({
           setSelectedProductFees={setSelectedProductFees}
           loadProductFeeItems={loadProductFeeItems}
           feeCategories={feeCategories}
+          weight={formData.weight}
+          volume={formData.volume}
+          hasBillSelected={!!formData.billId}
           onClose={() => {
             setShowProductSelect(false)
             setProductSearch('')
@@ -1535,18 +1814,28 @@ export default function FeeModal({
             const hasOriginalAmount = originalAmount > 0
             
             // 将选中的产品费用项添加到待提交列表
-            const newItems = items.map((item, index) => ({
-              id: `pending-product-${item.feeItem.id}-${Date.now()}`,
-              feeName: item.feeItem.feeName,
-              feeNameEn: item.feeItem.feeNameEn,
-              category: item.feeItem.feeCategory || 'other',
-              // 编辑模式或有原有金额时：第一个费用项使用原有金额，其他使用产品标准价格
-              amount: (hasOriginalAmount && index === 0) ? originalAmount : (item.feeItem.standardPrice || 0),
-              currency: item.feeItem.currency || 'EUR',
-              source: 'product' as FeeSourceType,
-              sourceId: item.feeItem.id,
-              routeInfo: `产品: ${item.productName}`
-            }))
+            const newItems = items.map((item, index) => {
+              // 计算金额：如果是按KG或CBM计费，且有关联订单的重量/体积，自动计算
+              let calculatedAmount = item.feeItem.standardPrice || 0
+              const unit = item.feeItem.unit || ''
+              
+              if (isQuantityBasedUnit(unit)) {
+                calculatedAmount = calculateAmountByUnit(item.feeItem.standardPrice || 0, unit, formData.weight, formData.volume)
+              }
+              
+              return {
+                id: `pending-product-${item.feeItem.id}-${Date.now()}`,
+                feeName: item.feeItem.feeName,
+                feeNameEn: item.feeItem.feeNameEn,
+                category: item.feeItem.feeCategory || 'other',
+                // 编辑模式或有原有金额时：第一个费用项使用原有金额，其他使用计算后的金额
+                amount: (hasOriginalAmount && index === 0) ? originalAmount : calculatedAmount,
+                currency: item.feeItem.currency || 'EUR',
+                source: 'product' as FeeSourceType,
+                sourceId: item.feeItem.id,
+                routeInfo: `产品: ${item.productName}`
+              }
+            })
             
             // 过滤掉已添加的
             const existingSourceIds = pendingFeeItems.filter(p => p.source === 'product').map(p => p.sourceId)
@@ -1607,22 +1896,43 @@ export default function FeeModal({
           const hasOriginalAmount = originalAmount > 0
           
           // 将选中的费用项添加到待提交列表
-          const newItems = selectedItems.map((item, index) => ({
-            id: `pending-${item.id}-${Date.now()}`,
-            feeName: item.feeName,
-            feeNameEn: item.feeNameEn,
-            category: item.feeCategory || 'other',
-            // 编辑模式或有原有金额时：第一个费用项使用原有金额，其他使用报价金额
-            amount: (hasOriginalAmount && index === 0) ? originalAmount : (item.price || 0),
-            currency: item.currency || 'EUR',
-            source: 'supplier_price' as FeeSourceType,
-            sourceId: item.id,
-            routeInfo: [
+          const newItems = selectedItems.map((item, index) => {
+            // 计算金额：如果是按KG或CBM计费，且有关联订单的重量/体积，自动计算
+            let calculatedAmount = item.price || 0
+            const unit = item.unit || ''
+            
+            if (isQuantityBasedUnit(unit)) {
+              calculatedAmount = calculateAmountByUnit(item.price || 0, unit, formData.weight, formData.volume)
+            }
+            
+            // 构建路线信息，包含计费单位
+            const routeParts = [
               item.routeFrom,
               item.city ? `${item.city}${item.routeTo ? ` (${item.routeTo})` : ''}` : item.routeTo,
               item.returnPoint ? `还柜:${item.returnPoint}` : ''
-            ].filter(Boolean).join(' → ')
-          }))
+            ].filter(Boolean)
+            
+            // 如果是按量计费，添加计算说明
+            let routeInfo = routeParts.join(' → ')
+            if (isQuantityBasedUnit(unit) && (formData.weight > 0 || formData.volume > 0)) {
+              const quantity = unit.toUpperCase() === 'KG' ? formData.weight : formData.volume
+              const unitLabel = unit.toUpperCase() === 'KG' ? 'KG' : 'CBM'
+              routeInfo += routeInfo ? ` | ${item.price}×${quantity}${unitLabel}` : `${item.price}×${quantity}${unitLabel}`
+            }
+            
+            return {
+              id: `pending-${item.id}-${Date.now()}`,
+              feeName: item.feeName,
+              feeNameEn: item.feeNameEn,
+              category: item.feeCategory || 'other',
+              // 编辑模式或有原有金额时：第一个费用项使用原有金额，其他使用计算后的金额
+              amount: (hasOriginalAmount && index === 0) ? originalAmount : calculatedAmount,
+              currency: item.currency || 'EUR',
+              source: 'supplier_price' as FeeSourceType,
+              sourceId: item.id,
+              routeInfo
+            }
+          })
           
           // 过滤掉已添加的（根据 sourceId 判断）
           const existingSourceIds = pendingFeeItems.map(p => p.sourceId)
@@ -1728,10 +2038,31 @@ export default function FeeModal({
                           {/* 内容 */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
-                              <span className="text-sm font-medium text-orange-600">
-                                {item.currency} {item.price?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
+                                {/* 显示计费单位 */}
+                                {item.unit && (
+                                  <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                    isQuantityBasedUnit(item.unit) 
+                                      ? 'bg-blue-100 text-blue-700' 
+                                      : 'bg-gray-100 text-gray-600'
+                                  }`}>
+                                    /{item.unit}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <span className="text-sm font-medium text-orange-600">
+                                  {item.currency} {item.price?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                  {item.unit && `/${item.unit}`}
+                                </span>
+                                {/* 如果是按量计费且有订单信息，显示预估金额 */}
+                                {isQuantityBasedUnit(item.unit) && formData.billId && (formData.weight > 0 || formData.volume > 0) && (
+                                  <div className="text-xs text-green-600">
+                                    ≈ {item.currency} {calculateAmountByUnit(item.price || 0, item.unit, formData.weight, formData.volume).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             {item.feeNameEn && (
                               <div className="text-xs text-gray-500">{item.feeNameEn}</div>
@@ -1825,6 +2156,23 @@ export default function FeeModal({
 }
 
 // 产品费用项多选弹窗组件
+// 计算按单位计费的金额（ProductFeeSelectModal 内部使用）
+const calcAmountByUnit = (unitPrice: number, unit: string, weight: number, volume: number): number => {
+  const upperUnit = (unit || '').toUpperCase()
+  if (upperUnit === 'KG' && weight > 0) {
+    return unitPrice * weight
+  } else if (upperUnit === 'CBM' && volume > 0) {
+    return unitPrice * volume
+  }
+  return unitPrice
+}
+
+// 判断是否为按量计费的单位（ProductFeeSelectModal 内部使用）
+const isQtyBasedUnit = (unit: string): boolean => {
+  const upperUnit = (unit || '').toUpperCase()
+  return upperUnit === 'KG' || upperUnit === 'CBM'
+}
+
 function ProductFeeSelectModal({
   products,
   productSearch,
@@ -1833,6 +2181,9 @@ function ProductFeeSelectModal({
   setSelectedProductFees,
   loadProductFeeItems,
   feeCategories,
+  weight,
+  volume,
+  hasBillSelected,
   onClose,
   onBatchAdd
 }: {
@@ -1843,6 +2194,9 @@ function ProductFeeSelectModal({
   setSelectedProductFees: (value: Array<{ productId: string; productName: string; feeItem: ProductFeeItem }>) => void
   loadProductFeeItems: (productId: string) => Promise<ProductFeeItem[]>
   feeCategories: FeeCategory[]
+  weight: number        // 订单货物重量（KG）
+  volume: number        // 订单货物体积（CBM）
+  hasBillSelected: boolean  // 是否已选择订单
   onClose: () => void
   onBatchAdd: (items: Array<{ productId: string; productName: string; feeItem: ProductFeeItem }>) => void
 }) {
@@ -2105,10 +2459,31 @@ function ProductFeeSelectModal({
                                     {/* 内容 */}
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center justify-between">
-                                        <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
-                                        <span className="text-sm font-medium text-green-600">
-                                          {item.currency} {item.standardPrice?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium text-sm text-gray-900">{item.feeName}</span>
+                                          {/* 显示计费单位 */}
+                                          {item.unit && (
+                                            <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                              isQtyBasedUnit(item.unit) 
+                                                ? 'bg-blue-100 text-blue-700' 
+                                                : 'bg-gray-100 text-gray-600'
+                                            }`}>
+                                              /{item.unit}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="text-sm font-medium text-green-600">
+                                            {item.currency} {item.standardPrice?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                            {item.unit && `/${item.unit}`}
+                                          </span>
+                                          {/* 如果是按量计费且有订单信息，显示预估金额 */}
+                                          {isQtyBasedUnit(item.unit) && hasBillSelected && (weight > 0 || volume > 0) && (
+                                            <div className="text-xs text-blue-600">
+                                              ≈ {item.currency} {calcAmountByUnit(item.standardPrice || 0, item.unit, weight, volume).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                       {item.feeNameEn && (
                                         <div className="text-xs text-gray-500">{item.feeNameEn}</div>

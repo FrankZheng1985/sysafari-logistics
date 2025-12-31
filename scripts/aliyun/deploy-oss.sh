@@ -29,10 +29,10 @@ declare -A CONFIGS
 CONFIGS[prod_bucket]="sysafari-logistics"
 CONFIGS[prod_domain]="erp.xianfeng-eu.com"
 CONFIGS[prod_api]="https://api.xianfeng-eu.com"
-# 演示环境
+# 演示环境（使用独立的演示 API）
 CONFIGS[demo_bucket]="sysafari-logistics-demo"
 CONFIGS[demo_domain]="demo.xianfeng-eu.com"
-CONFIGS[demo_api]="https://api.xianfeng-eu.com"
+CONFIGS[demo_api]="https://demo-api.xianfeng-eu.com"
 
 # 获取部署环境
 ENV="${1:-prod}"
