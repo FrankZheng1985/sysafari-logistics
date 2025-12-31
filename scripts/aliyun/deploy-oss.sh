@@ -26,13 +26,13 @@ OSS_ENDPOINT="oss-cn-hongkong.aliyuncs.com"
 # 环境配置
 declare -A CONFIGS
 # 生产环境
-CONFIGS[prod_bucket]="sysafari-logistics-web"
+CONFIGS[prod_bucket]="sysafari-logistics"
 CONFIGS[prod_domain]="erp.xianfeng-eu.com"
-CONFIGS[prod_api]="https://erp.xianfeng-eu.com"
+CONFIGS[prod_api]="https://api.xianfeng-eu.com"
 # 演示环境
 CONFIGS[demo_bucket]="sysafari-logistics-demo"
 CONFIGS[demo_domain]="demo.xianfeng-eu.com"
-CONFIGS[demo_api]="https://demo.xianfeng-eu.com"
+CONFIGS[demo_api]="https://api.xianfeng-eu.com"
 
 # 获取部署环境
 ENV="${1:-prod}"

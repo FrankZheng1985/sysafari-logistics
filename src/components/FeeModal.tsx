@@ -137,6 +137,14 @@ interface FeeCategory {
   icon: any
   color: string
   bg: string
+  parentId?: string | null
+  level?: number
+}
+
+// 分组后的费用分类（按一级分类分组）
+interface FeeCategoryGroup {
+  parent: FeeCategory
+  children: FeeCategory[]
 }
 
 // 费用来源配置
@@ -234,6 +242,8 @@ export default function FeeModal({
   
   // 费用分类（从基础数据加载）
   const [feeCategories, setFeeCategories] = useState<FeeCategory[]>(DEFAULT_FEE_CATEGORIES)
+  // 分组后的费用分类
+  const [feeCategoryGroups, setFeeCategoryGroups] = useState<FeeCategoryGroup[]>([])
   
   // 供应商报价搜索和多选
   const [supplierPriceSearch, setSupplierPriceSearch] = useState('')
@@ -407,16 +417,41 @@ export default function FeeModal({
       // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
       const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
       if (data.errCode === 200 && list.length > 0) {
-        const categories = list.map((item: any) => {
+        // 建立 ID -> 原始数据 的映射
+        const idMap: Record<string, any> = {}
+        list.forEach((item: any) => {
+          idMap[String(item.id)] = item
+        })
+        
+        // 转换为 FeeCategory 格式，保留原始 id
+        const categories: (FeeCategory & { id: string })[] = list.map((item: any) => {
           const style = getCategoryStyle(item.code || item.name)
           return {
+            id: String(item.id),
             value: item.code || item.name,
             label: item.name,
+            parentId: item.parentId ? String(item.parentId) : null,
+            level: item.level || 1,
             ...style
           }
         })
+        
+        // 分离一级分类和二级分类
+        const parentCategories = categories.filter(c => !c.parentId || c.level === 1)
+        const childCategories = categories.filter(c => c.parentId && c.level === 2)
+        
+        // 构建分组结构
+        const groups: FeeCategoryGroup[] = parentCategories.map(parent => {
+          // 找到该父级下的所有子分类
+          const children = childCategories.filter(child => child.parentId === parent.id)
+          return { parent, children }
+        }).filter(group => group.children.length > 0) // 只保留有子分类的组
+        
         if (categories.length > 0) {
           setFeeCategories(categories)
+        }
+        if (groups.length > 0) {
+          setFeeCategoryGroups(groups)
         }
       }
     } catch (error) {
@@ -1101,35 +1136,80 @@ export default function FeeModal({
                   })()}
                 </div>
               ) : (
-                /* 手动录入或未选择费用时，显示分类选择 */
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-                  {feeCategories.map(cat => {
-                    const Icon = cat.icon
-                    // 只有手动录入时才能选择费用分类
-                    const canSelect = isManualEntry
-                    return (
-                      <button
-                        key={cat.value}
-                        type="button"
-                        onClick={() => {
-                          if (canSelect) {
-                            setFormData(prev => ({ ...prev, category: cat.value }))
-                          }
-                        }}
-                        disabled={!canSelect}
-                        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
-                          formData.category === cat.value
-                            ? `${cat.bg} ${cat.color} border-current`
-                            : !canSelect
-                              ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
-                              : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                        }`}
-                      >
-                        <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span className="truncate">{cat.label}</span>
-                      </button>
-                    )
-                  })}
+                /* 手动录入或未选择费用时，显示分类选择（按父子级分组） */
+                <div className="max-h-[280px] overflow-y-auto space-y-3">
+                  {feeCategoryGroups.length > 0 ? (
+                    feeCategoryGroups.map(group => (
+                      <div key={group.parent.value} className="space-y-1.5">
+                        {/* 一级分类标题 */}
+                        <div className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium ${group.parent.color}`}>
+                          {(() => {
+                            const Icon = group.parent.icon
+                            return <Icon className="w-3.5 h-3.5" />
+                          })()}
+                          <span>{group.parent.label}</span>
+                        </div>
+                        {/* 二级分类按钮 */}
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pl-2">
+                          {group.children.map(cat => {
+                            const canSelect = isManualEntry
+                            return (
+                              <button
+                                key={cat.value}
+                                type="button"
+                                onClick={() => {
+                                  if (canSelect) {
+                                    setFormData(prev => ({ ...prev, category: cat.value }))
+                                  }
+                                }}
+                                disabled={!canSelect}
+                                className={`flex items-center justify-center px-2 py-1.5 rounded border text-xs transition-all truncate ${
+                                  formData.category === cat.value
+                                    ? `${cat.bg} ${cat.color} border-current font-medium`
+                                    : !canSelect
+                                      ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
+                                      : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                }`}
+                                title={cat.label}
+                              >
+                                {cat.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    /* 兜底：如果没有分组数据，显示平铺列表 */
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                      {feeCategories.filter(c => c.level === 2 || !c.parentId).map(cat => {
+                        const Icon = cat.icon
+                        const canSelect = isManualEntry
+                        return (
+                          <button
+                            key={cat.value}
+                            type="button"
+                            onClick={() => {
+                              if (canSelect) {
+                                setFormData(prev => ({ ...prev, category: cat.value }))
+                              }
+                            }}
+                            disabled={!canSelect}
+                            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
+                              formData.category === cat.value
+                                ? `${cat.bg} ${cat.color} border-current`
+                                : !canSelect
+                                  ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
+                                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="truncate">{cat.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               {!isManualEntry && !formData.feeName && (
