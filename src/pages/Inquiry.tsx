@@ -298,11 +298,11 @@ export default function Inquiry() {
   return (
     <PageContainer>
       <PageHeader
-        title="报价管理"
+        title="服务费配置"
         icon={<DollarSign className="w-4 h-4 text-primary-600" />}
         breadcrumbs={[
-          { label: '工具', path: '/tools/inquiry' },
-          { label: '报价管理' }
+          { label: '工具', path: '/tools' },
+          { label: '服务费配置' }
         ]}
       />
       
@@ -551,7 +551,7 @@ export default function Inquiry() {
                               <td className="px-3 py-1.5 text-xs text-gray-900 font-medium">{fee.name}</td>
                               <td className="px-3 py-1.5 text-xs text-gray-600">{fee.unit}</td>
                               <td className="px-3 py-1.5 text-xs text-gray-900 text-right font-medium">
-                                {fee.price.toFixed(2)} {fee.currency}
+                                {Number(fee.price || 0).toFixed(2)} {fee.currency}
                               </td>
                               <td className="px-3 py-1.5 text-xs text-gray-500">{fee.description}</td>
                               <td className="px-3 py-1.5 text-center">
@@ -652,13 +652,13 @@ export default function Inquiry() {
                         </span>
                       </td>
                       <td className="px-3 py-1.5 text-xs text-gray-900 text-right font-medium">
-                        {(price.distance || 0).toFixed(0)} KM
+                        {Number(price.distance || 0).toFixed(0)} KM
                       </td>
                       <td className="px-3 py-1.5 text-xs text-gray-900 text-right font-medium">
-                        {(price.pricePerKm || 0).toFixed(2)} {price.currency}/KM
+                        {Number(price.pricePerKm || 0).toFixed(2)} {price.currency}/KM
                       </td>
                       <td className="px-3 py-1.5 text-xs text-gray-900 text-right font-medium text-green-600">
-                        {(price.totalPrice || 0).toFixed(2)} {price.currency}
+                        {Number(price.totalPrice || 0).toFixed(2)} {price.currency}
                       </td>
                       <td className="px-3 py-1.5 text-xs text-gray-500">{price.description}</td>
                       <td className="px-3 py-1.5 text-center">

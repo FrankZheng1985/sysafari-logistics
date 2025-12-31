@@ -6,6 +6,8 @@ import DataTable, { Column } from '../components/DataTable'
 import CMRModal, { type CMRDetail, type ExceptionRecord } from '../components/CMRModal'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { getCMRList, updateBillDelivery, markBillComplete, type BillOfLading, type CMRStats, type CMRDetailData } from '../utils/api'
+import { copyToClipboard } from '../components/Toast'
+import { formatDate } from '../utils/dateFormat'
 
 // 扩展stats类型
 interface ExtendedCMRStats extends CMRStats {
@@ -72,15 +74,6 @@ export default function CMRManage() {
     loadCMRList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabType, searchValue])
-  
-  const handleCopy = (text: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(text).then(() => {
-      alert('已复制到剪贴板')
-    }).catch(() => {
-      alert('复制失败')
-    })
-  }
   
   // 打开CMR模态框
   const openCMRModal = (bill: BillOfLading) => {
@@ -209,41 +202,23 @@ export default function CMRManage() {
   const columns: Column<BillOfLading>[] = [
     {
       key: 'billNumber',
-      label: '序号',
+      label: '提单号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.billNumber}
+            {record.billNumber}
           </span>
-          <button
-            onClick={(e) => handleCopy(item.billNumber, e)}
-            className="text-gray-400 hover:text-gray-600"
-            title="复制序号"
-          >
-            <Copy className="w-3 h-3" />
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: 'containerNumber',
-      label: '提单号',
-      sorter: true,
-      filterable: true,
-      render: (item: BillOfLading) => (
-        <div className="flex items-center gap-1">
-          <span className="text-xs">{item.containerNumber || '-'}</span>
-          {item.containerNumber && (
+          {record.billNumber && (
             <button
-              onClick={(e) => handleCopy(item.containerNumber || '', e)}
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
               className="text-gray-400 hover:text-gray-600"
               title="复制提单号"
             >
@@ -254,12 +229,23 @@ export default function CMRManage() {
       ),
     },
     {
-      key: 'actualContainerNo',
+      key: 'containerNumber',
       label: '集装箱号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.actualContainerNo || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span className="text-xs">{record.containerNumber || '-'}</span>
+          {record.containerNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制集装箱号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
@@ -267,10 +253,10 @@ export default function CMRManage() {
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <Ship className="w-3 h-3 text-gray-500" />
-          <span className="text-xs">{item.vessel || '-'}</span>
+          <span className="text-xs">{record.vessel || '-'}</span>
         </div>
       ),
     },
@@ -278,26 +264,26 @@ export default function CMRManage() {
       key: 'portOfDischarge',
       label: '目的港',
       sorter: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.portOfDischarge || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.portOfDischarge || '-'}</span>
       ),
     },
     {
       key: 'placeOfDelivery',
       label: '交货地',
       sorter: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.placeOfDelivery || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.placeOfDelivery || '-'}</span>
       ),
     },
     {
       key: 'pieces',
       label: '件数/毛重',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.pieces}</div>
-          <div className="text-green-600">{item.weight} KGS</div>
+          <div className="text-gray-900">{record.pieces}</div>
+          <div className="text-green-600">{record.weight} KGS</div>
         </div>
       ),
     },
@@ -305,15 +291,15 @@ export default function CMRManage() {
       key: 'deliveryStatus',
       label: '派送状态',
       filters: [
-        { text: '未派送', value: '未派送' },
+        { text: '待派送', value: '待派送' },
         { text: '派送中', value: '派送中' },
         { text: '订单异常', value: '订单异常' },
         { text: '异常关闭', value: '异常关闭' },
         { text: '已送达', value: '已送达' },
       ],
-      onFilter: (value, record) => (record.deliveryStatus || '未派送') === value,
-      render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '未派送'
+      onFilter: (value, record) => (record.deliveryStatus || '待派送') === value,
+      render: (_value, record: BillOfLading) => {
+        const status = record.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (
@@ -325,7 +311,7 @@ export default function CMRManage() {
             ) : (
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  status === '未派送' ? 'bg-gray-500' :
+                  status === '待派送' ? 'bg-gray-500' :
                   status === '派送中' ? 'bg-orange-500' :
                   status === '已送达' ? 'bg-green-500' :
                   'bg-gray-500'
@@ -342,16 +328,16 @@ export default function CMRManage() {
     {
       key: 'status',
       label: '提单状态',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className={`w-1.5 h-1.5 rounded-full ${
-              item.status === '已到港' ? 'bg-green-500' : 
-              item.status === '船未到港' ? 'bg-yellow-500' :
+              record.status === '已到港' ? 'bg-green-500' : 
+              record.status === '船未到港' ? 'bg-yellow-500' :
               'bg-gray-500'
             }`}
           ></span>
-          <span className="text-xs">{item.status}</span>
+          <span className="text-xs">{record.status}</span>
         </div>
       ),
     },
@@ -363,15 +349,15 @@ export default function CMRManage() {
         const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.createTime}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{formatDate(record.createTime)}</span>
       ),
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '未派送'
+      render: (_value, record: BillOfLading) => {
+        const status = record.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (
@@ -379,18 +365,18 @@ export default function CMRManage() {
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                navigate(`/cmr-manage/${item.id}`)
+                navigate(`/cmr-manage/${record.id}`)
               }}
               className="text-primary-600 hover:text-primary-700 hover:underline text-xs flex items-center gap-0.5"
             >
               <Eye className="w-3 h-3" />
               详情
             </button>
-            {status === '未派送' && (
+            {status === '待派送' && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  openCMRModal(item)
+                  openCMRModal(record)
                 }}
                 className="text-orange-600 hover:text-orange-700 hover:underline text-xs flex items-center gap-0.5"
               >
@@ -402,19 +388,21 @@ export default function CMRManage() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  openCMRModal(item)
+                  openCMRModal(record)
                 }}
                 className="text-green-600 hover:text-green-700 hover:underline text-xs flex items-center gap-0.5"
               >
                 <CheckCircle className="w-3 h-3" />
-                继续派送
+                {/* 根据步骤显示不同的按钮文字 */}
+                {record.cmrUnloadingCompleteTime ? '完成派送' : 
+                 record.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
               </button>
             )}
             {isException && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  openCMRModal(item)
+                  openCMRModal(record)
                 }}
                 className="text-red-600 hover:text-red-700 hover:underline text-xs flex items-center gap-0.5"
               >
@@ -422,11 +410,11 @@ export default function CMRManage() {
                 处理异常
               </button>
             )}
-            {status === '已送达' && item.status !== '已完成' && (
+            {status === '已送达' && record.status !== '已完成' && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleMarkComplete(item.id)
+                  handleMarkComplete(record.id)
                 }}
                 className="text-emerald-600 hover:text-emerald-700 hover:underline text-xs flex items-center gap-0.5"
               >
@@ -434,7 +422,7 @@ export default function CMRManage() {
                 标记完成
               </button>
             )}
-            {item.status === '已完成' && (
+            {record.status === '已完成' && (
               <span className="text-xs text-gray-400 flex items-center gap-0.5">
                 <Check className="w-3 h-3" />
                 已完成
@@ -451,11 +439,11 @@ export default function CMRManage() {
 
   const getTabTitle = () => {
     switch (tabType) {
-      case 'undelivered': return '未派送'
+      case 'undelivered': return '待派送'
       case 'delivering': return '派送中'
       case 'exception': return '订单异常'
       case 'archived': return '已归档'
-      default: return '未派送'
+      default: return '待派送'
     }
   }
   
@@ -471,7 +459,7 @@ export default function CMRManage() {
   
   const getEmptyText = () => {
     switch (tabType) {
-      case 'undelivered': return '暂无未派送的柜子'
+      case 'undelivered': return '暂无待派送的柜子'
       case 'delivering': return '暂无派送中的柜子'
       case 'exception': return '暂无异常订单'
       case 'archived': return '暂无已归档的柜子'
@@ -482,10 +470,10 @@ export default function CMRManage() {
   return (
     <div className="h-full flex flex-col bg-white">
       <PageHeader
-        title="CMR管理"
+        title="TMS管理"
         icon={<Truck className="w-6 h-6 text-primary-600" />}
         tabs={[
-          { label: '未派送', path: '/cmr-manage', count: stats.undelivered },
+          { label: '待派送', path: '/cmr-manage', count: stats.undelivered },
           { label: '派送中', path: '/cmr-manage/delivering', count: stats.delivering },
           { label: '订单异常', path: '/cmr-manage/exception', count: stats.exception || 0 },
           { label: '归档', path: '/cmr-manage/archived', count: stats.archived },
@@ -526,7 +514,7 @@ export default function CMRManage() {
             searchableColumns={['billNumber', 'containerNumber', 'vessel']}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}
@@ -546,8 +534,17 @@ export default function CMRManage() {
           visible={cmrModalVisible}
           onClose={() => setCmrModalVisible(false)}
           billNumber={selectedBill.billNumber}
-          currentStatus={selectedBill.deliveryStatus || '未派送'}
+          currentStatus={selectedBill.deliveryStatus || '待派送'}
           cmrDetail={parseCMRDetail(selectedBill)}
+          defaultDeliveryAddress={selectedBill.placeOfDelivery || selectedBill.portOfDischarge}
+          deliveryAddresses={
+            // 从 referenceList 中提取地址列表
+            selectedBill.referenceList?.filter(ref => ref.consigneeAddress || ref.consigneeAddressDetails).map(ref => ({
+              label: ref.referenceNumber || '未命名',
+              address: ref.consigneeAddress || '',
+              details: ref.consigneeAddressDetails || ref.consigneeAddress || ''
+            })) || []
+          }
           onSubmit={handleCMRSubmit}
         />
       )}

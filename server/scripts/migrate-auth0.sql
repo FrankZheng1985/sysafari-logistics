@@ -1,5 +1,5 @@
 -- Auth0 集成迁移脚本
--- 在 Render PostgreSQL 控制台中执行此脚本
+-- 使用 psql 连接阿里云 RDS 执行，或在阿里云 DMS 控制台执行
 
 -- 1. 给 users 表添加 auth0_id 字段
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auth0_id TEXT UNIQUE;

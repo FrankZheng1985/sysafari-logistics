@@ -2,11 +2,15 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Clock, Package, Truck, Users, DollarSign, 
-  FileText, Search, Filter, Calendar, RefreshCw,
+  FileText, Search, Filter, RefreshCw,
   ChevronLeft, ChevronRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
+import DatePicker from '../components/DatePicker'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface ActivityLog {
   id: string
@@ -82,7 +86,7 @@ export default function ActivityLogs() {
     setLoading(true)
     try {
       // 尝试从API获取活动日志
-      const response = await fetch('/api/activity-logs').then(r => r.json()).catch(() => null)
+      const response = await fetch(`${API_BASE}/api/activity-logs`).then(r => r.json()).catch(() => null)
       
       if (response?.data) {
         setActivities(response.data)
@@ -179,6 +183,7 @@ export default function ActivityLogs() {
               placeholder="搜索活动内容、操作者..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchActivities()}
               className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
@@ -202,19 +207,16 @@ export default function ActivityLogs() {
 
           {/* 日期范围 */}
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            <input
-              type="date"
+            <DatePicker
               value={dateRange.start}
-              onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="px-2 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              onChange={(value) => setDateRange(prev => ({ ...prev, start: value }))}
+              placeholder="开始日期"
             />
-            <span className="text-gray-400">至</span>
-            <input
-              type="date"
+            <span className="text-gray-400 text-xs">至</span>
+            <DatePicker
               value={dateRange.end}
-              onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="px-2 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              onChange={(value) => setDateRange(prev => ({ ...prev, end: value }))}
+              placeholder="结束日期"
             />
           </div>
 

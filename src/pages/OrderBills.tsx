@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { FileText, Plus, RefreshCw, Archive, Trash2, CheckCircle, RotateCcw } from 'lucide-react'
+import { FileText, Plus, RefreshCw, Archive, Trash2, CheckCircle, RotateCcw, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
 import CreateBillModal from '../components/CreateBillModal'
 import VoidApplyModal from '../components/VoidApplyModal'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
-import { getBillsList, voidBill, restoreBill, publishDraft, type BillOfLading, type BillStats } from '../utils/api'
+import { getBillsList, voidBill, restoreBill, publishDraft, type BillOfLading, type BillStats, getApiBaseUrl } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
+import { copyToClipboard } from '../components/Toast'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
+
+const API_BASE = getApiBaseUrl()
 
 // 统一样式类
 const textPrimary = "text-gray-900"
@@ -19,6 +23,7 @@ export default function OrderBills() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchValue, setSearchValue] = useState('')
+  const [debouncedSearchValue, setDebouncedSearchValue] = useState('')
   const [createBillModalVisible, setCreateBillModalVisible] = useState(false)
   const [bills, setBills] = useState<BillOfLading[]>([])
   const [loading, setLoading] = useState(false)
@@ -31,6 +36,41 @@ export default function OrderBills() {
   const [voidApplyModalVisible, setVoidApplyModalVisible] = useState(false)
   const [selectedBillForVoid, setSelectedBillForVoid] = useState<BillOfLading | null>(null)
   
+  // 从 URL 参数读取筛选状态
+  const getInitialFilters = (): Record<string, string[]> => {
+    const searchParams = new URLSearchParams(location.search)
+    const filtersParam = searchParams.get('filters')
+    if (filtersParam) {
+      try {
+        return JSON.parse(decodeURIComponent(filtersParam))
+      } catch {
+        return {}
+      }
+    }
+    return {}
+  }
+  
+  const [tableFilters, setTableFilters] = useState<Record<string, string[]>>(getInitialFilters)
+  
+  // 筛选状态变化时更新 URL
+  const handleFilterChange = (filters: Record<string, string[]>) => {
+    setTableFilters(filters)
+    const searchParams = new URLSearchParams(location.search)
+    
+    // 检查是否有任何筛选条件
+    const hasFilters = Object.values(filters).some(arr => arr.length > 0)
+    
+    if (hasFilters) {
+      searchParams.set('filters', encodeURIComponent(JSON.stringify(filters)))
+    } else {
+      searchParams.delete('filters')
+    }
+    
+    // 使用 replace 避免产生过多历史记录
+    const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`
+    navigate(newUrl, { replace: true })
+  }
+  
   // 根据当前路径确定激活的标签页
   const currentPath = location.pathname
   const activeTabPath = currentPath === '/bookings/bill/draft' 
@@ -40,6 +80,14 @@ export default function OrderBills() {
       : '/bookings/bill'
   const isDraftTab = activeTabPath === '/bookings/bill/draft'
   const isVoidTab = activeTabPath === '/bookings/bill/void'
+  
+  // 防抖搜索：300ms 延迟
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchValue(searchValue)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchValue])
   
   // 从 API 获取数据
   useEffect(() => {
@@ -52,8 +100,8 @@ export default function OrderBills() {
           page: 1,
           pageSize: 1000,
         }
-        if (searchValue && searchValue.trim()) {
-          params.search = searchValue.trim()
+        if (debouncedSearchValue && debouncedSearchValue.trim()) {
+          params.search = debouncedSearchValue.trim()
         }
         const response = await getBillsList(params)
         
@@ -94,13 +142,13 @@ export default function OrderBills() {
     }
     
     loadBills()
-  }, [isDraftTab, isVoidTab, searchValue, refreshKey])
+  }, [isDraftTab, isVoidTab, debouncedSearchValue, refreshKey])
   
   // 作废提单
   const handleVoidBill = async (bill: BillOfLading) => {
     try {
       // 先检查是否有操作记录或费用
-      const checkResponse = await fetch(`/api/bills/${bill.id}/void-check`)
+      const checkResponse = await fetch(`${API_BASE}/api/bills/${bill.id}/void-check`)
       const checkData = await checkResponse.json()
       
       if (checkData.errCode === 200 && checkData.data?.hasOperations) {
@@ -169,7 +217,7 @@ export default function OrderBills() {
       return { text: '已作废', color: 'text-gray-500', bgColor: 'bg-gray-100', dotColor: 'bg-gray-400' }
     }
     
-    const deliveryStatus = bill.deliveryStatus || '未派送'
+    const deliveryStatus = bill.deliveryStatus || '待派送'
     if (deliveryStatus === '订单异常') {
       return { text: '订单异常', color: 'text-red-600', bgColor: 'bg-red-50', dotColor: 'bg-red-500' }
     }
@@ -203,7 +251,7 @@ export default function OrderBills() {
       }
     }
     
-    if (deliveryStatus === '未派送') {
+    if (deliveryStatus === '待派送') {
       return { text: '待派送', color: 'text-gray-600', bgColor: 'bg-gray-100', dotColor: 'bg-gray-500' }
     }
     if (deliveryStatus === '派送中') {
@@ -221,11 +269,22 @@ export default function OrderBills() {
   // 草稿页面的列定义
   const draftColumns: Column<BillOfLading>[] = [
     {
-      key: 'orderSeq',
-      label: '序号',
+      key: 'orderNumber',
+      label: '订单号',
       sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
-      render: (item: BillOfLading) => (
-        <span className="font-medium text-primary-600">{item.orderSeq || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span className="font-medium text-primary-600">{record.orderNumber || '-'}</span>
+          {record.orderNumber && (
+            <button
+              title="复制订单号"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
@@ -233,17 +292,27 @@ export default function OrderBills() {
       label: '提单ID',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={textPrimary}>{item.billId || item.id}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.billId || record.id}</span>
       ),
     },
     {
       key: 'billNumber',
       label: '提单号',
       sorter: true,
-      filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={`font-medium ${textPrimary}`}>{item.billNumber}</span>
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span className={`font-medium ${textPrimary}`}>{record.billNumber}</span>
+          {record.billNumber && (
+            <button
+              title="复制提单号"
+              className="text-gray-400 hover:text-gray-600"
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
@@ -251,7 +320,7 @@ export default function OrderBills() {
       label: '运输方式',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => {
+      render: (_value, record: BillOfLading) => {
         const methodIcon: Record<string, string> = {
           '海运': '🚢',
           '空运': '✈️',
@@ -261,7 +330,7 @@ export default function OrderBills() {
         }
         return (
           <span className={textPrimary}>
-            {methodIcon[item.transportMethod || ''] || ''} {item.transportMethod || '-'}
+            {methodIcon[record.transportMethod || ''] || ''} {record.transportMethod || '-'}
           </span>
         )
       },
@@ -270,8 +339,8 @@ export default function OrderBills() {
       key: 'pieces',
       label: '件数',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
-        <span className={`font-medium ${textPrimary}`}>{item.pieces}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={`font-medium ${textPrimary}`}>{record.pieces}</span>
       ),
     },
     {
@@ -279,20 +348,24 @@ export default function OrderBills() {
       label: '公司名',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={textPrimary}>{item.companyName || item.shipper || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.companyName || record.shipper || '-'}</span>
       ),
     },
     {
       key: 'createTime',
       label: '创建时间',
       sorter: (a, b) => {
-        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
-        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        // 空值始终排在最后
+        if (!a.createTime && !b.createTime) return 0
+        if (!a.createTime) return 1
+        if (!b.createTime) return -1
+        const dateA = new Date(a.createTime).getTime()
+        const dateB = new Date(b.createTime).getTime()
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
-        <span className={textSecondary}>{item.createTime}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textSecondary}>{formatDate(record.createTime)}</span>
       ),
     },
     {
@@ -306,9 +379,9 @@ export default function OrderBills() {
         if (value === '已作废') return record.isVoid === true
         return record.status === value
       },
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1.5">
-          {item.isVoid ? (
+          {record.isVoid ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
               已作废
@@ -316,7 +389,7 @@ export default function OrderBills() {
           ) : (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-600">
               <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-              {item.status || '草稿'}
+              {record.status || '草稿'}
             </span>
           )}
         </div>
@@ -325,13 +398,13 @@ export default function OrderBills() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
-          {item.isVoid ? (
+          {record.isVoid ? (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                handleRestoreBill(item)
+                handleRestoreBill(record)
               }}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
             >
@@ -343,7 +416,7 @@ export default function OrderBills() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handlePublishDraft(item)
+                  handlePublishDraft(record)
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
               >
@@ -353,7 +426,7 @@ export default function OrderBills() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  navigate(`/bookings/bill/${item.id}`)
+                  navigate(`/bookings/bill/${record.id}`)
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 rounded transition-colors"
               >
@@ -362,7 +435,7 @@ export default function OrderBills() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleVoidBill(item)
+                  handleVoidBill(record)
                 }}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
               >
@@ -379,22 +452,91 @@ export default function OrderBills() {
   // 提单页面的列定义
   const billColumns: Column<BillOfLading>[] = [
     {
-      key: 'billNumber',
-      label: '序号',
-      sorter: true,
-      filterable: true,
-      render: (item: BillOfLading) => (
-        <div className="flex items-center gap-2">
-          <span
-            className={`font-semibold cursor-pointer hover:underline ${item.isVoid ? 'text-gray-400 line-through' : 'text-primary-600'}`}
+      key: 'status',
+      label: '状态',
+      filters: [
+        { text: '船未到港', value: '船未到港' },
+        { text: '已到港', value: '已到港' },
+        { text: '清关中', value: '清关中' },
+        { text: '清关放行', value: '清关放行' },
+        { text: '查验中', value: '查验中' },
+        { text: '派送中', value: '派送中' },
+        { text: '已送达', value: '已送达' },
+        { text: '已作废', value: '已作废' },
+      ],
+      onFilter: (value, record) => {
+        if (value === '已作废') return record.isVoid === true
+        const currentStatus = getSmartStatus(record)
+        return currentStatus.text === value
+      },
+      render: (_value, record: BillOfLading) => {
+        const status = getSmartStatus(record)
+        return (
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color} ${record.isVoid ? 'line-through' : ''}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`}></span>
+            {status.text}
+          </span>
+        )
+      },
+    },
+    {
+      key: 'orderNumber',
+      label: '订单号',
+      sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <button
+            className={`font-medium hover:underline ${record.isVoid ? 'text-gray-400 line-through cursor-not-allowed' : 'text-primary-600 cursor-pointer'}`}
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              if (!record.isVoid) {
+                navigate(`/bookings/bill/${record.id}`)
+              }
             }}
+            disabled={record.isVoid}
           >
-            {item.billNumber}
-          </span>
-          {item.isVoid && (
+            {record.orderNumber || '-'}
+          </button>
+          {record.orderNumber && !record.isVoid && (
+            <button
+              title="复制订单号"
+              className="text-gray-400 hover:text-gray-600 p-0.5"
+              onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'billNumber',
+      label: '提单号',
+      sorter: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <button
+            className={`font-semibold hover:underline ${record.isVoid ? 'text-gray-400 line-through cursor-not-allowed' : 'text-gray-900 cursor-pointer'}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!record.isVoid) {
+                navigate(`/bookings/bill/${record.id}`)
+              }
+            }}
+            disabled={record.isVoid}
+          >
+            {record.billNumber}
+          </button>
+          {record.billNumber && (
+            <button
+              title="复制提单号"
+              className="text-gray-400 hover:text-gray-600 p-0.5"
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+          {record.isVoid && (
             <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-600 rounded">作废</span>
           )}
         </div>
@@ -402,28 +544,51 @@ export default function OrderBills() {
     },
     {
       key: 'containerNumber',
-      label: '提单号',
+      label: '集装箱号',
       sorter: true,
-      filterable: true,
-      render: (item: BillOfLading) => (
-        <span
-          className="font-medium text-primary-600 hover:underline cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation()
-            navigate(`/bookings/bill/${item.id}`)
-          }}
-        >
-          {item.containerNumber || '-'}
-        </span>
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <button
+            className={`font-medium hover:underline ${record.isVoid ? 'text-gray-400 line-through cursor-not-allowed' : 'text-primary-600 cursor-pointer'}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!record.isVoid) {
+                navigate(`/bookings/bill/${record.id}`)
+              }
+            }}
+            disabled={record.isVoid}
+          >
+            {record.containerNumber || '-'}
+          </button>
+          {record.containerNumber && (
+            <button
+              title="复制集装箱号"
+              className="text-gray-400 hover:text-gray-600 p-0.5"
+              onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
-      key: 'actualContainerNo',
-      label: '集装箱号',
+      key: 'customerName',
+      label: '关联客户',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={`font-mono ${textPrimary}`}>{item.actualContainerNo || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <div className="max-w-[120px]">
+          <span 
+            className={`${textPrimary} truncate block`}
+            title={record.customerName || '-'}
+          >
+            {record.customerName || '-'}
+          </span>
+          {record.customerCode && (
+            <span className={`text-xs ${textSecondary}`}>{record.customerCode}</span>
+          )}
+        </div>
       ),
     },
     {
@@ -431,35 +596,141 @@ export default function OrderBills() {
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className={textPrimary}>{item.vessel || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.vessel || '-'}</span>
+      ),
+    },
+    {
+      key: 'shippingCompany',
+      label: '船公司',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.shippingCompany || '-'}</span>
+      ),
+    },
+    {
+      key: 'transportMethod',
+      label: '运输方式',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{record.transportMethod || '-'}</span>
+      ),
+    },
+    {
+      key: 'portOfLoading',
+      label: '起运港/目的港',
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="space-y-0.5">
+          <div className={textPrimary}>{record.portOfLoading || '-'}</div>
+          <div className="text-xs text-blue-600">→ {record.portOfDischarge || '-'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'containerSize',
+      label: '柜型/封号',
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="space-y-0.5">
+          <div className={textPrimary}>{record.containerSize || '-'}</div>
+          {record.sealNumber && (
+            <div className={`text-xs ${textSecondary}`}>{record.sealNumber}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'etd',
+      label: 'ETD',
+      sorter: (a, b) => {
+        // 空值始终排在最后
+        if (!a.etd && !b.etd) return 0
+        if (!a.etd) return 1  // a 为空，排后面
+        if (!b.etd) return -1 // b 为空，排后面
+        const dateA = new Date(a.etd).getTime()
+        const dateB = new Date(b.etd).getTime()
+        return dateA - dateB
+      },
+      dateFilterable: true,
+      dateField: 'etd',
+      render: (_value, record: BillOfLading) => (
+        <span className={textPrimary}>{formatDateTimeShort(record.etd)}</span>
       ),
     },
     {
       key: 'eta',
       label: 'ETA/ATA',
       sorter: (a, b) => {
-        const dateA = a.eta ? new Date(a.eta).getTime() : 0
-        const dateB = b.eta ? new Date(b.eta).getTime() : 0
+        // 空值始终排在最后
+        if (!a.eta && !b.eta) return 0
+        if (!a.eta) return 1
+        if (!b.eta) return -1
+        const dateA = new Date(a.eta).getTime()
+        const dateB = new Date(b.eta).getTime()
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
+      dateFilterable: true,
+      dateField: 'eta',
+      render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
-          <div className={textPrimary}>{item.eta || '-'}</div>
-          {item.ata && (
-            <div className="text-green-600 text-xs">{item.ata}</div>
+          <div className={textPrimary}>{formatDateTimeShort(record.eta)}</div>
+          {record.ata && (
+            <div className="text-green-600 text-xs">{formatDateTimeShort(record.ata)}</div>
           )}
         </div>
+      ),
+    },
+    {
+      key: 'customsClearedDate',
+      label: '清关完成',
+      sorter: (a, b) => {
+        // 空值始终排在最后
+        if (!a.customsReleaseTime && !b.customsReleaseTime) return 0
+        if (!a.customsReleaseTime) return 1
+        if (!b.customsReleaseTime) return -1
+        const dateA = new Date(a.customsReleaseTime).getTime()
+        const dateB = new Date(b.customsReleaseTime).getTime()
+        return dateA - dateB
+      },
+      dateFilterable: true,
+      dateField: 'customsReleaseTime',
+      render: (_value, record: BillOfLading) => (
+        <span className={record.customsReleaseTime ? textPrimary : textMuted}>
+          {formatDateTimeShort(record.customsReleaseTime)}
+        </span>
+      ),
+    },
+    {
+      key: 'dischargeDate',
+      label: '卸货日期',
+      sorter: (a, b) => {
+        // 空值始终排在最后
+        if (!a.cmrUnloadingCompleteTime && !b.cmrUnloadingCompleteTime) return 0
+        if (!a.cmrUnloadingCompleteTime) return 1
+        if (!b.cmrUnloadingCompleteTime) return -1
+        const dateA = new Date(a.cmrUnloadingCompleteTime).getTime()
+        const dateB = new Date(b.cmrUnloadingCompleteTime).getTime()
+        return dateA - dateB
+      },
+      dateFilterable: true,
+      dateField: 'cmrUnloadingCompleteTime',
+      render: (_value, record: BillOfLading) => (
+        <span className={record.cmrUnloadingCompleteTime ? textPrimary : textMuted}>
+          {formatDateTimeShort(record.cmrUnloadingCompleteTime)}
+        </span>
       ),
     },
     {
       key: 'pieces',
       label: '件数/毛重',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="space-y-0.5">
-          <div className={`font-medium ${textPrimary}`}>{item.pieces} 件</div>
-          <div className="text-green-600 text-xs">{item.weight} KGS</div>
+          <div className={`font-medium ${textPrimary}`}>{record.pieces} 件</div>
+          <div className="text-green-600 text-xs">{record.weight} KGS</div>
         </div>
       ),
     },
@@ -474,8 +745,8 @@ export default function OrderBills() {
         if (value === '已查验') return record.inspection !== '-'
         return record.inspection === value
       },
-      render: (item: BillOfLading) => {
-        const inspection = item.inspection || '-'
+      render: (_value, record: BillOfLading) => {
+        const inspection = record.inspection || '-'
         if (inspection === '-') {
           return <span className={textMuted}>-</span>
         }
@@ -495,67 +766,56 @@ export default function OrderBills() {
     { 
       key: 'customsStats', 
       label: '报关统计',
-      render: (item: BillOfLading) => (
-        <span className={textSecondary}>{item.customsStats || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className={textSecondary}>{record.customsStats || '-'}</span>
       ),
     },
     {
       key: 'creator',
-      label: '创建者/时间',
-      render: (item: BillOfLading) => (
-        <div className="space-y-0.5">
-          <div className={`font-medium ${textPrimary}`}>{item.creator || '-'}</div>
-          <div className={`text-xs ${textMuted}`}>{item.createTime || '-'}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'status',
-      label: '状态',
-      filters: [
-        { text: '船未到港', value: '船未到港' },
-        { text: '已到港', value: '已到港' },
-        { text: '清关中', value: '清关中' },
-        { text: '清关放行', value: '清关放行' },
-        { text: '查验中', value: '查验中' },
-        { text: '派送中', value: '派送中' },
-        { text: '已送达', value: '已送达' },
-        { text: '已作废', value: '已作废' },
-      ],
-      onFilter: (value, record) => {
-        if (value === '已作废') return record.isVoid === true
-        const currentStatus = getSmartStatus(record)
-        return currentStatus.text === value
+      label: '创建/导入',
+      sorter: (a, b) => {
+        // 空值始终排在最后
+        if (!a.createTime && !b.createTime) return 0
+        if (!a.createTime) return 1
+        if (!b.createTime) return -1
+        const dateA = new Date(a.createTime).getTime()
+        const dateB = new Date(b.createTime).getTime()
+        return dateA - dateB
       },
-      render: (item: BillOfLading) => {
-        const status = getSmartStatus(item)
+      render: (_value, record: BillOfLading) => {
+        // 优先显示导入者，其次显示创建者
+        const operatorName = record.importedByName || record.creator || '-'
+        const operatorTime = record.importTime || record.createTime
+        const operationType = record.importedByName ? '导入' : '创建'
         return (
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color} ${item.isVoid ? 'line-through' : ''}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`}></span>
-            {status.text}
-          </span>
+          <div className="space-y-0.5">
+            <div className={`font-medium ${textPrimary}`}>{operatorName}</div>
+            <div className={`text-xs ${textMuted}`}>
+              {operationType}: {formatDate(operatorTime)}
+            </div>
+          </div>
         )
       },
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
             className="px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 rounded transition-colors"
           >
             详情
           </button>
-          {item.isVoid ? (
+          {record.isVoid ? (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                handleRestoreBill(item)
+                handleRestoreBill(record)
               }}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 rounded transition-colors"
             >
@@ -566,7 +826,7 @@ export default function OrderBills() {
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                handleVoidBill(item)
+                handleVoidBill(record)
               }}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
             >
@@ -634,7 +894,8 @@ export default function OrderBills() {
             navigate(path)
           }
         }}
-        searchPlaceholder={isDraftTab ? "搜索提单ID..." : "搜索提单号、集装箱号..."}
+        searchPlaceholder={isDraftTab ? "搜索订单号、提单号..." : "搜索订单号、提单号、集装箱号..."}
+        defaultSearchValue={searchValue}
         onSearch={setSearchValue}
         onSettingsClick={handleSettingsClick}
         summary={
@@ -664,7 +925,8 @@ export default function OrderBills() {
         }
       />
       
-      <ContentCard noPadding>
+      <div style={{ height: 'calc(100vh - 280px)', minHeight: '600px' }}>
+      <ContentCard noPadding className="flex flex-col h-full">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <LoadingSpinner />
@@ -682,9 +944,11 @@ export default function OrderBills() {
             data={displayBills}
             loading={loading}
             searchValue={searchValue}
-            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'companyName'] : ['billNumber', 'containerNumber', 'actualContainerNo', 'vessel']}
+            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'orderNumber', 'companyName'] : ['orderNumber', 'billNumber', 'containerNumber', 'vessel']}
             visibleColumns={visibleColumns}
             compact={true}
+            initialFilters={tableFilters}
+            onFilterChange={handleFilterChange}
             pagination={{
               pageSize: 15,
               showSizeChanger: true,
@@ -699,6 +963,7 @@ export default function OrderBills() {
           />
         )}
       </ContentCard>
+      </div>
 
       {/* Column Settings Modal */}
       <ColumnSettingsModal

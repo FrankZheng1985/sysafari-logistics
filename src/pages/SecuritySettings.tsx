@@ -1,16 +1,41 @@
-import { Shield, Save, Loader2, RefreshCw, Info, Lock, Mail, Clock, Key, History } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Shield, Save, Loader2, RefreshCw, Info, Lock, Clock, Key, History } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { useAuth } from '../contexts/AuthContext'
 
-// API 基础地址
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
+// API 基础地址 - 根据域名自动选择（阿里云部署）
+function getApiBaseUrl(): string {
+  // 开发环境
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3001'
+  }
+  
+  // 根据当前域名自动选择 API（全部指向阿里云）
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    
+    // 演示环境 -> 演示 API
+    if (hostname === 'demo.xianfeng-eu.com') {
+      return 'https://demo-api.xianfeng-eu.com'
+    }
+    
+    // 生产环境 -> 阿里云 API
+    if (hostname === 'erp.xianfeng-eu.com') {
+      return 'https://api.xianfeng-eu.com'
+    }
+  }
+  
+  return ''
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 interface SecuritySetting {
   key: string
   value: string
+  type?: string
   description: string
 }
 
@@ -28,7 +53,7 @@ interface LoginLog {
 export default function SecuritySettings() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { hasPermission } = useAuth()
+  const { hasPermission, getAccessToken } = useAuth()
   const [activeTab, setActiveTab] = useState<'settings' | 'logs'>(() => 
     location.pathname.includes('logs') ? 'logs' : 'settings'
   )
@@ -36,8 +61,18 @@ export default function SecuritySettings() {
   const [logs, setLogs] = useState<LoginLog[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [initializing, setInitializing] = useState(false)
   const [logsLoading, setLogsLoading] = useState(false)
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 })
+
+  // 获取带认证的请求头
+  const getAuthHeaders = useCallback(async (): Promise<HeadersInit> => {
+    const token = await getAccessToken()
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  }, [getAccessToken])
 
   // 设置分组
   const settingGroups = [
@@ -51,24 +86,17 @@ export default function SecuritySettings() {
         'password_require_lowercase',
         'password_require_number',
         'password_require_special',
+        'password_expire_days',
       ]
     },
     {
-      key: 'lockout',
+      key: 'login',
       title: '登录锁定',
       icon: <Lock className="w-3 h-3" />,
       settings: [
-        'login_lockout_attempts',
+        'login_max_attempts',
         'login_lockout_duration',
-      ]
-    },
-    {
-      key: 'verification',
-      title: '邮箱验证',
-      icon: <Mail className="w-3 h-3" />,
-      settings: [
-        'email_verification_enabled',
-        'verification_code_expiry',
+        'login_require_captcha_after',
       ]
     },
     {
@@ -77,68 +105,150 @@ export default function SecuritySettings() {
       icon: <Clock className="w-3 h-3" />,
       settings: [
         'session_timeout',
+        'session_single_login',
+        'session_remember_max_days',
+      ]
+    },
+    {
+      key: 'audit',
+      title: '安全审计',
+      icon: <History className="w-3 h-3" />,
+      settings: [
+        'audit_enabled',
+        'audit_sensitive_operations',
+        'audit_retention_days',
       ]
     },
   ]
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/security/settings`)
+      const headers = await getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/security/settings`, { headers })
       const data = await response.json()
       if (data.errCode === 200) {
-        setSettings(data.data)
+        // 后端返回的是分组对象，需要转换为扁平数组
+        const grouped = data.data
+        const flatSettings: SecuritySetting[] = []
+        
+        for (const category of Object.values(grouped) as { name: string, settings: { key: string, value: unknown, type?: string, description: string }[] }[]) {
+          for (const setting of category.settings) {
+            // 统一布尔值格式：true/false -> 1/0
+            let value = String(setting.value)
+            if (setting.type === 'boolean') {
+              value = (setting.value === true || setting.value === 'true' || setting.value === '1') ? '1' : '0'
+            }
+            flatSettings.push({
+              key: setting.key,
+              value,
+              type: setting.type,
+              description: setting.description
+            })
+          }
+        }
+        
+        setSettings(flatSettings)
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
       }
     } catch (error) {
       console.error('加载安全配置失败:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [getAuthHeaders])
 
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async (page: number, pageSize: number) => {
     setLogsLoading(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login-logs?page=${pagination.page}&pageSize=${pagination.pageSize}`)
+      const headers = await getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/auth/login-logs?page=${page}&pageSize=${pageSize}`, { headers })
       const data = await response.json()
       if (data.errCode === 200) {
         setLogs(data.data.list)
         setPagination(prev => ({ ...prev, total: data.data.total }))
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
       }
     } catch (error) {
       console.error('加载登录日志失败:', error)
     } finally {
       setLogsLoading(false)
     }
-  }
+  }, [getAuthHeaders])
 
   useEffect(() => {
     loadSettings()
-  }, [])
+  }, [loadSettings])
 
-   
   useEffect(() => {
     if (activeTab === 'logs') {
-      loadLogs()
+      loadLogs(pagination.page, pagination.pageSize)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, pagination.page])
+  }, [activeTab, pagination.page, pagination.pageSize, loadLogs])
 
   const handleSettingChange = (key: string, value: string) => {
     setSettings(prev => prev.map(s => s.key === key ? { ...s, value } : s))
   }
 
+  // 初始化安全设置
+  const handleInitialize = async () => {
+    if (!confirm('确定要初始化安全设置吗？这将创建默认的安全配置。')) {
+      return
+    }
+    
+    setInitializing(true)
+    try {
+      const headers = await getAuthHeaders()
+      const response = await fetch(`${API_BASE_URL}/api/security/settings/init`, {
+        method: 'POST',
+        headers
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert(data.msg || '初始化成功')
+        loadSettings() // 重新加载设置
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
+      } else {
+        alert(data.msg || '初始化失败')
+      }
+    } catch (error) {
+      console.error('初始化失败:', error)
+      alert('初始化失败')
+    } finally {
+      setInitializing(false)
+    }
+  }
+
+  // 检查设置是否已加载
+  const hasSettings = settings.length > 0
+
   const handleSave = async () => {
     setSaving(true)
     try {
+      // 将数组转换为对象格式，并将布尔值转回 true/false
+      const settingsObj: Record<string, string> = {}
+      for (const s of settings) {
+        let value = s.value
+        if (s.type === 'boolean') {
+          value = s.value === '1' ? 'true' : 'false'
+        }
+        settingsObj[s.key] = value
+      }
+      
+      const headers = await getAuthHeaders()
       const response = await fetch(`${API_BASE_URL}/api/security/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings })
+        headers,
+        body: JSON.stringify({ settings: settingsObj })
       })
       const data = await response.json()
       if (data.errCode === 200) {
         alert('配置保存成功')
+      } else if (data.errCode === 401) {
+        alert('认证失败，请重新登录')
       } else {
         alert(data.msg || '保存失败')
       }
@@ -154,22 +264,39 @@ export default function SecuritySettings() {
 
   const getSettingLabel = (key: string) => {
     const labels: Record<string, string> = {
+      // 密码策略
       'password_min_length': '最小密码长度',
       'password_require_uppercase': '需要大写字母',
       'password_require_lowercase': '需要小写字母',
       'password_require_number': '需要数字',
       'password_require_special': '需要特殊字符',
-      'login_lockout_attempts': '锁定前允许失败次数',
+      'password_expire_days': '密码有效期（天）',
+      'password_history_count': '密码历史记录',
+      // 登录安全
+      'login_max_attempts': '最大登录尝试次数',
       'login_lockout_duration': '锁定时长（分钟）',
-      'email_verification_enabled': '启用邮箱验证',
-      'verification_code_expiry': '验证码有效期（分钟）',
+      'login_remember_days': '记住登录天数',
+      'login_require_captcha_after': '验证码触发次数',
+      // 会话管理
       'session_timeout': '会话超时（分钟）',
+      'session_single_login': '单点登录',
+      'session_remember_max_days': '最长记住天数',
+      // 安全审计
+      'audit_enabled': '启用审计',
+      'audit_sensitive_operations': '记录敏感操作',
+      'audit_retention_days': '日志保留天数',
     }
     return labels[key] || key
   }
 
   const renderSettingInput = (setting: SecuritySetting) => {
-    const isBool = ['password_require_uppercase', 'password_require_lowercase', 'password_require_number', 'password_require_special', 'email_verification_enabled'].includes(setting.key)
+    // 根据 type 字段或键名判断是否为布尔值
+    const boolKeys = [
+      'password_require_uppercase', 'password_require_lowercase', 
+      'password_require_number', 'password_require_special',
+      'session_single_login', 'audit_enabled', 'audit_sensitive_operations'
+    ]
+    const isBool = setting.type === 'boolean' || boolKeys.includes(setting.key)
     
     if (isBool) {
       return (
@@ -207,38 +334,38 @@ export default function SecuritySettings() {
     { 
       key: 'loginTime', 
       label: '登录时间',
-      render: (item: LoginLog) => new Date(item.loginTime).toLocaleString('zh-CN')
+      render: (_value: unknown, record: LoginLog) => new Date(record.loginTime).toLocaleString('zh-CN')
     },
     { key: 'username', label: '用户名' },
     { key: 'ipAddress', label: 'IP地址' },
     { 
       key: 'status', 
       label: '状态',
-      render: (item: LoginLog) => (
+      render: (_value: unknown, record: LoginLog) => (
         <span className={`px-2 py-0.5 rounded text-xs ${
-          item.status === 'success' ? 'bg-green-100 text-green-700' :
-          item.status === 'failed' ? 'bg-red-100 text-red-700' :
-          item.status === 'locked' ? 'bg-orange-100 text-orange-700' :
-          item.status === 'disabled' ? 'bg-gray-100 text-gray-700' :
+          record.status === 'success' ? 'bg-green-100 text-green-700' :
+          record.status === 'failed' ? 'bg-red-100 text-red-700' :
+          record.status === 'locked' ? 'bg-orange-100 text-orange-700' :
+          record.status === 'disabled' ? 'bg-gray-100 text-gray-700' :
           'bg-gray-100 text-gray-700'
         }`}>
-          {item.status === 'success' ? '成功' :
-           item.status === 'failed' ? '失败' :
-           item.status === 'locked' ? '已锁定' :
-           item.status === 'disabled' ? '已禁用' : item.status}
+          {record.status === 'success' ? '成功' :
+           record.status === 'failed' ? '失败' :
+           record.status === 'locked' ? '已锁定' :
+           record.status === 'disabled' ? '已禁用' : record.status}
         </span>
       )
     },
     { 
       key: 'failureReason', 
       label: '失败原因',
-      render: (item: LoginLog) => item.failureReason || '-'
+      render: (_value: unknown, record: LoginLog) => record.failureReason || '-'
     },
     { 
       key: 'userAgent', 
       label: '设备',
-      render: (item: LoginLog) => {
-        const ua = item.userAgent || ''
+      render: (_value: unknown, record: LoginLog) => {
+        const ua = record.userAgent || ''
         if (ua.includes('Chrome')) return 'Chrome'
         if (ua.includes('Firefox')) return 'Firefox'
         if (ua.includes('Safari')) return 'Safari'
@@ -286,6 +413,31 @@ export default function SecuritySettings() {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 text-primary-600 animate-spin" />
               <span className="ml-2 text-xs text-gray-600">加载中...</span>
+            </div>
+          ) : !hasSettings ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+              <Shield className="w-12 h-12 mb-3 opacity-30" />
+              <p className="text-sm">暂无安全配置数据</p>
+              <p className="text-xs mt-1 mb-4">点击下方按钮初始化默认安全配置</p>
+              {hasPermission('system:user') && (
+                <button
+                  onClick={handleInitialize}
+                  disabled={initializing}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                  {initializing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      初始化中...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-4 h-4" />
+                      初始化安全配置
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -339,6 +491,9 @@ export default function SecuritySettings() {
                   {getSetting('password_require_lowercase')?.value === '1' && <p>• 必须包含小写字母 (a-z)</p>}
                   {getSetting('password_require_number')?.value === '1' && <p>• 必须包含数字 (0-9)</p>}
                   {getSetting('password_require_special')?.value === '1' && <p>• 必须包含特殊字符 (!@#$%^&*等)</p>}
+                  {Number(getSetting('password_expire_days')?.value) > 0 && (
+                    <p>• 密码有效期 {getSetting('password_expire_days')?.value} 天</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -352,7 +507,7 @@ export default function SecuritySettings() {
                 共 {pagination.total} 条登录记录
               </div>
               <button
-                onClick={loadLogs}
+                onClick={() => loadLogs(pagination.page, pagination.pageSize)}
                 disabled={logsLoading}
                 className="px-1.5 py-0.5 text-xs text-gray-600 hover:bg-gray-100 rounded flex items-center gap-1"
               >
@@ -372,26 +527,40 @@ export default function SecuritySettings() {
             )}
 
             {/* 分页 */}
-            {!logsLoading && pagination.total > pagination.pageSize && (
+            {!logsLoading && (
               <div className="flex items-center justify-between mt-3">
-                <div className="text-xs text-gray-500">
-                  第 {pagination.page} / {Math.ceil(pagination.total / pagination.pageSize)} 页
-                </div>
-                <div className="flex items-center gap-1.5">
+                <span className="text-sm text-gray-700">
+                  共 <span className="font-medium">{pagination.total}</span> 条记录
+                </span>
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                     disabled={pagination.page <= 1}
-                    className="px-1.5 py-0.5 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     上一页
                   </button>
+                  <span className="text-sm text-gray-700">
+                    第 {pagination.page} / {Math.ceil(pagination.total / pagination.pageSize) || 1} 页
+                  </span>
                   <button
                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                     disabled={pagination.page >= Math.ceil(pagination.total / pagination.pageSize)}
-                    className="px-1.5 py-0.5 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     下一页
                   </button>
+                  <select
+                    value={pagination.pageSize}
+                    onChange={(e) => setPagination(prev => ({ ...prev, pageSize: Number(e.target.value), page: 1 }))}
+                    title="每页显示条数"
+                    aria-label="每页显示条数"
+                    className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                  >
+                    <option value={20}>20 条/页</option>
+                    <option value={50}>50 条/页</option>
+                    <option value={100}>100 条/页</option>
+                  </select>
                 </div>
               </div>
             )}

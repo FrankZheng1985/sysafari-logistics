@@ -3,9 +3,32 @@
  */
 
 import express from 'express'
+import multer from 'multer'
 import * as controller from './controller.js'
 
 const router = express.Router()
+
+// 配置合同文件上传
+const contractUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 20 * 1024 * 1024 // 20MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ]
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('不支持的文件类型，请上传 PDF、Word 或图片文件'))
+    }
+  }
+})
 
 // ==================== 客户管理路由 ====================
 
@@ -75,6 +98,53 @@ router.get('/customers/:customerId/order-stats', controller.getCustomerOrderStat
 // 获取客户订单列表
 router.get('/customers/:customerId/orders', controller.getCustomerOrders)
 
+// ==================== 客户报价单PDF路由 ====================
+
+// 获取客户最新报价单PDF
+router.get('/customers/:customerId/quotation-pdf', controller.getCustomerQuotationPdf)
+
+// 获取客户报价单历史列表
+router.get('/customers/:customerId/quotation-history', controller.getCustomerQuotationHistory)
+
+// ==================== 客户地址路由 ====================
+
+// 获取客户地址列表
+router.get('/customers/:customerId/addresses', controller.getCustomerAddresses)
+
+// 创建客户地址
+router.post('/customers/:customerId/addresses', controller.createCustomerAddress)
+
+// 更新客户地址
+router.put('/customers/:customerId/addresses/:addressId', controller.updateCustomerAddress)
+
+// 删除客户地址
+router.delete('/customers/:customerId/addresses/:addressId', controller.deleteCustomerAddress)
+
+// ==================== 客户税号路由 ====================
+
+// 获取客户税号列表
+router.get('/customers/:customerId/tax-numbers', controller.getCustomerTaxNumbers)
+
+// 创建客户税号
+router.post('/customers/:customerId/tax-numbers', controller.createCustomerTaxNumber)
+
+// 更新客户税号
+router.put('/customers/:customerId/tax-numbers/:taxId', controller.updateCustomerTaxNumber)
+
+// 删除客户税号
+router.delete('/customers/:customerId/tax-numbers/:taxId', controller.deleteCustomerTaxNumber)
+
+// ==================== 税号验证路由 ====================
+
+// VAT税号验证
+router.post('/tax/validate-vat', controller.validateVAT)
+
+// EORI号码验证
+router.post('/tax/validate-eori', controller.validateEORI)
+
+// 获取支持的VAT国家列表
+router.get('/tax/supported-countries', controller.getSupportedVatCountries)
+
 // ==================== 销售机会路由 ====================
 
 // 获取销售机会统计
@@ -115,6 +185,9 @@ router.put('/quotations/:id', controller.updateQuotation)
 // 删除报价
 router.delete('/quotations/:id', controller.deleteQuotation)
 
+// 生成报价单PDF
+router.post('/quotations/:id/pdf', controller.generateQuotationPdf)
+
 // ==================== 合同管理路由 ====================
 
 // 获取合同列表
@@ -131,6 +204,29 @@ router.put('/contracts/:id', controller.updateContract)
 
 // 删除合同
 router.delete('/contracts/:id', controller.deleteContract)
+
+// ==================== 合同签署管理路由 ====================
+
+// 为销售机会生成合同
+router.post('/contracts/generate', controller.generateContract)
+
+// 上传已签署合同（支持文件上传）
+router.post('/contracts/:id/upload-signed', contractUpload.single('file'), controller.uploadSignedContract)
+
+// 更新合同签署状态
+router.put('/contracts/:id/sign-status', controller.updateContractSignStatus)
+
+// 获取合同签署历史
+router.get('/contracts/:id/sign-history', controller.getContractSignHistory)
+
+// 获取客户待签署合同
+router.get('/customers/:customerId/pending-contracts', controller.getPendingSignContracts)
+
+// 检查销售机会是否可以成交
+router.get('/opportunities/:opportunityId/can-close', controller.checkOpportunityCanClose)
+
+// 销售机会成交（带合同校验）
+router.put('/opportunities/:id/close', controller.closeOpportunity)
 
 // ==================== 客户反馈/投诉路由 ====================
 
@@ -165,6 +261,81 @@ router.get('/analytics/activity-ranking', controller.getCustomerActivityRanking)
 
 // 获取客户价值分析
 router.get('/customers/:customerId/value-analysis', controller.getCustomerValueAnalysis)
+
+// ==================== 税号自动验证路由 ====================
+
+// 手动触发批量验证所有税号
+router.post('/tax/validate-all', controller.validateAllTaxNumbers)
+
+// 获取税号验证统计
+router.get('/tax/validation-stats', controller.getTaxValidationStats)
+
+// ==================== 营业执照OCR识别路由 ====================
+
+// 识别营业执照图片
+router.post('/ocr/business-license', controller.recognizeBusinessLicense)
+
+// 检查OCR服务状态
+router.get('/ocr/status', controller.checkOcrStatus)
+
+// ==================== 共享税号管理路由（公司级税号库） ====================
+
+// 获取共享税号列表
+router.get('/shared-tax-numbers', controller.getSharedTaxNumbers)
+
+// 获取共享税号详情
+router.get('/shared-tax-numbers/:id', controller.getSharedTaxNumberById)
+
+// 创建共享税号
+router.post('/shared-tax-numbers', controller.createSharedTaxNumber)
+
+// 更新共享税号
+router.put('/shared-tax-numbers/:id', controller.updateSharedTaxNumber)
+
+// 删除共享税号
+router.delete('/shared-tax-numbers/:id', controller.deleteSharedTaxNumber)
+
+// ==================== 客户门户账户管理路由 ====================
+
+// 获取客户门户账户列表
+router.get('/customer-accounts', controller.getCustomerAccounts)
+
+// 获取单个账户详情
+router.get('/customer-accounts/:id', controller.getCustomerAccountById)
+
+// 创建客户门户账户
+router.post('/customer-accounts', controller.createCustomerAccount)
+
+// 更新客户门户账户
+router.put('/customer-accounts/:id', controller.updateCustomerAccount)
+
+// 重置客户账户密码
+router.put('/customer-accounts/:id/reset-password', controller.resetCustomerAccountPassword)
+
+// 删除客户门户账户
+router.delete('/customer-accounts/:id', controller.deleteCustomerAccount)
+
+// ==================== API 密钥管理路由 ====================
+
+// 获取客户的 API 密钥列表
+router.get('/customers/:customerId/api-keys', controller.getCustomerApiKeys)
+
+// 创建 API 密钥
+router.post('/customers/:customerId/api-keys', controller.createApiKey)
+
+// 更新 API 密钥
+router.put('/api-keys/:id', controller.updateApiKey)
+
+// 删除 API 密钥
+router.delete('/api-keys/:id', controller.deleteApiKey)
+
+// 获取 API 调用日志
+router.get('/api-call-logs', controller.getApiCallLogs)
+
+// ==================== 最后里程费率集成路由 ====================
+
+// 获取最后里程费率（用于报价单）
+router.get('/last-mile-rate', controller.getLastMileRateForQuotation)
 
 export default router
 

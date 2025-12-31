@@ -92,17 +92,17 @@ TARIC Excel文件应包含以下列（至少需要编码列）：
 
 ## 导入后验证
 
-导入完成后，可以验证数据：
+导入完成后，可以验证数据（使用 PostgreSQL）：
 
 ```bash
 # 查看数据库中的HS Code数量
-sqlite3 server/data/orders.db "SELECT COUNT(*) FROM hs_codes;"
+psql -d sysafari_dev -c "SELECT COUNT(*) FROM hs_codes;"
 
 # 查看章节分布
-sqlite3 server/data/orders.db "SELECT chapter, COUNT(*) as count FROM hs_codes WHERE chapter IS NOT NULL GROUP BY chapter ORDER BY chapter;"
+psql -d sysafari_dev -c "SELECT chapter, COUNT(*) as count FROM hs_codes WHERE chapter IS NOT NULL GROUP BY chapter ORDER BY chapter;"
 
 # 查看示例数据
-sqlite3 server/data/orders.db "SELECT hs_code, description_en, chapter FROM hs_codes LIMIT 10;"
+psql -d sysafari_dev -c "SELECT hs_code, description_en, chapter FROM hs_codes LIMIT 10;"
 ```
 
 ## 常见问题

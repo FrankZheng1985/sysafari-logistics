@@ -1,5 +1,6 @@
 /**
  * 系统管理模块 - 控制器
+ * 包含用户管理、角色权限、审批流程等功能
  */
 
 import crypto from 'crypto'
@@ -7,6 +8,8 @@ import { success, successWithPagination, badRequest, notFound, conflict, unautho
 import { validatePassword } from '../../utils/validator.js'
 import { getDatabase } from '../../config/database.js'
 import * as model from './model.js'
+import * as approvalService from '../../services/approvalService.js'
+import { canManageUser, canGrantPermission, getTeamMembers, getGrantablePermissions, checkRequiresApproval } from '../../middleware/auth.js'
 
 // ==================== 用户管理 ====================
 
@@ -233,6 +236,38 @@ export async function changePassword(req, res) {
   }
 }
 
+/**
+ * 重置用户密码（管理员操作，不需要旧密码）
+ */
+export async function resetPassword(req, res) {
+  try {
+    const { id } = req.params
+    const { newPassword } = req.body
+    
+    const user = await model.getUserById(id)
+    if (!user) {
+      return notFound(res, '用户不存在')
+    }
+    
+    // 使用传入的密码或默认密码
+    const password = newPassword || 'password123'
+    
+    // 验证新密码强度（如果是自定义密码）
+    if (newPassword) {
+      const passwordValidation = validatePassword(newPassword)
+      if (!passwordValidation.valid) {
+        return badRequest(res, passwordValidation.errors.join('; '))
+      }
+    }
+    
+    await model.changePassword(id, password)
+    return success(res, { newPassword: password }, '密码重置成功')
+  } catch (error) {
+    console.error('重置密码失败:', error)
+    return serverError(res, '重置密码失败')
+  }
+}
+
 // ==================== 认证相关 ====================
 
 /**
@@ -321,13 +356,16 @@ export async function login(req, res) {
     // 判断是否是测试用户
     const isTestUser = user.userType === 'test'
     
+    // 注意：isTestMode 用于前端判断是否使用简单 token（而非 Auth0 JWT）
+    // 对于所有密码登录的用户（无论是否是测试用户），都应该设置为 true
     return success(res, {
       user: {
         ...safeUser,
         userType: user.userType
       },
       permissions: permissionCodes,
-      isTestMode: isTestUser,
+      isTestMode: true,  // 密码登录始终使用简单 token
+      isTestUser: isTestUser,  // 保留测试用户标识（如需要）
       token: String(user.id)
     }, '登录成功')
   } catch (error) {
@@ -948,6 +986,645 @@ export async function saveSystemSettingsBatch(req, res) {
   } catch (error) {
     console.error('批量保存系统设置失败:', error)
     return serverError(res, '批量保存系统设置失败')
+  }
+}
+
+// ==================== 审批管理 ====================
+
+/**
+ * 获取审批列表
+ */
+export async function getApprovals(req, res) {
+  try {
+    const { status, requestType, search, page, pageSize } = req.query
+    
+    const result = await approvalService.getApprovalRequests({
+      status,
+      requestType,
+      search,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取审批列表失败:', error)
+    return serverError(res, '获取审批列表失败')
+  }
+}
+
+/**
+ * 获取待审批列表（审批人视角）
+ */
+export async function getPendingApprovals(req, res) {
+  try {
+    const { page, pageSize } = req.query
+    
+    const result = await approvalService.getPendingApprovals({
+      approverRole: req.user?.role,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取待审批列表失败:', error)
+    return serverError(res, '获取待审批列表失败')
+  }
+}
+
+/**
+ * 获取我的申请列表
+ */
+export async function getMyApprovals(req, res) {
+  try {
+    const { status, page, pageSize } = req.query
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.getMyApprovalRequests(req.user.id, {
+      status,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取我的申请列表失败:', error)
+    return serverError(res, '获取我的申请列表失败')
+  }
+}
+
+/**
+ * 获取审批详情
+ */
+export async function getApprovalById(req, res) {
+  try {
+    const { id } = req.params
+    
+    const request = await approvalService.getApprovalRequestById(parseInt(id))
+    if (!request) {
+      return notFound(res, '审批请求不存在')
+    }
+    
+    // 获取审批历史
+    const history = await approvalService.getApprovalHistory(parseInt(id))
+    
+    return success(res, { ...request, history })
+  } catch (error) {
+    console.error('获取审批详情失败:', error)
+    return serverError(res, '获取审批详情失败')
+  }
+}
+
+/**
+ * 创建审批请求
+ */
+export async function createApprovalRequest(req, res) {
+  try {
+    const { requestType, requestTitle, requestData, targetUserId, targetUserName, priority } = req.body
+    
+    if (!requestType || !requestTitle) {
+      return badRequest(res, '请求类型和标题为必填项')
+    }
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.createApprovalRequest({
+      requestType,
+      requestTitle,
+      requestData,
+      targetUserId,
+      targetUserName,
+      requesterId: req.user.id,
+      requesterName: req.user.name,
+      requesterRole: req.user.role,
+      requesterDepartment: req.user.department,
+      priority
+    })
+    
+    if (result.success) {
+      return success(res, result.data, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('创建审批请求失败:', error)
+    return serverError(res, '创建审批请求失败')
+  }
+}
+
+/**
+ * 审批通过
+ */
+export async function approveRequest(req, res) {
+  try {
+    const { id } = req.params
+    const { comment } = req.body
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    // 检查审批权限
+    if (!req.user.canApprove && !['admin', 'boss'].includes(req.user.role)) {
+      return forbidden(res, '您没有审批权限')
+    }
+    
+    const result = await approvalService.approveRequest(
+      parseInt(id),
+      {
+        id: req.user.id,
+        name: req.user.name,
+        role: req.user.role
+      },
+      comment
+    )
+    
+    if (result.success) {
+      return success(res, result.executeResult, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('审批通过失败:', error)
+    return serverError(res, '审批通过失败')
+  }
+}
+
+/**
+ * 审批拒绝
+ */
+export async function rejectRequest(req, res) {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    // 检查审批权限
+    if (!req.user.canApprove && !['admin', 'boss'].includes(req.user.role)) {
+      return forbidden(res, '您没有审批权限')
+    }
+    
+    if (!reason) {
+      return badRequest(res, '请填写拒绝原因')
+    }
+    
+    const result = await approvalService.rejectRequest(
+      parseInt(id),
+      {
+        id: req.user.id,
+        name: req.user.name,
+        role: req.user.role
+      },
+      reason
+    )
+    
+    if (result.success) {
+      return success(res, null, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('审批拒绝失败:', error)
+    return serverError(res, '审批拒绝失败')
+  }
+}
+
+/**
+ * 取消审批请求
+ */
+export async function cancelApprovalRequest(req, res) {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.cancelRequest(
+      parseInt(id),
+      {
+        id: req.user.id,
+        name: req.user.name,
+        role: req.user.role
+      },
+      reason
+    )
+    
+    if (result.success) {
+      return success(res, null, result.message)
+    } else {
+      return badRequest(res, result.error)
+    }
+  } catch (error) {
+    console.error('取消审批请求失败:', error)
+    return serverError(res, '取消审批请求失败')
+  }
+}
+
+/**
+ * 获取待审批数量
+ */
+export async function getPendingApprovalCount(req, res) {
+  try {
+    const count = await approvalService.getPendingCount(req.user?.role)
+    return success(res, { count })
+  } catch (error) {
+    console.error('获取待审批数量失败:', error)
+    return serverError(res, '获取待审批数量失败')
+  }
+}
+
+/**
+ * 获取审批通知
+ */
+export async function getApprovalNotifications(req, res) {
+  try {
+    const { unreadOnly, page, pageSize } = req.query
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const result = await approvalService.getUserNotifications(req.user.id, {
+      unreadOnly: unreadOnly === 'true',
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取审批通知失败:', error)
+    return serverError(res, '获取审批通知失败')
+  }
+}
+
+/**
+ * 标记通知已读
+ */
+export async function markNotificationRead(req, res) {
+  try {
+    const { id } = req.params
+    
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    await approvalService.markNotificationRead(parseInt(id), req.user.id)
+    return success(res, null, '标记成功')
+  } catch (error) {
+    console.error('标记通知已读失败:', error)
+    return serverError(res, '标记通知已读失败')
+  }
+}
+
+// ==================== 团队管理 ====================
+
+/**
+ * 获取团队成员
+ */
+export async function getTeamMembersList(req, res) {
+  try {
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const members = await getTeamMembers(req.user.id)
+    return success(res, members)
+  } catch (error) {
+    console.error('获取团队成员失败:', error)
+    return serverError(res, '获取团队成员失败')
+  }
+}
+
+/**
+ * 获取可授予的权限列表
+ */
+export async function getGrantablePermissionsList(req, res) {
+  try {
+    if (!req.user?.id) {
+      return unauthorized(res, '请先登录')
+    }
+    
+    const permissions = await getGrantablePermissions(req.user.id)
+    return success(res, permissions)
+  } catch (error) {
+    console.error('获取可授予权限列表失败:', error)
+    return serverError(res, '获取可授予权限列表失败')
+  }
+}
+
+/**
+ * 检查操作是否需要审批
+ */
+export async function checkApprovalRequired(req, res) {
+  try {
+    const { operationType, context } = req.body
+    
+    if (!operationType) {
+      return badRequest(res, '操作类型为必填项')
+    }
+    
+    const required = await checkRequiresApproval(operationType, context || {})
+    return success(res, { required })
+  } catch (error) {
+    console.error('检查审批需求失败:', error)
+    return serverError(res, '检查审批需求失败')
+  }
+}
+
+/**
+ * 获取最近活动（用于仪表盘）
+ * 从多个业务表中聚合最近的活动记录
+ */
+export async function getRecentActivities(req, res) {
+  try {
+    const { limit = 5 } = req.query
+    const db = getDatabase()
+    const activities = []
+    
+    // 1. 从订单表获取最近创建/更新的订单
+    try {
+      const recentBills = await db.prepare(`
+        SELECT 
+          id,
+          bill_number,
+          customer_name,
+          status,
+          created_at,
+          updated_at
+        FROM bills_of_lading
+        WHERE is_void = 0 OR is_void IS NULL
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 3
+      `).all()
+      
+      for (const bill of recentBills) {
+        const statusText = {
+          'pending': '待处理',
+          '待处理': '待处理',
+          'inspecting': '查验中',
+          '查验中': '查验中',
+          'delivering': '派送中',
+          '派送中': '派送中',
+          'delivered': '已完成',
+          '已送达': '已完成',
+          'draft': '草稿',
+          '草稿': '草稿'
+        }[bill.status] || '更新'
+        
+        activities.push({
+          id: `bill-${bill.id}`,
+          type: 'order',
+          action: `订单${statusText}`,
+          description: `${bill.bill_number || '未知单号'} - ${bill.customer_name || '未知客户'}`,
+          time: formatTimeAgo(new Date(bill.updated_at || bill.created_at)),
+          user: '系统',
+          timestamp: new Date(bill.updated_at || bill.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取订单活动失败:', err.message)
+    }
+    
+    // 2. 从订单表获取 CMR 状态的运输记录（派送中/已送达的订单）
+    try {
+      const recentCmr = await db.prepare(`
+        SELECT 
+          id,
+          bill_number,
+          customer_name,
+          cmr_status,
+          cmr_updated_at,
+          created_at
+        FROM bills_of_lading
+        WHERE cmr_status IS NOT NULL 
+          AND cmr_status != ''
+          AND (is_void = 0 OR is_void IS NULL)
+        ORDER BY COALESCE(cmr_updated_at, created_at) DESC
+        LIMIT 3
+      `).all()
+      
+      for (const cmr of recentCmr) {
+        const statusText = {
+          'pending': '待派送',
+          'delivering': '派送中',
+          'delivered': '已送达',
+          'exception': '异常',
+          'undelivered': '待派送'
+        }[cmr.cmr_status] || cmr.cmr_status
+        
+        activities.push({
+          id: `cmr-${cmr.id}`,
+          type: 'tms',
+          action: `运输${statusText}`,
+          description: `${cmr.bill_number || '未知单号'} - ${cmr.customer_name || '未知客户'}`,
+          time: formatTimeAgo(new Date(cmr.cmr_updated_at || cmr.created_at)),
+          user: '系统',
+          timestamp: new Date(cmr.cmr_updated_at || cmr.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取CMR活动失败:', err.message)
+    }
+    
+    // 3. 从客户表获取最近的客户记录
+    try {
+      const recentCustomers = await db.prepare(`
+        SELECT 
+          id,
+          customer_name,
+          company_name,
+          created_at,
+          updated_at
+        FROM customers
+        ORDER BY COALESCE(updated_at, created_at) DESC
+        LIMIT 2
+      `).all()
+      
+      for (const customer of recentCustomers) {
+        activities.push({
+          id: `customer-${customer.id}`,
+          type: 'crm',
+          action: '客户更新',
+          description: customer.company_name || customer.customer_name || '未知客户',
+          time: formatTimeAgo(new Date(customer.updated_at || customer.created_at)),
+          user: '系统',
+          timestamp: new Date(customer.updated_at || customer.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取客户活动失败:', err.message)
+    }
+    
+    // 4. 从费用表获取最近的费用记录
+    try {
+      const recentFees = await db.prepare(`
+        SELECT 
+          f.id,
+          f.fee_name,
+          f.amount,
+          f.currency,
+          f.created_at,
+          b.bill_number
+        FROM fees f
+        LEFT JOIN bills_of_lading b ON f.bill_id = b.id
+        ORDER BY f.created_at DESC
+        LIMIT 2
+      `).all()
+      
+      for (const fee of recentFees) {
+        activities.push({
+          id: `fee-${fee.id}`,
+          type: 'finance',
+          action: '费用记录',
+          description: `${fee.fee_name}: ${fee.amount} ${fee.currency || 'EUR'}${fee.bill_number ? ` (${fee.bill_number})` : ''}`,
+          time: formatTimeAgo(new Date(fee.created_at)),
+          user: '系统',
+          timestamp: new Date(fee.created_at).getTime()
+        })
+      }
+    } catch (err) {
+      console.log('获取费用活动失败:', err.message)
+    }
+    
+    // 按时间排序并限制返回数量
+    activities.sort((a, b) => b.timestamp - a.timestamp)
+    const result = activities.slice(0, parseInt(limit)).map(({ timestamp, ...rest }) => rest)
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取最近活动失败:', error)
+    return success(res, [])
+  }
+}
+
+/**
+ * 格式化时间为相对时间
+ */
+function formatTimeAgo(date) {
+  const now = new Date()
+  const diffMs = now - date
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHour = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHour / 24)
+  
+  if (diffSec < 60) {
+    return '刚刚'
+  } else if (diffMin < 60) {
+    return `${diffMin}分钟前`
+  } else if (diffHour < 24) {
+    return `${diffHour}小时前`
+  } else if (diffDay < 7) {
+    return `${diffDay}天前`
+  } else {
+    return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+  }
+}
+
+/**
+ * 获取上级用户列表（用于选择直属上级）
+ */
+export async function getSupervisorCandidates(req, res) {
+  try {
+    const db = getDatabase()
+    
+    // 获取具有团队管理权限的用户
+    // 条件：状态为 active，且 (can_manage_team=1 或角色是管理角色)
+    const supervisors = await db.prepare(`
+      SELECT u.id, u.name, u.username, u.role, u.department, r.role_name, r.role_level
+      FROM users u
+      LEFT JOIN roles r ON u.role = r.role_code
+      WHERE u.status = 'active' 
+        AND (COALESCE(r.can_manage_team, 0) = 1 OR u.role IN ('admin', 'boss', 'manager', 'finance_director'))
+      ORDER BY COALESCE(r.role_level, 99), u.name
+    `).all()
+    
+    return success(res, supervisors.map(s => ({
+      id: s.id,
+      name: s.name,
+      username: s.username,
+      role: s.role,
+      roleName: s.role_name,
+      department: s.department,
+      roleLevel: s.role_level
+    })))
+  } catch (error) {
+    console.error('获取上级用户列表失败:', error)
+    return serverError(res, '获取上级用户列表失败')
+  }
+}
+
+// ==================== 翻译服务 ====================
+
+/**
+ * 翻译文本 - 使用 Google Translate API
+ */
+export async function translateText(req, res) {
+  try {
+    const { text, from = 'zh-CN', to = 'en' } = req.body
+    
+    if (!text || !text.trim()) {
+      return success(res, { translatedText: '' })
+    }
+
+    // 使用免费的 Google Translate API
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`翻译请求失败: ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    // 解析返回的数据结构
+    // 返回格式: [[["translated text","original text",null,null,10]],null,"zh-CN",...]
+    let translatedText = text
+    if (data && data[0] && Array.isArray(data[0])) {
+      const translatedParts = data[0]
+        .filter(part => part && part[0])
+        .map(part => part[0])
+      translatedText = translatedParts.join('')
+    }
+
+    return success(res, { translatedText })
+  } catch (error) {
+    console.error('[翻译错误]', error.message)
+    // 翻译失败时返回原文
+    return success(res, { translatedText: req.body.text || '' })
   }
 }
 

@@ -1,8 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { 
-  FileText, Calculator, CreditCard, MapPin, Package, 
-  Table, Component, Settings, Wrench, ArrowRight,
-  TrendingUp, Globe, BarChart3
+  FileText, Calculator, ArrowRight,
+  TrendingUp, BarChart3, Building2, Wrench, Settings
 } from 'lucide-react'
 
 interface ToolCard {
@@ -16,9 +15,9 @@ interface ToolCard {
 
 const tools: ToolCard[] = [
   {
-    path: '/tools/inquiry',
-    label: '报价管理',
-    description: '创建和管理客户报价单，支持多币种和多服务类型',
+    path: '/tools/product-pricing',
+    label: '产品定价',
+    description: '管理公司产品定价、费用项配置和供应商报价关联',
     icon: FileText,
     color: 'text-blue-600',
     bgColor: 'bg-blue-50 hover:bg-blue-100',
@@ -32,52 +31,12 @@ const tools: ToolCard[] = [
     bgColor: 'bg-green-50 hover:bg-green-100',
   },
   {
-    path: '/tools/payment',
-    label: '付款&发票',
-    description: '管理付款记录和发票，跟踪账款状态',
-    icon: CreditCard,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-50 hover:bg-purple-100',
-  },
-  {
-    path: '/tools/address',
-    label: '地址&税号',
-    description: '管理客户地址信息和税务登记号',
-    icon: MapPin,
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-50 hover:bg-orange-100',
-  },
-  {
-    path: '/tools/commodity-code',
-    label: '海关编码',
-    description: '查询和管理HS编码，支持智能搜索',
-    icon: Globe,
-    color: 'text-indigo-600',
-    bgColor: 'bg-indigo-50 hover:bg-indigo-100',
-  },
-  {
-    path: '/tools/productCare',
-    label: '品类库',
-    description: '产品分类管理，支持多级分类结构',
-    icon: Package,
-    color: 'text-teal-600',
-    bgColor: 'bg-teal-50 hover:bg-teal-100',
-  },
-  {
-    path: '/tools/editable-table',
-    label: '可编辑表格',
-    description: '数据表格编辑工具，支持批量操作',
-    icon: Table,
-    color: 'text-cyan-600',
-    bgColor: 'bg-cyan-50 hover:bg-cyan-100',
-  },
-  {
-    path: '/tools/components-demo',
-    label: '组件示例',
-    description: '系统UI组件展示和使用示例',
-    icon: Component,
-    color: 'text-pink-600',
-    bgColor: 'bg-pink-50 hover:bg-pink-100',
+    path: '/tools/shared-tax',
+    label: '共享税号库',
+    description: '公司级税号管理，可分享给客户使用',
+    icon: Building2,
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50 hover:bg-amber-100',
   },
 ]
 

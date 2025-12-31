@@ -6,6 +6,8 @@ import DataTable, { Column } from '../components/DataTable'
 import InspectionModal, { type InspectionDetail } from '../components/InspectionModal'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { getInspectionsList, updateBillInspection, type BillOfLading, type InspectionDetailData } from '../utils/api'
+import { copyToClipboard } from '../components/Toast'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
 
 export default function InspectionDetails() {
   const navigate = useNavigate()
@@ -63,15 +65,6 @@ export default function InspectionDetails() {
     
     loadInspections()
   }, [isReleasedTab, searchValue])
-  
-  const handleCopy = (text: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(text).then(() => {
-      alert('已复制到剪贴板')
-    }).catch(() => {
-      alert('复制失败')
-    })
-  }
   
   // 打开查验模态框
   const openInspectionModal = (bill: BillOfLading) => {
@@ -131,7 +124,7 @@ export default function InspectionDetails() {
   
   // 处理放行操作（放行后会转移到"查验-放行"标签，同时在CMR管理显示）- 保留用于扩展功能
   const handleReleaseInspectionReserved = async (bill: BillOfLading) => {
-    if (!confirm(`确定要放行提单 ${bill.billNumber} 吗？放行后将转移到"查验-放行"并可在CMR管理中派送。`)) return
+    if (!confirm(`确定要放行提单 ${bill.billNumber} 吗？放行后将转移到"查验-放行"并可在TMS管理中派送。`)) return
     
     try {
       const response = await updateBillInspection(String(bill.id), '已放行')
@@ -152,41 +145,23 @@ export default function InspectionDetails() {
   const columns: Column<BillOfLading>[] = [
     {
       key: 'billNumber',
-      label: '序号',
+      label: '提单号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.billNumber}
+            {record.billNumber}
           </span>
-          <button
-            onClick={(e) => handleCopy(item.billNumber, e)}
-            className="text-gray-400 hover:text-gray-600"
-            title="复制序号"
-          >
-            <Copy className="w-3 h-3" />
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: 'containerNumber',
-      label: '提单号',
-      sorter: true,
-      filterable: true,
-      render: (item: BillOfLading) => (
-        <div className="flex items-center gap-1">
-          <span className="text-xs">{item.containerNumber || '-'}</span>
-          {item.containerNumber && (
+          {record.billNumber && (
             <button
-              onClick={(e) => handleCopy(item.containerNumber || '', e)}
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
               className="text-gray-400 hover:text-gray-600"
               title="复制提单号"
             >
@@ -197,12 +172,23 @@ export default function InspectionDetails() {
       ),
     },
     {
-      key: 'actualContainerNo',
+      key: 'containerNumber',
       label: '集装箱号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.actualContainerNo || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span className="text-xs">{record.containerNumber || '-'}</span>
+          {record.containerNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制集装箱号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
@@ -210,10 +196,10 @@ export default function InspectionDetails() {
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <Ship className="w-3 h-3 text-gray-500" />
-          <span className="text-xs">{item.vessel || '-'}</span>
+          <span className="text-xs">{record.vessel || '-'}</span>
         </div>
       ),
     },
@@ -225,13 +211,13 @@ export default function InspectionDetails() {
         const dateB = b.eta ? new Date(b.eta).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <span>{item.eta || '-'}</span>
-          {item.ata && (
+          <span>{formatDateTimeShort(record.eta)}</span>
+          {record.ata && (
             <>
               <span className="mx-0.5">/</span>
-              <span>{item.ata}</span>
+              <span>{formatDateTimeShort(record.ata)}</span>
             </>
           )}
         </div>
@@ -241,10 +227,10 @@ export default function InspectionDetails() {
       key: 'pieces',
       label: '件数/毛重(KGS)',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.pieces}</div>
-          <div className="text-green-600">{item.weight}</div>
+          <div className="text-gray-900">{record.pieces}</div>
+          <div className="text-green-600">{record.weight}</div>
         </div>
       ),
     },
@@ -259,85 +245,85 @@ export default function InspectionDetails() {
         { text: '已放行', value: '已放行' },
       ],
       onFilter: (value, record) => record.inspection === value,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className={`w-1.5 h-1.5 rounded-full ${
-              item.inspection === '待查验' ? 'bg-yellow-500' :
-              item.inspection === '查验中' ? 'bg-orange-500' :
-              item.inspection === '已查验' ? 'bg-blue-500' :
-              item.inspection === '查验放行' ? 'bg-emerald-500' :
-              item.inspection === '已放行' ? 'bg-green-500' :
+              record.inspection === '待查验' ? 'bg-yellow-500' :
+              record.inspection === '查验中' ? 'bg-orange-500' :
+              record.inspection === '已查验' ? 'bg-blue-500' :
+              record.inspection === '查验放行' ? 'bg-emerald-500' :
+              record.inspection === '已放行' ? 'bg-green-500' :
               'bg-gray-500'
             }`}
           ></span>
-          <span className="text-xs">{item.inspection}</span>
+          <span className="text-xs">{record.inspection}</span>
         </div>
       ),
     },
     {
       key: 'creator',
       label: '创建者/创建时间',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div>{item.creator}</div>
-          <div className="text-[10px] text-gray-500">{item.createTime}</div>
+          <div>{record.creator}</div>
+          <div className="text-[10px] text-gray-500">{formatDate(record.createTime)}</div>
         </div>
       ),
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-2">
           <button
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/inspection/${item.id}`)
+              navigate(`/inspection/${record.id}`)
             }}
             className="text-primary-600 hover:text-primary-700 hover:underline text-xs flex items-center gap-0.5"
           >
             <Eye className="w-3 h-3" />
             详情
           </button>
-          {!isReleasedTab && item.inspection === '待查验' && (
+          {!isReleasedTab && record.inspection === '待查验' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-orange-600 hover:text-orange-700 hover:underline text-xs"
             >
               开始查验
             </button>
           )}
-          {!isReleasedTab && item.inspection === '查验中' && (
+          {!isReleasedTab && record.inspection === '查验中' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-blue-600 hover:text-blue-700 hover:underline text-xs"
             >
               录入结果
             </button>
           )}
-          {!isReleasedTab && item.inspection === '已查验' && (
+          {!isReleasedTab && record.inspection === '已查验' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-green-600 hover:text-green-700 hover:underline text-xs"
             >
               查验放行
             </button>
           )}
-          {!isReleasedTab && item.inspection === '查验放行' && (
+          {!isReleasedTab && record.inspection === '查验放行' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                openInspectionModal(item)
+                openInspectionModal(record)
               }}
               className="text-emerald-600 hover:text-emerald-700 hover:underline text-xs"
             >
@@ -397,7 +383,7 @@ export default function InspectionDetails() {
             searchableColumns={['billNumber', 'containerNumber', 'vessel']}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

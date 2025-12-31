@@ -1,54 +1,144 @@
 import { useState, useEffect } from 'react'
-import { X, Tag } from 'lucide-react'
+import { X, Tag, ChevronDown } from 'lucide-react'
 import { 
   createServiceFeeCategory, 
   updateServiceFeeCategory, 
+  getTopLevelCategories,
   ServiceFeeCategory 
 } from '../utils/api'
+
+// 服务费类别中英文翻译映射表
+const CATEGORY_NAME_TRANSLATIONS: Record<string, string> = {
+  // 运输相关
+  '运输服务': 'Transport Services',
+  '拖车服务': 'Trucking Services',
+  '铁路运输': 'Rail Transport',
+  '公路运输': 'Road Transport',
+  '多式联运': 'Multimodal Transport',
+  // 港口相关
+  '港口服务': 'Port Services',
+  '码头服务': 'Terminal Services',
+  '码头操作': 'Terminal Handling',
+  '堆场服务': 'Depot Services',
+  // 清关相关
+  '报关服务': 'Customs Clearance',
+  '清关服务': 'Clearance Services',
+  '查验服务': 'Inspection Services',
+  // 仓储相关
+  '仓储服务': 'Warehousing Services',
+  '仓库操作': 'Warehouse Handling',
+  '装卸服务': 'Loading Services',
+  // 文件相关
+  '文件服务': 'Documentation Services',
+  '单证服务': 'Document Services',
+  // 增值服务
+  '增值服务': 'Value Added Services',
+  '保险服务': 'Insurance Services',
+  '代理服务': 'Agency Services',
+  // 其他
+  '其他服务': 'Other Services',
+  '杂费': 'Miscellaneous',
+}
+
+// 自动翻译类别名称
+function translateCategoryName(chineseName: string): string {
+  // 去除空格后匹配
+  const trimmedName = chineseName.trim()
+  
+  // 直接匹配
+  if (CATEGORY_NAME_TRANSLATIONS[trimmedName]) {
+    return CATEGORY_NAME_TRANSLATIONS[trimmedName]
+  }
+  
+  // 部分匹配
+  for (const [cn, en] of Object.entries(CATEGORY_NAME_TRANSLATIONS)) {
+    if (trimmedName.includes(cn) || cn.includes(trimmedName)) {
+      return en
+    }
+  }
+  
+  // 默认返回空字符串，提示用户手动设置
+  return ''
+}
 
 interface ServiceFeeCategoryModalProps {
   visible: boolean
   onClose: () => void
   onSuccess: () => void
   data?: ServiceFeeCategory | null
+  parentId?: string | null  // 预设的父级分类ID（用于直接添加子分类）
 }
 
 export default function ServiceFeeCategoryModal({
   visible,
   onClose,
   onSuccess,
-  data
+  data,
+  parentId: presetParentId
 }: ServiceFeeCategoryModalProps) {
   const [formData, setFormData] = useState({
     name: '',
+    nameEn: '',
     code: '',
     description: '',
     sortOrder: 0,
     status: 'active' as 'active' | 'inactive',
+    parentId: null as string | null,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
+  const [parentCategories, setParentCategories] = useState<ServiceFeeCategory[]>([])
+  const [loadingParents, setLoadingParents] = useState(false)
+
+  // 加载顶级分类列表
+  useEffect(() => {
+    if (visible) {
+      loadParentCategories()
+    }
+  }, [visible])
+
+  const loadParentCategories = async () => {
+    setLoadingParents(true)
+    try {
+      const response = await getTopLevelCategories('all')
+      if (response.errCode === 200 && response.data) {
+        // 编辑时过滤掉自己（不能设置自己为父级）
+        const filtered = data 
+          ? response.data.filter(c => c.id !== data.id)
+          : response.data
+        setParentCategories(filtered)
+      }
+    } catch (err) {
+      console.error('加载父级分类失败:', err)
+    } finally {
+      setLoadingParents(false)
+    }
+  }
 
   useEffect(() => {
     if (data) {
       setFormData({
         name: data.name,
+        nameEn: data.nameEn || '',
         code: data.code,
         description: data.description || '',
         sortOrder: data.sortOrder || 0,
         status: data.status || 'active',
+        parentId: data.parentId || null,
       })
     } else {
       setFormData({
         name: '',
+        nameEn: '',
         code: '',
         description: '',
         sortOrder: 0,
         status: 'active',
+        parentId: presetParentId || null,
       })
     }
     setErrors({})
-  }, [data, visible])
+  }, [data, visible, presetParentId])
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -73,23 +163,32 @@ export default function ServiceFeeCategoryModal({
         // 编辑模式
         const response = await updateServiceFeeCategory(data.id, {
           name: formData.name,
+          nameEn: formData.nameEn,
           code: formData.code.toUpperCase(),
           description: formData.description,
           sortOrder: formData.sortOrder,
           status: formData.status,
+          parentId: formData.parentId,
         })
         if (response.errCode !== 200) {
           throw new Error(response.msg || '更新失败')
         }
       } else {
         // 新增模式
-        const response = await createServiceFeeCategory({
+        // 子分类不传递 sortOrder，让后端自动计算
+        const createData: any = {
           name: formData.name,
+          nameEn: formData.nameEn,
           code: formData.code.toUpperCase(),
           description: formData.description,
-          sortOrder: formData.sortOrder,
           status: formData.status,
-        })
+          parentId: formData.parentId,
+        }
+        // 只有顶级分类才传递手动设置的排序值
+        if (!formData.parentId) {
+          createData.sortOrder = formData.sortOrder
+        }
+        const response = await createServiceFeeCategory(createData)
         if (response.errCode !== 200) {
           throw new Error(response.msg || '创建失败')
         }
@@ -107,6 +206,10 @@ export default function ServiceFeeCategoryModal({
 
   if (!visible) return null
 
+  // 判断是否为子分类（有父级或预设了父级）
+  const isSubCategory = !!formData.parentId
+  const parentCategory = parentCategories.find(c => c.id === formData.parentId)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded shadow-xl w-full max-w-md mx-4">
@@ -117,7 +220,10 @@ export default function ServiceFeeCategoryModal({
               <Tag className="w-4 h-4 text-white" />
             </div>
             <h2 className="text-sm font-semibold text-gray-900">
-              {data ? '编辑服务费类别' : '新增服务费类别'}
+              {data 
+                ? (isSubCategory ? '编辑子分类' : '编辑服务费类别')
+                : (isSubCategory ? '新增子分类' : '新增服务费类别')
+              }
             </h2>
           </div>
           <button
@@ -130,6 +236,35 @@ export default function ServiceFeeCategoryModal({
 
         {/* 内容 */}
         <div className="p-4 space-y-4">
+          {/* 父级分类选择 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              父级分类
+              <span className="text-gray-400 ml-1">(留空则为顶级分类)</span>
+            </label>
+            <div className="relative">
+              <select
+                value={formData.parentId || ''}
+                onChange={(e) => setFormData({ ...formData, parentId: e.target.value || null })}
+                disabled={loadingParents}
+                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white appearance-none pr-8"
+              >
+                <option value="">无（顶级分类）</option>
+                {parentCategories.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({cat.code})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            </div>
+            {isSubCategory && parentCategory && (
+              <p className="text-xs text-gray-500 mt-1">
+                将作为「{parentCategory.name}」的子分类
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               类别名称 <span className="text-red-500">*</span>
@@ -137,13 +272,34 @@ export default function ServiceFeeCategoryModal({
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => {
+                const newName = e.target.value
+                const translatedName = translateCategoryName(newName)
+                setFormData({ 
+                  ...formData, 
+                  name: newName,
+                  nameEn: translatedName
+                })
+              }}
               className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white ${
                 errors.name ? 'border-red-300' : 'border-gray-300'
               }`}
-              placeholder="如：报关服务"
+              placeholder={isSubCategory ? "如：出口报关" : "如：报关服务"}
             />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              英文名称
+            </label>
+            <input
+              type="text"
+              value={formData.nameEn}
+              onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+              placeholder="如：Export Customs Clearance"
+            />
           </div>
 
           <div>
@@ -157,21 +313,31 @@ export default function ServiceFeeCategoryModal({
               className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white ${
                 errors.code ? 'border-red-300' : 'border-gray-300'
               }`}
-              placeholder="如：CUSTOMS"
+              placeholder={isSubCategory ? "如：EXPORT_CUSTOMS" : "如：CUSTOMS"}
             />
             {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code}</p>}
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">排序</label>
-            <input
-              type="number"
-              value={formData.sortOrder}
-              onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-              placeholder="数字越小越靠前"
-            />
-          </div>
+          {/* 排序：子分类自动排序，顶级分类手动设置 */}
+          {!isSubCategory ? (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">排序</label>
+              <input
+                type="number"
+                value={formData.sortOrder}
+                onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 0 })}
+                className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                placeholder="数字越小越靠前"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">排序</label>
+              <div className="w-full px-2 py-1 border border-gray-200 rounded text-xs bg-gray-50 text-gray-500">
+                自动排序（按添加顺序从1开始）
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">描述</label>
@@ -223,4 +389,3 @@ export default function ServiceFeeCategoryModal({
     </div>
   )
 }
-

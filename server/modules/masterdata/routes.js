@@ -27,6 +27,29 @@ router.put('/countries/:id', controller.updateCountry)
 // 删除国家
 router.delete('/countries/:id', controller.deleteCountry)
 
+// ==================== 城市相关路由 ====================
+
+// 获取城市列表
+router.get('/cities', controller.getCities)
+
+// 根据国家获取城市列表
+router.get('/cities/country/:countryCode', controller.getCitiesByCountry)
+
+// 批量创建城市
+router.post('/cities/batch', controller.createCitiesBatch)
+
+// 获取单个城市
+router.get('/cities/:id', controller.getCityById)
+
+// 创建城市
+router.post('/cities', controller.createCity)
+
+// 更新城市
+router.put('/cities/:id', controller.updateCity)
+
+// 删除城市
+router.delete('/cities/:id', controller.deleteCity)
+
 // ==================== 起运港相关路由 ====================
 
 // 获取起运港国家列表 (需要在 :id 路由之前)
@@ -68,6 +91,9 @@ router.put('/destination-ports/:id', controller.updateDestinationPort)
 router.delete('/destination-ports/:id', controller.deleteDestinationPort)
 
 // ==================== 机场相关路由 ====================
+
+// 获取机场国家列表 (需要在 :id 路由之前)
+router.get('/air-ports/countries', controller.getAirPortCountries)
 
 // 获取机场列表
 router.get('/air-ports', controller.getAirPorts)
@@ -151,8 +177,11 @@ router.delete('/transport-methods/:id', controller.deleteTransportMethod)
 
 // ==================== 服务费类别相关路由 ====================
 
-// 获取服务费类别列表
+// 获取服务费类别列表（支持树形结构：?tree=true）
 router.get('/service-fee-categories', controller.getServiceFeeCategories)
+
+// 获取顶级分类列表（用于选择父级）
+router.get('/service-fee-categories/top-level', controller.getTopLevelCategories)
 
 // 创建服务费类别
 router.post('/service-fee-categories', controller.createServiceFeeCategory)

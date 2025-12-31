@@ -68,7 +68,7 @@ export function logOperation(db, params) {
         old_value, new_value, remark, 
         operator, operator_id, module,
         operation_time
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `).run(
       billId,
       operationType,

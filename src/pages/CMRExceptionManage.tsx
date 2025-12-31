@@ -6,7 +6,9 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { type BillOfLading } from '../utils/api'
+import { type BillOfLading, getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface ExceptionRecord {
   id: string
@@ -40,9 +42,9 @@ export default function CMRExceptionManage() {
 
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
-    { label: 'CMR管理', path: '/cmr-manage' },
+    { label: 'TMS管理', path: '/cmr-manage' },
     { label: '异常管理', path: '/tms/exceptions' },
-    { label: '服务商管理', path: '/tms/service-providers' },
+    { label: '运输供应商', path: '/supplier-manage?type=transport' },
   ]
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function CMRExceptionManage() {
   const fetchExceptionBills = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/cmr/exceptions')
+      const response = await fetch(`${API_BASE}/api/cmr/exceptions`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -70,7 +72,7 @@ export default function CMRExceptionManage() {
     if (!selectedBill || !resolution.trim()) return
     
     try {
-      const response = await fetch(`/api/cmr/${selectedBill.id}/resolve-exception`, {
+      const response = await fetch(`${API_BASE}/api/cmr/${selectedBill.id}/resolve-exception`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolution })
@@ -92,7 +94,7 @@ export default function CMRExceptionManage() {
     if (!confirm('确定要关闭此异常订单吗？关闭后将无法恢复。')) return
     
     try {
-      const response = await fetch(`/api/cmr/${billId}/close-exception`, {
+      const response = await fetch(`${API_BASE}/api/cmr/${billId}/close-exception`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
@@ -125,48 +127,58 @@ export default function CMRExceptionManage() {
     {
       key: 'billNumber',
       label: '提单号',
-      render: (item) => (
+      sorter: true,
+      render: (_value, record) => (
         <span 
           className="text-primary-600 hover:underline cursor-pointer font-medium"
-          onClick={() => navigate(`/cmr-manage/${item.id}`)}
+          onClick={() => navigate(`/cmr-manage/${record.id}`)}
         >
-          {item.billNumber}
+          {record.billNumber}
         </span>
       )
     },
     {
       key: 'containerNumber',
       label: '集装箱号',
-      render: (item) => <span className="text-gray-900">{item.containerNumber || '-'}</span>
+      sorter: true,
+      render: (_value, record) => <span className="text-gray-900">{record.containerNumber || '-'}</span>
     },
     {
       key: 'cmrExceptionNote',
       label: '异常说明',
-      render: (item) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="max-w-xs">
-          <p className="text-sm text-gray-900 truncate">{item.cmrExceptionNote || '暂无说明'}</p>
+          <p className="text-sm text-gray-900 truncate">{record.cmrExceptionNote || '暂无说明'}</p>
         </div>
       )
     },
     {
       key: 'cmrExceptionTime',
       label: '异常时间',
-      render: (item) => (
+      sorter: (a: ExceptionBill, b: ExceptionBill) => {
+        const dateA = a.cmrExceptionTime ? new Date(a.cmrExceptionTime).getTime() : 0
+        const dateB = b.cmrExceptionTime ? new Date(b.cmrExceptionTime).getTime() : 0
+        return dateA - dateB
+      },
+      render: (_value, record) => (
         <span className="text-gray-600 text-sm">
-          {item.cmrExceptionTime ? new Date(item.cmrExceptionTime).toLocaleString('zh-CN') : '-'}
+          {record.cmrExceptionTime ? new Date(record.cmrExceptionTime).toLocaleString('zh-CN') : '-'}
         </span>
       )
     },
     {
       key: 'cmrExceptionStatus',
       label: '处理状态',
-      render: (item) => getStatusBadge(item.cmrExceptionStatus || 'pending')
+      sorter: true,
+      render: (_value, record) => getStatusBadge(record.cmrExceptionStatus || 'pending')
     },
     {
       key: 'deliveryStatus',
       label: '派送状态',
-      render: (item) => {
-        const status = item.deliveryStatus || '未派送'
+      sorter: true,
+      render: (_value, record) => {
+        const status = record.deliveryStatus || '待派送'
         const isException = status === '订单异常'
         const isClosed = status === '异常关闭'
         return (
@@ -179,7 +191,7 @@ export default function CMRExceptionManage() {
     {
       key: 'actions',
       label: '操作',
-      render: (item) => (
+      render: (_value, item) => (
         <div className="flex items-center gap-2">
           {item.deliveryStatus !== '异常关闭' && (
             <>

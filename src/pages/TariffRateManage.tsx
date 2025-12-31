@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Search, Plus, Upload, Download, Edit2, Trash2, RefreshCw, X, Check, AlertCircle } from 'lucide-react'
+import { Search, Plus, Upload, Download, Edit2, Trash2, RefreshCw, X, Check, AlertCircle, Globe, Zap, Shield, FileWarning, Ban } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import TaricSyncPanel from '../components/TaricSyncPanel'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import {
   getTariffRates,
@@ -12,6 +13,10 @@ import {
   getTariffRateStats,
   TariffRate,
   TariffRateStats,
+  lookupTaricRealtime,
+  TaricRealtimeResult,
+  getTaricCountryCodes,
+  CountryCode,
 } from '../utils/api'
 
 // 导入弹窗组件
@@ -31,12 +36,12 @@ function ImportModal({
 
   // 下载模板
   const handleDownloadTemplate = () => {
-    const templateContent = `hs_code,hs_code_10,description,description_cn,origin_country_code,duty_rate,vat_rate,anti_dumping_rate,unit_code,unit_name
-61091000,6109100010,T-shirts singlets and other vests of cotton knitted,棉制针织T恤衫,CN,12,19,0,KGM,千克
-84713000,8471300000,Portable automatic data processing machines,便携式自动数据处理设备,CN,0,19,0,PCE,台
-85171200,8517120000,Telephones for cellular networks,蜂窝网络电话,CN,0,19,0,PCE,台
-42022200,4202220000,Handbags with outer surface of plastic or textile,塑料或纺织材料面手提包,CN,3,19,0,PCE,件
-64039900,6403990090,Other footwear with outer soles of rubber plastics,其他皮革面鞋靴,CN,8,19,0,PA2,双`
+    const templateContent = `hs_code,hs_code_10,description,description_cn,origin_country_code,duty_rate,vat_rate,anti_dumping_rate,unit_code,unit_name,material,usage_scenario,min_declaration_value
+61091000,6109100010,T-shirts singlets and other vests of cotton knitted,棉制针织T恤衫,CN,12,19,0,KGM,千克,棉,服装,2.50
+84713000,8471300000,Portable automatic data processing machines,便携式自动数据处理设备,CN,0,19,0,PCE,台,金属/塑料,电子产品,150.00
+85171200,8517120000,Telephones for cellular networks,蜂窝网络电话,CN,0,19,0,PCE,台,金属/玻璃,电子产品,80.00
+42022200,4202220000,Handbags with outer surface of plastic or textile,塑料或纺织材料面手提包,CN,3,19,0,PCE,件,塑料/纺织,箱包,5.00
+64039900,6403990090,Other footwear with outer soles of rubber plastics,其他皮革面鞋靴,CN,8,19,0,PA2,双,皮革/橡胶,鞋类,8.00`
 
     const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -97,6 +102,12 @@ function ImportModal({
             rate.unitCode = value
           } else if (header === 'unit_name' || header === 'unit') {
             rate.unitName = value
+          } else if (header === 'material' || header === '材质' || header === '货物材质') {
+            rate.material = value
+          } else if (header === 'usage_scenario' || header === 'usage' || header === '用途' || header === '货物用途') {
+            rate.usageScenario = value
+          } else if (header === 'min_declaration_value' || header === 'declaration_value' || header === '申报价值' || header === '最低申报') {
+            rate.minDeclarationValue = parseFloat(value) || 0
           }
         })
         
@@ -146,7 +157,7 @@ function ImportModal({
               支持 CSV 格式文件，包含以下列：
             </p>
             <p className="text-xs text-gray-500 mb-3">
-              hs_code, description, origin_country_code, duty_rate, vat_rate, unit_name
+              hs_code, description, origin_country_code, duty_rate, vat_rate, unit_name, material, usage_scenario, min_declaration_value
             </p>
             <input
               ref={fileInputRef}
@@ -193,6 +204,7 @@ function ImportModal({
               <li>• 必填列：hs_code（HS编码）、description（商品描述）</li>
               <li>• 可选列：duty_rate（关税率%）、vat_rate（增值税率%）、origin_country_code（原产国代码）</li>
               <li>• 可选列：description_cn（中文描述）、unit_code（单位代码）、unit_name（单位名称）</li>
+              <li>• 可选列：material（货物材质）、usage_scenario（货物用途）、min_declaration_value（申报价值EUR）</li>
             </ul>
           </div>
         </div>
@@ -559,6 +571,327 @@ function EditModal({
   )
 }
 
+// 实时查询弹窗组件
+function RealtimeLookupModal({
+  visible,
+  onClose,
+  onSaveSuccess,
+}: {
+  visible: boolean
+  onClose: () => void
+  onSaveSuccess: () => void
+}) {
+  const [hsCode, setHsCode] = useState('')
+  const [originCountry, setOriginCountry] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<TaricRealtimeResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [countries, setCountries] = useState<CountryCode[]>([])
+  const [loadingCountries, setLoadingCountries] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // 加载国家代码
+  useEffect(() => {
+    if (visible && countries.length === 0) {
+      loadCountries()
+    }
+  }, [visible])
+
+  const loadCountries = async () => {
+    setLoadingCountries(true)
+    try {
+      const response = await getTaricCountryCodes()
+      if (response.errCode === 200 && response.data) {
+        setCountries(response.data.countries || [])
+      }
+    } catch (err) {
+      console.error('加载国家代码失败:', err)
+    } finally {
+      setLoadingCountries(false)
+    }
+  }
+
+  const handleLookup = async () => {
+    if (!hsCode || hsCode.length < 6) {
+      setError('请输入至少6位的 HS 编码')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      const response = await lookupTaricRealtime(hsCode, originCountry || undefined, false)
+      if (response.errCode === 200 && response.data) {
+        setResult(response.data)
+      } else {
+        setError(response.msg || '查询失败')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '查询失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveToDb = async () => {
+    if (!result) return
+
+    setSaving(true)
+    try {
+      const response = await lookupTaricRealtime(hsCode, originCountry || undefined, true)
+      if (response.errCode === 200 && response.data) {
+        setResult(response.data)
+        if (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated') {
+          onSaveSuccess()
+        }
+      }
+    } catch (err) {
+      console.error('保存失败:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!visible) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 pb-4 bg-black bg-opacity-50 overflow-y-auto">
+      <div className="bg-white rounded shadow-xl w-full max-w-3xl mx-4">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+              <Globe className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">TARIC 实时查询</h3>
+              <p className="text-xs text-gray-500">从欧盟官方系统获取最新税率数据</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* 查询表单 */}
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-600 mb-1">HS 编码 (8-10位)</label>
+              <input
+                type="text"
+                value={hsCode}
+                onChange={(e) => setHsCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="如: 6109100010"
+                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div className="w-48">
+              <label className="block text-xs text-gray-600 mb-1">原产国 (可选)</label>
+              <select
+                value={originCountry}
+                onChange={(e) => setOriginCountry(e.target.value)}
+                disabled={loadingCountries}
+                className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">全部国家</option>
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} - {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleLookup}
+              disabled={loading || !hsCode}
+              className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              {loading ? '查询中...' : '实时查询'}
+            </button>
+          </div>
+
+          {/* 错误提示 */}
+          {error && (
+            <div className="p-3 bg-red-50 text-red-700 rounded text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {error}
+            </div>
+          )}
+
+          {/* 查询结果 */}
+          {result && (
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-700">查询结果</span>
+                  {result.fromCache && (
+                    <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[10px]">
+                      来自缓存
+                    </span>
+                  )}
+                  {result.savedToDb && (
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      result.savedToDb === 'inserted' ? 'bg-green-100 text-green-700' :
+                      result.savedToDb === 'updated' ? 'bg-blue-100 text-blue-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {result.savedToDb === 'inserted' ? '已新增' :
+                       result.savedToDb === 'updated' ? '已更新' : '保存失败'}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400">
+                  查询时间: {new Date(result.queryTime).toLocaleString('zh-CN')}
+                </span>
+              </div>
+
+              <div className="p-3 space-y-3">
+                {/* 基本信息 */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-gray-50 rounded p-2">
+                    <p className="text-[10px] text-gray-500 mb-0.5">HS 编码 (8位)</p>
+                    <p className="text-sm font-medium text-gray-900">{result.hsCode}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2">
+                    <p className="text-[10px] text-gray-500 mb-0.5">TARIC 编码 (10位)</p>
+                    <p className="text-sm font-medium text-gray-900">{result.hsCode10}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2">
+                    <p className="text-[10px] text-gray-500 mb-0.5">原产国</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {result.originCountryCode || '全部'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 商品描述 */}
+                {result.goodsDescription && (
+                  <div className="bg-blue-50 rounded p-2">
+                    <p className="text-[10px] text-gray-500 mb-0.5">商品描述</p>
+                    <p className="text-xs text-gray-800">{result.goodsDescription}</p>
+                  </div>
+                )}
+
+                {/* 税率信息 */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="bg-green-50 rounded p-2 text-center">
+                    <p className="text-[10px] text-gray-500 mb-0.5">第三国关税</p>
+                    <p className="text-lg font-bold text-green-700">
+                      {result.thirdCountryDuty !== null ? `${result.thirdCountryDuty}%` : '-'}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 rounded p-2 text-center">
+                    <p className="text-[10px] text-gray-500 mb-0.5">适用关税</p>
+                    <p className="text-lg font-bold text-blue-700">
+                      {result.dutyRate !== null ? `${result.dutyRate}%` : '-'}
+                    </p>
+                  </div>
+                  <div className="bg-orange-50 rounded p-2 text-center">
+                    <p className="text-[10px] text-gray-500 mb-0.5">反倾销税</p>
+                    <p className="text-lg font-bold text-orange-700">
+                      {result.antiDumpingRate !== null ? `${result.antiDumpingRate}%` : 
+                       result.hasAntiDumping ? '有' : '-'}
+                    </p>
+                  </div>
+                  <div className="bg-red-50 rounded p-2 text-center">
+                    <p className="text-[10px] text-gray-500 mb-0.5">反补贴税</p>
+                    <p className="text-lg font-bold text-red-700">
+                      {result.countervailingRate !== null ? `${result.countervailingRate}%` :
+                       result.hasCountervailing ? '有' : '-'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 贸易限制标志 */}
+                <div className="flex items-center gap-3">
+                  {result.hasQuota && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+                      <FileWarning className="w-3 h-3" />
+                      有配额限制
+                    </span>
+                  )}
+                  {result.requiresLicense && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs">
+                      <Shield className="w-3 h-3" />
+                      需要许可证
+                    </span>
+                  )}
+                  {result.requiresSPS && (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-cyan-100 text-cyan-700 rounded text-xs">
+                      <Ban className="w-3 h-3" />
+                      需要 SPS 检验
+                    </span>
+                  )}
+                  {result.totalMeasures && result.totalMeasures > 0 && (
+                    <span className="text-xs text-gray-500">
+                      共 {result.totalMeasures} 项贸易措施
+                    </span>
+                  )}
+                </div>
+
+                {/* 措施列表 */}
+                {result.measures && result.measures.length > 0 && (
+                  <div className="border border-gray-200 rounded">
+                    <div className="px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+                      <p className="text-xs font-medium text-gray-700">贸易措施详情</p>
+                    </div>
+                    <div className="divide-y divide-gray-100 max-h-40 overflow-auto">
+                      {result.measures.slice(0, 10).map((measure, idx) => (
+                        <div key={idx} className="px-2 py-1.5 flex items-center justify-between text-xs">
+                          <span className="text-gray-700">{measure.type || '措施'}</span>
+                          <span className="text-gray-900 font-medium">
+                            {measure.rate !== undefined ? `${measure.rate}%` : '-'}
+                          </span>
+                          {measure.geographicalArea && (
+                            <span className="text-gray-500">{measure.geographicalArea}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 提示信息 */}
+          <div className="bg-blue-50 rounded p-3 text-xs text-blue-700">
+            <p className="font-medium mb-1">💡 使用说明</p>
+            <ul className="space-y-0.5 text-blue-600">
+              <li>• 输入 HS 编码（8-10位）进行实时查询</li>
+              <li>• 选择原产国可获取针对特定国家的税率（如反倾销税）</li>
+              <li>• 查询结果会缓存24小时，避免重复请求</li>
+              <li>• 点击"保存到数据库"可将查询结果保存到本地税率库</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800"
+          >
+            关闭
+          </button>
+          {result && (
+            <button
+              onClick={handleSaveToDb}
+              disabled={saving}
+              className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              {saving ? '保存中...' : '保存到数据库'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TariffRateManage() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const location = useLocation() // reserved for future use
@@ -569,13 +902,21 @@ export default function TariffRateManage() {
   const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<TariffRateStats | null>(null)
   const [searchValue, setSearchValue] = useState('')
+  const [hsCodeFilter, setHsCodeFilter] = useState('')
+  const [originFilter, setOriginFilter] = useState('')
+  const [dataSourceFilter, setDataSourceFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [dutyRateMin, setDutyRateMin] = useState('')
+  const [dutyRateMax, setDutyRateMax] = useState('')
+  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
   
   const [importModalVisible, setImportModalVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingRate, setEditingRate] = useState<TariffRate | null>(null)
+  const [realtimeLookupVisible, setRealtimeLookupVisible] = useState(false)
 
   // 加载税率列表
   const loadRates = async () => {
@@ -583,6 +924,12 @@ export default function TariffRateManage() {
     try {
       const response = await getTariffRates({
         search: searchValue || undefined,
+        hsCode: hsCodeFilter || undefined,
+        origin: originFilter || undefined,
+        dataSource: dataSourceFilter || undefined,
+        status: statusFilter || undefined,
+        dutyRateMin: dutyRateMin ? parseFloat(dutyRateMin) : undefined,
+        dutyRateMax: dutyRateMax ? parseFloat(dutyRateMax) : undefined,
         page,
         pageSize,
       })
@@ -613,7 +960,7 @@ export default function TariffRateManage() {
     loadRates()
     loadStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue])
+  }, [page, pageSize, searchValue, hsCodeFilter, originFilter, dataSourceFilter, statusFilter, dutyRateMin, dutyRateMax])
 
   const handleSearch = () => {
     setPage(1)
@@ -648,36 +995,44 @@ export default function TariffRateManage() {
   return (
     <div className="h-full flex flex-col bg-white">
       <PageHeader
-        title="税率管理"
+        title="HS Code数据库"
         icon="$"
         breadcrumbs={[
           { label: '系统管理', path: '/system/basic-data' },
-          '税率管理',
+          'HS Code数据库',
         ]}
       />
 
+      {/* TARIC 同步面板 */}
+      <div className="px-4 pt-4">
+        <TaricSyncPanel />
+      </div>
+
       {/* 统计卡片 */}
       {stats && (
-        <div className="px-4 py-2 border-b border-gray-200 bg-gray-50">
+        <div className="px-4 py-2.5 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50">
           <div className="flex items-center gap-6 text-xs">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
               <span className="text-gray-500">总数:</span>
-              <span className="font-medium text-gray-900">{stats.total}</span>
+              <span className="font-semibold text-gray-900 tabular-nums">{stats.total?.toLocaleString()}</span>
             </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+            <div className="w-px h-4 bg-gray-300"></div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
               <span className="text-gray-500">启用:</span>
-              <span className="font-medium text-green-600">{stats.active}</span>
+              <span className="font-semibold text-green-600 tabular-nums">{stats.active?.toLocaleString()}</span>
             </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
               <span className="text-gray-500">停用:</span>
-              <span className="font-medium text-gray-600">{stats.inactive}</span>
+              <span className="font-semibold text-gray-600 tabular-nums">{stats.inactive?.toLocaleString()}</span>
             </div>
+            <div className="w-px h-4 bg-gray-300"></div>
             {stats.bySource && Object.entries(stats.bySource).map(([source, count]) => (
-              <div key={source} className="flex items-center gap-1">
+              <div key={source} className="flex items-center gap-1.5">
                 <span className="text-gray-500">{source}:</span>
-                <span className="font-medium text-gray-700">{count}</span>
+                <span className="font-semibold text-gray-700 tabular-nums">{(count as number)?.toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -685,74 +1040,204 @@ export default function TariffRateManage() {
       )}
 
       {/* 工具栏 */}
-      <div className="px-4 py-2 border-b border-gray-200 bg-white flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          {/* 搜索筛选区域 */}
+          <div className="flex items-center gap-2 flex-1">
+            {/* HS编码搜索 */}
             <input
               type="text"
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              onKeyUp={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="搜索HS编码或商品描述..."
-              className="pl-7 pr-2 py-1 border border-gray-300 rounded text-xs w-64 bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+              value={hsCodeFilter}
+              onChange={(e) => {
+                setHsCodeFilter(e.target.value)
+                setPage(1)
+              }}
+              placeholder="HS编码"
+              title="输入 HS 编码进行精确搜索"
+              className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs w-24 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
             />
+            {/* 商品描述搜索 */}
+            <div className="relative flex-1 max-w-[200px]">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                onKeyUp={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="搜索商品描述..."
+                className="w-full pl-7 pr-2 py-1.5 border border-gray-300 rounded-md text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              />
+            </div>
+            {/* 原产国筛选 */}
+            <input
+              type="text"
+              value={originFilter}
+              onChange={(e) => {
+                setOriginFilter(e.target.value)
+                setPage(1)
+              }}
+              placeholder="原产国"
+              title="输入原产国名称或代码筛选"
+              className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs w-20 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+            />
+            {/* 数据来源筛选 */}
+            <select
+              value={dataSourceFilter}
+              onChange={(e) => {
+                setDataSourceFilter(e.target.value)
+                setPage(1)
+              }}
+              title="按数据来源筛选"
+              className="px-2 py-1.5 border border-gray-300 rounded-md text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors cursor-pointer"
+            >
+              <option value="">来源</option>
+              <option value="taric">TARIC</option>
+              <option value="manual">手动</option>
+              <option value="import">导入</option>
+            </select>
+            {/* 状态筛选 */}
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setPage(1)
+              }}
+              title="按状态筛选"
+              className="px-2 py-1.5 border border-gray-300 rounded-md text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors cursor-pointer"
+            >
+              <option value="">状态</option>
+              <option value="active">启用</option>
+              <option value="inactive">停用</option>
+            </select>
+            {/* 高级筛选按钮 */}
+            <button
+              onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
+              className={`px-2 py-1.5 border rounded-md text-xs flex items-center gap-1 transition-all whitespace-nowrap ${
+                showAdvancedFilter ? 'border-primary-500 text-primary-600 bg-primary-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400'
+              }`}
+            >
+              <AlertCircle className="w-3 h-3" />
+              高级
+            </button>
+            {/* 搜索按钮 */}
+            <button
+              onClick={handleSearch}
+              className="px-3 py-1.5 bg-primary-600 text-white rounded-md text-xs hover:bg-primary-700 flex items-center gap-1 shadow-sm transition-all hover:shadow whitespace-nowrap"
+            >
+              <Search className="w-3 h-3" />
+              搜索
+            </button>
+            {/* 重置按钮 */}
+            {(hsCodeFilter || searchValue || originFilter || dataSourceFilter || statusFilter || dutyRateMin || dutyRateMax) && (
+              <button
+                onClick={() => {
+                  setHsCodeFilter('')
+                  setSearchValue('')
+                  setOriginFilter('')
+                  setDataSourceFilter('')
+                  setStatusFilter('')
+                  setDutyRateMin('')
+                  setDutyRateMax('')
+                  setPage(1)
+                }}
+                className="px-1.5 py-1.5 text-gray-400 hover:text-red-500 text-xs flex items-center transition-colors"
+                title="重置筛选"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          <button
-            onClick={handleSearch}
-            className="px-2 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 flex items-center gap-1"
-          >
-            <Search className="w-3 h-3" />
-            搜索
-          </button>
+          {/* 分隔线 */}
+          <div className="w-px h-6 bg-gray-200 mx-1"></div>
+          {/* 操作按钮区域 */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setRealtimeLookupVisible(true)}
+              className="px-2.5 py-1.5 border border-blue-500 text-blue-600 rounded-md text-xs hover:bg-blue-50 flex items-center gap-1 transition-all whitespace-nowrap"
+            >
+              <Globe className="w-3 h-3" />
+              实时查询
+            </button>
+            <button
+              onClick={() => setImportModalVisible(true)}
+              className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs hover:bg-gray-50 hover:border-gray-400 flex items-center gap-1 transition-all whitespace-nowrap"
+            >
+              <Upload className="w-3 h-3" />
+              导入
+            </button>
+            <button
+              onClick={handleAdd}
+              className="px-2.5 py-1.5 bg-primary-600 text-white rounded-md text-xs hover:bg-primary-700 flex items-center gap-1 shadow-sm transition-all hover:shadow whitespace-nowrap"
+            >
+              <Plus className="w-3 h-3" />
+              新增税率
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setImportModalVisible(true)}
-            className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 flex items-center gap-1"
-          >
-            <Upload className="w-3 h-3" />
-            导入
-          </button>
-          <button
-            onClick={handleAdd}
-            className="px-2 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 flex items-center gap-1"
-          >
-            <Plus className="w-3 h-3" />
-            新增税率
-          </button>
-        </div>
+        {/* 高级筛选面板 */}
+        {showAdvancedFilter && (
+          <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">关税率:</span>
+              <input
+                type="number"
+                value={dutyRateMin}
+                onChange={(e) => {
+                  setDutyRateMin(e.target.value)
+                  setPage(1)
+                }}
+                placeholder="最小"
+                className="px-2 py-1 border border-gray-300 rounded text-xs w-16 bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <span className="text-xs text-gray-400">~</span>
+              <input
+                type="number"
+                value={dutyRateMax}
+                onChange={(e) => {
+                  setDutyRateMax(e.target.value)
+                  setPage(1)
+                }}
+                placeholder="最大"
+                className="px-2 py-1 border border-gray-300 rounded text-xs w-16 bg-white focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              />
+              <span className="text-xs text-gray-400">%</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 表格 */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-xs">
-          <thead className="bg-gray-50 sticky top-0">
+          <thead className="bg-gray-100 sticky top-0 z-10 shadow-sm">
             <tr>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 border-b">HS编码</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 border-b">商品描述</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500 border-b">原产国</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500 border-b">关税率</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500 border-b">增值税率</th>
-              <th className="px-3 py-2 text-center font-medium text-gray-500 border-b">申报方式</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500 border-b">最低申报</th>
-              <th className="px-3 py-2 text-center font-medium text-gray-500 border-b">材质/场景</th>
-              <th className="px-3 py-2 text-center font-medium text-gray-500 border-b">单位</th>
-              <th className="px-3 py-2 text-center font-medium text-gray-500 border-b">状态</th>
-              <th className="px-3 py-2 text-center font-medium text-gray-500 border-b">操作</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">HS编码</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap min-w-[150px] text-[11px] tracking-wide">商品描述</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">原产国</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">关税率</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">增值税率</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">反倾销税</th>
+              <th className="px-3 py-2.5 text-left font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap min-w-[100px] text-[11px] tracking-wide">贸易措施</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">申报方式</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">最低申报</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">材质/场景</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">单位</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">来源</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">状态</th>
+              <th className="px-3 py-2.5 text-center font-semibold text-gray-600 border-b border-gray-200 whitespace-nowrap text-[11px] tracking-wide">操作</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-gray-500">
+                <td colSpan={14} className="px-3 py-8 text-center text-gray-500">
                   <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                   加载中...
                 </td>
               </tr>
             ) : rates.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-gray-500">
+                <td colSpan={14} className="px-3 py-8 text-center text-gray-500">
                   暂无数据
                 </td>
               </tr>
@@ -785,20 +1270,38 @@ export default function TariffRateManage() {
                       <span className="ml-1 text-gray-600">{rate.originCountry}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-medium text-gray-900">
+                  <td className="px-3 py-2 text-center font-medium text-gray-900 whitespace-nowrap">
                     {rate.dutyRate}%
                   </td>
-                  <td className="px-3 py-2 text-right text-gray-700">
+                  <td className="px-3 py-2 text-center text-gray-700 whitespace-nowrap">
                     {rate.vatRate}%
                   </td>
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
+                    {rate.antiDumpingRate && rate.antiDumpingRate > 0 ? (
+                      <span className="text-red-600 font-medium">{rate.antiDumpingRate}%</span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 max-w-[150px]">
+                    {rate.measureType ? (
+                      <span className="text-[10px] text-gray-600 truncate block" title={rate.measureType}>
+                        {rate.measureType.length > 25 
+                          ? rate.measureType.substring(0, 25) + '...' 
+                          : rate.measureType}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-center">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap ${
                       rate.declarationType === 'per_weight' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
                     }`}>
                       {rate.declarationType === 'per_weight' ? '按重量' : '按单价'}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
                     {rate.minDeclarationValue && rate.minDeclarationValue > 0 ? (
                       <span className="text-orange-600 font-medium">€{rate.minDeclarationValue.toFixed(2)}</span>
                     ) : (
@@ -822,10 +1325,20 @@ export default function TariffRateManage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-center text-gray-600">
+                  <td className="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
                     {rate.unitName || '-'}
                   </td>
-                  <td className="px-3 py-2 text-center">
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      (rate as any).dataSource === 'taric' ? 'bg-blue-100 text-blue-700' :
+                      (rate as any).dataSource === 'import' ? 'bg-purple-100 text-purple-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {(rate as any).dataSource === 'taric' ? 'TARIC' :
+                       (rate as any).dataSource === 'import' ? '导入' : '手动'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
                     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${
                       rate.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                     }`}>
@@ -879,6 +1392,19 @@ export default function TariffRateManage() {
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}
@@ -902,6 +1428,16 @@ export default function TariffRateManage() {
           loadStats()
         }}
         editData={editingRate}
+      />
+
+      {/* 实时查询弹窗 */}
+      <RealtimeLookupModal
+        visible={realtimeLookupVisible}
+        onClose={() => setRealtimeLookupVisible(false)}
+        onSaveSuccess={() => {
+          loadRates()
+          loadStats()
+        }}
       />
     </div>
   )

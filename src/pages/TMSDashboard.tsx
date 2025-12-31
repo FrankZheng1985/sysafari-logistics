@@ -6,6 +6,9 @@ import {
   RefreshCw, ArrowUpRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface StepDistribution {
   step1: number
@@ -55,9 +58,10 @@ export default function TMSDashboard() {
 
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
-    { label: 'CMR管理', path: '/cmr-manage' },
-    { label: '服务商管理', path: '/tms/service-providers' },
+    { label: 'TMS管理', path: '/cmr-manage' },
+    { label: '运输供应商', path: '/supplier-manage?type=transport' },
     { label: '运费管理', path: '/tms/pricing' },
+    { label: '条件管理', path: '/tms/conditions' },
   ]
 
   useEffect(() => {
@@ -68,9 +72,9 @@ export default function TMSDashboard() {
     setLoading(true)
     try {
       const [statsRes, deliveringRes, providersRes] = await Promise.all([
-        fetch('/api/cmr/stats'),
-        fetch('/api/cmr/list?type=delivering&pageSize=5'),
-        fetch('/api/service-providers?pageSize=5&status=active')
+        fetch(`${API_BASE}/api/cmr/stats`),
+        fetch(`${API_BASE}/api/cmr/list?type=delivering&pageSize=5`),
+        fetch(`${API_BASE}/api/service-providers?pageSize=5&status=active`)
       ])
 
       const [statsData, deliveringData, providersData] = await Promise.all([
@@ -80,7 +84,15 @@ export default function TMSDashboard() {
       ])
 
       if (statsData.errCode === 200) {
-        setStats(statsData.data)
+        // 映射API字段到前端期望的字段名
+        setStats({
+          pending: statsData.data?.undelivered || statsData.data?.pending || 0,
+          delivering: statsData.data?.delivering || 0,
+          delivered: statsData.data?.delivered || statsData.data?.archived || 0,
+          exception: statsData.data?.exception || 0,
+          closed: statsData.data?.closed || 0,
+          stepDistribution: statsData.data?.stepDistribution
+        })
       }
       
       if (deliveringData.errCode === 200) {
@@ -105,20 +117,37 @@ export default function TMSDashboard() {
     }
   }
 
-  const getStepLabel = (step: number) => {
-    const steps = ['未开始', '已提货', '运输中', '已到达', '卸货中', '已送达']
-    return steps[step] || '未知'
+  const getStepLabel = (step: number | null | undefined, deliveryStatus?: string) => {
+    // 如果有有效的step值，使用step
+    if (step !== null && step !== undefined && step > 0) {
+      const steps = ['未开始', '已提货', '运输中', '已到达', '卸货中', '已送达']
+      return steps[step] || '未知'
+    }
+    // 否则根据deliveryStatus推断
+    if (deliveryStatus === '派送中') return '运输中'
+    if (deliveryStatus === '已送达') return '已送达'
+    if (deliveryStatus === '订单异常') return '异常'
+    return '未开始'
+  }
+
+  // 根据deliveryStatus推断步骤数
+  const inferStep = (step: number | null | undefined, deliveryStatus?: string): number => {
+    if (step !== null && step !== undefined && step > 0) return step
+    if (deliveryStatus === '派送中') return 2 // 运输中
+    if (deliveryStatus === '已送达') return 5
+    if (deliveryStatus === '订单异常') return 3
+    return 0
   }
 
   const getStatusConfig = (status: string) => {
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof Truck }> = {
-      '未派送': { label: '待派送', color: 'text-gray-600', bg: 'bg-gray-100', icon: Clock },
+      '待派送': { label: '待派送', color: 'text-gray-600', bg: 'bg-gray-100', icon: Clock },
       '派送中': { label: '派送中', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
       '已送达': { label: '已送达', color: 'text-green-600', bg: 'bg-green-100', icon: CheckCircle },
       '订单异常': { label: '异常', color: 'text-red-600', bg: 'bg-red-100', icon: AlertTriangle },
       '异常关闭': { label: '已关闭', color: 'text-gray-400', bg: 'bg-gray-50', icon: XCircle },
     }
-    return configs[status] || configs['未派送']
+    return configs[status] || configs['待派送']
   }
 
   if (loading) {
@@ -283,7 +312,7 @@ export default function TMSDashboard() {
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
             <Users className="w-4 h-4 text-gray-500" />
-            活跃服务商
+            运输供应商
           </h3>
           {serviceProviders.length > 0 ? (
             <div className="space-y-2">
@@ -293,21 +322,21 @@ export default function TMSDashboard() {
                   <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">活跃</span>
                 </div>
               ))}
-              <button 
-                onClick={() => navigate('/tms/service-providers')}
+              <button
+                onClick={() => navigate('/supplier-manage?type=transport')}
                 className="w-full text-xs text-primary-600 hover:text-primary-700 text-center mt-2"
               >
-                查看全部服务商
+                查看全部供应商
               </button>
             </div>
           ) : (
             <div className="text-center py-4">
-              <div className="text-gray-400 text-sm mb-2">暂无服务商</div>
-              <button 
-                onClick={() => navigate('/tms/service-providers')}
+              <div className="text-gray-400 text-sm mb-2">暂无运输供应商</div>
+              <button
+                onClick={() => navigate('/supplier-manage?type=transport')}
                 className="text-xs text-primary-600 hover:text-primary-700"
               >
-                添加服务商
+                添加供应商
               </button>
             </div>
           )}
@@ -362,13 +391,13 @@ export default function TMSDashboard() {
                             <div
                               key={step}
                               className={`w-2 h-2 rounded-full ${
-                                step <= (item.cmrCurrentStep || 0) ? 'bg-blue-500' : 'bg-gray-200'
+                                step <= inferStep(item.cmrCurrentStep, item.deliveryStatus) ? 'bg-blue-500' : 'bg-gray-200'
                               }`}
                             />
                           ))}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          {getStepLabel(item.cmrCurrentStep || 0)}
+                          {getStepLabel(item.cmrCurrentStep, item.deliveryStatus)}
                         </div>
                       </td>
                       <td className="py-2 px-3 text-center">

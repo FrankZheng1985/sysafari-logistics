@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { createVatRate, updateVatRate, type VatRate, type CreateVatRateRequest, type UpdateVatRateRequest } from '../utils/api'
+import DatePicker from './DatePicker'
 
 interface VatRateModalProps {
   visible: boolean
@@ -305,15 +306,13 @@ export default function VatRateModal({
           <div className="grid grid-cols-2 gap-4">
             {/* 生效日期 */}
             <div>
-              <label htmlFor="effectiveDate" className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
                 生效日期
               </label>
-              <input
-                id="effectiveDate"
-                type="date"
+              <DatePicker
                 value={formData.effectiveDate}
-                onChange={(e) => handleInputChange('effectiveDate', e.target.value)}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                onChange={(value) => handleInputChange('effectiveDate', value)}
+                placeholder="选择生效日期"
               />
             </div>
 

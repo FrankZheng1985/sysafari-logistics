@@ -1,18 +1,34 @@
 import { useState, useEffect } from 'react'
-import { Image, Upload, X } from 'lucide-react'
+import { Image, Upload, X, Loader2 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 export default function LogoManage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   // 加载已保存的 Logo
   useEffect(() => {
-    const savedLogo = localStorage.getItem('systemLogo')
-    if (savedLogo) {
-      setLogoUrl(savedLogo)
-      setPreviewUrl(savedLogo)
+    const loadLogo = async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(`${API_BASE}/api/system-settings?key=systemLogo`)
+        const data = await res.json()
+        if (data.errCode === 200 && data.data?.systemLogo) {
+          setLogoUrl(data.data.systemLogo)
+          setPreviewUrl(data.data.systemLogo)
+        }
+      } catch (error) {
+        console.error('加载Logo失败:', error)
+      } finally {
+        setLoading(false)
+      }
     }
+    loadLogo()
   }, [])
 
   // 处理文件选择
@@ -42,28 +58,65 @@ export default function LogoManage() {
   }
 
   // 保存 Logo
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!previewUrl) {
       alert('请先选择图片')
       return
     }
 
-    localStorage.setItem('systemLogo', previewUrl)
-    setLogoUrl(previewUrl)
-    // 触发事件通知 Sidebar 更新
-    window.dispatchEvent(new Event('logoChanged'))
-    alert('Logo 保存成功')
+    setSaving(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/system-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'systemLogo',
+          value: previewUrl,
+          type: 'string',
+          description: '系统Logo'
+        })
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setLogoUrl(previewUrl)
+        // 触发事件通知 Sidebar 更新
+        window.dispatchEvent(new Event('logoChanged'))
+        alert('Logo 保存成功')
+      } else {
+        alert('保存失败: ' + data.msg)
+      }
+    } catch (error) {
+      console.error('保存Logo失败:', error)
+      alert('保存失败，请重试')
+    } finally {
+      setSaving(false)
+    }
   }
 
   // 删除 Logo
-  const handleDelete = () => {
-    if (confirm('确定要删除 Logo 吗？')) {
-      localStorage.removeItem('systemLogo')
-      setLogoUrl(null)
-      setPreviewUrl(null)
-      // 触发事件通知 Sidebar 更新
-      window.dispatchEvent(new Event('logoChanged'))
-      alert('Logo 已删除')
+  const handleDelete = async () => {
+    if (!confirm('确定要删除 Logo 吗？')) return
+
+    setSaving(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/system-settings/systemLogo`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setLogoUrl(null)
+        setPreviewUrl(null)
+        // 触发事件通知 Sidebar 更新
+        window.dispatchEvent(new Event('logoChanged'))
+        alert('Logo 已删除')
+      } else {
+        alert('删除失败: ' + data.msg)
+      }
+    } catch (error) {
+      console.error('删除Logo失败:', error)
+      alert('删除失败，请重试')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -88,7 +141,9 @@ export default function LogoManage() {
                 当前 Logo
               </label>
               <div className="border border-gray-200 rounded p-2 bg-gray-50 flex items-center justify-center min-h-[80px]">
-                {logoUrl ? (
+                {loading ? (
+                  <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                ) : logoUrl ? (
                   <img
                     src={logoUrl}
                     alt="系统 Logo"
@@ -142,15 +197,17 @@ export default function LogoManage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleSave}
-                disabled={!previewUrl || previewUrl === logoUrl}
-                className="px-1.5 py-0.5 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-xs"
+                disabled={!previewUrl || previewUrl === logoUrl || saving}
+                className="px-1.5 py-0.5 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-xs flex items-center gap-1"
               >
+                {saving && <Loader2 className="w-3 h-3 animate-spin" />}
                 保存
               </button>
               {logoUrl && (
                 <button
                   onClick={handleDelete}
-                  className="px-1.5 py-0.5 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-xs flex items-center gap-1"
+                  disabled={saving}
+                  className="px-1.5 py-0.5 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 transition-colors text-xs flex items-center gap-1"
                 >
                   <X className="w-3 h-3" />
                   <span>删除 Logo</span>
@@ -159,7 +216,8 @@ export default function LogoManage() {
               {previewUrl && previewUrl !== logoUrl && (
                 <button
                   onClick={() => setPreviewUrl(logoUrl)}
-                  className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors text-xs"
+                  disabled={saving}
+                  className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:bg-gray-100 transition-colors text-xs"
                 >
                   取消
                 </button>

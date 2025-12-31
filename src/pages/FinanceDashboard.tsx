@@ -7,6 +7,9 @@ import {
   Wallet, PieChart
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface FinanceOverview {
   invoices: {
@@ -59,9 +62,12 @@ export default function FinanceDashboard() {
   const tabs = [
     { label: '财务概览', path: '/finance' },
     { label: '发票管理', path: '/finance/invoices' },
+    { label: '历史记录', path: '/finance/invoices/history' },
     { label: '收付款', path: '/finance/payments' },
     { label: '费用管理', path: '/finance/fees' },
     { label: '财务报表', path: '/finance/reports' },
+    { label: '订单报表', path: '/finance/order-report' },
+    { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
   useEffect(() => {
@@ -71,7 +77,7 @@ export default function FinanceDashboard() {
   const fetchOverview = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/finance/overview')
+      const response = await fetch(`${API_BASE}/api/finance/overview`)
       const data = await response.json()
       if (data.errCode === 200) {
         setOverview(data.data)
@@ -84,24 +90,42 @@ export default function FinanceDashboard() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('zh-CN', {
+    return new Intl.NumberFormat('de-DE', {
       style: 'currency',
-      currency: 'CNY',
+      currency: 'EUR',
       minimumFractionDigits: 2
     }).format(amount)
   }
 
   const getCategoryName = (category: string) => {
     const names: Record<string, string> = {
+      // 标准分类（小写）
       freight: '运费',
+      transport: '运输费',
       customs: '关税',
+      duty: '进口税',
+      tax: '增值税',
       warehouse: '仓储费',
+      storage: '仓储费',
       insurance: '保险费',
       handling: '操作费',
       documentation: '文件费',
-      other: '其他费用'
+      port: '港口费',
+      service: '服务费',
+      package: '清提派业务',
+      other: '其他费用',
+      clearance: '清关服务',
+      thc: '港杂费',
+      // 服务费类别英文代码（来自基础数据）
+      'export customs clearance services': '出口报关服务',
+      'document fees': '文件费',
+      'document exchange fee': '换单费',
+      'tax fees': '税务费',
+      "importer's agency fee": '税号使用费',
+      'management fee': '管理费',
     }
-    return names[category] || category
+    const lowerCategory = category?.toLowerCase() || ''
+    return names[lowerCategory] || category
   }
 
   if (loading) {
@@ -218,22 +242,41 @@ export default function FinanceDashboard() {
             {/* 销售发票 */}
             <div className="bg-blue-50 rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-blue-700">销售发票（应收）</span>
-                <span className="text-sm text-blue-600">{overview?.invoices?.sales?.totalCount || 0} 张</span>
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=sales')}
+                  className="text-sm font-medium text-blue-700 hover:text-blue-900 hover:underline"
+                >
+                  销售发票（应收）
+                </button>
+                <button
+                  onClick={() => navigate('/finance/invoices?type=sales')}
+                  className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {overview?.invoices?.sales?.totalCount || 0} 张
+                </button>
               </div>
               <div className="flex items-center gap-4 text-xs text-gray-600">
-                <span className="flex items-center gap-1">
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=sales&status=paid')}
+                  className="flex items-center gap-1 hover:text-green-700 hover:bg-green-100 px-1.5 py-0.5 rounded transition-colors"
+                >
                   <CheckCircle className="w-3 h-3 text-green-500" />
                   已收 {overview?.invoices?.sales?.paidCount || 0}
-                </span>
-                <span className="flex items-center gap-1">
+                </button>
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=sales&status=pending')}
+                  className="flex items-center gap-1 hover:text-yellow-700 hover:bg-yellow-100 px-1.5 py-0.5 rounded transition-colors"
+                >
                   <Clock className="w-3 h-3 text-yellow-500" />
                   待收 {overview?.invoices?.sales?.pendingCount || 0}
-                </span>
-                <span className="flex items-center gap-1">
+                </button>
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=sales&status=overdue')}
+                  className="flex items-center gap-1 hover:text-red-700 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
+                >
                   <AlertTriangle className="w-3 h-3 text-red-500" />
                   逾期 {overview?.invoices?.sales?.overdueCount || 0}
-                </span>
+                </button>
               </div>
               <div className="mt-2 text-sm">
                 <span className="text-gray-500">总额</span>
@@ -246,22 +289,41 @@ export default function FinanceDashboard() {
             {/* 采购发票 */}
             <div className="bg-orange-50 rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-orange-700">采购发票（应付）</span>
-                <span className="text-sm text-orange-600">{overview?.invoices?.purchase?.totalCount || 0} 张</span>
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=purchase')}
+                  className="text-sm font-medium text-orange-700 hover:text-orange-900 hover:underline"
+                >
+                  采购发票（应付）
+                </button>
+                <button
+                  onClick={() => navigate('/finance/invoices?type=purchase')}
+                  className="text-sm text-orange-600 hover:text-orange-800 hover:underline"
+                >
+                  {overview?.invoices?.purchase?.totalCount || 0} 张
+                </button>
               </div>
               <div className="flex items-center gap-4 text-xs text-gray-600">
-                <span className="flex items-center gap-1">
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=purchase&status=paid')}
+                  className="flex items-center gap-1 hover:text-green-700 hover:bg-green-100 px-1.5 py-0.5 rounded transition-colors"
+                >
                   <CheckCircle className="w-3 h-3 text-green-500" />
                   已付 {overview?.invoices?.purchase?.paidCount || 0}
-                </span>
-                <span className="flex items-center gap-1">
+                </button>
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=purchase&status=pending')}
+                  className="flex items-center gap-1 hover:text-yellow-700 hover:bg-yellow-100 px-1.5 py-0.5 rounded transition-colors"
+                >
                   <Clock className="w-3 h-3 text-yellow-500" />
                   待付 {overview?.invoices?.purchase?.pendingCount || 0}
-                </span>
-                <span className="flex items-center gap-1">
+                </button>
+                <button 
+                  onClick={() => navigate('/finance/invoices?type=purchase&status=overdue')}
+                  className="flex items-center gap-1 hover:text-red-700 hover:bg-red-100 px-1.5 py-0.5 rounded transition-colors"
+                >
                   <AlertTriangle className="w-3 h-3 text-red-500" />
                   逾期 {overview?.invoices?.purchase?.overdueCount || 0}
-                </span>
+                </button>
               </div>
               <div className="mt-2 text-sm">
                 <span className="text-gray-500">总额</span>

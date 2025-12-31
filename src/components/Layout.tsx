@@ -2,6 +2,9 @@ import { ReactNode, useMemo } from 'react'
 import { FlaskConical, AlertTriangle } from 'lucide-react'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import TabsBar from './TabsBar'
+import ContextualHelp from './ContextualHelp'
+import KeepAliveOutlet from './KeepAliveOutlet'
 import { useAuth } from '../contexts/AuthContext'
 
 interface LayoutProps {
@@ -40,10 +43,15 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         )}
         <Header />
-        <main className="flex-1 overflow-y-auto bg-white" style={{ backgroundColor: '#ffffff' }}>
-          {children}
+        <TabsBar />
+        <main className="flex-1 overflow-y-auto bg-gray-50 overscroll-none">
+          <KeepAliveOutlet>
+            {children}
+          </KeepAliveOutlet>
         </main>
       </div>
+      {/* 全局上下文帮助按钮 */}
+      <ContextualHelp />
     </div>
   )
 }

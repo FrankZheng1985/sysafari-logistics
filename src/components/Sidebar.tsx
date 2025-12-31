@@ -22,13 +22,42 @@ import {
   Building2,
   TrendingUp,
   MessageSquare,
+  MessageCircle,
   Clock,
   CheckCircle,
-  CreditCard
+  CreditCard,
+  Upload,
+  Calculator,
+  FilePlus,
+  Link2
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import clsx from 'clsx'
 import { loadMenuSettingsAsync } from '../utils/menuSettings'
+import { getApiBaseUrl } from '../utils/api'
+import { getCachedSystemSettings, invalidateSystemSettings } from '../utils/apiCache'
+import { useAuth } from '../contexts/AuthContext'
+
+const API_BASE = getApiBaseUrl()
+
+// 菜单权限映射：定义每个菜单路径需要的权限
+const MENU_PERMISSIONS: Record<string, string[]> = {
+  '/dashboard': ['dashboard:view'],
+  '/bp-view': ['bp:view'],
+  '/bookings': ['bill:view', 'bill:create', 'bill:edit'],
+  '/bookings/bill': ['bill:view'],
+  '/bookings/labels': ['bill:view'],
+  '/bookings/packages': ['bill:view'],
+  '/bookings/declarations': ['bill:view'],
+  '/documents': ['document:view', 'document:import', 'document:match'],
+  '/inspection': ['inspection:view', 'inspection:operate'],
+  '/tms': ['cmr:view', 'cmr:operate'],
+  '/crm': ['crm:view', 'crm:customer_manage', 'crm:opportunity_manage'],
+  '/suppliers': ['supplier:view', 'supplier:manage'],
+  '/finance': ['finance:view', 'finance:invoice_view', 'finance:payment_view'],
+  '/tools': ['product:view', 'system:tariff_rate'],
+  '/system': ['system:user', 'system:menu', 'system:basic_data', 'system:security'],
+}
 
 interface MenuItem {
   path: string
@@ -57,7 +86,19 @@ const menuItems: MenuItem[] = [
       { path: '/bookings/packages', label: '打包', icon: Package },
       { path: '/bookings/bill', label: '提单', icon: FileText },
       { path: '/bookings/declarations', label: '报关', icon: ClipboardList },
-      { path: '/bookings/clearance', label: '单证管理', icon: FileCheck },
+    ],
+  },
+  {
+    path: '/documents',
+    label: '单证管理',
+    icon: FileCheck,
+    children: [
+      { path: '/documents', label: '单证概览', icon: ClipboardList },
+      { path: '/documents/import', label: '货物导入', icon: Upload },
+      { path: '/documents/matching', label: 'HS匹配审核', icon: CheckCircle },
+      { path: '/documents/tax-calc', label: '税费计算', icon: Calculator },
+      { path: '/documents/supplement', label: '数据补充', icon: FilePlus },
+      { path: '/documents/match-records', label: '匹配记录库', icon: FileCheck },
     ],
   },
   {
@@ -76,9 +117,9 @@ const menuItems: MenuItem[] = [
     icon: Truck,
     children: [
       { path: '/tms', label: 'TMS概览', icon: ClipboardList },
-      { path: '/cmr-manage', label: 'CMR管理', icon: Truck },
-      { path: '/tms/service-providers', label: '服务商管理', icon: UserCircle },
+      { path: '/cmr-manage', label: 'TMS管理', icon: Truck },
       { path: '/tms/pricing', label: '运费管理', icon: Wallet },
+      { path: '/tms/conditions', label: '条件管理', icon: ClipboardCheck },
       { path: '/last-mile', label: '最后里程', icon: Truck },
     ],
   },
@@ -114,6 +155,7 @@ const menuItems: MenuItem[] = [
       { path: '/finance/payments', label: '收付款', icon: Wallet },
       { path: '/finance/fees', label: '费用管理', icon: CreditCard },
       { path: '/finance/reports', label: '报表分析', icon: TrendingUp },
+      { path: '/finance/statements', label: '财务报表', icon: FileText },
     ],
   },
   {
@@ -121,14 +163,9 @@ const menuItems: MenuItem[] = [
     label: '工具',
     icon: Settings,
     children: [
-      { path: '/tools/inquiry', label: '报价管理', icon: FileText },
+      { path: '/tools/product-pricing', label: '产品定价', icon: FileText },
       { path: '/tools/tariff-calculator', label: '关税计算', icon: FileText },
-      { path: '/tools/payment', label: '付款&发票', icon: FileText },
-            { path: '/tools/address', label: '地址&税号', icon: Settings },
-            { path: '/tools/commodity-code', label: '海关编码', icon: FileText },
-            { path: '/tools/productCare', label: '品类库', icon: Package },
-            { path: '/tools/editable-table', label: '可编辑表格', icon: FileText },
-            { path: '/tools/components-demo', label: '组件示例', icon: FileText },
+      { path: '/tools/shared-tax', label: '共享税号库', icon: FileText },
     ],
   },
   {
@@ -136,22 +173,41 @@ const menuItems: MenuItem[] = [
     label: '系统管理',
     icon: Settings,
     children: [
+      { path: '/system/info-center', label: '信息中心', icon: MessageCircle },
+      { path: '/system/data-import', label: '数据导入', icon: Upload },
       { path: '/system/menu-settings', label: '板块开关', icon: ToggleLeft },
       { path: '/system/user-manage', label: '用户管理', icon: Users },
-      { path: '/system/approvals', label: '审批管理', icon: ClipboardCheck },
-      { path: '/system/security-settings', label: '安全设置', icon: Shield },
+      { path: '/system/security-center', label: '安全管理中心', icon: Shield },
       { path: '/system/logo-manage', label: 'Logo 管理', icon: Image },
       { path: '/system/basic-data', label: '基础数据管理', icon: Database },
-      { path: '/system/tariff-rates', label: '税率管理', icon: FileText },
+      { path: '/system/tariff-rates', label: 'HS Code数据库', icon: FileText },
+      { path: '/system/api-integrations', label: 'API对接管理', icon: Link2 },
     ],
   },
 ]
 
 export default function Sidebar() {
   const navigate = useNavigate()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['/bookings', '/tools', '/system', '/crm', '/tms', '/suppliers', '/inspection', '/finance'])
+  const { hasAnyPermission, isAdmin, isManager } = useAuth()
+  const [expandedItems, setExpandedItems] = useState<string[]>(['/bookings', '/documents', '/tools', '/system', '/crm', '/tms', '/suppliers', '/inspection', '/finance'])
   const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({})
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
+
+  // 检查用户是否有权限访问某个菜单
+  const canAccessMenu = (path: string): boolean => {
+    // 管理员和经理可以访问所有菜单
+    if (isAdmin() || isManager()) return true
+    
+    // 获取该菜单需要的权限
+    const requiredPermissions = MENU_PERMISSIONS[path]
+    if (!requiredPermissions || requiredPermissions.length === 0) {
+      // 如果没有定义权限要求，默认允许访问
+      return true
+    }
+    
+    // 检查用户是否有任意一个所需权限
+    return hasAnyPermission(requiredPermissions)
+  }
 
   // 加载菜单设置并监听变化
   useEffect(() => {
@@ -189,18 +245,31 @@ export default function Sidebar() {
     }
   }, [])
 
-  // 加载 Logo
+  // 加载 Logo（使用缓存）
   useEffect(() => {
-    const loadLogo = () => {
-      const savedLogo = localStorage.getItem('systemLogo')
-      setLogoUrl(savedLogo)
+    const loadLogo = async (forceRefresh = false) => {
+      try {
+        // 如果强制刷新，先清除缓存
+        if (forceRefresh) {
+          invalidateSystemSettings('systemLogo')
+        }
+        const data = await getCachedSystemSettings('systemLogo', API_BASE)
+        if (data.errCode === 200 && data.data?.systemLogo) {
+          setLogoUrl(data.data.systemLogo)
+        } else {
+          setLogoUrl(null)
+        }
+      } catch (error) {
+        console.debug('加载Logo失败:', error)
+        setLogoUrl(null)
+      }
     }
 
     loadLogo()
 
-    // 监听 Logo 变化事件
+    // 监听 Logo 变化事件（强制刷新）
     const handleLogoChange = () => {
-      loadLogo()
+      loadLogo(true)
     }
 
     window.addEventListener('logoChanged', handleLogoChange)
@@ -241,6 +310,8 @@ export default function Sidebar() {
       navigate('/inspection')
     } else if (item.path === '/finance') {
       navigate('/finance')
+    } else if (item.path === '/documents') {
+      navigate('/documents')
     }
   }
 
@@ -271,6 +342,10 @@ export default function Sidebar() {
               <div className="ml-2">
                 {item.children
                   ?.filter((child) => {
+                    // 检查用户权限
+                    if (!canAccessMenu(child.path)) {
+                      return false
+                    }
                     // 如果是订单管理下的菜单项，检查开关状态
                     if (item.path === '/bookings') {
                       // 如果 menuSettings 为空或未初始化，使用默认值（开启）
@@ -333,6 +408,10 @@ export default function Sidebar() {
           .filter(item => {
             // 检查顶级菜单项的开关状态
             if (menuSettings[item.path] === false) {
+              return false
+            }
+            // 检查用户权限
+            if (!canAccessMenu(item.path)) {
               return false
             }
             return true

@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { LogIn, Shield, User, Lock, FlaskConical, Monitor } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // 是否是开发环境
 const isDev = import.meta.env.DEV
@@ -29,8 +32,18 @@ export default function Login() {
 
   // 加载 Logo
   useEffect(() => {
-    const savedLogo = localStorage.getItem('systemLogo')
-    setLogoUrl(savedLogo)
+    const loadLogo = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/system-settings?key=systemLogo`)
+        const data = await res.json()
+        if (data.errCode === 200 && data.data?.systemLogo) {
+          setLogoUrl(data.data.systemLogo)
+        }
+      } catch (error) {
+        console.error('加载Logo失败:', error)
+      }
+    }
+    loadLogo()
   }, [])
 
   // 正式登录（Auth0）

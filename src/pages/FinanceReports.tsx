@@ -1,42 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
-  Calendar, Download, TrendingUp, TrendingDown, 
+  Download, TrendingUp, TrendingDown, 
   DollarSign, PieChart, BarChart3, FileText,
-  ArrowUpRight, ArrowDownRight, RefreshCw, Package
+  ArrowUpRight, ArrowDownRight, RefreshCw
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import DatePicker from '../components/DatePicker'
+import { getApiBaseUrl } from '../utils/api'
 
-// 订单维度费用报表
-interface OrderFeeReport {
-  billId: string
-  billNumber: string
-  customerId: string
-  customerName: string
-  feeCount: number
-  totalAmount: number
-  freightAmount: number
-  customsAmount: number
-  warehouseAmount: number
-  insuranceAmount: number
-  handlingAmount: number
-  documentationAmount: number
-  otherAmount: number
-  firstFeeDate: string
-  lastFeeDate: string
-}
-
-interface OrderReportData {
-  list: OrderFeeReport[]
-  total: number
-  page: number
-  pageSize: number
-  summary: {
-    orderCount: number
-    feeCount: number
-    totalAmount: number
-  }
-}
+const API_BASE = getApiBaseUrl()
 
 interface ReportData {
   summary: {
@@ -82,20 +55,21 @@ export default function FinanceReports() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [reportData, setReportData] = useState<ReportData | null>(null)
-  const [orderReportData, setOrderReportData] = useState<OrderReportData | null>(null)
-  const [orderReportPage, setOrderReportPage] = useState(1)
   const [dateRange, setDateRange] = useState({
     startDate: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
   })
-  const [reportType, setReportType] = useState<'overview' | 'profit' | 'cashflow' | 'receivables' | 'orders'>('overview')
+  const [reportType, setReportType] = useState<'overview' | 'profit' | 'cashflow' | 'receivables'>('overview')
 
   const tabs = [
     { label: '财务概览', path: '/finance' },
     { label: '发票管理', path: '/finance/invoices' },
+    { label: '历史记录', path: '/finance/invoices/history' },
     { label: '收付款', path: '/finance/payments' },
     { label: '费用管理', path: '/finance/fees' },
     { label: '财务报表', path: '/finance/reports' },
+    { label: '订单报表', path: '/finance/order-report' },
+    { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
    
@@ -103,14 +77,6 @@ export default function FinanceReports() {
     fetchReportData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange])
-
-   
-  useEffect(() => {
-    if (reportType === 'orders') {
-      fetchOrderReport()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportType, dateRange, orderReportPage])
 
   const fetchReportData = async () => {
     setLoading(true)
@@ -122,10 +88,10 @@ export default function FinanceReports() {
       
       // 并行获取各类数据
       const [overviewRes, invoiceRes, paymentRes, feeRes] = await Promise.all([
-        fetch(`/api/finance/overview?${params}`),
-        fetch(`/api/invoices/stats?${params}`),
-        fetch(`/api/payments/stats?${params}`),
-        fetch(`/api/fees/stats?${params}`)
+        fetch(`${API_BASE}/api/finance/overview?${params}`),
+        fetch(`${API_BASE}/api/invoices/stats?${params}`),
+        fetch(`${API_BASE}/api/payments/stats?${params}`),
+        fetch(`${API_BASE}/api/fees/stats?${params}`)
       ])
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -178,29 +144,6 @@ export default function FinanceReports() {
     }
   }
 
-  const fetchOrderReport = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
-        page: orderReportPage.toString(),
-        pageSize: '20'
-      })
-      
-      const response = await fetch(`/api/finance/reports/orders?${params}`)
-      const data = await response.json()
-      
-      if (data.errCode === 200) {
-        setOrderReportData(data.data)
-      }
-    } catch (error) {
-      console.error('获取订单费用报表失败:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const generateMonthlyData = () => {
     // 生成模拟月度数据
     const months = []
@@ -221,20 +164,27 @@ export default function FinanceReports() {
   const getCategoryName = (category: string) => {
     const names: Record<string, string> = {
       freight: '运费',
+      transport: '运输费',
       customs: '关税',
+      duty: '进口税',
+      tax: '增值税',
       warehouse: '仓储费',
+      storage: '仓储费',
       insurance: '保险费',
       handling: '操作费',
       documentation: '文件费',
+      port: '港口费',
+      service: '服务费',
+      package: '清提派业务',
       other: '其他'
     }
     return names[category] || category
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('zh-CN', {
+    return new Intl.NumberFormat('de-DE', {
       style: 'currency',
-      currency: 'CNY',
+      currency: 'EUR',
       minimumFractionDigits: 2
     }).format(amount)
   }
@@ -304,19 +254,16 @@ export default function FinanceReports() {
         <div className="flex items-center gap-4">
           {/* 日期范围选择 */}
           <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-gray-400" />
-            <input
-              type="date"
+            <DatePicker
               value={dateRange.startDate}
-              onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              onChange={(value) => setDateRange(prev => ({ ...prev, startDate: value }))}
+              placeholder="开始日期"
             />
-            <span className="text-gray-400">至</span>
-            <input
-              type="date"
+            <span className="text-gray-400 text-xs">至</span>
+            <DatePicker
               value={dateRange.endDate}
-              onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              onChange={(value) => setDateRange(prev => ({ ...prev, endDate: value }))}
+              placeholder="结束日期"
             />
           </div>
 
@@ -386,7 +333,6 @@ export default function FinanceReports() {
           { key: 'profit', label: '利润分析', icon: TrendingUp },
           { key: 'cashflow', label: '现金流量', icon: DollarSign },
           { key: 'receivables', label: '应收应付', icon: FileText },
-          { key: 'orders', label: '订单报表', icon: Package },
         ].map(item => {
           const Icon = item.icon
           return (
@@ -962,212 +908,6 @@ export default function FinanceReports() {
         </>
       )}
 
-      {/* ========== 订单报表 ========== */}
-      {reportType === 'orders' && (
-        <>
-          {/* 汇总指标 */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Package className="w-5 h-5 text-blue-600" />
-                <span className="text-sm font-medium text-blue-800">有费用的订单</span>
-              </div>
-              <div className="text-3xl font-bold text-blue-600">
-                {orderReportData?.summary.orderCount || 0}
-              </div>
-              <div className="text-xs text-blue-600 mt-1">共关联 {orderReportData?.summary.feeCount || 0} 笔费用</div>
-            </div>
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="w-5 h-5 text-green-600" />
-                <span className="text-sm font-medium text-green-800">费用总额</span>
-              </div>
-              <div className="text-3xl font-bold text-green-600">
-                {formatCurrency(orderReportData?.summary.totalAmount || 0)}
-              </div>
-              <div className="text-xs text-green-600 mt-1">选定日期范围内</div>
-            </div>
-            <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-lg border border-purple-200 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <BarChart3 className="w-5 h-5 text-purple-600" />
-                <span className="text-sm font-medium text-purple-800">平均单价</span>
-              </div>
-              <div className="text-3xl font-bold text-purple-600">
-                {formatCurrency(
-                  orderReportData?.summary.orderCount 
-                    ? (orderReportData.summary.totalAmount / orderReportData.summary.orderCount)
-                    : 0
-                )}
-              </div>
-              <div className="text-xs text-purple-600 mt-1">每单平均费用</div>
-            </div>
-          </div>
-
-          {/* 订单费用明细表 */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
-              <Package className="w-5 h-5 text-blue-500" />
-              订单费用明细
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left py-3 px-3 font-medium text-gray-600">订单号</th>
-                    <th className="text-left py-3 px-3 font-medium text-gray-600">客户</th>
-                    <th className="text-right py-3 px-3 font-medium text-gray-600">费用笔数</th>
-                    <th className="text-right py-3 px-3 font-medium text-blue-600">运费</th>
-                    <th className="text-right py-3 px-3 font-medium text-red-600">关税</th>
-                    <th className="text-right py-3 px-3 font-medium text-orange-600">仓储</th>
-                    <th className="text-right py-3 px-3 font-medium text-purple-600">操作费</th>
-                    <th className="text-right py-3 px-3 font-medium text-gray-600">其他</th>
-                    <th className="text-right py-3 px-3 font-medium text-green-600">合计</th>
-                    <th className="text-center py-3 px-3 font-medium text-gray-600">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orderReportData?.list && orderReportData.list.length > 0 ? (
-                    orderReportData.list.map((item) => (
-                      <tr key={item.billId} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-3">
-                          <span 
-                            className="text-primary-600 hover:underline cursor-pointer font-medium"
-                            onClick={() => navigate(`/bill-details/${item.billId}`)}
-                          >
-                            {item.billNumber}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-gray-600">{item.customerName || '-'}</td>
-                        <td className="py-3 px-3 text-right text-gray-900">{item.feeCount}</td>
-                        <td className="py-3 px-3 text-right text-blue-600">
-                          {item.freightAmount > 0 ? formatCurrency(item.freightAmount) : '-'}
-                        </td>
-                        <td className="py-3 px-3 text-right text-red-600">
-                          {item.customsAmount > 0 ? formatCurrency(item.customsAmount) : '-'}
-                        </td>
-                        <td className="py-3 px-3 text-right text-orange-600">
-                          {item.warehouseAmount > 0 ? formatCurrency(item.warehouseAmount) : '-'}
-                        </td>
-                        <td className="py-3 px-3 text-right text-purple-600">
-                          {item.handlingAmount > 0 ? formatCurrency(item.handlingAmount) : '-'}
-                        </td>
-                        <td className="py-3 px-3 text-right text-gray-600">
-                          {(item.insuranceAmount + item.documentationAmount + item.otherAmount) > 0 
-                            ? formatCurrency(item.insuranceAmount + item.documentationAmount + item.otherAmount) 
-                            : '-'}
-                        </td>
-                        <td className="py-3 px-3 text-right font-bold text-green-600">
-                          {formatCurrency(item.totalAmount)}
-                        </td>
-                        <td className="py-3 px-3 text-center">
-                          <button
-                            onClick={() => navigate(`/finance/fees?billId=${item.billId}`)}
-                            className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
-                          >
-                            查看明细
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={10} className="py-12 text-center text-gray-400">
-                        {loading ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                            加载中...
-                          </div>
-                        ) : (
-                          '暂无订单费用数据'
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {orderReportData?.list && orderReportData.list.length > 0 && (
-                  <tfoot>
-                    <tr className="bg-gray-50 font-medium">
-                      <td className="py-3 px-3 text-gray-900">合计</td>
-                      <td className="py-3 px-3 text-gray-600">{orderReportData.total} 个订单</td>
-                      <td className="py-3 px-3 text-right text-gray-900">{orderReportData.summary.feeCount}</td>
-                      <td className="py-3 px-3 text-right text-blue-600">
-                        {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.freightAmount, 0))}
-                      </td>
-                      <td className="py-3 px-3 text-right text-red-600">
-                        {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.customsAmount, 0))}
-                      </td>
-                      <td className="py-3 px-3 text-right text-orange-600">
-                        {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.warehouseAmount, 0))}
-                      </td>
-                      <td className="py-3 px-3 text-right text-purple-600">
-                        {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.handlingAmount, 0))}
-                      </td>
-                      <td className="py-3 px-3 text-right text-gray-600">
-                        {formatCurrency(orderReportData.list.reduce((sum, i) => sum + i.insuranceAmount + i.documentationAmount + i.otherAmount, 0))}
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold text-green-600">
-                        {formatCurrency(orderReportData.summary.totalAmount)}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-            
-            {/* 分页 */}
-            {orderReportData && orderReportData.total > orderReportData.pageSize && (
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                <div className="text-xs text-gray-500">
-                  共 {orderReportData.total} 个订单，第 {orderReportData.page} / {Math.ceil(orderReportData.total / orderReportData.pageSize)} 页
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setOrderReportPage(p => Math.max(1, p - 1))}
-                    disabled={orderReportPage === 1}
-                    className="px-3 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    上一页
-                  </button>
-                  <button
-                    onClick={() => setOrderReportPage(p => p + 1)}
-                    disabled={orderReportPage >= Math.ceil(orderReportData.total / orderReportData.pageSize)}
-                    className="px-3 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    下一页
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 费用构成说明 */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-              <PieChart className="w-4 h-4 text-gray-500" />
-              费用类型说明
-            </h3>
-            <div className="grid grid-cols-4 gap-4 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-blue-500"></span>
-                <span className="text-gray-600">运费 - 海运费、内陆运费等</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-red-500"></span>
-                <span className="text-gray-600">关税 - 进口关税、增值税等</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-orange-500"></span>
-                <span className="text-gray-600">仓储 - 仓储费、滞港费等</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-purple-500"></span>
-                <span className="text-gray-600">操作费 - 报关费、查验费等</span>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   )
 }

@@ -1,19 +1,31 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
-  Search, Plus, Edit2, Trash2, Receipt,
-  Truck, Shield, Building2, FileText, Package, Settings
+  Search, Edit2, Trash2, Receipt,
+  Truck, Shield, Building2, FileText, Package, Settings,
+  Loader2, Copy,
+  Anchor, Calculator, Briefcase, Box, DollarSign,
+  ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import DataTable, { Column } from '../components/DataTable'
 import FeeModal from '../components/FeeModal'
+import { copyToClipboard } from '../components/Toast'
+import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
+
+const API_BASE = getApiBaseUrl()
 
 interface Fee {
   id: string
   billId: string | null
   billNumber: string
+  orderNumber?: string      // 订单号
+  containerNumber?: string  // 集装箱号
   customerId: string | null
   customerName: string
+  supplierId?: string | null
+  supplierName?: string
+  feeType: 'receivable' | 'payable'  // 应收/应付
   category: string
   feeName: string
   amount: number
@@ -21,11 +33,38 @@ interface Fee {
   feeDate: string
   description: string
   createTime: string
+  invoiceStatus?: string
+}
+
+// 按订单分组的数据结构
+interface OrderFeeGroup {
+  orderNumber: string        // 订单号（用作分组键）
+  billId: string | null
+  billNumber: string
+  containerNumber: string
+  customerName: string
+  receivableTotal: number    // 应收总额
+  payableTotal: number       // 应付总额
+  feeCount: number           // 费用条数
+  fees: Fee[]                // 该订单下的所有费用
 }
 
 interface FeeStats {
-  byCategory: Array<{ category: string; count: number; total: number }>
+  byCategory: Array<{ category: string; categoryCode: string; count: number; total: number }>
   totalAmount: number
+  // 应收/应付分别统计
+  receivable?: { amount: number; count: number }
+  payable?: { amount: number; count: number }
+}
+
+// 服务费类别接口
+interface ServiceFeeCategory {
+  id: string
+  name: string
+  nameEn?: string
+  code: string
+  description?: string
+  status: string
 }
 
 export default function FinanceFees() {
@@ -35,15 +74,24 @@ export default function FinanceFees() {
   const [fees, setFees] = useState<Fee[]>([])
   const [stats, setStats] = useState<FeeStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [total, setTotal] = useState(0)
+  const [total, setTotal] = useState(0)  // 费用条数
+  const [totalGroups, setTotalGroups] = useState(0)  // 订单分组数（用于分页）
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   const [searchValue, setSearchValue] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [filterFeeType, setFilterFeeType] = useState<'' | 'receivable' | 'payable'>('')  // 费用类型筛选
   
   const [modalVisible, setModalVisible] = useState(false)
   const [editingFee, setEditingFee] = useState<Fee | null>(null)
+  const [defaultFeeType, setDefaultFeeType] = useState<'receivable' | 'payable'>('receivable')  // 新增时的默认类型
+  
+  // 展开/收起状态管理（存储已展开的订单号）
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
+  
+  // 服务费类别（从基础数据加载）
+  const [serviceCategories, setServiceCategories] = useState<ServiceFeeCategory[]>([])
   
   // 从URL获取筛选/预填信息（从订单详情页面跳转过来时）
   const filterBillId = searchParams.get('billId') || ''
@@ -62,35 +110,59 @@ export default function FinanceFees() {
   const tabs = [
     { label: '财务概览', path: '/finance' },
     { label: '发票管理', path: '/finance/invoices' },
+    { label: '历史记录', path: '/finance/invoices/history' },
     { label: '收付款', path: '/finance/payments' },
     { label: '费用管理', path: '/finance/fees' },
     { label: '财务报表', path: '/finance/reports' },
+    { label: '订单报表', path: '/finance/order-report' },
+    { label: '银行账户', path: '/finance/bank-accounts' },
   ]
 
+  // 加载服务费类别（用于显示费用分类名称）
+  useEffect(() => {
+    loadServiceCategories()
+  }, [])
    
   useEffect(() => {
     fetchFees()
     fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, filterCategory, searchValue, filterBillId])
+  }, [page, pageSize, filterCategory, filterFeeType, searchValue, filterBillId])
+  
+  // 加载服务费类别数据
+  const loadServiceCategories = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/service-fee-categories?status=active`)
+      const data = await response.json()
+      const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+      if (data.errCode === 200 && list.length > 0) {
+        setServiceCategories(list)
+      }
+    } catch (error) {
+      console.error('加载服务费类别失败:', error)
+    }
+  }
 
   const fetchFees = async () => {
     try {
       setLoading(true)
+      // 统计按 category（费用分类）分组，筛选也使用 category 参数
       const params = new URLSearchParams({
         page: page.toString(),
         pageSize: pageSize.toString(),
         ...(filterCategory && { category: filterCategory }),
+        ...(filterFeeType && { feeType: filterFeeType }),
         ...(searchValue && { search: searchValue }),
         ...(filterBillId && { billId: filterBillId }),
       })
       
-      const response = await fetch(`/api/fees?${params}`)
+      const response = await fetch(`${API_BASE}/api/fees?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
         setFees(data.data?.list || [])
-        setTotal(data.data?.total || 0)
+        setTotal(Number(data.data?.total) || 0)  // 费用条数
+        setTotalGroups(Number(data.data?.totalGroups) || Number(data.data?.total) || 0)  // 订单分组数
       }
     } catch (error) {
       console.error('获取费用列表失败:', error)
@@ -101,7 +173,7 @@ export default function FinanceFees() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/fees/stats')
+      const response = await fetch(`${API_BASE}/api/fees/stats`)
       const data = await response.json()
       if (data.errCode === 200) {
         setStats(data.data)
@@ -115,7 +187,7 @@ export default function FinanceFees() {
     if (!confirm('确定要删除这条费用记录吗？')) return
     
     try {
-      const response = await fetch(`/api/fees/${id}`, { method: 'DELETE' })
+      const response = await fetch(`${API_BASE}/api/fees/${id}`, { method: 'DELETE' })
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -130,127 +202,192 @@ export default function FinanceFees() {
     }
   }
 
-  const formatCurrency = (amount: number, currency = 'CNY') => {
-    return new Intl.NumberFormat('zh-CN', {
+  const formatCurrency = (amount: number, currency = 'EUR') => {
+    return new Intl.NumberFormat('de-DE', {
       style: 'currency',
       currency: currency,
       minimumFractionDigits: 2
     }).format(amount)
   }
 
+  // 切换订单展开/收起状态
+  const toggleOrderExpand = (orderKey: string) => {
+    setExpandedOrders(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(orderKey)) {
+        newSet.delete(orderKey)
+      } else {
+        newSet.add(orderKey)
+      }
+      return newSet
+    })
+  }
+
+  // 全部展开/收起
+  const toggleExpandAll = () => {
+    if (expandedOrders.size === orderGroups.length) {
+      setExpandedOrders(new Set())
+    } else {
+      setExpandedOrders(new Set(orderGroups.map(g => g.orderNumber || 'no-order')))
+    }
+  }
+
+  // 按订单号分组费用数据
+  const orderGroups = useMemo<OrderFeeGroup[]>(() => {
+    const groupMap = new Map<string, OrderFeeGroup>()
+    
+    fees.forEach(fee => {
+      // 使用订单号作为分组键，没有订单号的用 billNumber 或 'no-order'
+      const groupKey = fee.orderNumber || fee.billNumber || 'no-order'
+      
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, {
+          orderNumber: fee.orderNumber || '',
+          billId: fee.billId,
+          billNumber: fee.billNumber || '',
+          containerNumber: fee.containerNumber || '',
+          customerName: fee.customerName || '',
+          receivableTotal: 0,
+          payableTotal: 0,
+          feeCount: 0,
+          fees: []
+        })
+      }
+      
+      const group = groupMap.get(groupKey)!
+      group.fees.push(fee)
+      group.feeCount++
+      
+      // 确保 amount 转换为数字（API 返回的是字符串）
+      const amount = Number(fee.amount) || 0
+      
+      if (fee.feeType === 'receivable') {
+        group.receivableTotal += amount
+      } else {
+        group.payableTotal += amount
+      }
+      
+      // 更新客户名（取第一个有值的）
+      if (!group.customerName && fee.customerName) {
+        group.customerName = fee.customerName
+      }
+      // 更新集装箱号（取第一个有值的）
+      if (!group.containerNumber && fee.containerNumber) {
+        group.containerNumber = fee.containerNumber
+      }
+    })
+    
+    // 转换为数组并按订单号排序
+    return Array.from(groupMap.values()).sort((a, b) => {
+      // 有订单号的排在前面
+      if (a.orderNumber && !b.orderNumber) return -1
+      if (!a.orderNumber && b.orderNumber) return 1
+      // 按订单号字母顺序排序
+      return (b.orderNumber || b.billNumber).localeCompare(a.orderNumber || a.billNumber)
+    })
+  }, [fees])
+
+  // 根据分类代码获取样式配置
+  const getCategoryStyle = (code: string) => {
+    const lowerCode = code?.toLowerCase() || ''
+    if (lowerCode.includes('transport') || lowerCode.includes('freight') || lowerCode.includes('运输')) {
+      return { color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck }
+    }
+    if (lowerCode.includes('customs') || lowerCode.includes('clearance') || lowerCode.includes('关税') || lowerCode.includes('清关')) {
+      return { color: 'text-red-600', bg: 'bg-red-100', icon: Receipt }
+    }
+    if (lowerCode.includes('duty') || lowerCode.includes('进口税')) {
+      return { color: 'text-rose-600', bg: 'bg-rose-100', icon: Calculator }
+    }
+    if (lowerCode.includes('tax') || lowerCode.includes('vat') || lowerCode.includes('增值税')) {
+      return { color: 'text-pink-600', bg: 'bg-pink-100', icon: DollarSign }
+    }
+    if (lowerCode.includes('warehouse') || lowerCode.includes('storage') || lowerCode.includes('仓储')) {
+      return { color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 }
+    }
+    if (lowerCode.includes('insurance') || lowerCode.includes('保险')) {
+      return { color: 'text-green-600', bg: 'bg-green-100', icon: Shield }
+    }
+    if (lowerCode.includes('handling') || lowerCode.includes('操作') || lowerCode.includes('thc') || lowerCode.includes('港杂')) {
+      return { color: 'text-purple-600', bg: 'bg-purple-100', icon: Package }
+    }
+    if (lowerCode.includes('document') || lowerCode.includes('文件') || lowerCode.includes('换单')) {
+      return { color: 'text-cyan-600', bg: 'bg-cyan-100', icon: FileText }
+    }
+    if (lowerCode.includes('port') || lowerCode.includes('港口')) {
+      return { color: 'text-indigo-600', bg: 'bg-indigo-100', icon: Anchor }
+    }
+    if (lowerCode.includes('service') || lowerCode.includes('服务')) {
+      return { color: 'text-teal-600', bg: 'bg-teal-100', icon: Briefcase }
+    }
+    if (lowerCode.includes('package') || lowerCode.includes('清提派') || lowerCode.includes('clearing and dispatching')) {
+      return { color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Package }
+    }
+    if (lowerCode.includes('agency') || lowerCode.includes('代理') || lowerCode.includes('税号')) {
+      return { color: 'text-amber-600', bg: 'bg-amber-100', icon: Building2 }
+    }
+    if (lowerCode.includes('management') || lowerCode.includes('管理')) {
+      return { color: 'text-slate-600', bg: 'bg-slate-100', icon: Settings }
+    }
+    return { color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings }
+  }
+
+  // 费用分类配置 - 优先从动态数据匹配，再使用硬编码映射
   const getCategoryConfig = (category: string) => {
+    // 硬编码的基础映射（用于快速匹配常见分类）
     const configs: Record<string, { label: string; color: string; bg: string; icon: typeof Truck }> = {
+      // 标准分类（小写）
       freight: { label: '运费', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
+      transport: { label: '运输服务', color: 'text-blue-600', bg: 'bg-blue-100', icon: Truck },
       customs: { label: '关税', color: 'text-red-600', bg: 'bg-red-100', icon: Receipt },
-      warehouse: { label: '仓储费', color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 },
+      duty: { label: '进口税', color: 'text-rose-600', bg: 'bg-rose-100', icon: Calculator },
+      tax: { label: '增值税', color: 'text-pink-600', bg: 'bg-pink-100', icon: DollarSign },
+      warehouse: { label: '仓储服务', color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 },
+      storage: { label: '仓储费', color: 'text-orange-600', bg: 'bg-orange-100', icon: Building2 },
       insurance: { label: '保险费', color: 'text-green-600', bg: 'bg-green-100', icon: Shield },
       handling: { label: '操作费', color: 'text-purple-600', bg: 'bg-purple-100', icon: Package },
       documentation: { label: '文件费', color: 'text-cyan-600', bg: 'bg-cyan-100', icon: FileText },
-      other: { label: '其他费用', color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings },
+      port: { label: '港口费', color: 'text-indigo-600', bg: 'bg-indigo-100', icon: Anchor },
+      service: { label: '服务费', color: 'text-teal-600', bg: 'bg-teal-100', icon: Briefcase },
+      package: { label: '清提派业务', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Package },
+      other: { label: '其他服务', color: 'text-gray-600', bg: 'bg-gray-100', icon: Settings },
+      clearance: { label: '清关服务', color: 'text-red-600', bg: 'bg-red-100', icon: Receipt },
+      thc: { label: '港杂费', color: 'text-purple-600', bg: 'bg-purple-100', icon: Package },
+      // 清提派业务分类
+      'clearing and dispatching business': { label: '清提派业务', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: Package },
     }
-    return configs[category] || configs.other
+    
+    const lowerCategory = category?.toLowerCase() || ''
+    
+    // 1. 优先从动态加载的服务费类别中匹配（通过 code 或 name 匹配，忽略大小写）
+    const dynamicCategory = serviceCategories.find(
+      cat => cat.code?.toLowerCase() === lowerCategory || 
+             cat.name?.toLowerCase() === lowerCategory ||
+             cat.name === category
+    )
+    
+    if (dynamicCategory) {
+      // 根据 code 获取样式
+      const style = getCategoryStyle(dynamicCategory.code || dynamicCategory.name)
+      return { 
+        label: dynamicCategory.name, 
+        ...style 
+      }
+    }
+    
+    // 2. 从硬编码映射中查找
+    if (configs[lowerCategory]) {
+      return configs[lowerCategory]
+    }
+    
+    // 3. 最后：根据原始值智能匹配样式，并使用原始值作为标签
+    const style = getCategoryStyle(category)
+    return { 
+      label: category || '其他', 
+      ...style 
+    }
   }
 
-  const columns: Column<Fee>[] = useMemo(() => [
-    {
-      key: 'feeName',
-      label: '费用名称',
-      width: 180,
-      render: (item) => (
-        <div>
-          <div className="font-medium text-gray-900">{item.feeName}</div>
-          <div className="text-xs text-gray-400">{item.feeDate}</div>
-        </div>
-      )
-    },
-    {
-      key: 'category',
-      label: '分类',
-      width: 120,
-      render: (item) => {
-        const config = getCategoryConfig(item.category)
-        const Icon = config.icon
-        return (
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.color}`}>
-            <Icon className="w-3 h-3" />
-            {config.label}
-          </span>
-        )
-      }
-    },
-    {
-      key: 'billNumber',
-      label: '关联提单',
-      width: 150,
-      render: (item) => (
-        <div>
-          {item.billNumber ? (
-            <span className="text-sm text-primary-600 hover:underline cursor-pointer">
-              {item.billNumber}
-            </span>
-          ) : (
-            <span className="text-gray-400">-</span>
-          )}
-        </div>
-      )
-    },
-    {
-      key: 'customerName',
-      label: '客户',
-      width: 150,
-      render: (item) => (
-        <span className="text-sm text-gray-600">{item.customerName || '-'}</span>
-      )
-    },
-    {
-      key: 'amount',
-      label: '金额',
-      width: 120,
-      align: 'right',
-      render: (item) => (
-        <div className="text-right font-medium text-gray-900">
-          {formatCurrency(item.amount, item.currency)}
-        </div>
-      )
-    },
-    {
-      key: 'description',
-      label: '说明',
-      width: 200,
-      render: (item) => (
-        <span className="text-xs text-gray-500 truncate block max-w-[200px]">
-          {item.description || '-'}
-        </span>
-      )
-    },
-    {
-      key: 'actions',
-      label: '操作',
-      width: 100,
-      render: (item) => (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => {
-              setEditingFee(item)
-              setModalVisible(true)
-            }}
-            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-            title="编辑"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => handleDelete(item.id)}
-            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-            title="删除"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [])
 
   return (
     <div className="p-4 space-y-4">
@@ -261,47 +398,101 @@ export default function FinanceFees() {
         onTabChange={(path) => navigate(path)}
       />
 
-      {/* 费用分类统计 */}
+      {/* 费用统计 - 应收/应付总览 */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-gray-900">费用分类统计</h3>
-          <div className="text-sm">
-            <span className="text-gray-500">总费用：</span>
-            <span className="font-bold text-gray-900">{formatCurrency(stats?.totalAmount || 0)}</span>
+          <h3 className="font-medium text-gray-900">费用统计</h3>
+          <div className="flex items-center gap-6 text-sm">
+            {/* 应收总额 */}
+            <button
+              onClick={() => setFilterFeeType(filterFeeType === 'receivable' ? '' : 'receivable')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                filterFeeType === 'receivable' 
+                  ? 'bg-green-100 ring-2 ring-green-500' 
+                  : 'hover:bg-green-50'
+              }`}
+            >
+              <ArrowDownCircle className="w-4 h-4 text-green-600" />
+              <span className="text-gray-500">应收：</span>
+              <span className="font-bold text-green-600">{formatCurrency(stats?.receivable?.amount || 0)}</span>
+              <span className="text-xs text-gray-400">({stats?.receivable?.count || 0}笔)</span>
+            </button>
+            {/* 应付总额 */}
+            <button
+              onClick={() => setFilterFeeType(filterFeeType === 'payable' ? '' : 'payable')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
+                filterFeeType === 'payable' 
+                  ? 'bg-orange-100 ring-2 ring-orange-500' 
+                  : 'hover:bg-orange-50'
+              }`}
+            >
+              <ArrowUpCircle className="w-4 h-4 text-orange-600" />
+              <span className="text-gray-500">应付：</span>
+              <span className="font-bold text-orange-600">{formatCurrency(stats?.payable?.amount || 0)}</span>
+              <span className="text-xs text-gray-400">({stats?.payable?.count || 0}笔)</span>
+            </button>
+            {/* 净额 */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border-l border-gray-200">
+              <span className="text-gray-500">净额：</span>
+              <span className={`font-bold ${
+                (stats?.receivable?.amount || 0) - (stats?.payable?.amount || 0) >= 0 
+                  ? 'text-green-600' 
+                  : 'text-red-600'
+              }`}>
+                {formatCurrency((stats?.receivable?.amount || 0) - (stats?.payable?.amount || 0))}
+              </span>
+            </div>
           </div>
         </div>
         
-        <div className="grid grid-cols-7 gap-3">
-          {['freight', 'customs', 'warehouse', 'insurance', 'handling', 'documentation', 'other'].map((category) => {
-            const config = getCategoryConfig(category)
-            const Icon = config.icon
-            const categoryStats = stats?.byCategory?.find(c => c.category === category)
-            
-            return (
-              <div
-                key={category}
-                onClick={() => setFilterCategory(filterCategory === category ? '' : category)}
-                className={`rounded-lg p-3 cursor-pointer transition-all ${
-                  filterCategory === category 
-                    ? `${config.bg} ring-2 ring-offset-1 ring-${config.color.replace('text-', '')}`
-                    : 'bg-gray-50 hover:bg-gray-100'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Icon className={`w-4 h-4 ${config.color}`} />
-                  <span className={`text-xs font-medium ${filterCategory === category ? config.color : 'text-gray-600'}`}>
-                    {config.label}
-                  </span>
+        {/* 动态网格：根据分类数量自适应列数 */}
+        <div className={`grid gap-3 ${
+          (stats?.byCategory?.length || 0) <= 5 ? 'grid-cols-5' :
+          (stats?.byCategory?.length || 0) <= 7 ? 'grid-cols-7' :
+          'grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10'
+        }`}>
+          {/* 按金额降序排列显示所有分类 */}
+          {stats?.byCategory
+            ?.slice()
+            .sort((a, b) => b.total - a.total)
+            .map((categoryData) => {
+              const config = getCategoryConfig(categoryData.category)
+              const Icon = config.icon
+              
+              const categoryKey = categoryData.categoryCode || categoryData.category
+              
+              return (
+                <div
+                  key={categoryKey}
+                  onClick={() => {
+                    setFilterCategory(filterCategory === categoryKey ? '' : categoryKey)
+                    setPage(1) // 重置分页到第一页
+                  }}
+                  title={config.label}
+                  className={`rounded-lg p-3 cursor-pointer transition-all ${
+                    filterCategory === categoryKey 
+                      ? `${config.bg} ring-2 ring-offset-1 ring-current`
+                      : 'bg-gray-50 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon className={`w-4 h-4 ${config.color}`} />
+                    <span 
+                      className={`text-xs font-medium truncate ${filterCategory === categoryKey ? config.color : 'text-gray-600'}`}
+                      title={config.label}
+                    >
+                      {config.label}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-gray-900">
+                    {formatCurrency(categoryData.total)}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {categoryData.count} 笔
+                  </div>
                 </div>
-                <div className="text-sm font-bold text-gray-900">
-                  {formatCurrency(categoryStats?.total || 0)}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {categoryStats?.count || 0} 笔
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
         </div>
       </div>
 
@@ -331,32 +522,56 @@ export default function FinanceFees() {
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="搜索费用名称..."
+              placeholder="搜索费用名称/订单号/提单号/柜号..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+              onKeyDown={(e) => e.key === 'Enter' && fetchFees()}
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-72 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
             />
           </div>
 
-          {/* 分类筛选 */}
+          {/* 费用类型筛选 */}
           <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
+            value={filterFeeType}
+            onChange={(e) => {
+              setFilterFeeType(e.target.value as '' | 'receivable' | 'payable')
+              setPage(1) // 重置分页到第一页
+            }}
             className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选费用类型"
           >
-            <option value="">全部分类</option>
-            <option value="freight">运费</option>
-            <option value="customs">关税</option>
-            <option value="warehouse">仓储费</option>
-            <option value="insurance">保险费</option>
-            <option value="handling">操作费</option>
-            <option value="documentation">文件费</option>
-            <option value="other">其他费用</option>
+            <option value="">全部类型</option>
+            <option value="receivable">应收费用</option>
+            <option value="payable">应付费用</option>
           </select>
 
-          {filterCategory && (
+          {/* 分类筛选 - 动态生成选项 */}
+          <select
+            value={filterCategory}
+            onChange={(e) => {
+              setFilterCategory(e.target.value)
+              setPage(1) // 重置分页到第一页
+            }}
+            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选费用分类"
+          >
+            <option value="">全部分类</option>
+            {stats?.byCategory
+              ?.slice()
+              .sort((a, b) => b.total - a.total)
+              .map((cat) => (
+                <option key={cat.categoryCode || cat.category} value={cat.categoryCode || cat.category}>
+                  {getCategoryConfig(cat.category).label} ({cat.count}笔)
+                </option>
+              ))}
+          </select>
+
+          {(filterCategory || filterFeeType) && (
             <button
-              onClick={() => setFilterCategory('')}
+              onClick={() => {
+                setFilterCategory('')
+                setFilterFeeType('')
+              }}
               className="text-xs text-gray-500 hover:text-gray-700"
             >
               清除筛选
@@ -364,30 +579,272 @@ export default function FinanceFees() {
           )}
         </div>
 
-        <button
-          onClick={() => {
-            setEditingFee(null)
-            setModalVisible(true)
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          新增费用
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setEditingFee(null)
+              setDefaultFeeType('receivable')
+              setModalVisible(true)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <ArrowDownCircle className="w-4 h-4" />
+            录入应收
+          </button>
+          <button
+            onClick={() => {
+              setEditingFee(null)
+              setDefaultFeeType('payable')
+              setModalVisible(true)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-xs font-medium rounded-lg hover:bg-orange-700 transition-colors"
+          >
+            <ArrowUpCircle className="w-4 h-4" />
+            录入应付
+          </button>
+        </div>
       </div>
 
-      {/* 数据表格 */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <DataTable
-          columns={columns}
-          data={fees}
-          loading={loading}
-          rowKey="id"
-        />
+      {/* 分组数据表格 */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}>
+        {/* 表格内容包装器 - 设置最小宽度 */}
+        <div className="min-w-[950px]">
+          {/* 表格头部 - sticky 固定在顶部 */}
+          <div className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+            <div className="flex items-center w-full px-3 py-2 text-xs font-medium text-gray-500">
+              <div className="w-8 flex-shrink-0 flex items-center justify-center">
+                <button 
+                  onClick={toggleExpandAll}
+                  className="p-1 hover:bg-gray-200 rounded transition-colors"
+                  title={expandedOrders.size === orderGroups.length ? '全部收起' : '全部展开'}
+                >
+                  {expandedOrders.size === orderGroups.length ? (
+                    <ChevronDown className="w-4 h-4 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  )}
+                </button>
+              </div>
+              <div className="w-[100px] flex-shrink-0">订单号</div>
+              <div className="w-[140px] flex-shrink-0">提单号</div>
+              <div className="w-[130px] flex-shrink-0">集装箱号</div>
+              <div className="w-[100px] flex-shrink-0">客户</div>
+              <div className="w-[60px] flex-shrink-0 text-center">费用数</div>
+              <div className="w-[110px] flex-shrink-0 text-right">应收</div>
+              <div className="w-[110px] flex-shrink-0 text-right">应付</div>
+              <div className="w-[110px] flex-shrink-0 text-right">净额</div>
+              <div className="flex-1 min-w-[20px]"></div>
+            </div>
+          </div>
+
+          {/* 表格内容 */}
+          <div className="divide-y divide-gray-100">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+              <span className="ml-2 text-sm text-gray-500">加载中...</span>
+            </div>
+          ) : orderGroups.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+              <Receipt className="w-12 h-12 mb-2 opacity-50" />
+              <span className="text-sm">暂无费用数据</span>
+            </div>
+          ) : (
+            orderGroups.map((group) => {
+              const groupKey = group.orderNumber || group.billNumber || 'no-order'
+              const isExpanded = expandedOrders.has(groupKey)
+              const netAmount = group.receivableTotal - group.payableTotal
+              
+              return (
+                <div key={groupKey} className="w-full">
+                  {/* 订单汇总行 */}
+                  <div 
+                    className={`flex items-center w-full px-3 py-2.5 hover:bg-gray-50 cursor-pointer transition-colors ${
+                      isExpanded ? 'bg-primary-50/50' : ''
+                    }`}
+                    onClick={() => toggleOrderExpand(groupKey)}
+                  >
+                    <div className="w-8 flex-shrink-0 flex items-center justify-center">
+                      <button className="p-1 hover:bg-gray-200 rounded transition-colors">
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4 text-primary-600" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                    </div>
+                    <div className="w-[100px] flex-shrink-0">
+                      {group.orderNumber ? (
+                        <span 
+                          className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            group.billId && navigate(`/finance/bill-details/${group.billId}`)
+                          }}
+                        >
+                          {group.orderNumber}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">无订单号</span>
+                      )}
+                    </div>
+                    <div className="w-[140px] flex-shrink-0">
+                      {group.billNumber ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-600 truncate max-w-[110px]" title={group.billNumber}>
+                            {group.billNumber}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              copyToClipboard(group.billNumber, e)
+                            }}
+                            className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                            title="复制提单号"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">-</span>
+                      )}
+                    </div>
+                    <div className="w-[130px] flex-shrink-0 text-xs text-gray-600">
+                      {group.containerNumber || '-'}
+                    </div>
+                    <div className="w-[100px] flex-shrink-0 text-xs text-gray-600 truncate" title={group.customerName}>
+                      {group.customerName || '-'}
+                    </div>
+                    <div className="w-[60px] flex-shrink-0">
+                      <div className="flex items-center justify-center">
+                        <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                          {group.feeCount}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-[110px] flex-shrink-0 text-right text-xs font-medium text-green-600">
+                      {group.receivableTotal > 0 ? formatCurrency(group.receivableTotal) : '-'}
+                    </div>
+                    <div className="w-[110px] flex-shrink-0 text-right text-xs font-medium text-orange-600">
+                      {group.payableTotal > 0 ? formatCurrency(group.payableTotal) : '-'}
+                    </div>
+                    <div className={`w-[110px] flex-shrink-0 text-right text-xs font-bold ${
+                      netAmount >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(netAmount)}
+                    </div>
+                    <div className="flex-1"></div>
+                  </div>
+
+                  {/* 展开的费用明细 */}
+                  {isExpanded && (
+                    <div className="bg-gray-50/50 w-full">
+                      {/* 明细表头 */}
+                      <div className="flex items-center w-full px-3 py-1.5 bg-gray-100/80 text-xs text-gray-500 border-y border-gray-200/50">
+                        <div className="w-8 flex-shrink-0"></div>
+                        <div className="w-[140px] flex-shrink-0 pl-4">费用名称</div>
+                        <div className="w-[70px] flex-shrink-0 text-center">类型</div>
+                        <div className="w-[90px] flex-shrink-0 text-center">分类</div>
+                        <div className="w-[90px] flex-shrink-0">客户/供应商</div>
+                        <div className="w-[100px] flex-shrink-0 text-right">金额</div>
+                        <div className="w-[90px] flex-shrink-0 text-center">日期</div>
+                        <div className="flex-1 min-w-[100px]">说明</div>
+                        <div className="w-[70px] flex-shrink-0 text-center">操作</div>
+                      </div>
+                      
+                      {/* 明细行 */}
+                      {group.fees.map((fee, feeIndex) => {
+                        const categoryConfig = getCategoryConfig(fee.category)
+                        const CategoryIcon = categoryConfig.icon
+                        
+                        return (
+                          <div 
+                            key={fee.id}
+                            className={`flex items-center w-full px-3 py-2 hover:bg-white transition-colors ${
+                              feeIndex < group.fees.length - 1 ? 'border-b border-gray-100' : ''
+                            }`}
+                          >
+                            <div className="w-8 flex-shrink-0"></div>
+                            <div className="w-[140px] flex-shrink-0 pl-4">
+                              <div className="text-xs font-medium text-gray-900 truncate" title={fee.feeName}>{fee.feeName}</div>
+                            </div>
+                            <div className="w-[70px] flex-shrink-0">
+                              <div className="flex items-center justify-center">
+                                {fee.feeType === 'payable' ? (
+                                  <span className="inline-flex items-center justify-center min-w-[52px] gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                                    <ArrowUpCircle className="w-3 h-3" />
+                                    应付
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center justify-center min-w-[52px] gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                                    <ArrowDownCircle className="w-3 h-3" />
+                                    应收
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="w-[90px] flex-shrink-0">
+                              <div className="flex items-center justify-center">
+                                <span className={`inline-flex items-center justify-center min-w-[60px] gap-0.5 px-1.5 py-0.5 rounded-full text-xs font-medium ${categoryConfig.bg} ${categoryConfig.color}`}>
+                                  <CategoryIcon className="w-3 h-3" />
+                                  {categoryConfig.label}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="w-[90px] flex-shrink-0 text-xs truncate">
+                              {fee.feeType === 'payable' ? (
+                                <span className="text-orange-600" title={fee.supplierName}>{fee.supplierName || '-'}</span>
+                              ) : (
+                                <span className="text-gray-600" title={fee.customerName}>{fee.customerName || '-'}</span>
+                              )}
+                            </div>
+                            <div className="w-[100px] flex-shrink-0 text-right text-xs font-medium text-gray-900">
+                              {formatCurrency(Number(fee.amount) || 0, fee.currency)}
+                            </div>
+<div className="w-[90px] flex-shrink-0 text-xs text-gray-500 text-center">
+                                              {formatDate(fee.feeDate)}
+                                            </div>
+                            <div className="flex-1 min-w-[100px]">
+                              <span className="text-xs text-gray-500 truncate block" title={fee.description}>
+                                {fee.description || '-'}
+                              </span>
+                            </div>
+                            <div className="w-[70px] flex-shrink-0">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingFee(fee)
+                                    setModalVisible(true)
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                                  title="编辑"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(fee.id)}
+                                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="删除"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+        </div>
       </div>
 
       {/* 分页 */}
-      {total > pageSize && (
+      {total > 0 && (
         <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
           <div className="text-xs text-gray-500">
             共 {total} 条记录
@@ -401,15 +858,28 @@ export default function FinanceFees() {
               上一页
             </button>
             <span className="text-xs text-gray-600">
-              第 {page} / {Math.ceil(total / pageSize)} 页
+              第 {page} / {Math.ceil(totalGroups / pageSize) || 1} 页
             </span>
             <button
-              onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
-              disabled={page >= Math.ceil(total / pageSize)}
+              onClick={() => setPage(p => Math.min(Math.ceil(totalGroups / pageSize), p + 1))}
+              disabled={page >= Math.ceil(totalGroups / pageSize)}
               className="px-3 py-1 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               下一页
             </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
           </div>
         </div>
       )}
@@ -430,6 +900,7 @@ export default function FinanceFees() {
         defaultBillNumber={defaultBillNumber}
         defaultCustomerId={defaultCustomerId}
         defaultCustomerName={defaultCustomerName}
+        defaultFeeType={defaultFeeType}
       />
     </div>
   )

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { FileText } from 'lucide-react'
+import { FileText, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
+import { copyToClipboard } from '../components/Toast'
 import { useColumnSettings } from '../hooks/useColumnSettings'
 
 interface Order {
@@ -83,11 +84,20 @@ export default function OrderLabels() {
       label: '订单号',
       sorter: true,
       filterable: true,
-      render: (item: Order) => (
-        <div>
-          <div className="text-primary-600 hover:underline cursor-pointer">
-            {item.orderNumber}
-          </div>
+      render: (_value, record: Order) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
+            {record.orderNumber}
+          </span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -100,9 +110,9 @@ export default function OrderLabels() {
     {
       key: 'counts',
       label: '成功 / 失败 / 生成中 / 全部',
-      render: (item: Order) => (
+      render: (_value, record: Order) => (
         <span>
-          {item.success} / {item.failed} / {item.generating} / {item.total}
+          {record.success} / {record.failed} / {record.generating} / {record.total}
         </span>
       ),
     },
@@ -136,14 +146,14 @@ export default function OrderLabels() {
         { text: '失败', value: '失败' },
       ],
       onFilter: (value, record) => record.status === value,
-      render: (item: Order) => (
+      render: (_value, record: Order) => (
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            item.status === '成功' ? 'bg-green-500' :
-            item.status === '生成中' ? 'bg-yellow-500' :
+            record.status === '成功' ? 'bg-green-500' :
+            record.status === '生成中' ? 'bg-yellow-500' :
             'bg-red-500'
           }`}></span>
-          <span>{item.status}</span>
+          <span>{record.status}</span>
         </div>
       ),
     },
@@ -231,7 +241,7 @@ export default function OrderLabels() {
           visibleColumns={visibleColumns}
           compact={true}
           pagination={{
-            pageSize: 10,
+            pageSize: 20,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条记录`,
           }}

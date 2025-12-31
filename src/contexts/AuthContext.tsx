@@ -2,9 +2,36 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { type User } from '../utils/api'
+import { useSessionTimeout } from '../hooks/useSessionTimeout'
+import SessionTimeoutModal from '../components/SessionTimeoutModal'
 
-// API 基础地址（生产环境使用相对路径，通过 Vercel rewrites 转发到后端）
-const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api'
+// API 基础地址 - 根据域名自动选择（阿里云部署）
+function getApiBaseUrl(): string {
+  // 开发环境
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3001/api'
+  }
+  
+  // 根据当前域名自动选择 API（全部指向阿里云）
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    
+    // 演示环境 -> 演示 API
+    if (hostname === 'demo.xianfeng-eu.com') {
+      return 'https://demo-api.xianfeng-eu.com/api'
+    }
+    
+    // 生产环境 -> 阿里云 API
+    if (hostname === 'erp.xianfeng-eu.com') {
+      return 'https://api.xianfeng-eu.com/api'
+    }
+  }
+  
+  // 默认使用相对路径（通过 Nginx 反向代理转发）
+  return '/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 interface AuthState {
   user: User | null
@@ -18,7 +45,7 @@ interface AuthState {
 interface AuthContextType extends AuthState {
   login: () => void
   testLogin: (username: string, password: string) => Promise<{ success: boolean; message: string }>
-  logout: () => void
+  logout: (reason?: string) => void
   getAccessToken: () => Promise<string | null>
   hasPermission: (permission: string) => boolean
   hasAnyPermission: (permissions: string[]) => boolean
@@ -26,6 +53,7 @@ interface AuthContextType extends AuthState {
   canViewBill: (billId?: string, operatorId?: string) => boolean
   isAdmin: () => boolean
   isManager: () => boolean
+  extendSession: () => void // 延长会话（重置超时计时器）
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -235,12 +263,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // 登出
-  const logout = useCallback(() => {
+  const logout = useCallback((reason?: string) => {
+    // 检查是否是密码登录用户（localStorage 中有 TEST_MODE_KEY 表示是密码登录）
+    const isPasswordLogin = !!localStorage.getItem(TEST_MODE_KEY)
+    
+    // 清除会话超时相关的 localStorage
+    localStorage.removeItem('bp_logistics_last_activity')
+    localStorage.removeItem('bp_logistics_session_timeout')
     localStorage.removeItem(USER_CACHE_KEY)
     localStorage.removeItem(TEST_MODE_KEY)
     
-    if (state.isTestMode) {
-      // 测试模式直接清除状态
+    // 如果是超时登出，在控制台记录
+    if (reason === 'timeout') {
+      console.log('[Auth] 会话超时，自动登出')
+    }
+    
+    // 密码登录用户（包括测试用户和普通用户）直接清除状态
+    if (isPasswordLogin || state.isTestMode) {
       setState({
         user: null,
         permissions: [],
@@ -249,8 +288,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading: false,
         isTestMode: false,
       })
+      // 跳转到登录页
+      window.location.href = '/login'
     } else {
-      // 正式模式退出 Auth0
+      // Auth0 登录用户退出 Auth0
       auth0Logout({
         logoutParams: {
           returnTo: window.location.origin,
@@ -259,11 +300,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [auth0Logout, state.isTestMode])
 
+  // 会话超时处理
+  const handleSessionTimeout = useCallback(() => {
+    logout('timeout')
+  }, [logout])
+
+  // 会话超时监控 - 仅在已登录且非加载状态时启用
+  const {
+    showWarning: showTimeoutWarning,
+    remainingTime: sessionRemainingTime,
+    extendSession,
+  } = useSessionTimeout({
+    onTimeout: handleSessionTimeout,
+    enabled: state.isAuthenticated && !state.isLoading,
+  })
+
   // 获取 Access Token（用于 API 调用）
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (state.isTestMode) {
+    // 如果有存储的 token（来自密码登录），直接使用
+    // 这样即使 isTestMode 是 false，也能使用密码登录的 token
+    if (state.token) {
       return state.token
     }
+    // 否则尝试获取 Auth0 token
     try {
       const token = await getAccessTokenSilently()
       return token
@@ -271,7 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('获取 Access Token 失败:', error)
       return null
     }
-  }, [getAccessTokenSilently, state.isTestMode, state.token])
+  }, [getAccessTokenSilently, state.token])
 
   // 检查是否有某个权限
   const hasPermission = useCallback((permission: string): boolean => {
@@ -334,9 +393,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         canViewBill,
         isAdmin,
         isManager,
+        extendSession,
       }}
     >
       {children}
+      {/* 会话超时提醒弹窗 */}
+      <SessionTimeoutModal
+        isOpen={showTimeoutWarning}
+        remainingTime={sessionRemainingTime}
+        onExtend={extendSession}
+        onLogout={() => logout('timeout')}
+      />
     </AuthContext.Provider>
   )
 }
@@ -351,40 +418,99 @@ export function useAuth() {
 
 // 权限常量
 export const PERMISSIONS = {
+  // 系统概览
+  DASHBOARD_VIEW: 'dashboard:view',
+  BP_VIEW: 'bp:view',
+  // 订单管理
   BILL_VIEW: 'bill:view',
   BILL_VIEW_ALL: 'bill:view_all',
   BILL_CREATE: 'bill:create',
   BILL_EDIT: 'bill:edit',
   BILL_DELETE: 'bill:delete',
+  // TMS运输
   CMR_VIEW: 'cmr:view',
   CMR_OPERATE: 'cmr:operate',
+  TMS_VIEW: 'tms:view',
+  TMS_TRACK: 'tms:track',
+  TMS_OPERATE: 'tms:operate',
+  TMS_DISPATCH: 'tms:dispatch',
+  TMS_EXCEPTION: 'tms:exception',
+  TMS_PRICING: 'tms:pricing',
+  TMS_CONDITIONS: 'tms:conditions',
+  TMS_LAST_MILE: 'tms:last_mile',
+  // 查验管理
   INSPECTION_VIEW: 'inspection:view',
   INSPECTION_OPERATE: 'inspection:operate',
+  INSPECTION_RELEASE: 'inspection:release',
+  // CRM客户管理
   CRM_VIEW: 'crm:view',
   CRM_MANAGE: 'crm:manage',
   CRM_CUSTOMER_VIEW: 'crm:customer:view',
   CRM_CUSTOMER_MANAGE: 'crm:customer:manage',
   CRM_OPPORTUNITY_VIEW: 'crm:opportunity:view',
   CRM_OPPORTUNITY_MANAGE: 'crm:opportunity:manage',
+  CRM_QUOTATION_MANAGE: 'crm:quotation_manage',
+  CRM_CONTRACT_MANAGE: 'crm:contract_manage',
+  CRM_FEEDBACK_MANAGE: 'crm:feedback_manage',
+  // 供应商管理
+  SUPPLIER_VIEW: 'supplier:view',
+  SUPPLIER_MANAGE: 'supplier:manage',
+  SUPPLIER_PRICE_IMPORT: 'supplier:price_import',
+  // 财务管理
   FINANCE_VIEW: 'finance:view',
   FINANCE_MANAGE: 'finance:manage',
-  FINANCE_INVOICE_VIEW: 'finance:invoice:view',
+  FINANCE_INVOICE_VIEW: 'finance:invoice_view',
+  FINANCE_INVOICE_CREATE: 'finance:invoice_create',
+  FINANCE_INVOICE_EDIT: 'finance:invoice_edit',
+  FINANCE_INVOICE_DELETE: 'finance:invoice_delete',
   FINANCE_INVOICE_MANAGE: 'finance:invoice:manage',
-  FINANCE_PAYMENT_VIEW: 'finance:payment:view',
+  FINANCE_PAYMENT_VIEW: 'finance:payment_view',
+  FINANCE_PAYMENT_REGISTER: 'finance:payment_register',
+  FINANCE_PAYMENT_APPROVE: 'finance:payment_approve',
   FINANCE_PAYMENT_MANAGE: 'finance:payment:manage',
-  FINANCE_REPORT_VIEW: 'finance:report:view',
+  FINANCE_REPORT_VIEW: 'finance:report_view',
+  FINANCE_REPORT_EXPORT: 'finance:report_export',
+  FINANCE_FEE_MANAGE: 'finance:fee_manage',
+  FINANCE_BANK_MANAGE: 'finance:bank_manage',
+  FINANCE_STATEMENTS: 'finance:statements',
+  // 单证管理
+  DOCUMENT_VIEW: 'document:view',
+  DOCUMENT_CREATE: 'document:create',
+  DOCUMENT_EDIT: 'document:edit',
+  DOCUMENT_DELETE: 'document:delete',
+  DOCUMENT_IMPORT: 'document:import',
+  DOCUMENT_EXPORT: 'document:export',
+  DOCUMENT_MATCH: 'document:match',
+  DOCUMENT_TAX_CALC: 'document:tax_calc',
+  DOCUMENT_SUPPLEMENT: 'document:supplement',
+  DOCUMENT_MATCH_RECORDS: 'document:match_records',
+  // 产品定价
+  PRODUCT_VIEW: 'product:view',
+  PRODUCT_MANAGE: 'product:manage',
+  PRODUCT_PRICE_ADJUST: 'product:price_adjust',
+  // 工具箱
   TOOL_INQUIRY: 'tool:inquiry',
   TOOL_TARIFF: 'tool:tariff',
   TOOL_CATEGORY: 'tool:category',
   TOOL_ADDRESS: 'tool:address',
   TOOL_COMMODITY: 'tool:commodity',
   TOOL_PAYMENT: 'tool:payment',
+  TOOL_SHARED_TAX: 'tool:shared_tax',
+  // 系统管理
   SYSTEM_USER: 'system:user',
   SYSTEM_MENU: 'system:menu',
   SYSTEM_BASIC_DATA: 'system:basic_data',
   SYSTEM_TARIFF_RATE: 'system:tariff_rate',
   SYSTEM_LOGO: 'system:logo',
   SYSTEM_ACTIVITY_LOG: 'system:activity_log',
+  SYSTEM_MESSAGE: 'system:message',
+  SYSTEM_DATA_IMPORT: 'system:data_import',
+  SYSTEM_SECURITY: 'system:security',
+  SYSTEM_API_INTEGRATIONS: 'system:api_integrations',
+  // 审批管理
+  APPROVAL_VIEW: 'approval:view',
+  APPROVAL_SUBMIT: 'approval:submit',
+  APPROVAL_APPROVE: 'approval:approve',
 } as const
 
 export default AuthContext

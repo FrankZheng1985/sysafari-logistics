@@ -8,6 +8,9 @@ import { PageContainer, ContentCard } from '../components/ui'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ClearanceDocumentModal from '../components/ClearanceDocumentModal'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // 单证类型接口
 interface DocumentType {
@@ -72,7 +75,7 @@ export default function ClearanceDocuments() {
   const [stats, setStats] = useState<ClearanceStats | null>(null)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(20)
   
   // 筛选条件
   const [searchValue, setSearchValue] = useState('')
@@ -103,11 +106,11 @@ export default function ClearanceDocuments() {
   useEffect(() => {
     loadDocuments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, searchValue, filterType, filterStatus, activeTab])
+  }, [page, pageSize, searchValue, filterType, filterStatus, activeTab])
 
   const loadDocumentTypes = async () => {
     try {
-      const response = await fetch('/api/clearance/document-types')
+      const response = await fetch(`${API_BASE}/api/clearance/document-types`)
       const data = await response.json()
       if (data.errCode === 200) {
         setDocumentTypes(data.data || [])
@@ -119,7 +122,7 @@ export default function ClearanceDocuments() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/clearance/stats')
+      const response = await fetch(`${API_BASE}/api/clearance/stats`)
       const data = await response.json()
       if (data.errCode === 200) {
         setStats(data.data)
@@ -145,7 +148,7 @@ export default function ClearanceDocuments() {
         params.append('status', activeTab)
       }
       
-      const response = await fetch(`/api/clearance/documents?${params}`)
+      const response = await fetch(`${API_BASE}/api/clearance/documents?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -173,7 +176,7 @@ export default function ClearanceDocuments() {
     if (!confirm('确定要删除此单证吗？')) return
     
     try {
-      const response = await fetch(`/api/clearance/documents/${id}`, { method: 'DELETE' })
+      const response = await fetch(`${API_BASE}/api/clearance/documents/${id}`, { method: 'DELETE' })
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -199,32 +202,32 @@ export default function ClearanceDocuments() {
     {
       key: 'documentNo',
       label: '单证编号',
-      render: (item) => (
-        <span className="text-primary-600 font-medium cursor-pointer hover:underline" onClick={() => handleEdit(item)}>
-          {item.documentNo}
+      render: (_value, record) => (
+        <span className="text-primary-600 font-medium cursor-pointer hover:underline" onClick={() => handleEdit(record)}>
+          {record.documentNo}
         </span>
       ),
     },
     {
       key: 'documentTypeName',
       label: '单证类型',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-1">
           <FileText className="w-3.5 h-3.5 text-gray-400" />
-          <span>{item.documentTypeName || item.documentType}</span>
+          <span>{record.documentTypeName || record.documentType}</span>
         </div>
       ),
     },
     {
       key: 'billNumber',
       label: '关联订单',
-      render: (item) => (
-        item.billNumber ? (
+      render: (_value, record) => (
+        record.billNumber ? (
           <span 
             className="text-primary-600 cursor-pointer hover:underline"
-            onClick={() => item.billId && navigate(`/bookings/bill/${item.billId}`)}
+            onClick={() => record.billId && navigate(`/bookings/bill/${record.billId}`)}
           >
-            {item.billNumber}
+            {record.billNumber}
           </span>
         ) : (
           <span className="text-gray-400">-</span>
@@ -234,32 +237,32 @@ export default function ClearanceDocuments() {
     {
       key: 'shipperName',
       label: '发货人',
-      render: (item) => <span className="truncate max-w-[120px]" title={item.shipperName}>{item.shipperName || '-'}</span>,
+      render: (_value, record) => <span className="truncate max-w-[120px]" title={record.shipperName}>{record.shipperName || '-'}</span>,
     },
     {
       key: 'consigneeName',
       label: '收货人',
-      render: (item) => <span className="truncate max-w-[120px]" title={item.consigneeName}>{item.consigneeName || '-'}</span>,
+      render: (_value, record) => <span className="truncate max-w-[120px]" title={record.consigneeName}>{record.consigneeName || '-'}</span>,
     },
     {
       key: 'goodsDescription',
       label: '货物描述',
-      render: (item) => <span className="truncate max-w-[150px]" title={item.goodsDescription}>{item.goodsDescription || '-'}</span>,
+      render: (_value, record) => <span className="truncate max-w-[150px]" title={record.goodsDescription}>{record.goodsDescription || '-'}</span>,
     },
     {
       key: 'totalValue',
       label: '货值',
-      render: (item) => (
+      render: (_value, record) => (
         <span className="font-medium">
-          {item.currency} {item.totalValue?.toLocaleString() || '0'}
+          {record.currency} {record.totalValue?.toLocaleString() || '0'}
         </span>
       ),
     },
     {
       key: 'status',
       label: '状态',
-      render: (item) => {
-        const config = STATUS_CONFIG[item.status] || STATUS_CONFIG.draft
+      render: (_value, record) => {
+        const config = STATUS_CONFIG[record.status] || STATUS_CONFIG.draft
         const Icon = config.icon
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${config.color}`}>
@@ -272,8 +275,8 @@ export default function ClearanceDocuments() {
     {
       key: 'reviewStatus',
       label: '审核',
-      render: (item) => {
-        const config = REVIEW_STATUS_CONFIG[item.reviewStatus] || REVIEW_STATUS_CONFIG.pending
+      render: (_value, record) => {
+        const config = REVIEW_STATUS_CONFIG[record.reviewStatus] || REVIEW_STATUS_CONFIG.pending
         return (
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${config.color}`}>
             {config.label}
@@ -284,17 +287,17 @@ export default function ClearanceDocuments() {
     {
       key: 'createdAt',
       label: '创建时间',
-      render: (item) => <span className="text-gray-500 text-xs">{item.createdAt?.slice(0, 16)}</span>,
+      render: (_value, record) => <span className="text-gray-500 text-xs">{record.createdAt?.slice(0, 16)}</span>,
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item) => (
+      render: (_value, record) => (
         <div className="flex items-center gap-2">
-          <button onClick={() => handleEdit(item)} className="text-primary-600 hover:text-primary-700" title="编辑">
+          <button onClick={() => handleEdit(record)} className="text-primary-600 hover:text-primary-700" title="编辑">
             <Edit2 className="w-4 h-4" />
           </button>
-          <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-700" title="删除">
+          <button onClick={() => handleDelete(record.id)} className="text-red-600 hover:text-red-700" title="删除">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
@@ -491,6 +494,8 @@ export default function ClearanceDocuments() {
               page,
               pageSize,
               onChange: setPage,
+              showSizeChanger: true,
+              showTotal: (total) => `共 ${total} 条记录`,
             }}
             compact
           />

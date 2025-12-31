@@ -51,38 +51,47 @@ export default function OrderDeclarations() {
   }
   
   const columns: Column<Declaration>[] = [
-    { key: 'id', label: '序号' },
+    { key: 'id', label: '序号', sorter: true },
     {
       key: 'declarationId',
       label: '申报 ID',
-      render: (item: Declaration) => (
+      sorter: true,
+      render: (_value, record: Declaration) => (
         <div className="flex items-center gap-2">
-          <span className="text-primary-600">{item.declarationId}</span>
+          <span className="text-primary-600">{record.declarationId}</span>
         </div>
       ),
     },
-    { key: 'country', label: '申报国家' },
-    { key: 'type', label: '申报类型' },
+    { key: 'country', label: '申报国家', sorter: true },
+    { key: 'type', label: '申报类型', sorter: true },
     {
       key: 'status',
       label: '成功 / 生产中 / 失败 / 全部',
-      render: (item: Declaration) => (
+      render: (_value, record: Declaration) => (
         <span>
-          {item.success} / {item.producing} / {item.failed} / {item.total}
+          {record.success} / {record.producing} / {record.failed} / {record.total}
         </span>
       ),
     },
-    { key: 'priority', label: '优先级' },
-    { key: 'creator', label: '创建者' },
-    { key: 'createTime', label: '创建时间' },
+    { key: 'priority', label: '优先级', sorter: true },
+    { key: 'creator', label: '创建者', sorter: true },
+    { 
+      key: 'createTime', 
+      label: '创建时间',
+      sorter: (a: Declaration, b: Declaration) => {
+        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
+        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        return dateA - dateB
+      }
+    },
     {
       key: 'actions',
       label: '操作',
-      render: (item: Declaration) => (
+      render: (_value, record: Declaration) => (
         <div className="flex gap-2">
           <button className="text-primary-600 hover:underline">详情</button>
           <button
-            onClick={() => handleDownload(item.declarationId)}
+            onClick={() => handleDownload(record.declarationId)}
             className="flex items-center gap-1 text-primary-600 hover:underline"
             title="下载文件"
           >

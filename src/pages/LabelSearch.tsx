@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { FileText, Search } from 'lucide-react'
+import { FileText, Search, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
+import { copyToClipboard } from '../components/Toast'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { useColumnSettings } from '../hooks/useColumnSettings'
 
@@ -92,11 +93,20 @@ export default function LabelSearch() {
       key: 'labelNumber',
       label: '标签号',
       sorter: true,
-      render: (item: SearchResult) => (
-        <div>
-          <div className="text-primary-600 hover:underline cursor-pointer">
-            {item.labelNumber}
-          </div>
+      render: (_value, record: SearchResult) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
+            {record.labelNumber}
+          </span>
+          {record.labelNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.labelNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制标签号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -104,9 +114,20 @@ export default function LabelSearch() {
       key: 'orderNumber',
       label: '订单号',
       sorter: true,
-      render: (item: SearchResult) => (
-        <div className="text-primary-600 hover:underline cursor-pointer">
-          {item.orderNumber}
+      render: (_value, record: SearchResult) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
+            {record.orderNumber}
+          </span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -114,9 +135,20 @@ export default function LabelSearch() {
       key: 'billNumber',
       label: '提单号',
       sorter: true,
-      render: (item: SearchResult) => (
-        <div className="text-primary-600 hover:underline cursor-pointer">
-          {item.billNumber}
+      render: (_value, record: SearchResult) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
+            {record.billNumber}
+          </span>
+          {record.billNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制提单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -128,9 +160,9 @@ export default function LabelSearch() {
     {
       key: 'address',
       label: '地址',
-      render: (item: SearchResult) => (
-        <div className="max-w-xs truncate" title={item.address}>
-          {item.address}
+      render: (_value, record: SearchResult) => (
+        <div className="max-w-xs truncate" title={record.address}>
+          {record.address}
         </div>
       ),
     },
@@ -151,19 +183,19 @@ export default function LabelSearch() {
         { text: '待打印', value: '待打印' },
       ],
       onFilter: (value, record) => record.status === value,
-      render: (item: SearchResult) => (
+      render: (_value, record: SearchResult) => (
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            item.status === '已打印' ? 'bg-green-500' : 'bg-yellow-500'
+            record.status === '已打印' ? 'bg-green-500' : 'bg-yellow-500'
           }`}></span>
-          <span>{item.status}</span>
+          <span>{record.status}</span>
         </div>
       ),
     },
     {
       key: 'printTime',
       label: '打印时间',
-      render: (item: SearchResult) => item.printTime || '-',
+      render: (_value, record: SearchResult) => record.printTime || '-',
     },
     {
       key: 'actions',
@@ -263,7 +295,7 @@ export default function LabelSearch() {
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

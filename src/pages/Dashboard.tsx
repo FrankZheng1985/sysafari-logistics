@@ -7,6 +7,7 @@ import ColumnSettingsModal from '../components/ColumnSettingsModal'
 import { StatsCard, PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
 import { getBillsList, type BillOfLading } from '../utils/api'
 import { useColumnSettings } from '../hooks/useColumnSettings'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -29,92 +30,106 @@ export default function Dashboard() {
     { 
       key: 'id', 
       label: '序号',
-      render: (item: BillOfLading) => (
-        <span className="text-xs text-gray-600">{item.orderSeq || item.id}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs text-gray-600">{record.orderSeq || record.id}</span>
+      ),
+    },
+    {
+      key: 'orderNumber',
+      label: '订单号',
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span 
+            className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
+            onClick={() => navigate(`/bookings/bill/${record.id}`)}
+          >
+            {record.orderNumber || '-'}
+          </span>
+        </div>
       ),
     },
     {
       key: 'billNumber',
       label: '提单号',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <span 
           className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
-          onClick={() => navigate(`/bookings/bill/${item.id}`)}
+          onClick={() => navigate(`/bookings/bill/${record.id}`)}
         >
-          {item.billNumber}
+          {record.billNumber}
         </span>
       ),
     },
     {
       key: 'containerNumber',
       label: '集装箱编号',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <span 
           className="text-primary-600 hover:underline cursor-pointer text-xs"
-          onClick={() => navigate(`/bookings/bill/${item.id}`)}
+          onClick={() => navigate(`/bookings/bill/${record.id}`)}
         >
-          {item.containerNumber}
+          {record.containerNumber}
         </span>
       ),
     },
     { 
       key: 'vessel', 
       label: '航班号/船名航次',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <Ship className="w-3 h-3 text-gray-400" />
-          <span className="text-xs">{item.vessel}</span>
+          <span className="text-xs">{record.vessel}</span>
         </div>
       ),
     },
     { 
       key: 'eta', 
       label: 'ETA/ATA',
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.eta}{item.ata ? ` / ${item.ata}` : ''}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{formatDateTimeShort(record.eta)}{record.ata ? ` / ${formatDateTimeShort(record.ata)}` : ''}</span>
       ),
     },
     {
       key: 'pieces',
       label: '件数 / 毛重',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.pieces} 件</div>
-          <div className="text-green-600">{item.weight} KGS</div>
+          <div className="text-gray-900">{record.pieces} 件</div>
+          <div className="text-green-600">{record.weight} KGS</div>
         </div>
       ),
     },
     { 
       key: 'inspection', 
       label: '查验',
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.inspection || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.inspection || '-'}</span>
       ),
     },
     { 
       key: 'customsStats', 
       label: '报关统计',
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.customsStats || '-'}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.customsStats || '-'}</span>
       ),
     },
     { 
       key: 'creator', 
       label: '创建者 / 时间',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.creator}</div>
-          <div className="text-[10px] text-gray-500">{item.createTime}</div>
+          <div className="text-gray-900">{record.creator}</div>
+          <div className="text-[10px] text-gray-500">{formatDate(record.createTime)}</div>
         </div>
       ),
     },
     {
       key: 'status',
       label: '状态',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${item.status === '已到港' ? 'bg-green-500' : 'bg-orange-500'}`} />
-          <span className="text-xs">{item.status}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${record.status === '已到港' ? 'bg-green-500' : 'bg-orange-500'}`} />
+          <span className="text-xs">{record.status}</span>
         </div>
       ),
     },
@@ -228,7 +243,7 @@ export default function Dashboard() {
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

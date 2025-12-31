@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Truck, MapPin, Clock, Package } from 'lucide-react'
+import { Truck, MapPin, Clock, Package, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
+import { copyToClipboard } from '../components/Toast'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import { useColumnSettings } from '../hooks/useColumnSettings'
 
@@ -64,45 +65,71 @@ export default function LastMile() {
 
   const pageKey = '/last-mile'
 
-  const filteredData = mockData.filter((item) => {
+  const filteredData = mockData.filter((record) => {
     if (selectedStatus === 'all') return true
-    return item.status === selectedStatus
+    return record.status === selectedStatus
   })
 
   const columns: Column<LastMileOrder>[] = [
-    { key: 'id', label: '序号' },
+    { key: 'id', label: '序号', sorter: true },
     {
       key: 'orderNumber',
       label: '订单号',
-      render: (item: LastMileOrder) => (
-        <span className="text-primary-600 font-medium">{item.orderNumber}</span>
+      sorter: true,
+      render: (_value, record: LastMileOrder) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 font-medium">{record.orderNumber}</span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       ),
     },
     {
       key: 'billNumber',
       label: '提单号',
-      render: (item: LastMileOrder) => (
-        <span className="text-primary-600 hover:underline cursor-pointer">
-          {item.billNumber}
-        </span>
-      ),
-    },
-    { key: 'recipient', label: '收件人' },
-    {
-      key: 'address',
-      label: '地址',
-      render: (item: LastMileOrder) => (
-        <div className="flex items-start gap-2">
-          <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-          <span className="text-xs">{item.address}</span>
+      sorter: true,
+      render: (_value, record: LastMileOrder) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
+            {record.billNumber}
+          </span>
+          {record.billNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制提单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
-    { key: 'phone', label: '电话' },
+    { key: 'recipient', label: '收件人', sorter: true },
+    {
+      key: 'address',
+      label: '地址',
+      sorter: true,
+      render: (_value, record: LastMileOrder) => (
+        <div className="flex items-start gap-2">
+          <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+          <span className="text-xs">{record.address}</span>
+        </div>
+      ),
+    },
+    { key: 'phone', label: '电话', sorter: true },
     {
       key: 'status',
       label: '状态',
-      render: (item: LastMileOrder) => {
+      sorter: true,
+      render: (_value, record: LastMileOrder) => {
         const statusColors: Record<string, string> = {
           '待派送': 'bg-yellow-100 text-yellow-800',
           '派送中': 'bg-blue-100 text-blue-800',
@@ -112,10 +139,10 @@ export default function LastMile() {
         return (
           <span
             className={`px-2 py-1 rounded-full text-xs font-medium ${
-              statusColors[item.status] || 'bg-gray-100 text-gray-800'
+              statusColors[record.status] || 'bg-gray-100 text-gray-800'
             }`}
           >
-            {item.status}
+            {record.status}
           </span>
         )
       },
@@ -123,27 +150,45 @@ export default function LastMile() {
     {
       key: 'deliveryCompany',
       label: '派送公司',
-      render: (item: LastMileOrder) => item.deliveryCompany || '-',
+      sorter: true,
+      render: (_value, record: LastMileOrder) => record.deliveryCompany || '-',
     },
     {
       key: 'trackingNumber',
       label: '跟踪号',
-      render: (item: LastMileOrder) => (
+      sorter: true,
+      render: (_value, record: LastMileOrder) => (
         <span className="text-xs font-mono">
-          {item.trackingNumber || '-'}
+          {record.trackingNumber || '-'}
         </span>
       ),
     },
-    { key: 'deliveryDate', label: '送达时间' },
-    { key: 'createTime', label: '创建时间' },
+    { 
+      key: 'deliveryDate', 
+      label: '送达时间',
+      sorter: (a: LastMileOrder, b: LastMileOrder) => {
+        const dateA = a.deliveryDate ? new Date(a.deliveryDate).getTime() : 0
+        const dateB = b.deliveryDate ? new Date(b.deliveryDate).getTime() : 0
+        return dateA - dateB
+      }
+    },
+    { 
+      key: 'createTime', 
+      label: '创建时间',
+      sorter: (a: LastMileOrder, b: LastMileOrder) => {
+        const dateA = a.createTime ? new Date(a.createTime).getTime() : 0
+        const dateB = b.createTime ? new Date(b.createTime).getTime() : 0
+        return dateA - dateB
+      }
+    },
     {
       key: 'actions',
       label: '操作',
-      render: (item: LastMileOrder) => (
+      render: (_value, record: LastMileOrder) => (
         <div className="flex gap-2">
           <button className="text-primary-600 hover:underline text-xs">编辑</button>
           <button className="text-primary-600 hover:underline text-xs">跟踪</button>
-          {item.status === '待派送' && (
+          {record.status === '待派送' && (
             <button className="text-green-600 hover:underline text-xs">派送</button>
           )}
         </div>
@@ -163,9 +208,9 @@ export default function LastMile() {
 
   const statusCounts = {
     all: mockData.length,
-    待派送: mockData.filter((item) => item.status === '待派送').length,
-    派送中: mockData.filter((item) => item.status === '派送中').length,
-    已送达: mockData.filter((item) => item.status === '已送达').length,
+    待派送: mockData.filter((record) => record.status === '待派送').length,
+    派送中: mockData.filter((record) => record.status === '派送中').length,
+    已送达: mockData.filter((record) => record.status === '已送达').length,
   }
 
   return (
@@ -229,7 +274,7 @@ export default function LastMile() {
           visibleColumns={visibleColumns}
           compact={true}
           pagination={{
-            pageSize: 10,
+            pageSize: 20,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条记录`,
           }}

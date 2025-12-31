@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Printer, CheckSquare, Square } from 'lucide-react'
+import { ArrowLeft, Printer, CheckSquare, Square, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import { copyToClipboard } from '../components/Toast'
 
 interface PrintLabel {
   id: string
@@ -108,13 +109,13 @@ export default function PureLabelPrintBatch() {
     {
       key: 'select',
       label: '选择',
-      render: (item: PrintLabel) => (
+      render: (_value, record: PrintLabel) => (
         <button
-          onClick={() => handleSelectItem(item.id)}
+          onClick={() => handleSelectItem(record.id)}
           className="flex items-center justify-center"
-          title={selectedIds.has(item.id) ? '取消选择' : '选择'}
+          title={selectedIds.has(record.id) ? '取消选择' : '选择'}
         >
-          {selectedIds.has(item.id) ? (
+          {selectedIds.has(record.id) ? (
             <CheckSquare className="w-5 h-5 text-primary-600" />
           ) : (
             <Square className="w-5 h-5 text-gray-400" />
@@ -126,9 +127,9 @@ export default function PureLabelPrintBatch() {
       key: 'labelNumber',
       label: '标签号',
       sorter: true,
-      render: (item: PrintLabel) => (
+      render: (_value, record: PrintLabel) => (
         <div className="text-primary-600 font-medium">
-          {item.labelNumber}
+          {record.labelNumber}
         </div>
       ),
     },
@@ -136,9 +137,20 @@ export default function PureLabelPrintBatch() {
       key: 'orderNumber',
       label: '订单号',
       sorter: true,
-      render: (item: PrintLabel) => (
-        <div className="text-primary-600">
-          {item.orderNumber}
+      render: (_value, record: PrintLabel) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600">
+            {record.orderNumber}
+          </span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -150,9 +162,9 @@ export default function PureLabelPrintBatch() {
     {
       key: 'address',
       label: '地址',
-      render: (item: PrintLabel) => (
-        <div className="max-w-xs truncate" title={item.address}>
-          {item.address}
+      render: (_value, record: PrintLabel) => (
+        <div className="max-w-xs truncate" title={record.address}>
+          {record.address}
         </div>
       ),
     },
@@ -161,7 +173,7 @@ export default function PureLabelPrintBatch() {
       key: 'weight',
       label: '重量 (KG)',
       sorter: (a, b) => a.weight - b.weight,
-      render: (item: PrintLabel) => `${item.weight} KG`,
+      render: (_value, record: PrintLabel) => `${record.weight} KG`,
     },
     {
       key: 'createTime',
@@ -175,12 +187,12 @@ export default function PureLabelPrintBatch() {
     {
       key: 'printStatus',
       label: '打印状态',
-      render: (item: PrintLabel) => (
+      render: (_value, record: PrintLabel) => (
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            item.printStatus === '已打印' ? 'bg-green-500' : 'bg-gray-400'
+            record.printStatus === '已打印' ? 'bg-green-500' : 'bg-gray-400'
           }`}></span>
-          <span>{item.printStatus}</span>
+          <span>{record.printStatus}</span>
         </div>
       ),
     },
@@ -263,7 +275,7 @@ export default function PureLabelPrintBatch() {
                 data={mockData}
                 rowKey="id"
                 pagination={{
-                  pageSize: 10,
+                  pageSize: 20,
                   showSizeChanger: true,
                   showTotal: (total) => `共 ${total} 条记录`,
                 }}

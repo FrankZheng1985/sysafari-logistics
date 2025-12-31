@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat } from 'lucide-react'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { useTabs } from '../contexts/TabsContext'
+import { useAuth } from '../contexts/AuthContext'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Copy, Lock } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { copyToClipboard } from '../components/Toast'
+import { formatDate, formatDateTime } from '../utils/dateFormat'
+import DatePicker from '../components/DatePicker'
 // DataTable available if needed
 import Timeline, { TimelineItem } from '../components/Timeline'
 import FeeModal from '../components/FeeModal'
-import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, type OperationLog, type DestinationPortItem, type BillFile } from '../utils/api'
+import OrderFeePanel from '../components/OrderFeePanel'
+import OrderDocuments from '../components/OrderDocuments'
+import CreateBillModal from '../components/CreateBillModal'
+import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
 import { getBillById as getBillByIdFromMock } from '../data/mockOrders'
 
 interface Declaration {
@@ -28,6 +36,92 @@ const mockDeclarations: Declaration[] = [
     releaseTime: '2025-11-22 15:30',
   },
 ]
+
+// 根据分类代码智能获取样式
+const getFeeCategoryStyle = (code: string) => {
+  const lowerCode = code?.toLowerCase() || ''
+  if (lowerCode.includes('transport') || lowerCode.includes('freight') || lowerCode.includes('运输')) {
+    return { bgClass: 'bg-blue-50', textClass: 'text-blue-600' }
+  }
+  if (lowerCode.includes('customs') || lowerCode.includes('clearance') || lowerCode.includes('关税') || lowerCode.includes('清关')) {
+    return { bgClass: 'bg-red-50', textClass: 'text-red-600' }
+  }
+  if (lowerCode.includes('duty') || lowerCode.includes('进口税')) {
+    return { bgClass: 'bg-rose-50', textClass: 'text-rose-600' }
+  }
+  if (lowerCode.includes('tax') || lowerCode.includes('vat') || lowerCode.includes('增值税')) {
+    return { bgClass: 'bg-pink-50', textClass: 'text-pink-600' }
+  }
+  if (lowerCode.includes('warehouse') || lowerCode.includes('storage') || lowerCode.includes('仓储')) {
+    return { bgClass: 'bg-amber-50', textClass: 'text-amber-600' }
+  }
+  if (lowerCode.includes('insurance') || lowerCode.includes('保险')) {
+    return { bgClass: 'bg-green-50', textClass: 'text-green-600' }
+  }
+  if (lowerCode.includes('handling') || lowerCode.includes('操作') || lowerCode.includes('thc') || lowerCode.includes('港杂')) {
+    return { bgClass: 'bg-purple-50', textClass: 'text-purple-600' }
+  }
+  if (lowerCode.includes('document') || lowerCode.includes('文件') || lowerCode.includes('换单')) {
+    return { bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' }
+  }
+  if (lowerCode.includes('port') || lowerCode.includes('港口')) {
+    return { bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' }
+  }
+  if (lowerCode.includes('service') || lowerCode.includes('服务')) {
+    return { bgClass: 'bg-teal-50', textClass: 'text-teal-600' }
+  }
+  if (lowerCode.includes('package') || lowerCode.includes('清提派')) {
+    return { bgClass: 'bg-emerald-50', textClass: 'text-emerald-600' }
+  }
+  if (lowerCode.includes('agency') || lowerCode.includes('代理') || lowerCode.includes('税号')) {
+    return { bgClass: 'bg-amber-50', textClass: 'text-amber-600' }
+  }
+  if (lowerCode.includes('management') || lowerCode.includes('管理')) {
+    return { bgClass: 'bg-slate-50', textClass: 'text-slate-600' }
+  }
+  return { bgClass: 'bg-gray-50', textClass: 'text-gray-600' }
+}
+
+// 费用分类配置 - 支持所有数据库中的分类（包括服务费类别的英文代码）
+const getFeeCategoryConfig = (category: string) => {
+  const configs: Record<string, { label: string; bgClass: string; textClass: string }> = {
+    // 标准分类（小写）
+    freight: { label: '运费', bgClass: 'bg-blue-50', textClass: 'text-blue-600' },
+    transport: { label: '运输服务', bgClass: 'bg-blue-50', textClass: 'text-blue-600' },
+    customs: { label: '关税', bgClass: 'bg-red-50', textClass: 'text-red-600' },
+    duty: { label: '进口税', bgClass: 'bg-rose-50', textClass: 'text-rose-600' },
+    tax: { label: '增值税', bgClass: 'bg-pink-50', textClass: 'text-pink-600' },
+    warehouse: { label: '仓储服务', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    storage: { label: '仓储', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    insurance: { label: '保险', bgClass: 'bg-green-50', textClass: 'text-green-600' },
+    handling: { label: '操作', bgClass: 'bg-purple-50', textClass: 'text-purple-600' },
+    documentation: { label: '文件', bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' },
+    port: { label: '港口', bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' },
+    service: { label: '服务', bgClass: 'bg-teal-50', textClass: 'text-teal-600' },
+    package: { label: '清提派业务', bgClass: 'bg-emerald-50', textClass: 'text-emerald-600' },
+    other: { label: '其他服务', bgClass: 'bg-gray-50', textClass: 'text-gray-600' },
+    clearance: { label: '清关服务', bgClass: 'bg-red-50', textClass: 'text-red-600' },
+    thc: { label: '港杂费', bgClass: 'bg-purple-50', textClass: 'text-purple-600' },
+    // 服务费类别英文代码（来自基础数据）
+    'export customs clearance services': { label: '出口报关服务', bgClass: 'bg-red-50', textClass: 'text-red-600' },
+    'document fees': { label: '文件费', bgClass: 'bg-cyan-50', textClass: 'text-cyan-600' },
+    'document exchange fee': { label: '换单费', bgClass: 'bg-indigo-50', textClass: 'text-indigo-600' },
+    'tax fees': { label: '税务费', bgClass: 'bg-green-50', textClass: 'text-green-600' },
+    "importer's agency fee": { label: '税号使用费', bgClass: 'bg-amber-50', textClass: 'text-amber-600' },
+    'management fee': { label: '管理费', bgClass: 'bg-slate-50', textClass: 'text-slate-600' },
+  }
+  // 先转换为小写再匹配
+  const lowerCategory = category?.toLowerCase() || ''
+  
+  // 1. 从硬编码映射中查找
+  if (configs[lowerCategory]) {
+    return configs[lowerCategory]
+  }
+  
+  // 2. 智能匹配样式（根据关键词）
+  const style = getFeeCategoryStyle(category)
+  return { label: category || '其他', ...style }
+}
 
 // 提取为独立组件，避免在渲染循环中重新创建
 interface ModuleWrapperProps {
@@ -108,6 +202,15 @@ function ModuleWrapper({
 export default function BillDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const { updateTabTitle } = useTabs()
+  const { hasPermission } = useAuth()
+  
+  // 检测来源：支持财务模块访问
+  const source = searchParams.get('source') || (location.state as any)?.source || ''
+  const isFromFinance = source === 'finance' || location.pathname.startsWith('/finance')
+  
   const [activeTab, setActiveTab] = useState<string>('info')
   const [billDetail, setBillDetail] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -130,8 +233,32 @@ export default function BillDetails() {
   
   // 费用管理状态
   const [showFeeModal, setShowFeeModal] = useState(false)
+  const [currentFeeType, setCurrentFeeType] = useState<'receivable' | 'payable'>('receivable')
   const [billFees, setBillFees] = useState<any[]>([])
   const [feesLoading, setFeesLoading] = useState(false)
+  
+  // 预计提货时间模态窗口状态
+  const [showPickupTimeModal, setShowPickupTimeModal] = useState(false)
+  const [pickupEstimatedTime, setPickupEstimatedTime] = useState('')
+  const [pickupNote, setPickupNote] = useState('')
+  const [pickupSubmitting, setPickupSubmitting] = useState(false)
+  
+  // 换单模态窗口状态
+  const [showDocSwapModal, setShowDocSwapModal] = useState(false)
+  const [docSwapAgent, setDocSwapAgent] = useState('')
+  const [docSwapAgentId, setDocSwapAgentId] = useState('')
+  const [docSwapFee, setDocSwapFee] = useState('')
+  const [docSwapSubmitting, setDocSwapSubmitting] = useState(false)
+  const [docSwapAgentList, setDocSwapAgentList] = useState<Supplier[]>([])
+  const [docSwapAgentLoading, setDocSwapAgentLoading] = useState(false)
+  
+  // 编辑提单模态窗口状态
+  const [showEditModal, setShowEditModal] = useState(false)
+  
+  // 清关放行模态窗口状态
+  const [showCustomsReleaseModal, setShowCustomsReleaseModal] = useState(false)
+  const [customsReleaseDate, setCustomsReleaseDate] = useState('')
+  const [customsReleaseSubmitting, setCustomsReleaseSubmitting] = useState(false)
   
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -166,7 +293,7 @@ export default function BillDetails() {
   // 标签页排序状态
   const [tabOrder, setTabOrder] = useState<string[]>(() => {
     const saved = localStorage.getItem('billDetailsTabOrder')
-    const defaultOrder = ['info', 'files', 'timeline', 'actions']
+    const defaultOrder = ['info', 'fees', 'files', 'timeline', 'actions']
     if (saved) {
       let parsed = JSON.parse(saved)
       // 移除已废弃的标签页，替换旧标签名
@@ -176,16 +303,21 @@ export default function BillDetails() {
       if (!parsed.includes('files')) {
         parsed.splice(1, 0, 'files')
       }
+      // 确保包含费用标签页
+      if (!parsed.includes('fees')) {
+        parsed.splice(1, 0, 'fees')
+      }
       localStorage.setItem('billDetailsTabOrder', JSON.stringify(parsed))
       return parsed.length > 0 ? parsed : defaultOrder
     }
     return defaultOrder
   })
   const [draggedTab, setDraggedTab] = useState<string | null>(null)
-  
+
   // 标签页配置
   const tabConfig: Record<string, { label: string; badge?: () => string }> = {
     info: { label: '基本信息' },
+    fees: { label: '费用管理', badge: () => `(${billFees.length})` },
     files: { label: '文件管理', badge: () => `(${billFiles.length})` },
     timeline: { label: '时间线' },
     actions: { label: '操作' },
@@ -448,7 +580,13 @@ export default function BillDetails() {
       
       setLoading(true)
       try {
-        const response = await getBillByIdFromAPI(id)
+        // 并行加载提单详情、操作日志和文件列表
+        const [response] = await Promise.all([
+          getBillByIdFromAPI(id),
+          loadOperationLogs(),
+          loadBillFiles()
+        ])
+        
         if (response.errCode === 200 && response.data) {
           setBillDetail(response.data)
         } else {
@@ -456,9 +594,6 @@ export default function BillDetails() {
           const mockBill = getBillByIdFromMock(id) || getBillByIdFromMock('1')
           setBillDetail(mockBill)
         }
-        // 加载操作日志和文件列表
-        await loadOperationLogs()
-        await loadBillFiles()
       } catch (error) {
         console.error('加载提单详情失败:', error)
         // 降级到 mock 数据
@@ -497,6 +632,13 @@ export default function BillDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billDetail?.id])
 
+  // 当提单详情加载后，更新标签页标题为订单号
+  useEffect(() => {
+    if (billDetail?.orderNumber && location.pathname) {
+      updateTabTitle(location.pathname, billDetail.orderNumber)
+    }
+  }, [billDetail?.orderNumber, location.pathname, updateTabTitle])
+
   // 当提单详情加载后，根据目的港加载跳港选项
   useEffect(() => {
     if (billDetail?.portOfDischarge) {
@@ -530,9 +672,9 @@ export default function BillDetails() {
     {
       key: 'actions',
       label: '操作',
-      render: (item: Declaration) => (
+      render: (_value: unknown, record: Declaration) => (
         <button
-          onClick={() => handleDownload(item.declarationNumber)}
+          onClick={() => handleDownload(record.declarationNumber)}
           className="flex items-center gap-1 px-1.5 py-0.5 text-xs text-primary-600 hover:bg-primary-50 rounded transition-colors"
           title="下载文件"
         >
@@ -543,24 +685,77 @@ export default function BillDetails() {
     },
   ]
 
+  // 根据来源设置面包屑和返回路径
+  const breadcrumbs = isFromFinance 
+    ? [
+        { label: '财务管理', path: '/finance' },
+        { label: '订单报表', path: '/finance/order-report' },
+        { label: '提单详情' }
+      ]
+    : [
+        { label: '订单管理', path: '/bookings/bill' },
+        { label: '提单', path: '/bookings/bill' },
+        { label: '详情' }
+      ]
+  
+  const backPath = isFromFinance ? '/finance/order-report' : '/bookings/bill'
+  
+  // 判断提单是否已完成（已完成或已归档状态）
+  const isCompleted = billDetail?.status === '已完成' || billDetail?.status === '已归档'
+  
+  // 判断用户是否有财务管理权限（财务人员可以修改已完成的提单）
+  const hasFinancePermission = hasPermission('finance:manage') || hasPermission('finance:fee_manage')
+  
+  // 判断是否可以编辑（未完成 或 有财务权限）
+  const canEdit = !isCompleted || hasFinancePermission
+  
+  // 提示信息
+  const completedMessage = isCompleted && !hasFinancePermission 
+    ? '此提单已完成，仅财务人员可修改' 
+    : ''
+
   return (
     <div className="h-full flex flex-col">
       <PageHeader
         title="提单详情"
         icon={<FileText className="w-6 h-6 text-primary-600" />}
-        breadcrumbs={[
-          { label: '订单管理', path: '/bookings/bill' },
-          { label: '提单', path: '/bookings/bill' },
-          { label: '详情' }
-        ]}
+        breadcrumbs={breadcrumbs}
         actionButtons={
-          <button
-            onClick={() => navigate('/bookings/bill')}
-            className="px-1.5 py-0.5 text-xs text-gray-700 bg-gray-100 rounded hover:bg-gray-200 flex items-center gap-1"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>返回</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {/* 已完成状态提示 */}
+            {isCompleted && (
+              <div className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                <Lock className="w-3 h-3" />
+                <span>已完成</span>
+                {!hasFinancePermission && <span className="text-amber-500">（仅财务可改）</span>}
+              </div>
+            )}
+            {canEdit ? (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="px-2 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 flex items-center gap-1"
+              >
+                <Edit className="w-4 h-4" />
+                <span>编辑</span>
+              </button>
+            ) : (
+              <button
+                disabled
+                className="px-2 py-1 text-xs text-gray-400 bg-gray-200 rounded cursor-not-allowed flex items-center gap-1"
+                title={completedMessage}
+              >
+                <Lock className="w-4 h-4" />
+                <span>编辑</span>
+              </button>
+            )}
+            <button
+              onClick={() => navigate(backPath)}
+              className="px-1.5 py-0.5 text-xs text-gray-700 bg-gray-100 rounded hover:bg-gray-200 flex items-center gap-1"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>返回</span>
+            </button>
+          </div>
         }
       />
 
@@ -568,7 +763,9 @@ export default function BillDetails() {
         {/* 标签页 - 可拖拽排序 */}
         <div className="mb-4 border-b border-gray-200">
           <div className="flex gap-1 items-center">
-            {tabOrder.map((tabId) => {
+            {tabOrder
+              .filter(tabId => !(isFromFinance && tabId === 'actions')) // 财务模块隐藏操作标签
+              .map((tabId) => {
               const config = tabConfig[tabId]
               if (!config) return null
               const isDragging = draggedTab === tabId
@@ -605,38 +802,111 @@ export default function BillDetails() {
                 <FileText className="w-3 h-3 text-primary-600" />
                 提单信息
               </h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div>
+                  <span className="text-xs text-gray-500">订单号:</span>
+                  <span className="ml-2 font-medium text-xs text-primary-600">{billDetail.orderNumber || '-'}</span>
+                  {billDetail.orderNumber && (
+                    <button
+                      onClick={(e) => copyToClipboard(billDetail.orderNumber || '', e)}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                      title="复制订单号"
+                    >
+                      <Copy className="w-3 h-3 inline" />
+                    </button>
+                  )}
+                </div>
                 <div>
                   <span className="text-xs text-gray-500">提单号:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.billNumber}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.billNumber || '-'}</span>
+                  {billDetail.billNumber && (
+                    <button
+                      onClick={(e) => copyToClipboard(billDetail.billNumber || '', e)}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                      title="复制提单号"
+                    >
+                      <Copy className="w-3 h-3 inline" />
+                    </button>
+                  )}
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">集装箱号:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.containerNumber}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.containerNumber || '-'}</span>
+                  {billDetail.containerNumber && (
+                    <button
+                      onClick={(e) => copyToClipboard(billDetail.containerNumber || '', e)}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                      title="复制集装箱号"
+                    >
+                      <Copy className="w-3 h-3 inline" />
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">船公司:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.shippingCompany || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">运输方式:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.transportMethod === 'sea' || billDetail.transportMethod === '海运' ? '🚢 海运' :
+                     billDetail.transportMethod === 'air' || billDetail.transportMethod === '空运' ? '✈️ 空运' :
+                     billDetail.transportMethod === 'rail' || billDetail.transportMethod === '铁路' ? '🚂 铁路' :
+                     billDetail.transportMethod === 'truck' || billDetail.transportMethod === '卡车' ? '🚛 卡车' :
+                     billDetail.transportMethod || '-'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">船名航次:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.vessel}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.vessel || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-500">ATA:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.ata || '-'}</span>
+                  <span className="text-xs text-gray-500">柜型:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.containerSize || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">封号:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.sealNumber || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">起运港:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.portOfLoading || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">目的港:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.portOfDischarge || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">ETD:</span>
+                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.etd)}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ETA:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.eta}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.eta)}</span>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-500">实际到港:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.actualArrivalDate || '-'}</span>
+                  <span className="text-xs text-gray-500">ATA:</span>
+                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.ata)}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">清关完成:</span>
+                  <span className={`ml-2 font-medium text-xs ${billDetail.customsReleaseTime ? 'text-green-600' : 'text-gray-400'}`}>
+                    {formatDateTime(billDetail.customsReleaseTime)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">卸货日期:</span>
+                  <span className={`ml-2 font-medium text-xs ${billDetail.cmrUnloadingCompleteTime ? 'text-green-600' : 'text-gray-400'}`}>
+                    {formatDateTime(billDetail.cmrUnloadingCompleteTime)}
+                  </span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">件数:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.pieces}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.pieces || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">毛重 (KGS):</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.weight}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.weight || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">体积 (CBM):</span>
@@ -644,16 +914,39 @@ export default function BillDetails() {
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">报关统计:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.customsStats}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.customsStats || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">创建者:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.creator}</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.creator || '-'}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">创建时间:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.createTime}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.createTime)}</span>
                 </div>
+                <div>
+                  <span className="text-xs text-gray-500">派送地址:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.cmrDeliveryAddress || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">服务产品:</span>
+                  <span className="ml-2 font-medium text-xs">{billDetail.serviceType || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">货柜金额:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.cargoValue ? `€${Number(billDetail.cargoValue).toLocaleString()}` : '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">资料发送日期:</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.documentsSentDate)}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">CMR发送日期:</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.cmrSentDate)}</span>
+                </div>
+                {/* 附加属性字段已移至独立的"附加属性"区块显示 */}
               </div>
             </div>
 
@@ -718,6 +1011,127 @@ export default function BillDetails() {
                 </div>
               </div>
             </div>
+
+            {/* 附加属性 - 始终显示，未填写的显示"-" */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                <Settings className="w-3 h-3 text-primary-600" />
+                附加属性
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-xs text-gray-500">箱型:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.containerType === 'cfs' ? '拼箱(CFS)' : 
+                     billDetail.containerType === 'fcl' ? '整箱(FCL)' : 
+                     billDetail.containerType || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">提单:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.billType === 'master' ? '船东单(Master Bill)' : 
+                     billDetail.billType === 'house' ? '货代单(House Bill)' : 
+                     billDetail.billType || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">运输:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.transportArrangement === 'entrust' ? '委托我司运输' : 
+                     billDetail.transportArrangement === 'self' ? '自行运输' : 
+                     billDetail.transportArrangement || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">收货人:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.consigneeType === 'asl' ? 'ASL为收货人' : 
+                     billDetail.consigneeType === 'not-asl' ? 'ASL不是提单收货人' : 
+                     billDetail.consigneeType || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">异地还柜:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.containerReturn === 'off-site' ? '异地还柜(非Rotterdam)' : 
+                     billDetail.containerReturn === 'local' ? '本地还柜' : 
+                     billDetail.containerReturn || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">全程整柜运输:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.fullContainerTransport === 'must-full' ? '必须整柜派送' : 
+                     billDetail.fullContainerTransport === 'can-split' ? '可拆柜后托盘送货' : 
+                     billDetail.fullContainerTransport || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">末端运输方式:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.lastMileTransport === 'truck' ? '卡车派送' : 
+                     billDetail.lastMileTransport === 'train' ? '铁路运输' : 
+                     billDetail.lastMileTransport === 'air' ? '空运' : 
+                     billDetail.lastMileTransport || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">拆柜:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.devanning === 'required' ? '需要拆柜分货服务' : 
+                     billDetail.devanning === 'not-required' ? '不需要拆柜' : 
+                     billDetail.devanning || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500">T1报关:</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.t1Declaration === 'yes' ? '是' : 
+                     billDetail.t1Declaration === 'no' ? '否' : 
+                     billDetail.t1Declaration || '-'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Reference List - 参考号列表 */}
+            {billDetail.referenceList && billDetail.referenceList.length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-200 p-3">
+                <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <FileText className="w-3 h-3 text-primary-600" />
+                  Reference List
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">参考号</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">件数</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">毛重</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">发货人</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">发货人详情</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">收货地址</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">收货地址详情</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {billDetail.referenceList.map((ref: any, idx: number) => (
+                        <tr key={idx}>
+                          <td className="px-2 py-1.5 text-gray-900">{ref.referenceNumber || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.pieces || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.grossWeight || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.shipper || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.shipperDetails || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.consigneeAddress || '-'}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{ref.consigneeAddressDetails || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* 状态信息 */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">
@@ -834,14 +1248,14 @@ export default function BillDetails() {
                     <span className="text-xs text-gray-500">派送状态</span>
                   </div>
                   <div className={`text-xs font-semibold ${
-                    billDetail.deliveryStatus === '未派送' ? 'text-gray-600' :
+                    billDetail.deliveryStatus === '待派送' ? 'text-gray-600' :
                     billDetail.deliveryStatus === '派送中' ? 'text-blue-600' :
                     billDetail.deliveryStatus === '已送达' ? 'text-green-600' :
                     billDetail.deliveryStatus === '订单异常' ? 'text-red-600' :
                     billDetail.deliveryStatus === '异常关闭' ? 'text-gray-500' :
                     'text-gray-600'
                   }`}>
-                    {billDetail.deliveryStatus || '未派送'}
+                    {billDetail.deliveryStatus || '待派送'}
                   </div>
                 </div>
 
@@ -877,134 +1291,248 @@ export default function BillDetails() {
           </div>
         )}
 
-        {/* 文件管理 */}
-        {activeTab === 'files' && (
+        {/* 费用管理 */}
+        {activeTab === 'fees' && (
           <div className="space-y-4">
-            {/* 上传区域 */}
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-gray-900 flex items-center gap-2">
-                  <Upload className="w-3 h-3 text-primary-600" />
-                  文件上传
-                </h3>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                  <span className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded transition-colors ${
-                    uploading 
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                      : 'bg-primary-600 text-white hover:bg-primary-700'
-                  }`}>
-                    {uploading ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        上传中 {uploadProgress}%
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3 h-3" />
-                        选择文件
-                      </>
-                    )}
-                  </span>
-                </label>
+            {/* 费用汇总卡片 */}
+            <div className="grid grid-cols-3 gap-4">
+              {/* 应收汇总 */}
+              <div className="bg-white rounded-lg border border-blue-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">应收费用</span>
+                </div>
+                <div className="text-2xl font-bold text-blue-600">
+                  €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  共 {billFees.filter(f => f.feeType === 'receivable').length} 笔
+                </div>
               </div>
-              <div className="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center">
-                <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-xs text-gray-500">点击上方按钮或拖拽文件到此处上传</p>
-                <p className="text-xs text-gray-400 mt-1">支持所有类型文件，文件会自动压缩存储以节省空间</p>
+              
+              {/* 应付汇总 */}
+              <div className="bg-white rounded-lg border border-orange-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                    <DollarSign className="w-4 h-4 text-orange-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">应付费用</span>
+                </div>
+                <div className="text-2xl font-bold text-orange-600">
+                  €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  共 {billFees.filter(f => f.feeType === 'payable').length} 笔
+                </div>
+              </div>
+              
+              {/* 毛利汇总 */}
+              <div className="bg-white rounded-lg border border-emerald-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <Receipt className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">毛利</span>
+                </div>
+                <div className={`text-2xl font-bold ${
+                  (billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                   billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)) >= 0
+                    ? 'text-emerald-600' : 'text-red-600'
+                }`}>
+                  €{(billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                     billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)
+                    ).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  利润率: {billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) > 0
+                    ? ((billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                        billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)) /
+                        billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) * 100
+                      ).toFixed(1)
+                    : '0.0'}%
+                </div>
               </div>
             </div>
 
-            {/* 文件列表 */}
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <FileText className="w-3 h-3 text-primary-600" />
-                文件列表 ({billFiles.length})
-              </h3>
-              {billFiles.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-xs">
-                  暂无文件，请上传文件
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {billFiles.map((file) => (
-                    <div 
-                      key={file.id} 
-                      className="flex items-center justify-between p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {getFileIcon(file.fileType)}
-                        <div>
-                          <p className="text-xs font-medium text-gray-900">{file.fileName}</p>
-                          <p className="text-xs text-gray-400">
-                            原始: {formatFileSize(file.originalSize)} → 压缩后: {formatFileSize(file.compressedSize)}
-                            <span className="ml-2 text-green-600">
-                              (节省 {Math.round((1 - file.compressedSize / file.originalSize) * 100)}%)
-                            </span>
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            上传时间: {new Date(file.uploadTime).toLocaleString()} | 上传者: {file.uploadBy}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleFileDownload(file.id, file.fileName)}
-                          className="p-1.5 text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                          title="下载文件（恢复原始大小）"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleFileDelete(file.id, file.fileName)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="删除文件"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+            {/* 操作按钮 */}
+            <div className="flex items-center gap-2">
+              {/* 已完成提示 */}
+              {isCompleted && !hasFinancePermission && (
+                <div className="flex items-center gap-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>提单已完成，仅财务可录入费用</span>
                 </div>
               )}
+              <button
+                onClick={() => {
+                  setCurrentFeeType('receivable')
+                  setShowFeeModal(true)
+                }}
+                disabled={!canEdit}
+                className={`px-4 py-2 text-sm rounded-lg flex items-center gap-2 ${
+                  canEdit 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+                title={!canEdit ? completedMessage : ''}
+              >
+                {canEdit ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                录入应收
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentFeeType('payable')
+                  setShowFeeModal(true)
+                }}
+                disabled={!canEdit}
+                className={`px-4 py-2 text-sm rounded-lg flex items-center gap-2 ${
+                  canEdit 
+                    ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+                title={!canEdit ? completedMessage : ''}
+              >
+                {canEdit ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                录入应付
+              </button>
+              <button
+                onClick={() => navigate(`/finance/fees?billId=${billDetail.id}`)}
+                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                费用管理页
+              </button>
             </div>
 
-            {/* 存储统计 */}
-            {billFiles.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                  <FileArchive className="w-3 h-3 text-primary-600" />
-                  存储统计
-                </h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-2 bg-blue-50 rounded-lg">
-                    <p className="text-lg font-bold text-blue-600">
-                      {formatFileSize(billFiles.reduce((sum, f) => sum + f.originalSize, 0))}
-                    </p>
-                    <p className="text-xs text-gray-500">原始总大小</p>
-                  </div>
-                  <div className="p-2 bg-green-50 rounded-lg">
-                    <p className="text-lg font-bold text-green-600">
-                      {formatFileSize(billFiles.reduce((sum, f) => sum + f.compressedSize, 0))}
-                    </p>
-                    <p className="text-xs text-gray-500">压缩后总大小</p>
-                  </div>
-                  <div className="p-2 bg-purple-50 rounded-lg">
-                    <p className="text-lg font-bold text-purple-600">
-                      {formatFileSize(billFiles.reduce((sum, f) => sum + (f.originalSize - f.compressedSize), 0))}
-                    </p>
-                    <p className="text-xs text-gray-500">节省空间</p>
+            {/* 费用列表 - 分应收应付显示 */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* 应收费用列表 */}
+              <div className="bg-white rounded-lg border border-gray-200">
+                <div className="px-4 py-3 border-b border-gray-100 bg-blue-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">应收</span>
+                      <span className="text-sm font-medium text-gray-900">收款明细</span>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600">
+                      €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
+                <div className="max-h-[400px] overflow-y-auto">
+                  {feesLoading ? (
+                    <div className="text-center py-8 text-sm text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                      加载中...
+                    </div>
+                  ) : billFees.filter(f => f.feeType === 'receivable').length > 0 ? (
+                    <div className="divide-y divide-gray-100">
+                      {billFees.filter(f => f.feeType === 'receivable').map((fee) => (
+                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-900">{fee.feeName}</span>
+                            <span className="text-sm font-semibold text-blue-600">
+                              €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${getFeeCategoryConfig(fee.category).bgClass} ${getFeeCategoryConfig(fee.category).textClass}`}>
+                                {getFeeCategoryConfig(fee.category).label}
+                              </span>
+                              {fee.customerName && (
+                                <span className="text-xs text-gray-500">{fee.customerName}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                            </span>
+                          </div>
+                          {fee.description && (
+                            <div className="text-xs text-gray-400 mt-1 truncate">{fee.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-sm text-gray-400">
+                      <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      暂无应收费用
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+
+              {/* 应付费用列表 */}
+              <div className="bg-white rounded-lg border border-gray-200">
+                <div className="px-4 py-3 border-b border-gray-100 bg-orange-50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-700">应付</span>
+                      <span className="text-sm font-medium text-gray-900">付款明细</span>
+                    </div>
+                    <span className="text-sm font-bold text-orange-600">
+                      €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+                <div className="max-h-[400px] overflow-y-auto">
+                  {feesLoading ? (
+                    <div className="text-center py-8 text-sm text-gray-500">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                      加载中...
+                    </div>
+                  ) : billFees.filter(f => f.feeType === 'payable').length > 0 ? (
+                    <div className="divide-y divide-gray-100">
+                      {billFees.filter(f => f.feeType === 'payable').map((fee) => (
+                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-900">{fee.feeName}</span>
+                            <span className="text-sm font-semibold text-orange-600">
+                              €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${getFeeCategoryConfig(fee.category).bgClass} ${getFeeCategoryConfig(fee.category).textClass}`}>
+                                {getFeeCategoryConfig(fee.category).label}
+                              </span>
+                              {fee.supplierName && (
+                                <span className="text-xs text-gray-500">{fee.supplierName}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                            </span>
+                          </div>
+                          {fee.description && (
+                            <div className="text-xs text-gray-400 mt-1 truncate">{fee.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-sm text-gray-400">
+                      <DollarSign className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      暂无应付费用
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
+        )}
+
+        {/* 文件管理 - 云端文档（腾讯云COS） */}
+        {activeTab === 'files' && (
+          <OrderDocuments
+            billId={id || ''}
+            billNumber={billDetail?.billNumber}
+            customerId={billDetail?.customerId}
+            customerName={billDetail?.customerName}
+          />
         )}
 
         {/* 时间线 */}
@@ -1111,7 +1639,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="查验操作" icon={<ClipboardCheck className="w-4 h-4" />} iconColor="text-yellow-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2">
-                        {billDetail.inspection === '-' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && (!billDetail.inspection || billDetail.inspection === '-') && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要将此提单标记为待查验吗？')) return
@@ -1135,7 +1670,7 @@ export default function BillDetails() {
                             标记查验
                           </button>
                         )}
-                        {billDetail.inspection === '待查验' && (
+                        {canEdit && billDetail.inspection === '待查验' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要开始查验吗？')) return
@@ -1159,7 +1694,7 @@ export default function BillDetails() {
                             开始查验
                           </button>
                         )}
-                        {billDetail.inspection === '查验中' && (
+                        {canEdit && billDetail.inspection === '查验中' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要完成查验吗？')) return
@@ -1183,10 +1718,10 @@ export default function BillDetails() {
                             完成查验
                           </button>
                         )}
-                        {billDetail.inspection === '已查验' && (
+                        {canEdit && billDetail.inspection === '已查验' && (
                           <button
                             onClick={async () => {
-                              if (!confirm('确定要放行此提单吗？放行后将转移到CMR管理。')) return
+                              if (!confirm('确定要放行此提单吗？放行后将转移到TMS管理。')) return
                               try {
                                 const response = await updateBillInspection(String(billDetail.id), '已放行')
                                 if (response.errCode === 200) {
@@ -1207,7 +1742,7 @@ export default function BillDetails() {
                             放行
                           </button>
                         )}
-                        {billDetail.inspection !== '-' && (
+                        {billDetail.inspection && billDetail.inspection !== '-' && (
                           <button
                             onClick={() => {
                               // 根据查验状态决定跳转到哪个标签页
@@ -1228,7 +1763,7 @@ export default function BillDetails() {
                             billDetail.inspection === '已查验' ? 'text-blue-600' :
                             billDetail.inspection === '已放行' ? 'text-green-600' :
                             'text-gray-600'
-                          }`}>{billDetail.inspection}</span>
+                          }`}>{billDetail.inspection || '-'}</span>
                         </div>
                       </div>
                     </ModuleWrapper>
@@ -1238,7 +1773,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="船状态操作" icon={<Ship className="w-4 h-4" />} iconColor="text-cyan-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2 items-center">
-                        {billDetail.shipStatus !== '未到港' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && billDetail.shipStatus !== '未到港' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要将船状态设为未到港吗？')) return
@@ -1262,7 +1804,7 @@ export default function BillDetails() {
                             未到港
                           </button>
                         )}
-                        {billDetail.shipStatus !== '已到港' && (
+                        {canEdit && billDetail.shipStatus !== '已到港' && (
                           <button
                             onClick={() => {
                               setActualArrivalDate(new Date().toISOString().split('T')[0])
@@ -1274,7 +1816,7 @@ export default function BillDetails() {
                             已到港
                           </button>
                         )}
-                        {billDetail.shipStatus !== '跳港' && (
+                        {canEdit && billDetail.shipStatus !== '跳港' && (
                           <div className="flex items-center gap-2">
                             <div className="relative" ref={skipPortDropdownRef}>
                               <input
@@ -1360,22 +1902,33 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="换单操作" icon={<Repeat className="w-4 h-4" />} iconColor="text-amber-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2 items-center">
-                        {billDetail.docSwapStatus !== '已换单' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && billDetail.docSwapStatus !== '已换单' && (
                           <button
                             onClick={async () => {
-                              if (!confirm('确定要标记为已换单吗？')) return
-                              try {
-                                const response = await updateBillDocSwapStatus(String(billDetail.id), '已换单')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, docSwapStatus: '已换单', docSwapTime: new Date().toISOString() })
-                                  loadOperationLogs()
-                                  alert('已标记为换单完成')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
+                              setDocSwapAgent('')
+                              setDocSwapAgentId('')
+                              setDocSwapFee('')
+                              setShowDocSwapModal(true)
+                              // 加载换单代理列表
+                              if (docSwapAgentList.length === 0) {
+                                setDocSwapAgentLoading(true)
+                                try {
+                                  const response = await getDocSwapAgents()
+                                  if (response.errCode === 200 && response.data) {
+                                    setDocSwapAgentList(response.data.list || [])
+                                  }
+                                } catch (error) {
+                                  console.error('加载换单代理列表失败:', error)
+                                } finally {
+                                  setDocSwapAgentLoading(false)
                                 }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
                               }
                             }}
                             className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 flex items-center gap-1"
@@ -1384,16 +1937,17 @@ export default function BillDetails() {
                             换单完成
                           </button>
                         )}
-                        {billDetail.docSwapStatus === '已换单' && (
+                        {canEdit && billDetail.docSwapStatus === '已换单' && (
                           <button
                             onClick={async () => {
-                              if (!confirm('确定要取消换单状态吗？')) return
+                              if (!confirm('确定要取消换单状态吗？取消后，系统自动创建的换单费也会一并撤销。')) return
                               try {
                                 const response = await updateBillDocSwapStatus(String(billDetail.id), '未换单')
                                 if (response.errCode === 200) {
                                   setBillDetail({ ...billDetail, docSwapStatus: '未换单', docSwapTime: undefined })
                                   loadOperationLogs()
-                                  alert('已取消换单状态')
+                                  loadBillFees()  // 刷新费用列表，删除的换单费会消失
+                                  alert('已取消换单状态，相关换单费已撤销')
                                 } else {
                                   alert(`操作失败: ${response.msg}`)
                                 }
@@ -1426,7 +1980,32 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="派送操作" icon={<Truck className="w-4 h-4" />} iconColor="text-blue-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2">
-                        {billDetail.deliveryStatus === '未派送' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {/* 预计提货时间按钮 */}
+                        {canEdit && (
+                          <button
+                            onClick={() => {
+                              // 初始化值（如果已有数据则显示）
+                              setPickupEstimatedTime(billDetail.cmrEstimatedPickupTime || '')
+                              setPickupNote('')
+                              setShowPickupTimeModal(true)
+                            }}
+                            className="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 flex items-center gap-1"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            预计提货时间
+                            {billDetail.cmrEstimatedPickupTime && (
+                              <span className="ml-1 text-amber-500">✓</span>
+                            )}
+                          </button>
+                        )}
+                        {canEdit && billDetail.deliveryStatus === '待派送' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要开始派送吗？')) return
@@ -1454,7 +2033,7 @@ export default function BillDetails() {
                           onClick={() => {
                             // 根据派送状态决定跳转到哪个标签页
                             let path = '/cmr-manage'
-                            const status = billDetail.deliveryStatus || '未派送'
+                            const status = billDetail.deliveryStatus || '待派送'
                             if (status === '派送中') {
                               path = '/cmr-manage/delivering'
                             } else if (status === '订单异常' || status === '异常关闭') {
@@ -1466,17 +2045,17 @@ export default function BillDetails() {
                           }}
                           className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
                         >
-                          查看CMR管理
+                          查看TMS管理
                         </button>
                         <div className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded">
                           当前状态: <span className={`font-medium ${
-                            billDetail.deliveryStatus === '未派送' ? 'text-gray-600' :
+                            billDetail.deliveryStatus === '待派送' ? 'text-gray-600' :
                             billDetail.deliveryStatus === '派送中' ? 'text-blue-600' :
                             billDetail.deliveryStatus === '已送达' ? 'text-green-600' :
                             billDetail.deliveryStatus === '订单异常' ? 'text-red-600' :
                             billDetail.deliveryStatus === '异常关闭' ? 'text-gray-500' :
                             'text-gray-600'
-                          }`}>{billDetail.deliveryStatus || '未派送'}</span>
+                          }`}>{billDetail.deliveryStatus || '待派送'}</span>
                         </div>
                       </div>
                     </ModuleWrapper>
@@ -1486,23 +2065,23 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="清关操作" icon={<ShieldCheck className="w-4 h-4" />} iconColor="text-purple-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2 items-center">
-                        {billDetail.customsStatus !== '已放行' && (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && billDetail.customsStatus !== '已放行' && (
                           <button
-                            onClick={async () => {
-                              if (!confirm('确定要将清关状态设为已放行吗？')) return
-                              try {
-                                const response = await updateBillCustomsStatus(String(billDetail.id), '已放行')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, customsStatus: '已放行', customsReleaseTime: new Date().toISOString() })
-                                  loadOperationLogs()
-                                  alert('已标记为清关放行')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
-                                }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
-                              }
+                            onClick={() => {
+                              // 默认设置为当前日期时间
+                              const now = new Date()
+                              const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+                                .toISOString()
+                                .slice(0, 16)
+                              setCustomsReleaseDate(localDateTime)
+                              setShowCustomsReleaseModal(true)
                             }}
                             className="px-3 py-1.5 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 flex items-center gap-1"
                           >
@@ -1510,7 +2089,7 @@ export default function BillDetails() {
                             清关放行
                           </button>
                         )}
-                        {billDetail.customsStatus === '已放行' && (
+                        {canEdit && billDetail.customsStatus === '已放行' && (
                           <button
                             onClick={async () => {
                               if (!confirm('确定要取消清关放行状态吗？')) return
@@ -1551,117 +2130,19 @@ export default function BillDetails() {
                 case 'finance':
                   return (
                     <ModuleWrapper key={moduleId} title="费用管理" icon={<DollarSign className="w-4 h-4" />} iconColor="text-emerald-600" {...wrapperProps}>
-                      <div className="space-y-3">
-                        {/* 操作按钮 */}
-                        <div className="flex flex-wrap gap-2 items-center">
-                          <button
-                            onClick={() => setShowFeeModal(true)}
-                            className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-1"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            录入费用
-                          </button>
-                          <button
-                            onClick={() => {
-                              navigate(`/finance/fees?billId=${billDetail.id}`)
-                            }}
-                            className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
-                          >
-                            <Receipt className="w-3.5 h-3.5" />
-                            查看全部费用
-                          </button>
-                          <button
-                            onClick={() => {
-                              navigate('/finance/invoices')
-                            }}
-                            className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 flex items-center gap-1"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            发票管理
-                          </button>
-                        </div>
-                        
-                        {/* 费用汇总 */}
-                        {billFees.length > 0 && (
-                          <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg p-3 border border-emerald-100">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-medium text-emerald-800">费用汇总</span>
-                              <span className="text-sm font-bold text-emerald-600">
-                                ¥{billFees.reduce((sum, fee) => sum + (fee.amount || 0), 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                            <div className="text-xs text-emerald-600">
-                              共 {billFees.length} 笔费用
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* 费用列表 */}
-                        {feesLoading ? (
-                          <div className="text-center py-4 text-xs text-gray-500">
-                            <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1" />
-                            加载费用中...
-                          </div>
-                        ) : billFees.length > 0 ? (
-                          <div className="border border-gray-200 rounded-lg overflow-hidden">
-                            <table className="w-full text-xs">
-                              <thead className="bg-gray-50">
-                                <tr>
-                                  <th className="text-left px-3 py-2 font-medium text-gray-600">费用名称</th>
-                                  <th className="text-left px-3 py-2 font-medium text-gray-600">类别</th>
-                                  <th className="text-right px-3 py-2 font-medium text-gray-600">金额</th>
-                                  <th className="text-left px-3 py-2 font-medium text-gray-600">日期</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {billFees.slice(0, 5).map((fee) => (
-                                  <tr key={fee.id} className="border-t border-gray-100 hover:bg-gray-50">
-                                    <td className="px-3 py-2 text-gray-900">{fee.feeName}</td>
-                                    <td className="px-3 py-2">
-                                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${
-                                        fee.category === 'freight' ? 'bg-blue-100 text-blue-700' :
-                                        fee.category === 'customs' ? 'bg-red-100 text-red-700' :
-                                        fee.category === 'warehouse' ? 'bg-orange-100 text-orange-700' :
-                                        fee.category === 'insurance' ? 'bg-green-100 text-green-700' :
-                                        fee.category === 'handling' ? 'bg-purple-100 text-purple-700' :
-                                        fee.category === 'documentation' ? 'bg-cyan-100 text-cyan-700' :
-                                        'bg-gray-100 text-gray-700'
-                                      }`}>
-                                        {fee.category === 'freight' ? '运费' :
-                                         fee.category === 'customs' ? '关税' :
-                                         fee.category === 'warehouse' ? '仓储' :
-                                         fee.category === 'insurance' ? '保险' :
-                                         fee.category === 'handling' ? '操作' :
-                                         fee.category === 'documentation' ? '文件' : '其他'}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2 text-right font-medium text-gray-900">
-                                      {fee.currency || '¥'}{fee.amount?.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="px-3 py-2 text-gray-500">
-                                      {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            {billFees.length > 5 && (
-                              <div className="bg-gray-50 px-3 py-2 text-center">
-                                <button
-                                  onClick={() => navigate(`/finance/fees?billId=${billDetail.id}`)}
-                                  className="text-xs text-primary-600 hover:text-primary-700"
-                                >
-                                  查看全部 {billFees.length} 笔费用 →
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-lg">
-                            暂无费用记录，点击"录入费用"添加
-                          </div>
-                        )}
-                      </div>
+                      <OrderFeePanel
+                        billId={billDetail.id}
+                        billNumber={billDetail.billNumber}
+                        customerId={billDetail.customerId}
+                        customerName={billDetail.customerName}
+                        onAddFee={(feeType) => {
+                          if (!canEdit) return
+                          setCurrentFeeType(feeType)
+                          setShowFeeModal(true)
+                        }}
+                        disabled={!canEdit}
+                        disabledMessage={completedMessage}
+                      />
                     </ModuleWrapper>
                   )
                   
@@ -1669,7 +2150,14 @@ export default function BillDetails() {
                   return (
                     <ModuleWrapper key={moduleId} title="订单操作" icon={<FileText className="w-4 h-4" />} iconColor="text-gray-600" {...wrapperProps}>
                       <div className="flex flex-wrap gap-2">
-                        {!billDetail.isVoid ? (
+                        {/* 已完成提示 */}
+                        {!canEdit && (
+                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>提单已完成，仅财务人员可修改状态</span>
+                          </div>
+                        )}
+                        {canEdit && !billDetail.isVoid ? (
                           <button
                             onClick={async () => {
                               if (!confirm(`确定要作废订单 ${billDetail.billNumber} 吗？`)) return
@@ -1692,7 +2180,7 @@ export default function BillDetails() {
                             <Ban className="w-3.5 h-3.5" />
                             作废订单
                           </button>
-                        ) : (
+                        ) : canEdit && billDetail.isVoid ? (
                           <>
                             <button
                               onClick={async () => {
@@ -1720,7 +2208,7 @@ export default function BillDetails() {
                               作废原因: {billDetail.voidReason}
                             </div>
                           </>
-                        )}
+                        ) : null}
                         <div className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded">
                           订单状态: <span className={`font-medium ${billDetail.isVoid ? 'text-red-600' : 'text-green-600'}`}>
                             {billDetail.isVoid ? '已作废' : '有效'}
@@ -1749,16 +2237,29 @@ export default function BillDetails() {
                 
                 {/* 操作按钮 */}
                 <div className="p-3 border-b border-gray-100">
+                  {/* 已完成提示 */}
+                  {isCompleted && !hasFinancePermission && (
+                    <div className="flex items-center gap-1 px-2 py-1.5 mb-2 text-[10px] bg-amber-50 text-amber-700 rounded border border-amber-200">
+                      <Lock className="w-3 h-3" />
+                      <span>提单已完成，仅财务可操作</span>
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => setShowFeeModal(true)}
-                      className="flex-1 px-3 py-2 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1"
+                      disabled={!canEdit}
+                      className={`flex-1 px-3 py-2 text-xs rounded-lg flex items-center justify-center gap-1 ${
+                        canEdit 
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                      title={!canEdit ? completedMessage : ''}
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      {canEdit ? <Plus className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                       录入费用
                     </button>
                     <button
-                      onClick={() => navigate(`/finance/fees?billId=${billDetail.id}`)}
+                      onClick={() => setActiveTab('fees')}
                       className="flex-1 px-3 py-2 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center justify-center gap-1"
                     >
                       <Receipt className="w-3.5 h-3.5" />
@@ -1767,16 +2268,46 @@ export default function BillDetails() {
                   </div>
                 </div>
                 
-                {/* 费用汇总 */}
+                {/* 费用汇总 - 分应收/应付显示 */}
                 {billFees.length > 0 && (
-                  <div className="p-3 border-b border-gray-100 bg-gradient-to-r from-emerald-50/50 to-green-50/50">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">费用总计</span>
-                      <span className="text-base font-bold text-emerald-600">
-                        ¥{billFees.reduce((sum, fee) => sum + (fee.amount || 0), 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                  <div className="p-3 border-b border-gray-100">
+                    {/* 应收费用汇总 */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700">应收</span>
+                        <span className="text-xs text-gray-500">
+                          ({billFees.filter(f => f.feeType === 'receivable').length}笔)
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-blue-600">
+                        €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">共 {billFees.length} 笔</div>
+                    {/* 应付费用汇总 */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-orange-100 text-orange-700">应付</span>
+                        <span className="text-xs text-gray-500">
+                          ({billFees.filter(f => f.feeType === 'payable').length}笔)
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-orange-600">
+                        €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    {/* 毛利 */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                      <span className="text-xs font-medium text-gray-600">毛利</span>
+                      <span className={`text-sm font-bold ${
+                        (billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                         billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)) >= 0
+                          ? 'text-emerald-600' : 'text-red-600'
+                      }`}>
+                        €{(billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0) -
+                           billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0)
+                          ).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   </div>
                 )}
                 
@@ -1790,30 +2321,35 @@ export default function BillDetails() {
                   ) : billFees.length > 0 ? (
                     <div className="divide-y divide-gray-100">
                       {billFees.map((fee) => (
-                        <div key={fee.id} className="px-3 py-2.5 hover:bg-gray-50">
+                        <div key={fee.id} className={`px-3 py-2.5 hover:bg-gray-50 ${
+                          fee.feeType === 'payable' ? 'border-l-2 border-l-orange-400' : 'border-l-2 border-l-blue-400'
+                        }`}>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-gray-900">{fee.feeName}</span>
-                            <span className="text-xs font-semibold text-gray-900">
-                              {fee.currency || '¥'}{fee.amount?.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-flex items-center px-1 py-0.5 rounded text-[9px] font-medium ${
+                                fee.feeType === 'payable' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {fee.feeType === 'payable' ? '付' : '收'}
+                              </span>
+                              <span className="text-xs font-medium text-gray-900">{fee.feeName}</span>
+                            </div>
+                            <span className={`text-xs font-semibold ${
+                              fee.feeType === 'payable' ? 'text-orange-600' : 'text-blue-600'
+                            }`}>
+                              {fee.currency || '€'}{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
-                              fee.category === 'freight' ? 'bg-blue-100 text-blue-700' :
-                              fee.category === 'customs' ? 'bg-red-100 text-red-700' :
-                              fee.category === 'warehouse' ? 'bg-orange-100 text-orange-700' :
-                              fee.category === 'insurance' ? 'bg-green-100 text-green-700' :
-                              fee.category === 'handling' ? 'bg-purple-100 text-purple-700' :
-                              fee.category === 'documentation' ? 'bg-cyan-100 text-cyan-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {fee.category === 'freight' ? '运费' :
-                               fee.category === 'customs' ? '关税' :
-                               fee.category === 'warehouse' ? '仓储' :
-                               fee.category === 'insurance' ? '保险' :
-                               fee.category === 'handling' ? '操作' :
-                               fee.category === 'documentation' ? '文件' : '其他'}
-                            </span>
+                          <div className="flex items-center justify-between mt-1 ml-6">
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${getFeeCategoryConfig(fee.category).bgClass} ${getFeeCategoryConfig(fee.category).textClass}`}>
+                                {getFeeCategoryConfig(fee.category).label}
+                              </span>
+                              {fee.supplierName && fee.feeType === 'payable' && (
+                                <span className="text-[10px] text-gray-400 truncate max-w-[80px]" title={fee.supplierName}>
+                                  {fee.supplierName}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-gray-400">
                               {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
                             </span>
@@ -1869,17 +2405,13 @@ export default function BillDetails() {
             <div className="p-6">
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="arrival-date-input" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     实际到港日期 <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    id="arrival-date-input"
-                    type="date"
+                  <DatePicker
                     value={actualArrivalDate}
-                    onChange={(e) => setActualArrivalDate(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white text-gray-900"
-                    title="选择实际到港日期"
-                    required
+                    onChange={(value) => setActualArrivalDate(value)}
+                    placeholder="选择实际到港日期"
                   />
                 </div>
               </div>
@@ -1932,6 +2464,346 @@ export default function BillDetails() {
         </div>
       )}
       
+      {/* 预计提货时间模态窗口 */}
+      {showPickupTimeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-semibold text-gray-900">预计提货时间</h3>
+              </div>
+              <button
+                onClick={() => setShowPickupTimeModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Clock className="w-3 h-3 inline mr-1" />
+                  预计提货时间 <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="datetime-local"
+                    value={pickupEstimatedTime}
+                    onChange={(e) => setPickupEstimatedTime(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                  />
+                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>
+                <textarea
+                  value={pickupNote}
+                  onChange={(e) => setPickupNote(e.target.value)}
+                  placeholder="可选填写备注信息..."
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white resize-none"
+                />
+              </div>
+              
+              {/* 已有预计提货时间提示 */}
+              {billDetail?.cmrEstimatedPickupTime && (
+                <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
+                  <p className="text-xs text-amber-700">
+                    <span className="font-medium">当前设置：</span>
+                    {new Date(billDetail.cmrEstimatedPickupTime).toLocaleString('zh-CN')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowPickupTimeModal(false)}
+                className="px-3 py-1.5 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  if (!pickupEstimatedTime) {
+                    alert('请选择预计提货时间')
+                    return
+                  }
+                  setPickupSubmitting(true)
+                  try {
+                    const cmrDetail: CMRDetailData = {
+                      estimatedPickupTime: pickupEstimatedTime,
+                      pickupNote: pickupNote || undefined,
+                    }
+                    // 保持当前派送状态不变，只更新 CMR 详情
+                    const response = await updateBillDelivery(
+                      String(billDetail.id),
+                      billDetail.deliveryStatus || '待派送',
+                      undefined,
+                      cmrDetail
+                    )
+                    if (response.errCode === 200) {
+                      setBillDetail({ 
+                        ...billDetail, 
+                        cmrEstimatedPickupTime: pickupEstimatedTime 
+                      })
+                      loadOperationLogs()
+                      setShowPickupTimeModal(false)
+                      alert('预计提货时间已保存')
+                    } else {
+                      alert(`操作失败: ${response.msg}`)
+                    }
+                  } catch (error) {
+                    console.error('操作失败:', error)
+                    alert('操作失败，请稍后重试')
+                  } finally {
+                    setPickupSubmitting(false)
+                  }
+                }}
+                disabled={!pickupEstimatedTime || pickupSubmitting}
+                className="px-3 py-1.5 text-xs text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {pickupSubmitting ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 换单完成模态窗口 */}
+      {showDocSwapModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Repeat className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-semibold text-gray-900">换单完成</h3>
+              </div>
+              <button
+                onClick={() => setShowDocSwapModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    换单代理商 <span className="text-red-500">*</span>
+                  </label>
+                  {docSwapAgentLoading ? (
+                    <div className="flex items-center justify-center py-2 text-gray-500 text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      加载中...
+                    </div>
+                  ) : (
+                    <select
+                      value={docSwapAgentId}
+                      onChange={(e) => {
+                        const selectedId = e.target.value
+                        setDocSwapAgentId(selectedId)
+                        const selected = docSwapAgentList.find(s => s.id === selectedId)
+                        setDocSwapAgent(selected?.supplierName || '')
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                    >
+                      <option value="">请选择换单代理商</option>
+                      {docSwapAgentList.map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.supplierName} {supplier.shortName ? `(${supplier.shortName})` : ''} - {supplier.city || supplier.country}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {docSwapAgentList.length === 0 && !docSwapAgentLoading && (
+                    <p className="text-xs text-gray-500 mt-1">暂无换单代理商，请先在供应商管理中添加</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    换单费用 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">€</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={docSwapFee}
+                      onChange={(e) => setDocSwapFee(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowDocSwapModal(false)}
+                className="px-3 py-1.5 text-xs text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  if (!docSwapAgentId) {
+                    alert('请选择换单代理商')
+                    return
+                  }
+                  if (!docSwapFee || parseFloat(docSwapFee) < 0) {
+                    alert('请输入有效的换单费用')
+                    return
+                  }
+                  setDocSwapSubmitting(true)
+                  try {
+                    const response = await updateBillDocSwapStatus(
+                      String(billDetail.id),
+                      '已换单',
+                      docSwapAgent,
+                      parseFloat(docSwapFee)
+                    )
+                    if (response.errCode === 200) {
+                      setBillDetail({ 
+                        ...billDetail, 
+                        docSwapStatus: '已换单', 
+                        docSwapTime: new Date().toISOString(),
+                        docSwapAgent: docSwapAgent,
+                        docSwapAgentId: docSwapAgentId,
+                        docSwapFee: parseFloat(docSwapFee)
+                      })
+                      loadOperationLogs()
+                      loadBillFees()  // 刷新费用列表，显示新创建的换单费
+                      setShowDocSwapModal(false)
+                      alert('已标记为换单完成')
+                    } else {
+                      alert(`操作失败: ${response.msg}`)
+                    }
+                  } catch (error) {
+                    console.error('操作失败:', error)
+                    alert('操作失败，请稍后重试')
+                  } finally {
+                    setDocSwapSubmitting(false)
+                  }
+                }}
+                disabled={!docSwapAgentId || !docSwapFee || docSwapSubmitting}
+                className="px-3 py-1.5 text-xs text-white bg-amber-600 rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {docSwapSubmitting ? '提交中...' : '确认换单'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 清关放行时间选择模态窗口 */}
+      {showCustomsReleaseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-purple-600" />
+                <h3 className="text-sm font-semibold text-gray-900">清关放行</h3>
+              </div>
+              <button
+                onClick={() => setShowCustomsReleaseModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  放行时间 <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="datetime-local"
+                    value={customsReleaseDate}
+                    onChange={(e) => setCustomsReleaseDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
+                  />
+                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  选择实际清关放行的日期和时间
+                </p>
+              </div>
+              
+              {/* 提示信息 */}
+              <div className="p-2 bg-purple-50 rounded-lg border border-purple-200">
+                <p className="text-xs text-purple-700">
+                  <span className="font-medium">提示：</span>
+                  确认放行后，清关状态将更新为"已放行"
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowCustomsReleaseModal(false)}
+                className="px-3 py-1.5 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  if (!customsReleaseDate) {
+                    alert('请选择放行时间')
+                    return
+                  }
+                  setCustomsReleaseSubmitting(true)
+                  try {
+                    // 将本地时间转换为 ISO 格式
+                    const releaseTime = new Date(customsReleaseDate).toISOString()
+                    const response = await updateBillCustomsStatus(String(billDetail.id), '已放行', releaseTime)
+                    if (response.errCode === 200) {
+                      setBillDetail({ 
+                        ...billDetail, 
+                        customsStatus: '已放行', 
+                        customsReleaseTime: releaseTime 
+                      })
+                      loadOperationLogs()
+                      setShowCustomsReleaseModal(false)
+                      alert('已标记为清关放行')
+                    } else {
+                      alert(`操作失败: ${response.msg}`)
+                    }
+                  } catch (error) {
+                    console.error('操作失败:', error)
+                    alert('操作失败，请稍后重试')
+                  } finally {
+                    setCustomsReleaseSubmitting(false)
+                  }
+                }}
+                disabled={!customsReleaseDate || customsReleaseSubmitting}
+                className="px-3 py-1.5 text-xs text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {customsReleaseSubmitting ? '提交中...' : '确认放行'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 费用录入弹窗 */}
       <FeeModal
         visible={showFeeModal}
@@ -1944,6 +2816,71 @@ export default function BillDetails() {
         defaultBillNumber={billDetail?.billNumber}
         defaultCustomerId={billDetail?.customerId}
         defaultCustomerName={billDetail?.customerName}
+        defaultFeeType={currentFeeType}
+      />
+
+      {/* 编辑提单弹窗 */}
+      <CreateBillModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={async () => {
+          setShowEditModal(false)
+          // 重新加载提单详情
+          if (id) {
+            try {
+              const response = await getBillByIdFromAPI(id)
+              if (response.errCode === 200 && response.data) {
+                setBillDetail(response.data)
+              }
+            } catch (error) {
+              console.error('重新加载提单详情失败:', error)
+            }
+          }
+        }}
+        mode="edit"
+        editData={billDetail ? {
+          id: billDetail.id,
+          billNumber: billDetail.billNumber,
+          containerNumber: billDetail.containerNumber, // 集装箱号
+          shippingCompany: billDetail.shippingCompany,
+          origin: billDetail.origin,
+          destination: billDetail.destination,
+          portOfLoading: billDetail.portOfLoading,
+          portOfDischarge: billDetail.portOfDischarge,
+          pieces: billDetail.pieces,
+          weight: billDetail.weight,
+          volume: billDetail.volume,
+          eta: billDetail.eta,
+          etd: billDetail.etd,
+          transportMethod: billDetail.transportMethod === '海运' ? 'sea' : 
+                           billDetail.transportMethod === '空运' ? 'air' : 
+                           billDetail.transportMethod === '铁路' ? 'rail' : 
+                           billDetail.transportMethod === '卡车' ? 'truck' : 'sea',
+          // 航程信息
+          vessel: billDetail.vessel,
+          voyage: billDetail.voyage,
+          groundHandling: billDetail.groundHandling,
+          // 集装箱信息
+          sealNumber: billDetail.sealNumber,
+          containerSize: billDetail.containerSize,
+          // 发货人信息
+          shipper: billDetail.shipper,
+          // Reference List
+          referenceList: billDetail.referenceList,
+          // 附加属性
+          containerType: billDetail.containerType,
+          billType: billDetail.billType,
+          consigneeType: billDetail.consigneeType,
+          containerReturn: billDetail.containerReturn,
+          fullContainerTransport: billDetail.fullContainerTransport,
+          lastMileTransport: billDetail.lastMileTransport,
+          devanning: billDetail.devanning,
+          t1Declaration: billDetail.t1Declaration,
+          transportArrangement: billDetail.transportArrangement,
+          customerId: billDetail.customerId,
+          customerName: billDetail.customerName,
+          status: billDetail.status,
+        } : null}
       />
     </div>
   )

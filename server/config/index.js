@@ -1,11 +1,17 @@
 /**
  * 配置统一导出
+ * ES Module 语法
  */
 
-const database = require('./database')
-const constants = require('./constants')
+import * as database from './database.js'
+import * as constants from './constants.js'
 
-module.exports = {
+// 重新导出所有配置
+export * from './database.js'
+export * from './constants.js'
+
+// 默认导出
+export default {
   ...database,
   ...constants
 }

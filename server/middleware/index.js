@@ -1,14 +1,9 @@
 /**
  * 中间件统一导出
+ * ES Module 语法
  */
 
-const auth = require('./auth')
-const logger = require('./logger')
-const errorHandler = require('./errorHandler')
-
-module.exports = {
-  ...auth,
-  ...logger,
-  ...errorHandler
-}
+export * from './auth.js'
+export * from './logger.js'
+export * from './errorHandler.js'
 

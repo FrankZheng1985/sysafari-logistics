@@ -1,0 +1,133 @@
+# Sysafari Logistics 开发规范
+
+## 项目概述
+这是一个基于 React + TypeScript + Tailwind CSS 的物流 ERP 系统。
+
+---
+
+## 🎨 UI 样式规范
+
+### 表格状态标签对齐规范（重要）
+
+**✅ 正确写法：使用 flex 布局确保居中对齐**
+
+```tsx
+<td className="px-3 py-2">
+  <div className="flex items-center justify-center">
+    <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded text-xs ${
+      isActive 
+        ? 'bg-green-100 text-green-700' 
+        : 'bg-gray-100 text-gray-600'
+    }`}>
+      {isActive ? '已核实' : '待核实'}
+    </span>
+  </div>
+</td>
+```
+
+**❌ 错误写法：不要直接使用 text-center**
+
+```tsx
+// 这样写会导致对齐不一致
+<td className="px-3 py-2 text-center">
+  <span className="...">已核实</span>
+</td>
+```
+
+### 状态颜色规范
+
+| 状态类型 | 样式类 |
+|----------|--------|
+| 成功/已完成 | `bg-green-100 text-green-700` |
+| 警告/进行中 | `bg-amber-100 text-amber-700` |
+| 错误/失败 | `bg-red-100 text-red-700` |
+| 信息/默认 | `bg-blue-100 text-blue-700` |
+| 禁用/待定 | `bg-gray-100 text-gray-600` |
+
+### 表格列对齐规范
+
+- 文本列：`text-left`
+- 数字/金额列：`text-right`
+- 状态/标签列：使用 `flex items-center justify-center`
+- 操作列：使用 `flex items-center justify-center gap-1`
+
+### 标准间距
+
+- 表格单元格：`px-3 py-2`
+- 状态标签：`px-2 py-0.5`
+- 状态标签最小宽度：`min-w-[52px]`
+
+---
+
+## 📐 组件规范
+
+### 操作按钮组
+
+```tsx
+<div className="flex items-center justify-center gap-1">
+  <button className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600" title="查看">
+    <Eye className="w-4 h-4" />
+  </button>
+  <button className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-blue-600" title="编辑">
+    <Edit2 className="w-4 h-4" />
+  </button>
+  <button className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600" title="删除">
+    <Trash2 className="w-4 h-4" />
+  </button>
+</div>
+```
+
+### 数字/金额显示
+
+```tsx
+// 金额右对齐
+<td className="px-3 py-2 text-right text-gray-900">
+  €{amount.toFixed(2)}
+</td>
+
+// 百分比居中带颜色
+<td className="px-3 py-2 text-center">
+  <span className={rate > 0 ? 'text-amber-600' : 'text-gray-500'}>
+    {rate}%
+  </span>
+</td>
+```
+
+### 长文本截断
+
+```tsx
+<div className="max-w-[150px]">
+  <div className="font-medium text-gray-900 truncate" title={fullText}>
+    {fullText}
+  </div>
+</div>
+```
+
+---
+
+## 🔧 代码风格
+
+### 命名规范
+- 变量/函数：camelCase
+- 组件/类：PascalCase
+- 常量：UPPER_SNAKE_CASE
+
+### 文件组织
+- 页面组件：`src/pages/`
+- 通用组件：`src/components/`
+- 工具函数：`src/utils/`
+- API 调用：`src/utils/api.ts`
+
+### 字体大小规范
+- 表格内容：`text-xs`（12px）
+- 正文：`text-sm`（14px）
+- 标题：`text-lg`（18px）或 `text-xl`（20px）
+
+---
+
+## ⚠️ 注意事项
+
+1. **数据库修改**：任何数据库 schema 修改必须先获得确认
+2. **本地优先**：代码先在本地测试通过后再提交
+3. **保持一致**：UI 样式、字体大小、间距要与现有页面保持一致
+4. **ERP 逻辑**：按照 ERP 系统的底层逻辑进行开发

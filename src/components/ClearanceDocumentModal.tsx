@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, FileText, Package, User, Ship, DollarSign, Anchor, Search } from 'lucide-react'
+import { getApiBaseUrl } from '../utils/api'
+import DatePicker from './DatePicker'
+
+const API_BASE = getApiBaseUrl()
 
 interface DocumentType {
   id: number
@@ -91,7 +95,7 @@ export default function ClearanceDocumentModal({
     volumeUnit: 'CBM',
     packages: 0,
     packageType: 'CARTON',
-    currency: 'USD',
+    currency: 'EUR',
     totalValue: 0,
     unitPrice: 0,
     freightAmount: 0,
@@ -146,7 +150,7 @@ export default function ClearanceDocumentModal({
       const params = new URLSearchParams({ pageSize: '50' })
       if (search) params.append('search', search)
       
-      const response = await fetch(`/api/bills?${params}`)
+      const response = await fetch(`${API_BASE}/api/bills?${params}`)
       const result = await response.json()
       
       if (result.errCode === 200 && result.data?.list) {
@@ -207,7 +211,7 @@ export default function ClearanceDocumentModal({
 
   const loadDocumentDetail = async (id: string) => {
     try {
-      const response = await fetch(`/api/clearance/documents/${id}`)
+      const response = await fetch(`${API_BASE}/api/clearance/documents/${id}`)
       const result = await response.json()
       if (result.errCode === 200 && result.data) {
         const doc = result.data
@@ -234,7 +238,7 @@ export default function ClearanceDocumentModal({
           volumeUnit: doc.volumeUnit || 'CBM',
           packages: doc.packages || 0,
           packageType: doc.packageType || 'CARTON',
-          currency: doc.currency || 'USD',
+          currency: doc.currency || 'EUR',
           totalValue: doc.totalValue || 0,
           unitPrice: doc.unitPrice || 0,
           freightAmount: doc.freightAmount || 0,
@@ -291,7 +295,7 @@ export default function ClearanceDocumentModal({
       volumeUnit: 'CBM',
       packages: 0,
       packageType: 'CARTON',
-      currency: 'USD',
+      currency: 'EUR',
       totalValue: 0,
       unitPrice: 0,
       freightAmount: 0,
@@ -790,8 +794,8 @@ export default function ClearanceDocumentModal({
                       onChange={(e) => handleInputChange('currency', e.target.value)}
                       className={selectClass}
                     >
-                      <option value="USD">USD - 美元</option>
                       <option value="EUR">EUR - 欧元</option>
+                      <option value="USD">USD - 美元</option>
                       <option value="CNY">CNY - 人民币</option>
                       <option value="GBP">GBP - 英镑</option>
                     </select>
@@ -906,19 +910,17 @@ export default function ClearanceDocumentModal({
               <FormSection title="时间节点" icon={FileText}>
                 <FormRow cols={2}>
                   <FormItem label="预计离港 (ETD)">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={formData.etd}
-                      onChange={(e) => handleInputChange('etd', e.target.value)}
-                      className={inputClass}
+                      onChange={(value) => handleInputChange('etd', value)}
+                      placeholder="选择离港日期"
                     />
                   </FormItem>
                   <FormItem label="预计到港 (ETA)">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={formData.eta}
-                      onChange={(e) => handleInputChange('eta', e.target.value)}
-                      className={inputClass}
+                      onChange={(value) => handleInputChange('eta', value)}
+                      placeholder="选择到港日期"
                     />
                   </FormItem>
                 </FormRow>
@@ -952,11 +954,10 @@ export default function ClearanceDocumentModal({
                     </FormItem>
                   </FormRow>
                   <FormItem label="清关放行日期">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={formData.customsReleaseDate}
-                      onChange={(e) => handleInputChange('customsReleaseDate', e.target.value)}
-                      className={`${inputClass} w-1/3`}
+                      onChange={(value) => handleInputChange('customsReleaseDate', value)}
+                      placeholder="选择放行日期"
                     />
                   </FormItem>
                 </div>

@@ -18,11 +18,15 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     bill_number TEXT NOT NULL,
     container_number TEXT,
     vessel TEXT,
+    voyage TEXT,
+    shipping_company TEXT,
+    etd TEXT,
     eta TEXT,
     ata TEXT,
     pieces INTEGER,
     weight NUMERIC,
     volume NUMERIC,
+    description TEXT,
     inspection TEXT,
     customs_stats TEXT,
     creator TEXT,
@@ -42,6 +46,9 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     is_void INTEGER DEFAULT 0,
     void_reason TEXT,
     void_time TEXT,
+    void_by TEXT,
+    remark TEXT,
+    operator TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ship_status TEXT DEFAULT '未到港',
@@ -60,6 +67,7 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     inspection_confirmed_time TEXT,
     cmr_detail TEXT,
     cmr_estimated_pickup_time TEXT,
+    cmr_pickup_time TEXT,
     cmr_service_provider TEXT,
     cmr_delivery_address TEXT,
     cmr_estimated_arrival_time TEXT,
@@ -79,11 +87,25 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
     customer_id TEXT,
     customer_name TEXT,
     customer_code TEXT,
-    actual_container_no TEXT,
     cmr_exception_resolution TEXT,
     cmr_exception_resolved_time TEXT,
     doc_swap_status TEXT DEFAULT '未换单',
-    doc_swap_time TEXT
+    doc_swap_time TEXT,
+    -- 附加属性字段
+    container_type TEXT,
+    bill_type TEXT,
+    transport_arrangement TEXT,
+    consignee_type TEXT,
+    container_return TEXT,
+    full_container_transport TEXT,
+    last_mile_transport TEXT,
+    devanning TEXT,
+    t1_declaration TEXT,
+    -- 订单导入扩展字段
+    service_type TEXT,
+    cargo_value NUMERIC,
+    documents_sent_date TEXT,
+    cmr_sent_date TEXT
 );
 
 -- ==================== 操作日志表 ====================
@@ -305,10 +327,35 @@ CREATE TABLE IF NOT EXISTS countries (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ==================== 城市/地区表 ====================
+CREATE TABLE IF NOT EXISTS cities (
+    id SERIAL PRIMARY KEY,
+    country_code TEXT NOT NULL,
+    city_code TEXT,
+    city_name_cn TEXT NOT NULL,
+    city_name_en TEXT,
+    city_name_pinyin TEXT,
+    parent_id INTEGER DEFAULT 0,
+    level INTEGER DEFAULT 2,
+    postal_code TEXT,
+    latitude NUMERIC,
+    longitude NUMERIC,
+    description TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_cities_country ON cities(country_code);
+CREATE INDEX IF NOT EXISTS idx_cities_parent ON cities(parent_id);
+CREATE INDEX IF NOT EXISTS idx_cities_level ON cities(level);
+CREATE INDEX IF NOT EXISTS idx_cities_name ON cities(city_name_cn);
+
 -- ==================== 服务费类别表 ====================
 CREATE TABLE IF NOT EXISTS service_fee_categories (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
+    name_en TEXT,
     code TEXT NOT NULL UNIQUE,
     description TEXT,
     sort_order INTEGER DEFAULT 0,
@@ -601,8 +648,10 @@ CREATE TABLE IF NOT EXISTS customers (
     customer_code TEXT UNIQUE NOT NULL,
     customer_name TEXT NOT NULL,
     company_name TEXT,
+    company_name_en TEXT,
     customer_type TEXT DEFAULT 'shipper',
     customer_level TEXT DEFAULT 'normal',
+    customer_region TEXT DEFAULT 'china',
     country_code TEXT,
     province TEXT,
     city TEXT,
@@ -612,9 +661,13 @@ CREATE TABLE IF NOT EXISTS customers (
     contact_phone TEXT,
     contact_email TEXT,
     tax_number TEXT,
+    legal_person TEXT,
+    registered_capital TEXT,
+    establishment_date TEXT,
+    business_scope TEXT,
     payment_terms TEXT,
     credit_limit NUMERIC DEFAULT 0,
-    currency TEXT DEFAULT 'CNY',
+    currency TEXT DEFAULT 'EUR',
     bank_name TEXT,
     bank_account TEXT,
     website TEXT,
@@ -636,6 +689,7 @@ CREATE TABLE IF NOT EXISTS customer_contacts (
     id TEXT PRIMARY KEY,
     customer_id TEXT NOT NULL,
     contact_name TEXT NOT NULL,
+    contact_type TEXT DEFAULT 'other',
     position TEXT,
     department TEXT,
     phone TEXT,
@@ -677,11 +731,14 @@ CREATE TABLE IF NOT EXISTS fees (
     bill_number TEXT,
     customer_id TEXT,
     customer_name TEXT,
+    supplier_id TEXT,
+    supplier_name TEXT,
     fee_type TEXT DEFAULT 'receivable',
     fee_category TEXT,
+    category TEXT,
     fee_name TEXT NOT NULL,
     amount NUMERIC NOT NULL DEFAULT 0,
-    currency TEXT DEFAULT 'CNY',
+    currency TEXT DEFAULT 'EUR',
     exchange_rate NUMERIC DEFAULT 1,
     amount_cny NUMERIC DEFAULT 0,
     tax_rate NUMERIC DEFAULT 0,
@@ -708,6 +765,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     invoice_type TEXT DEFAULT 'sales',
     customer_id TEXT,
     customer_name TEXT,
+    customer_address TEXT,
+    container_numbers TEXT,
     invoice_date DATE,
     due_date DATE,
     subtotal NUMERIC DEFAULT 0,
@@ -715,10 +774,16 @@ CREATE TABLE IF NOT EXISTS invoices (
     tax_amount NUMERIC DEFAULT 0,
     total_amount NUMERIC DEFAULT 0,
     paid_amount NUMERIC DEFAULT 0,
-    currency TEXT DEFAULT 'CNY',
+    currency TEXT DEFAULT 'EUR',
     items TEXT DEFAULT '[]',
+    fee_ids TEXT DEFAULT '[]',
     notes TEXT,
     status TEXT DEFAULT 'draft',
+    language TEXT DEFAULT 'en',
+    pdf_url TEXT,
+    excel_url TEXT,
+    pdf_generated_at TIMESTAMP,
+    excel_generated_at TIMESTAMP,
     created_by INTEGER,
     created_by_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -737,11 +802,14 @@ CREATE TABLE IF NOT EXISTS payments (
     fee_ids TEXT,
     payment_date DATE,
     amount NUMERIC NOT NULL DEFAULT 0,
-    currency TEXT DEFAULT 'CNY',
+    currency TEXT DEFAULT 'EUR',
+    exchange_rate NUMERIC DEFAULT 1,
     payment_method TEXT,
     bank_account TEXT,
     reference_number TEXT,
+    description TEXT,
     notes TEXT,
+    receipt_url TEXT,
     status TEXT DEFAULT 'pending',
     approved_by INTEGER,
     approved_by_name TEXT,
@@ -751,6 +819,30 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 添加 receipt_url 字段（如果不存在）
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'receipt_url') THEN
+        ALTER TABLE payments ADD COLUMN receipt_url TEXT;
+    END IF;
+END $$;
+
+-- 添加 exchange_rate 字段（如果不存在）
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'exchange_rate') THEN
+        ALTER TABLE payments ADD COLUMN exchange_rate NUMERIC DEFAULT 1;
+    END IF;
+END $$;
+
+-- 添加 description 字段（如果不存在）
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'description') THEN
+        ALTER TABLE payments ADD COLUMN description TEXT;
+    END IF;
+END $$;
 
 -- ==================== 销售机会表 ====================
 CREATE TABLE IF NOT EXISTS sales_opportunities (
@@ -790,7 +882,7 @@ CREATE TABLE IF NOT EXISTS quotations (
     discount NUMERIC DEFAULT 0,
     tax_amount NUMERIC DEFAULT 0,
     total_amount NUMERIC DEFAULT 0,
-    currency TEXT DEFAULT 'CNY',
+    currency TEXT DEFAULT 'EUR',
     terms TEXT,
     notes TEXT,
     items TEXT DEFAULT '[]',
@@ -812,7 +904,7 @@ CREATE TABLE IF NOT EXISTS contracts (
     opportunity_id TEXT,
     contract_type TEXT DEFAULT 'service',
     contract_amount NUMERIC DEFAULT 0,
-    currency TEXT DEFAULT 'CNY',
+    currency TEXT DEFAULT 'EUR',
     start_date DATE,
     end_date DATE,
     sign_date DATE,
@@ -859,7 +951,7 @@ CREATE TABLE IF NOT EXISTS transport_pricing (
     service_type TEXT DEFAULT 'delivery',
     price_type TEXT DEFAULT 'per_kg',
     unit_price NUMERIC DEFAULT 0,
-    currency TEXT DEFAULT 'CNY',
+    currency TEXT DEFAULT 'EUR',
     min_weight NUMERIC DEFAULT 0,
     max_weight NUMERIC DEFAULT 0,
     effective_date DATE,
@@ -912,7 +1004,7 @@ CREATE TABLE IF NOT EXISTS clearance_documents (
     volume_unit TEXT DEFAULT 'CBM',
     packages INTEGER,
     package_type TEXT,
-    currency TEXT DEFAULT 'USD',
+    currency TEXT DEFAULT 'EUR',
     total_value NUMERIC,
     unit_price NUMERIC,
     freight_amount NUMERIC,
@@ -1132,9 +1224,343 @@ CREATE TABLE IF NOT EXISTS auth0_pending_users (
 CREATE INDEX IF NOT EXISTS idx_auth0_pending_auth0_id ON auth0_pending_users(auth0_id);
 CREATE INDEX IF NOT EXISTS idx_auth0_pending_is_bound ON auth0_pending_users(is_bound);
 
+-- ==================== TMS考核条件表 ====================
+CREATE TABLE IF NOT EXISTS tms_assessment_conditions (
+    id SERIAL PRIMARY KEY,
+    condition_code TEXT UNIQUE NOT NULL,
+    condition_name TEXT NOT NULL,
+    condition_type TEXT NOT NULL,
+    metric_name TEXT,
+    operator TEXT DEFAULT '<=',
+    threshold_value NUMERIC,
+    threshold_value2 NUMERIC,
+    unit TEXT,
+    weight INTEGER DEFAULT 100,
+    scope_type TEXT DEFAULT 'global',
+    scope_values TEXT,
+    alert_enabled INTEGER DEFAULT 0,
+    alert_level TEXT DEFAULT 'warning',
+    description TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_code ON tms_assessment_conditions(condition_code);
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_type ON tms_assessment_conditions(condition_type);
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_status ON tms_assessment_conditions(status);
+CREATE INDEX IF NOT EXISTS idx_tms_conditions_scope ON tms_assessment_conditions(scope_type);
+
+-- ==================== TMS考核结果表 ====================
+CREATE TABLE IF NOT EXISTS tms_assessment_results (
+    id SERIAL PRIMARY KEY,
+    provider_id INTEGER,
+    provider_name TEXT,
+    bill_id TEXT,
+    bill_number TEXT,
+    condition_id INTEGER,
+    condition_code TEXT,
+    condition_type TEXT,
+    actual_value NUMERIC,
+    threshold_value NUMERIC,
+    is_passed INTEGER DEFAULT 0,
+    score NUMERIC DEFAULT 0,
+    assessment_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    period TEXT,
+    remark TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tms_results_provider ON tms_assessment_results(provider_id);
+CREATE INDEX IF NOT EXISTS idx_tms_results_bill ON tms_assessment_results(bill_id);
+CREATE INDEX IF NOT EXISTS idx_tms_results_condition ON tms_assessment_results(condition_id);
+CREATE INDEX IF NOT EXISTS idx_tms_results_type ON tms_assessment_results(condition_type);
+CREATE INDEX IF NOT EXISTS idx_tms_results_period ON tms_assessment_results(period);
+CREATE INDEX IF NOT EXISTS idx_tms_results_passed ON tms_assessment_results(is_passed);
+
+-- ==================== 客户地址表 ====================
+CREATE TABLE IF NOT EXISTS customer_addresses (
+    id SERIAL PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    address_code TEXT,
+    company_name TEXT NOT NULL,
+    contact_person TEXT,
+    phone TEXT,
+    country TEXT,
+    city TEXT,
+    address TEXT NOT NULL,
+    postal_code TEXT,
+    is_default INTEGER DEFAULT 0,
+    address_type TEXT DEFAULT 'both',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer ON customer_addresses(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_type ON customer_addresses(address_type);
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_default ON customer_addresses(is_default);
+
+-- ==================== 客户税号表 ====================
+CREATE TABLE IF NOT EXISTS customer_tax_numbers (
+    id SERIAL PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    tax_type TEXT NOT NULL,
+    tax_number TEXT NOT NULL,
+    country TEXT,
+    company_short_name TEXT,
+    company_name TEXT,
+    company_address TEXT,
+    is_verified INTEGER DEFAULT 0,
+    verified_at TIMESTAMP,
+    verification_data TEXT,
+    is_default INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_tax_customer ON customer_tax_numbers(customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_tax_type ON customer_tax_numbers(tax_type);
+CREATE INDEX IF NOT EXISTS idx_customer_tax_default ON customer_tax_numbers(is_default);
+CREATE INDEX IF NOT EXISTS idx_customer_tax_verified ON customer_tax_numbers(is_verified);
+
+-- ==================== 共享税号表（公司级税号库） ====================
+CREATE TABLE IF NOT EXISTS shared_tax_numbers (
+    id SERIAL PRIMARY KEY,
+    tax_type TEXT NOT NULL,
+    tax_number TEXT NOT NULL UNIQUE,
+    country TEXT,
+    company_short_name TEXT,
+    company_name TEXT,
+    company_address TEXT,
+    is_verified INTEGER DEFAULT 0,
+    verified_at TIMESTAMP,
+    verification_data TEXT,
+    status TEXT DEFAULT 'active',
+    remark TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_shared_tax_type ON shared_tax_numbers(tax_type);
+CREATE INDEX IF NOT EXISTS idx_shared_tax_number ON shared_tax_numbers(tax_number);
+CREATE INDEX IF NOT EXISTS idx_shared_tax_status ON shared_tax_numbers(status);
+
+-- ==================== 产品表（应收费用基础） ====================
+CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    product_code TEXT UNIQUE,
+    product_name TEXT NOT NULL,
+    product_name_en TEXT,
+    category TEXT,
+    description TEXT,
+    is_active INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_products_code ON products(product_code);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active);
+
+-- ==================== 产品费用项表 ====================
+CREATE TABLE IF NOT EXISTS product_fee_items (
+    id SERIAL PRIMARY KEY,
+    product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    fee_name TEXT NOT NULL,
+    fee_name_en TEXT,
+    fee_category TEXT DEFAULT 'other',
+    unit TEXT,
+    standard_price NUMERIC DEFAULT 0,
+    min_price NUMERIC,
+    max_price NUMERIC,
+    currency TEXT DEFAULT 'EUR',
+    is_required INTEGER DEFAULT 0,
+    description TEXT,
+    sort_order INTEGER DEFAULT 0,
+    -- 供应商关联和利润设置字段
+    supplier_id TEXT,                    -- 关联的供应商ID
+    supplier_price_id INTEGER,           -- 关联的供应商采购价ID
+    supplier_name TEXT,                  -- 供应商名称（冗余）
+    cost_price NUMERIC DEFAULT 0,        -- 成本价（从供应商报价获取）
+    profit_type TEXT DEFAULT 'amount',   -- 利润类型: amount=固定金额, rate=利润率
+    profit_value NUMERIC DEFAULT 0,      -- 利润值（金额或百分比）
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_fee_items_product ON product_fee_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_fee_items_category ON product_fee_items(fee_category);
+CREATE INDEX IF NOT EXISTS idx_product_fee_items_supplier ON product_fee_items(supplier_id);
+
+-- ==================== 供应商报价表 ====================
+CREATE TABLE IF NOT EXISTS supplier_price_items (
+    id SERIAL PRIMARY KEY,
+    supplier_id TEXT NOT NULL,
+    supplier_name TEXT,
+    fee_name TEXT NOT NULL,
+    fee_name_en TEXT,
+    fee_category TEXT DEFAULT 'other',
+    unit TEXT,
+    price NUMERIC DEFAULT 0,
+    currency TEXT DEFAULT 'EUR',
+    effective_date DATE,
+    expiry_date DATE,
+    route_from TEXT,
+    route_to TEXT,
+    remark TEXT,
+    import_batch_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_price_supplier ON supplier_price_items(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_category ON supplier_price_items(fee_category);
+CREATE INDEX IF NOT EXISTS idx_supplier_price_batch ON supplier_price_items(import_batch_id);
+
+-- ==================== 报价导入记录表 ====================
+CREATE TABLE IF NOT EXISTS import_records (
+    id SERIAL PRIMARY KEY,
+    supplier_id TEXT,
+    supplier_name TEXT,
+    file_name TEXT,
+    file_type TEXT,
+    sheet_count INTEGER DEFAULT 0,
+    record_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending',
+    error_message TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_records_supplier ON import_records(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_import_records_status ON import_records(status);
+
+-- ==================== API对接管理模块 ====================
+CREATE TABLE IF NOT EXISTS api_integrations (
+    id SERIAL PRIMARY KEY,
+    api_code TEXT UNIQUE NOT NULL,           -- 唯一标识：tencent_ocr, tencent_cos, exchange_rate 等
+    api_name TEXT NOT NULL,                  -- 显示名称
+    provider TEXT,                           -- 服务商
+    category TEXT DEFAULT 'other',           -- 分类：tracking/ocr/storage/translation/tariff/validation/infrastructure
+    api_url TEXT,                            -- API地址
+    health_check_url TEXT,                   -- 健康检查端点
+    pricing_model TEXT DEFAULT 'free',       -- 计费模式：per_call/per_volume/subscription/free
+    unit_price NUMERIC DEFAULT 0,           -- 单价
+    currency TEXT DEFAULT 'USD',             -- 计费货币
+    balance NUMERIC DEFAULT 0,              -- 当前余额
+    total_recharged NUMERIC DEFAULT 0,       -- 累计充值
+    total_consumed NUMERIC DEFAULT 0,       -- 累计消费
+    alert_threshold NUMERIC DEFAULT 100,     -- 预警阈值
+    recharge_url TEXT,                       -- 充值入口链接
+    status TEXT DEFAULT 'active',            -- 状态：active/inactive/suspended
+    health_status TEXT DEFAULT 'unknown',    -- 健康状态：online/offline/degraded/unknown
+    last_health_check TIMESTAMP,             -- 上次健康检查时间
+    health_check_message TEXT,               -- 健康检查返回信息
+    response_time_ms INTEGER,                -- 响应时间（毫秒）
+    last_sync_time TIMESTAMP,                -- 上次同步时间
+    config_json TEXT,                        -- 扩展配置JSON
+    description TEXT,                        -- 描述说明
+    icon TEXT,                               -- 图标名称
+    sort_order INTEGER DEFAULT 0,            -- 排序
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_integrations_code ON api_integrations(api_code);
+CREATE INDEX IF NOT EXISTS idx_api_integrations_category ON api_integrations(category);
+CREATE INDEX IF NOT EXISTS idx_api_integrations_status ON api_integrations(status);
+CREATE INDEX IF NOT EXISTS idx_api_integrations_health ON api_integrations(health_status);
+
+CREATE TABLE IF NOT EXISTS api_usage_records (
+    id SERIAL PRIMARY KEY,
+    api_id INTEGER REFERENCES api_integrations(id) ON DELETE CASCADE,
+    api_code TEXT NOT NULL,
+    usage_date DATE NOT NULL,
+    call_count INTEGER DEFAULT 0,            -- 调用次数
+    success_count INTEGER DEFAULT 0,         -- 成功次数
+    fail_count INTEGER DEFAULT 0,             -- 失败次数
+    data_volume NUMERIC DEFAULT 0,            -- 数据量（MB/KB等）
+    cost NUMERIC DEFAULT 0,                   -- 费用
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(api_code, usage_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_usage_code ON api_usage_records(api_code);
+CREATE INDEX IF NOT EXISTS idx_api_usage_date ON api_usage_records(usage_date);
+CREATE INDEX IF NOT EXISTS idx_api_usage_api_id ON api_usage_records(api_id);
+
+CREATE TABLE IF NOT EXISTS api_recharge_records (
+    id SERIAL PRIMARY KEY,
+    api_id INTEGER REFERENCES api_integrations(id) ON DELETE CASCADE,
+    api_code TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    recharge_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    payment_method TEXT,                     -- 支付方式
+    reference_no TEXT,                       -- 参考号/订单号
+    operator TEXT,                           -- 操作人
+    remark TEXT,                             -- 备注
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_recharge_code ON api_recharge_records(api_code);
+CREATE INDEX IF NOT EXISTS idx_api_recharge_time ON api_recharge_records(recharge_time);
+CREATE INDEX IF NOT EXISTS idx_api_recharge_api_id ON api_recharge_records(api_id);
+
+-- ==================== 银行账户表 ====================
+CREATE TABLE IF NOT EXISTS bank_accounts (
+    id SERIAL PRIMARY KEY,
+    account_name TEXT NOT NULL,
+    account_number TEXT NOT NULL,
+    bank_name TEXT NOT NULL,
+    bank_branch TEXT,
+    swift_code TEXT,
+    iban TEXT,
+    currency TEXT DEFAULT 'EUR',
+    account_type TEXT DEFAULT 'current',
+    is_default BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_currency ON bank_accounts(currency);
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_active ON bank_accounts(is_active);
+CREATE INDEX IF NOT EXISTS idx_bank_accounts_default ON bank_accounts(is_default);
+
+-- ==================== 船公司跟踪API配置表 ====================
+CREATE TABLE IF NOT EXISTS tracking_api_configs (
+    id SERIAL PRIMARY KEY,
+    provider_code VARCHAR(50) NOT NULL UNIQUE,
+    provider_name VARCHAR(100) NOT NULL,
+    transport_type VARCHAR(20) NOT NULL DEFAULT 'sea',
+    api_type VARCHAR(20) DEFAULT 'rest',
+    api_url VARCHAR(500),
+    api_key VARCHAR(500),
+    api_secret VARCHAR(500),
+    client_id VARCHAR(200),
+    client_secret VARCHAR(500),
+    extra_config JSONB,
+    status VARCHAR(20) DEFAULT 'inactive',
+    description TEXT,
+    priority INTEGER DEFAULT 10,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_tracking_api_configs_provider ON tracking_api_configs(provider_code);
+CREATE INDEX IF NOT EXISTS idx_tracking_api_configs_transport ON tracking_api_configs(transport_type);
+CREATE INDEX IF NOT EXISTS idx_tracking_api_configs_status ON tracking_api_configs(status);
+
 -- 完成提示
 DO $$
 BEGIN
     RAISE NOTICE '✅ PostgreSQL 数据库表结构初始化完成！';
-    RAISE NOTICE '📊 共创建 53 个数据表';
+    RAISE NOTICE '📊 共创建 64 个数据表';
 END $$;

@@ -7,6 +7,9 @@ import {
   ChevronRight, Activity, BarChart3, Lock
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // 模块权限配置
 const MODULE_PERMISSIONS = {
@@ -42,6 +45,8 @@ interface DashboardStats {
     payable: number
     netCashFlow: number
     totalFees: number
+    monthlyIncome: number
+    currentMonth: number
   }
 }
 
@@ -91,24 +96,25 @@ export default function SystemDashboard() {
     try {
       // 并行获取各模块数据
       const [billStatsRes, cmrRes, financeRes, customerRes, opportunityRes, feedbackRes] = await Promise.all([
-        fetch('/api/bills/stats').then(r => r.json()).catch(() => ({ data: {} })),
-        fetch('/api/cmr/stats').then(r => r.json()).catch(() => ({ data: {} })),
-        fetch('/api/finance/overview').then(r => r.json()).catch(() => ({ data: {} })),
-        fetch('/api/customers/stats').then(r => r.json()).catch(() => ({ data: { total: 0 } })),
-        fetch('/api/opportunities/stats').then(r => r.json()).catch(() => ({ data: { total: 0, wonValue: 0 } })),
-        fetch('/api/feedbacks/stats').then(r => r.json()).catch(() => ({ data: { byStatus: { open: 0, processing: 0 } } }))
+        fetch(`${API_BASE}/api/bills/stats`).then(r => r.json()).catch(() => ({ data: {} })),
+        fetch(`${API_BASE}/api/cmr/stats`).then(r => r.json()).catch(() => ({ data: {} })),
+        fetch(`${API_BASE}/api/finance/overview`).then(r => r.json()).catch(() => ({ data: {} })),
+        fetch(`${API_BASE}/api/customers/stats`).then(r => r.json()).catch(() => ({ data: { total: 0 } })),
+        fetch(`${API_BASE}/api/opportunities/stats`).then(r => r.json()).catch(() => ({ data: { total: 0, wonValue: 0 } })),
+        fetch(`${API_BASE}/api/feedbacks/stats`).then(r => r.json()).catch(() => ({ data: { byStatus: { open: 0, processing: 0 } } }))
       ])
 
       // 从 /api/bills/stats 获取真实统计数据
       const billStats = billStatsRes.data || {}
-      // 订单状态分布：
-      // - 待处理: 未到港 + 未清关
-      // - 进行中: 已到港(未清关) + 查验中 + 派送中
-      // - 已完成: 已送达
-      const pending = (billStats.notArrived || 0) + (billStats.notCleared || 0)
-      const inProgress = (billStats.inspecting || 0) + (billStats.delivering || 0)
-      const completed = billStats.delivered || 0
-      const total = billStats.total || billStats.active || 0
+      // 订单状态分布（优化后的逻辑）：
+      // - 待处理: 未到港 + 已到港未清关（订单还在运输或等待清关）
+      // - 进行中: 查验中 + 待派送 + 派送中（订单已在处理流程中）
+      // - 已完成: 已送达（订单已完成交付）
+      // 使用 Number() 确保转换为数字，避免字符串拼接问题
+      const pending = Number(billStats.statusPending || 0)
+      const inProgress = Number(billStats.statusInProgress || 0)
+      const completed = Number(billStats.statusCompleted || 0)
+      const total = Number(billStats.active || 0)
 
       // 构建统计数据
       const dashboardStats: DashboardStats = {
@@ -120,29 +126,42 @@ export default function SystemDashboard() {
           trend: 0 // 趋势需要历史数据计算，暂时设为0
         },
         tms: {
-          pending: cmrRes.data?.undelivered || cmrRes.data?.pending || 0,
-          delivering: cmrRes.data?.delivering || 0,
-          delivered: cmrRes.data?.archived || cmrRes.data?.delivered || 0,
-          exception: cmrRes.data?.exception || 0
+          // 使用 Number() 确保转换为数字，避免字符串拼接问题
+          pending: Number(cmrRes.data?.undelivered || cmrRes.data?.pending || 0),
+          delivering: Number(cmrRes.data?.delivering || 0),
+          delivered: Number(cmrRes.data?.archived || cmrRes.data?.delivered || 0),
+          exception: Number(cmrRes.data?.exception || 0)
         },
         crm: {
-          customers: customerRes.data?.totalCount || customerRes.data?.total || 0,
-          opportunities: opportunityRes.data?.totalCount || opportunityRes.data?.total || 0,
-          wonAmount: opportunityRes.data?.wonAmount || opportunityRes.data?.wonValue || 0,
-          pendingFeedbacks: (feedbackRes.data?.pendingCount || feedbackRes.data?.byStatus?.open || 0) + (feedbackRes.data?.processingCount || feedbackRes.data?.byStatus?.processing || 0)
+          // 使用 Number() 确保转换为数字
+          customers: Number(customerRes.data?.totalCount || customerRes.data?.total || 0),
+          opportunities: Number(opportunityRes.data?.totalCount || opportunityRes.data?.total || 0),
+          wonAmount: Number(opportunityRes.data?.wonAmount || opportunityRes.data?.wonValue || 0),
+          pendingFeedbacks: Number(feedbackRes.data?.pendingCount || feedbackRes.data?.byStatus?.open || 0) + Number(feedbackRes.data?.processingCount || feedbackRes.data?.byStatus?.processing || 0)
         },
         finance: {
-          receivable: financeRes.data?.summary?.receivable || 0,
-          payable: financeRes.data?.summary?.payable || 0,
-          netCashFlow: financeRes.data?.summary?.netCashFlow || 0,
-          totalFees: financeRes.data?.summary?.totalFees || 0
+          // 使用 Number() 确保转换为数字
+          receivable: Number(financeRes.data?.summary?.receivable || 0),
+          payable: Number(financeRes.data?.summary?.payable || 0),
+          netCashFlow: Number(financeRes.data?.summary?.netCashFlow || 0),
+          totalFees: Number(financeRes.data?.summary?.totalFees || 0),
+          monthlyIncome: Number(financeRes.data?.summary?.monthlyIncome || 0),
+          currentMonth: Number(financeRes.data?.summary?.currentMonth || new Date().getMonth() + 1)
         }
       }
 
       setStats(dashboardStats)
 
-      // 清空最近活动（需要从数据库获取真实操作日志，暂时置空）
-      setRecentActivities([])
+      // 获取最近活动
+      try {
+        const activitiesRes = await fetch(`${API_BASE}/api/recent-activities?limit=5`).then(r => r.json())
+        if (activitiesRes.errCode === 200 && activitiesRes.data) {
+          setRecentActivities(activitiesRes.data)
+        }
+      } catch (err) {
+        console.error('获取最近活动失败:', err)
+        setRecentActivities([])
+      }
 
     } catch (error) {
       console.error('获取仪表盘数据失败:', error)
@@ -152,9 +171,9 @@ export default function SystemDashboard() {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('zh-CN', {
+    return new Intl.NumberFormat('de-DE', {
       style: 'currency',
-      currency: 'CNY',
+      currency: 'EUR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(amount)
@@ -227,7 +246,7 @@ export default function SystemDashboard() {
               <Package className="w-6 h-6" />
             </div>
           </div>
-          {stats?.orders.trend && stats.orders.trend > 0 && (
+          {stats?.orders.trend !== undefined && stats.orders.trend > 0 && (
             <div className="mt-3 flex items-center gap-1 text-xs text-blue-100">
               <ArrowUpRight className="w-3 h-3" />
               较上周增长 {stats.orders.trend}%
@@ -260,7 +279,7 @@ export default function SystemDashboard() {
               <Truck className="w-6 h-6" />
             </div>
           </div>
-          {stats?.tms.exception && stats.tms.exception > 0 && (
+          {stats?.tms.exception !== undefined && stats.tms.exception > 0 && (
             <div className="mt-3 flex items-center gap-1 text-xs text-yellow-200">
               <AlertTriangle className="w-3 h-3" />
               {stats.tms.exception} 个异常订单需处理
@@ -293,7 +312,7 @@ export default function SystemDashboard() {
               <Users className="w-6 h-6" />
             </div>
           </div>
-          {stats?.crm.pendingFeedbacks && stats.crm.pendingFeedbacks > 0 && (
+          {stats?.crm.pendingFeedbacks !== undefined && stats.crm.pendingFeedbacks > 0 && (
             <div className="mt-3 flex items-center gap-1 text-xs text-purple-100">
               <Clock className="w-3 h-3" />
               {stats.crm.pendingFeedbacks} 个待处理反馈
@@ -315,8 +334,10 @@ export default function SystemDashboard() {
           )}
           <div className="flex items-start justify-between">
             <div>
-              <div className="text-amber-100 text-sm mb-1">财务管理</div>
-              <div className="text-2xl font-bold">{formatCurrency(stats?.finance.netCashFlow || 0)}</div>
+              <div className="text-amber-100 text-sm mb-1">
+                总营业收入（{stats?.finance.currentMonth || new Date().getMonth() + 1}月）
+              </div>
+              <div className="text-2xl font-bold">{formatCurrency(stats?.finance.monthlyIncome || 0)}</div>
               <div className="mt-3 flex items-center gap-4 text-xs text-amber-100">
                 <span>应收: {formatCurrency(stats?.finance.receivable || 0)}</span>
               </div>
@@ -342,11 +363,11 @@ export default function SystemDashboard() {
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: '提单管理', path: '/bookings/bill', icon: FileText, color: 'bg-blue-50 text-blue-600', module: 'order' as const },
-              { label: 'CMR管理', path: '/cmr-manage', icon: Truck, color: 'bg-green-50 text-green-600', module: 'tms' as const },
+              { label: 'TMS管理', path: '/cmr-manage', icon: Truck, color: 'bg-green-50 text-green-600', module: 'tms' as const },
               { label: '客户管理', path: '/crm/customers', icon: Users, color: 'bg-purple-50 text-purple-600', module: 'crm' as const },
               { label: '财务报表', path: '/finance/reports', icon: BarChart3, color: 'bg-amber-50 text-amber-600', module: 'finance' as const },
               { label: '查验明细', path: '/inspection-overview', icon: CheckCircle, color: 'bg-cyan-50 text-cyan-600', module: 'inspection' as const },
-              { label: '服务商', path: '/tms/service-providers', icon: Package, color: 'bg-pink-50 text-pink-600', module: 'tms' as const },
+              { label: '运输供应商', path: '/supplier-manage?type=transport', icon: Package, color: 'bg-pink-50 text-pink-600', module: 'tms' as const },
             ].filter(item => canAccessModule(item.module)).map(item => {
               const Icon = item.icon
               return (
@@ -395,22 +416,22 @@ export default function SystemDashboard() {
           {/* TMS状态 */}
           <div className="mt-6 pt-4 border-t border-gray-100">
             <div className="text-xs text-gray-500 mb-3">TMS派送状态</div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 text-center p-2 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-4 gap-2">
+              <div className="text-center p-2 bg-gray-50 rounded-lg">
                 <div className="text-lg font-bold text-gray-900">{stats?.tms.pending || 0}</div>
-                <div className="text-xs text-gray-500">待派送</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">待派送</div>
               </div>
-              <div className="flex-1 text-center p-2 bg-blue-50 rounded-lg">
+              <div className="text-center p-2 bg-blue-50 rounded-lg">
                 <div className="text-lg font-bold text-blue-600">{stats?.tms.delivering || 0}</div>
-                <div className="text-xs text-gray-500">派送中</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">派送中</div>
               </div>
-              <div className="flex-1 text-center p-2 bg-green-50 rounded-lg">
+              <div className="text-center p-2 bg-green-50 rounded-lg">
                 <div className="text-lg font-bold text-green-600">{stats?.tms.delivered || 0}</div>
-                <div className="text-xs text-gray-500">已送达</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">已送达</div>
               </div>
-              <div className="flex-1 text-center p-2 bg-red-50 rounded-lg">
+              <div className="text-center p-2 bg-red-50 rounded-lg">
                 <div className="text-lg font-bold text-red-600">{stats?.tms.exception || 0}</div>
-                <div className="text-xs text-gray-500">异常</div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">异常</div>
               </div>
             </div>
           </div>
@@ -431,20 +452,27 @@ export default function SystemDashboard() {
             </button>
           </div>
           <div className="space-y-3">
-            {recentActivities.map(activity => (
-              <div key={activity.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50">
-                <div className="p-1.5 bg-gray-100 rounded-lg">
-                  {getActivityIcon(activity.type)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">{activity.action}</span>
-                    <span className="text-xs text-gray-400">{activity.time}</span>
+            {recentActivities.length > 0 ? (
+              recentActivities.map(activity => (
+                <div key={activity.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50">
+                  <div className="p-1.5 bg-gray-100 rounded-lg">
+                    {getActivityIcon(activity.type)}
                   </div>
-                  <p className="text-xs text-gray-500 truncate">{activity.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">{activity.action}</span>
+                      <span className="text-xs text-gray-400">{activity.time}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">{activity.description}</p>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                <Clock className="w-8 h-8 mb-2" />
+                <p className="text-sm">暂无最近活动</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

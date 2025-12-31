@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Plus, Search, Edit, Trash2, Check, X, 
   Building2, Phone, Mail, User, Star, RefreshCw,
-  FileText, CreditCard, Download
+  FileText, CreditCard, Download, DollarSign
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DatePicker from '../components/DatePicker'
+import SupplierPriceModal from '../components/SupplierPriceModal'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 // ==================== 类型定义 ====================
 
@@ -48,7 +53,8 @@ interface SupplierFormData {
   supplierCode: string
   supplierName: string
   shortName: string
-  supplierType: string
+  supplierType: string  // 存储为逗号分隔的字符串，如 "doc_swap_agent,overseas_trucking"
+  supplierTypes: string[]  // 用于多选组件的数组形式
   contactPerson: string
   contactPhone: string
   contactEmail: string
@@ -91,12 +97,42 @@ interface SupplierStats {
 // ==================== 常量定义 ====================
 
 const SUPPLIER_TYPES = [
+  // === 服务费类别父级（与服务费分类对应） ===
+  { value: 'warehouse_operation', label: '仓储操作' },
+  { value: 'transport', label: '运输' },
+  { value: 'express', label: '快递' },
+  { value: 'customs_clearance', label: '清关服务' },
+  { value: 'document', label: '单证费' },
+  { value: 'doc_swap', label: '换单费' },
+  { value: 'port', label: '港口费' },
+  { value: 'tax', label: '税务' },
+  { value: 'import_agency', label: '进口商代理' },
+  { value: 'misc_fee', label: '费用杂项' },
+  { value: 'truck_waiting', label: '卡车等待费' },
+  { value: 'inspection_fee', label: '查验费' },
+  { value: 'clearing_dispatching', label: '清提派业务' },
+  // === 传统供应商类型 ===
+  { value: 'overseas_trucking', label: '海外卡车运输' },
+  { value: 'customs_agent', label: '清关代理' },
+  { value: 'import_agent', label: '进口代理商' },
+  { value: 'doc_swap_agent', label: '换单代理' },
   { value: 'manufacturer', label: '生产厂家' },
   { value: 'trader', label: '贸易商' },
   { value: 'agent', label: '代理商' },
   { value: 'distributor', label: '分销商' },
+  { value: 'shipping', label: '船运公司' },
+  { value: 'trucking', label: '拖车公司' },
+  { value: 'delivery', label: '派送服务' },
+  { value: 'forwarder', label: '货代公司' },
+  { value: 'warehouse', label: '仓储服务' },
+  { value: 'customs', label: '报关服务' },
+  { value: 'terminal', label: '码头运营' },
+  { value: 'depot', label: '堆场服务' },
   { value: 'other', label: '其他' },
 ]
+
+// 运输相关的供应商类型
+const TRANSPORT_TYPES = ['shipping', 'trucking', 'delivery', 'forwarder', 'terminal', 'depot']
 
 const SUPPLIER_STATUS = [
   { value: 'active', label: '启用', color: 'bg-green-100 text-green-700' },
@@ -125,7 +161,8 @@ const initialFormData: SupplierFormData = {
   supplierCode: '',
   supplierName: '',
   shortName: '',
-  supplierType: 'trader',
+  supplierType: '',
+  supplierTypes: [],  // 多选数组
   contactPerson: '',
   contactPhone: '',
   contactEmail: '',
@@ -141,7 +178,7 @@ const initialFormData: SupplierFormData = {
   bankName: '',
   bankAccount: '',
   bankBranch: '',
-  currency: 'CNY',
+  currency: 'EUR',
   paymentTerms: '',
   creditLimit: 0,
   status: 'active',
@@ -156,6 +193,11 @@ const initialFormData: SupplierFormData = {
 
 export default function SupplierManage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  
+  // 获取URL参数，判断是否为运输供应商视图
+  const viewType = searchParams.get('type') // 'transport' 表示只显示运输供应商
+  const isTransportView = viewType === 'transport'
   
   // 列表状态
   const [loading, setLoading] = useState(true)
@@ -175,16 +217,36 @@ export default function SupplierManage() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null)
   const [formData, setFormData] = useState<SupplierFormData>(initialFormData)
+  
+  // 采购价管理状态
+  const [priceModalVisible, setPriceModalVisible] = useState(false)
+  const [priceListVisible, setPriceListVisible] = useState(false)
+  const [selectedSupplierForPrice, setSelectedSupplierForPrice] = useState<Supplier | null>(null)
+  const [supplierPrices, setSupplierPrices] = useState<any[]>([])
+  const [editingPrice, setEditingPrice] = useState<any>(null)
+  const [loadingPrices, setLoadingPrices] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<'basic' | 'contact' | 'finance'>('basic')
   
   // 选中行
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
-  const tabs = [
+  // 根据视图类型显示不同的 tabs
+  const tmsTabs = [
+    { label: 'TMS概览', path: '/tms' },
+    { label: 'TMS管理', path: '/cmr-manage' },
+    { label: '运输供应商', path: '/supplier-manage?type=transport' },
+    { label: '运费管理', path: '/tms/pricing' },
+    { label: '条件管理', path: '/tms/conditions' },
+  ]
+
+  const supplierTabs = [
     { label: '供应商概览', path: '/suppliers' },
     { label: '供应商列表', path: '/suppliers/list' },
   ]
+
+  const tabs = isTransportView ? tmsTabs : supplierTabs
+  const pageActiveTab = isTransportView ? '/supplier-manage?type=transport' : '/suppliers/list'
 
   // ==================== 数据获取 ====================
 
@@ -192,7 +254,7 @@ export default function SupplierManage() {
     fetchSuppliers()
     fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, filterType, filterStatus, filterLevel])
+  }, [page, pageSize, filterType, filterStatus, filterLevel, isTransportView])
 
   const fetchSuppliers = async () => {
     setLoading(true)
@@ -206,7 +268,12 @@ export default function SupplierManage() {
         ...(filterLevel && { level: filterLevel }),
       })
       
-      const res = await fetch(`/api/suppliers?${params}`)
+      // 运输供应商视图时，添加类型过滤
+      if (isTransportView && !filterType) {
+        params.set('types', TRANSPORT_TYPES.join(','))
+      }
+      
+      const res = await fetch(`${API_BASE}/api/suppliers?${params}`)
       const data = await res.json()
       
       if (data.errCode === 200) {
@@ -222,7 +289,7 @@ export default function SupplierManage() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/suppliers/stats')
+      const res = await fetch(`${API_BASE}/api/suppliers/stats`)
       const data = await res.json()
       if (data.errCode === 200) {
         setStats(data.data)
@@ -242,11 +309,14 @@ export default function SupplierManage() {
   const handleOpenModal = async (supplier?: Supplier) => {
     if (supplier) {
       setEditingSupplier(supplier)
+      // 将逗号分隔的字符串转为数组
+      const typesArray = supplier.supplierType ? supplier.supplierType.split(',').filter(t => t.trim()) : []
       setFormData({
         supplierCode: supplier.supplierCode,
         supplierName: supplier.supplierName,
         shortName: supplier.shortName || '',
-        supplierType: supplier.supplierType,
+        supplierType: supplier.supplierType || '',
+        supplierTypes: typesArray,
         contactPerson: supplier.contactPerson || '',
         contactPhone: supplier.contactPhone || '',
         contactEmail: supplier.contactEmail || '',
@@ -262,7 +332,7 @@ export default function SupplierManage() {
         bankName: supplier.bankName || '',
         bankAccount: supplier.bankAccount || '',
         bankBranch: supplier.bankBranch || '',
-        currency: supplier.currency || 'CNY',
+        currency: supplier.currency || 'EUR',
         paymentTerms: supplier.paymentTerms || '',
         creditLimit: supplier.creditLimit || 0,
         status: supplier.status,
@@ -276,7 +346,7 @@ export default function SupplierManage() {
       setEditingSupplier(null)
       // 获取新编码
       try {
-        const res = await fetch('/api/suppliers/generate-code')
+        const res = await fetch(`${API_BASE}/api/suppliers/generate-code`)
         const data = await res.json()
         if (data.errCode === 200) {
           setFormData({ ...initialFormData, supplierCode: data.data.code })
@@ -334,13 +404,59 @@ export default function SupplierManage() {
 
   // ==================== 操作处理 ====================
 
+  // 打开采购价列表
+  const handleOpenPriceList = async (supplier: Supplier) => {
+    setSelectedSupplierForPrice(supplier)
+    setPriceListVisible(true)
+    await fetchSupplierPrices(supplier.id)
+  }
+
+  // 获取供应商采购价列表
+  const fetchSupplierPrices = async (supplierId: string) => {
+    setLoadingPrices(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/suppliers/${supplierId}/prices`)
+      const data = await res.json()
+      if (data.errCode === 200) {
+        // 兼容两种返回格式：data.data.list 或 data.data（直接数组）
+        const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+        setSupplierPrices(list)
+      }
+    } catch (error) {
+      console.error('获取采购价列表失败:', error)
+    } finally {
+      setLoadingPrices(false)
+    }
+  }
+
+  // 删除采购价
+  const handleDeletePrice = async (priceId: number) => {
+    if (!selectedSupplierForPrice) return
+    if (!confirm('确定要删除这个采购价吗？')) return
+
+    try {
+      const res = await fetch(`${API_BASE}/api/suppliers/${selectedSupplierForPrice.id}/prices/${priceId}`, {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        fetchSupplierPrices(selectedSupplierForPrice.id)
+      } else {
+        alert(data.msg || '删除失败')
+      }
+    } catch (error) {
+      console.error('删除采购价失败:', error)
+      alert('删除失败')
+    }
+  }
+
   const handleDelete = async (supplier: Supplier) => {
     if (!confirm(`确定要删除供应商 "${supplier.supplierName}" 吗？`)) {
       return
     }
 
     try {
-      const res = await fetch(`/api/suppliers/${supplier.id}`, {
+      const res = await fetch(`${API_BASE}/api/suppliers/${supplier.id}`, {
         method: 'DELETE',
       })
       
@@ -362,7 +478,7 @@ export default function SupplierManage() {
     const newStatus = supplier.status === 'active' ? 'inactive' : 'active'
     
     try {
-      const res = await fetch(`/api/suppliers/${supplier.id}/status`, {
+      const res = await fetch(`${API_BASE}/api/suppliers/${supplier.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -393,7 +509,7 @@ export default function SupplierManage() {
     }
 
     try {
-      const res = await fetch('/api/suppliers/batch-delete', {
+      const res = await fetch(`${API_BASE}/api/suppliers/batch-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedIds }),
@@ -424,8 +540,18 @@ export default function SupplierManage() {
     return SUPPLIER_LEVELS.find(l => l.value === level) || SUPPLIER_LEVELS[4]
   }
 
+  // 获取单个类型标签
   const getTypeLabel = (type: string) => {
     return SUPPLIER_TYPES.find(t => t.value === type)?.label || type
+  }
+  
+  // 获取多类型标签（支持逗号分隔的字符串）
+  const getTypeLabels = (typeString: string) => {
+    if (!typeString) return []
+    return typeString.split(',').filter(t => t.trim()).map(t => ({
+      value: t.trim(),
+      label: getTypeLabel(t.trim())
+    }))
   }
 
   const columns: Column<Supplier>[] = [
@@ -433,24 +559,26 @@ export default function SupplierManage() {
       key: 'supplierCode',
       label: '供应商编码',
       width: '110px',
-      render: (item) => (
+      sorter: true,
+      render: (_value, record) => (
         <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
-          {item.supplierCode}
+          {record.supplierCode}
         </span>
       ),
     },
     {
       key: 'supplierName',
       label: '供应商名称',
-      render: (item) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
             <Building2 className="w-4 h-4 text-primary-600" />
           </div>
           <div className="min-w-0">
-            <div className="font-medium text-gray-900 truncate">{item.supplierName}</div>
-            {item.shortName && (
-              <div className="text-xs text-gray-500 truncate">{item.shortName}</div>
+            <div className="font-medium text-gray-900 truncate">{record.supplierName}</div>
+            {record.shortName && (
+              <div className="text-xs text-gray-500 truncate">{record.shortName}</div>
             )}
           </div>
         </div>
@@ -459,22 +587,41 @@ export default function SupplierManage() {
     {
       key: 'supplierType',
       label: '类型',
-      width: '90px',
-      render: (item) => (
-        <span className="text-xs text-gray-600">
-          {getTypeLabel(item.supplierType)}
-        </span>
-      ),
+      width: '150px',
+      sorter: true,
+      render: (_value, record) => {
+        const types = getTypeLabels(record.supplierType)
+        if (types.length === 0) return <span className="text-xs text-gray-400">-</span>
+        if (types.length === 1) {
+          return <span className="text-xs text-gray-600">{types[0].label}</span>
+        }
+        // 多类型显示为标签组
+        return (
+          <div className="flex flex-wrap gap-1">
+            {types.slice(0, 2).map((t, idx) => (
+              <span key={idx} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px]">
+                {t.label}
+              </span>
+            ))}
+            {types.length > 2 && (
+              <span className="px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded text-[10px]" title={types.map(t => t.label).join(', ')}>
+                +{types.length - 2}
+              </span>
+            )}
+          </div>
+        )
+      },
     },
     {
       key: 'level',
       label: '级别',
       width: '80px',
-      render: (item) => {
-        const config = getLevelConfig(item.level)
+      sorter: true,
+      render: (_value, record) => {
+        const config = getLevelConfig(record.level)
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
-            {item.level === 'vip' && <Star className="w-3 h-3" />}
+            {record.level === 'vip' && <Star className="w-3 h-3" />}
             {config.label}
           </span>
         )
@@ -484,10 +631,11 @@ export default function SupplierManage() {
       key: 'contactPerson',
       label: '联系人',
       width: '100px',
-      render: (item) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="flex items-center gap-1 text-gray-600 text-xs">
           <User className="w-3 h-3" />
-          {item.contactPerson || '-'}
+          {record.contactPerson || '-'}
         </div>
       ),
     },
@@ -495,18 +643,20 @@ export default function SupplierManage() {
       key: 'contactPhone',
       label: '联系电话',
       width: '120px',
-      render: (item) => (
+      sorter: true,
+      render: (_value, record) => (
         <div className="flex items-center gap-1 text-gray-600 text-xs">
           <Phone className="w-3 h-3" />
-          {item.contactPhone || item.contactMobile || '-'}
+          {record.contactPhone || record.contactMobile || '-'}
         </div>
       ),
     },
     {
       key: 'address',
       label: '地址',
-      render: (item) => {
-        const fullAddress = [item.country, item.province, item.city, item.address]
+      sorter: true,
+      render: (_value, record) => {
+        const fullAddress = [record.country, record.province, record.city, record.address]
           .filter(Boolean)
           .join(' ')
         return (
@@ -520,14 +670,15 @@ export default function SupplierManage() {
       key: 'status',
       label: '状态',
       width: '80px',
-      render: (item) => {
-        const config = getStatusConfig(item.status)
+      sorter: true,
+      render: (_value, record) => {
+        const config = getStatusConfig(record.status)
         return (
           <button
-            onClick={() => handleToggleStatus(item)}
+            onClick={() => handleToggleStatus(record)}
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${config.color}`}
           >
-            {item.status === 'active' ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+            {record.status === 'active' ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
             {config.label}
           </button>
         )
@@ -536,18 +687,25 @@ export default function SupplierManage() {
     {
       key: 'actions',
       label: '操作',
-      width: '100px',
-      render: (item) => (
+      width: '140px',
+      render: (_value, record) => (
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleOpenModal(item)}
+            onClick={() => handleOpenPriceList(record)}
+            className="p-1 text-gray-400 hover:text-green-600 rounded"
+            title="采购价管理"
+          >
+            <DollarSign className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleOpenModal(record)}
             className="p-1 text-gray-400 hover:text-primary-600 rounded"
             title="编辑"
           >
             <Edit className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleDelete(item)}
+            onClick={() => handleDelete(record)}
             className="p-1 text-gray-400 hover:text-red-600 rounded"
             title="删除"
           >
@@ -563,10 +721,10 @@ export default function SupplierManage() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title="供应商管理"
+        title={isTransportView ? "TMS运输管理" : "供应商管理"}
         icon={<Building2 className="w-6 h-6 text-primary-600" />}
         tabs={tabs}
-        activeTab="/suppliers/list"
+        activeTab={pageActiveTab}
         onTabChange={(path) => navigate(path)}
       />
 
@@ -811,19 +969,57 @@ export default function SupplierManage() {
                       />
                     </div>
 
-                    {/* 供应商类型 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">供应商类型</label>
-                      <select
-                        value={formData.supplierType}
-                        onChange={(e) => setFormData(prev => ({ ...prev, supplierType: e.target.value }))}
-                        title="选择供应商类型"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      >
+                    {/* 供应商类型 - 多选 */}
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-700 mb-2">供应商类型（可多选）</label>
+                      <div className="grid grid-cols-4 gap-2 p-3 border border-gray-300 rounded bg-gray-50 max-h-[160px] overflow-y-auto">
                         {SUPPLIER_TYPES.map(type => (
-                          <option key={type.value} value={type.value}>{type.label}</option>
+                          <label key={type.value} className="flex items-center gap-1.5 cursor-pointer hover:bg-white px-2 py-1 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={formData.supplierTypes.includes(type.value)}
+                              onChange={(e) => {
+                                const newTypes = e.target.checked
+                                  ? [...formData.supplierTypes, type.value]
+                                  : formData.supplierTypes.filter(t => t !== type.value)
+                                setFormData(prev => ({
+                                  ...prev,
+                                  supplierTypes: newTypes,
+                                  supplierType: newTypes.join(',')  // 同步更新字符串形式
+                                }))
+                              }}
+                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-xs text-gray-700">{type.label}</span>
+                          </label>
                         ))}
-                      </select>
+                      </div>
+                      {formData.supplierTypes.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {formData.supplierTypes.map(typeValue => {
+                            const typeInfo = SUPPLIER_TYPES.find(t => t.value === typeValue)
+                            return (
+                              <span key={typeValue} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs">
+                                {typeInfo?.label || typeValue}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newTypes = formData.supplierTypes.filter(t => t !== typeValue)
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      supplierTypes: newTypes,
+                                      supplierType: newTypes.join(',')
+                                    }))
+                                  }}
+                                  className="hover:text-primary-900"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* 供应商级别 */}
@@ -859,24 +1055,20 @@ export default function SupplierManage() {
                     {/* 合作开始日期 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">合作开始日期</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={formData.cooperationDate}
-                        onChange={(e) => setFormData(prev => ({ ...prev, cooperationDate: e.target.value }))}
-                        title="选择合作开始日期"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                        onChange={(value) => setFormData(prev => ({ ...prev, cooperationDate: value }))}
+                        placeholder="选择合作开始日期"
                       />
                     </div>
 
                     {/* 合同到期日期 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">合同到期日期</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={formData.contractExpireDate}
-                        onChange={(e) => setFormData(prev => ({ ...prev, contractExpireDate: e.target.value }))}
-                        title="选择合同到期日期"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                        onChange={(value) => setFormData(prev => ({ ...prev, contractExpireDate: value }))}
+                        placeholder="选择合同到期日期"
                       />
                     </div>
                   </div>
@@ -1153,6 +1345,120 @@ export default function SupplierManage() {
           </div>
         </div>
       )}
+
+      {/* 采购价列表弹窗 */}
+      {priceListVisible && selectedSupplierForPrice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setPriceListVisible(false)} />
+          <div className="relative bg-white rounded-lg shadow-xl w-[800px] max-h-[85vh] overflow-hidden flex flex-col">
+            {/* 弹窗头部 */}
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">
+                采购价管理 - {selectedSupplierForPrice.supplierName}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEditingPrice(null)
+                    setPriceModalVisible(true)
+                  }}
+                  className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 flex items-center gap-1"
+                >
+                  <Plus className="w-4 h-4" />
+                  新增
+                </button>
+                <button onClick={() => setPriceListVisible(false)} className="text-gray-400 hover:text-gray-600" title="关闭">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 采购价列表 */}
+            <div className="flex-1 overflow-auto p-4">
+              {loadingPrices ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
+                </div>
+              ) : supplierPrices.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  暂无采购价数据，点击"新增"添加
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left py-2 px-3 font-medium text-gray-600">类别</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-600">费用名称</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-600">英文名称</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-600">单价</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600">状态</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {supplierPrices.map(price => (
+                      <tr key={price.id} className="border-b hover:bg-gray-50">
+                        <td className="py-2 px-3 text-gray-600">{price.category}</td>
+                        <td className="py-2 px-3 text-gray-900">{price.name}</td>
+                        <td className="py-2 px-3 text-gray-600">{price.nameEn || '-'}</td>
+                        <td className="py-2 px-3 text-right text-gray-900">
+                          {price.unitPrice?.toLocaleString()} {price.currency}/{price.unit}
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${
+                            price.isActive 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {price.isActive ? '启用' : '禁用'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingPrice(price)
+                                setPriceModalVisible(true)
+                              }}
+                              className="p-1 text-gray-400 hover:text-primary-600 rounded"
+                              title="编辑"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeletePrice(price.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 rounded"
+                              title="删除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 采购价编辑弹窗 */}
+      <SupplierPriceModal
+        visible={priceModalVisible}
+        onClose={() => {
+          setPriceModalVisible(false)
+          setEditingPrice(null)
+        }}
+        onSuccess={() => {
+          if (selectedSupplierForPrice) {
+            fetchSupplierPrices(selectedSupplierForPrice.id)
+          }
+        }}
+        supplierId={selectedSupplierForPrice?.id || ''}
+        data={editingPrice}
+      />
     </div>
   )
 }

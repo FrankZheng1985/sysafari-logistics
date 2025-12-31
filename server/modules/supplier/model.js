@@ -8,10 +8,28 @@ import { getDatabase, generateId } from '../../config/database.js'
 // ==================== 供应商类型常量 ====================
 
 export const SUPPLIER_TYPES = {
+  // === 服务费类别父级（与服务费分类对应） ===
+  WAREHOUSE_OPERATION: 'warehouse_operation',   // 仓储操作
+  TRANSPORT: 'transport',                       // 运输
+  EXPRESS: 'express',                           // 快递
+  CUSTOMS_CLEARANCE: 'customs_clearance',       // 清关服务
+  DOCUMENT: 'document',                         // 单证费
+  DOC_SWAP: 'doc_swap',                         // 换单费
+  PORT: 'port',                                 // 港口费
+  TAX: 'tax',                                   // 税务
+  IMPORT_AGENCY: 'import_agency',               // 进口商代理
+  MISC_FEE: 'misc_fee',                         // 费用杂项
+  TRUCK_WAITING: 'truck_waiting',               // 卡车等待费
+  INSPECTION_FEE: 'inspection_fee',             // 查验费
+  CLEARING_DISPATCHING: 'clearing_dispatching', // 清提派业务
+  // === 传统供应商类型 ===
   MANUFACTURER: 'manufacturer',    // 生产厂家
   TRADER: 'trader',                // 贸易商
   AGENT: 'agent',                  // 代理商
   DISTRIBUTOR: 'distributor',      // 分销商
+  DOC_SWAP_AGENT: 'doc_swap_agent', // 换单代理
+  CUSTOMS_AGENT: 'customs_agent',  // 清关代理
+  WAREHOUSE: 'warehouse',          // 仓储服务商
   OTHER: 'other'                   // 其他
 }
 
@@ -64,9 +82,9 @@ export async function initSupplierTable() {
       bank_name TEXT,
       bank_account TEXT,
       bank_branch TEXT,
-      currency TEXT DEFAULT 'CNY',
+      currency TEXT DEFAULT 'EUR',
       payment_terms TEXT,
-      credit_limit REAL DEFAULT 0,
+      credit_limit NUMERIC(10,2) DEFAULT 0,
       
       -- 合作信息
       status TEXT DEFAULT 'active',
@@ -79,8 +97,8 @@ export async function initSupplierTable() {
       remark TEXT,
       
       -- 时间戳
-      created_at TEXT DEFAULT (datetime('now', 'localtime')),
-      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
       created_by TEXT,
       updated_by TEXT
     )
@@ -107,7 +125,8 @@ export async function getSupplierList(params = {}) {
   const db = getDatabase()
   const { 
     search, 
-    type, 
+    type,
+    types,  // 支持多类型过滤（逗号分隔）
     status, 
     level,
     page = 1, 
@@ -130,10 +149,23 @@ export async function getSupplierList(params = {}) {
     queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
-  // 类型筛选
+  // 单类型筛选 - 使用 LIKE 支持多类型字段（supplier_type 存储为逗号分隔的字符串）
   if (type) {
-    query += ' AND supplier_type = ?'
-    queryParams.push(type)
+    // 支持精确匹配单类型或包含在多类型中
+    query += ` AND (supplier_type = ? OR supplier_type LIKE ? OR supplier_type LIKE ? OR supplier_type LIKE ?)`
+    queryParams.push(type, `${type},%`, `%,${type},%`, `%,${type}`)
+  }
+  
+  // 多类型筛选（用于运输供应商等场景）- 查找包含任意指定类型的供应商
+  if (types && !type) {
+    const typeArray = types.split(',').map(t => t.trim()).filter(Boolean)
+    if (typeArray.length > 0) {
+      const conditions = typeArray.map(() => `(supplier_type = ? OR supplier_type LIKE ? OR supplier_type LIKE ? OR supplier_type LIKE ?)`).join(' OR ')
+      query += ` AND (${conditions})`
+      typeArray.forEach(t => {
+        queryParams.push(t, `${t},%`, `%,${t},%`, `%,${t}`)
+      })
+    }
   }
   
   // 状态筛选
@@ -152,8 +184,8 @@ export async function getSupplierList(params = {}) {
   const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
-  // 分页和排序
-  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  // 分页和排序 - 按供应商编码升序排序（DSA001, DSA002, DSA003...）
+  query += ' ORDER BY supplier_code ASC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
@@ -228,7 +260,7 @@ export async function createSupplier(data) {
     data.bankName || '',
     data.bankAccount || '',
     data.bankBranch || '',
-    data.currency || 'CNY',
+    data.currency || 'EUR',
     data.paymentTerms || '',
     data.creditLimit || 0,
     data.status || 'active',
@@ -295,7 +327,7 @@ export async function updateSupplier(id, data) {
   if (fields.length === 0) return false
   
   // 更新时间
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE suppliers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -328,7 +360,7 @@ export async function updateSupplierStatus(id, status, updatedBy) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE suppliers 
-    SET status = ?, updated_at = datetime('now', 'localtime'), updated_by = ?
+    SET status = ?, updated_at = NOW(), updated_by = ?
     WHERE id = ?
   `).run(status, updatedBy || '', id)
   return result.changes > 0
@@ -472,6 +504,383 @@ function convertToCamelCase(row) {
   }
 }
 
+// ==================== 供应商采购价管理 ====================
+
+/**
+ * 格式化采购价项数据（从数据库到API）
+ */
+function formatSupplierPriceItem(row) {
+  if (!row) return null
+  const price = parseFloat(row.price) || 0
+  return {
+    id: row.id,
+    supplierId: row.supplier_id,
+    supplierName: row.supplier_name,
+    // 兼容两种字段名
+    feeName: row.fee_name,
+    name: row.fee_name,              // 前端兼容
+    feeNameEn: row.fee_name_en,
+    nameEn: row.fee_name_en,         // 前端兼容
+    category: row.fee_category,
+    feeCategory: row.fee_category,   // 前端兼容（FeeModal使用此字段名）
+    unit: row.unit,
+    price: price,
+    unitPrice: price,                // 前端兼容
+    currency: row.currency,
+    effectiveDate: row.effective_date,
+    expiryDate: row.expiry_date,
+    validFrom: row.effective_date,   // 前端兼容
+    validUntil: row.expiry_date,     // 前端兼容
+    isActive: row.status !== 'disabled',  // 前端兼容
+    routeFrom: row.route_from,       // 起运地
+    country: row.country,            // 国家
+    routeTo: row.route_to,           // 目的地邮编
+    city: row.city,                  // 城市
+    returnPoint: row.return_point,   // 还柜点
+    transportMode: row.transport_mode, // 运输方式（空运/海运）
+    billingType: row.billing_type || 'fixed', // 计费类型（fixed/actual）
+    remark: row.remark,
+    notes: row.remark,               // 前端兼容
+    importBatchId: row.import_batch_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+/**
+ * 获取供应商的采购价列表
+ */
+export async function getSupplierPrices(supplierId, options = {}) {
+  const db = getDatabase()
+  const { category, isActive, search } = options
+  
+  let sql = `
+    SELECT * FROM supplier_price_items 
+    WHERE supplier_id = $1
+  `
+  const params = [supplierId]
+  let paramIndex = 2
+  
+  if (category) {
+    sql += ` AND fee_category = $${paramIndex++}`
+    params.push(category)
+  }
+  
+  if (search) {
+    sql += ` AND (fee_name ILIKE $${paramIndex} OR fee_name_en ILIKE $${paramIndex})`
+    params.push(`%${search}%`)
+    paramIndex++
+  }
+  
+  sql += ` ORDER BY fee_category, fee_name`
+  
+  try {
+    const result = await db.pool.query(sql, params)
+    return result.rows.map(formatSupplierPriceItem)
+  } catch (error) {
+    console.error('获取采购价列表失败:', error.message)
+    return []
+  }
+}
+
+/**
+ * 获取单个采购价
+ */
+export async function getSupplierPriceById(id) {
+  const db = getDatabase()
+  try {
+    const result = await db.pool.query('SELECT * FROM supplier_price_items WHERE id = $1', [id])
+    return result.rows[0] ? formatSupplierPriceItem(result.rows[0]) : null
+  } catch (error) {
+    console.error('获取采购价失败:', error.message)
+    return null
+  }
+}
+
+/**
+ * 创建采购价
+ */
+export async function createSupplierPrice(data) {
+  const db = getDatabase()
+  
+  try {
+    const result = await db.pool.query(`
+      INSERT INTO supplier_price_items (
+        supplier_id, supplier_name, fee_name, fee_name_en, fee_category, 
+        unit, price, currency, effective_date, expiry_date, 
+        route_from, route_to, return_point, transport_mode, billing_type, remark
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      RETURNING id
+    `, [
+      data.supplierId,
+      data.supplierName || null,
+      data.feeName || data.name,
+      data.feeNameEn || data.nameEn || null,
+      data.category || 'other',
+      data.unit || '次',
+      data.price || data.unitPrice || 0,
+      data.currency || 'EUR',
+      data.effectiveDate || data.validFrom || null,
+      data.expiryDate || data.validUntil || null,
+      data.routeFrom || null,
+      data.routeTo || null,
+      data.returnPoint || null,
+      data.transportMode || null,  // 运输方式
+      data.billingType || 'fixed', // 计费类型
+      data.remark || data.notes || null
+    ])
+    
+    return { id: result.rows[0].id, ...data }
+  } catch (error) {
+    console.error('创建采购价失败:', error.message)
+    throw error
+  }
+}
+
+/**
+ * 更新采购价
+ */
+export async function updateSupplierPrice(id, data) {
+  const db = getDatabase()
+  
+  const fields = []
+  const values = []
+  let paramIndex = 1
+  
+  // 支持更新供应商名称（用于修复历史数据）
+  if (data.supplierName !== undefined) {
+    fields.push(`supplier_name = $${paramIndex++}`)
+    values.push(data.supplierName)
+  }
+  
+  if (data.category !== undefined) {
+    fields.push(`fee_category = $${paramIndex++}`)
+    values.push(data.category)
+  }
+  if (data.feeName !== undefined || data.name !== undefined) {
+    fields.push(`fee_name = $${paramIndex++}`)
+    values.push(data.feeName || data.name)
+  }
+  if (data.feeNameEn !== undefined || data.nameEn !== undefined) {
+    fields.push(`fee_name_en = $${paramIndex++}`)
+    values.push(data.feeNameEn || data.nameEn)
+  }
+  if (data.unit !== undefined) {
+    fields.push(`unit = $${paramIndex++}`)
+    values.push(data.unit)
+  }
+  if (data.price !== undefined || data.unitPrice !== undefined) {
+    fields.push(`price = $${paramIndex++}`)
+    values.push(data.price || data.unitPrice)
+  }
+  if (data.currency !== undefined) {
+    fields.push(`currency = $${paramIndex++}`)
+    values.push(data.currency)
+  }
+  if (data.effectiveDate !== undefined || data.validFrom !== undefined) {
+    fields.push(`effective_date = $${paramIndex++}`)
+    values.push(data.effectiveDate || data.validFrom)
+  }
+  if (data.expiryDate !== undefined || data.validUntil !== undefined) {
+    fields.push(`expiry_date = $${paramIndex++}`)
+    values.push(data.expiryDate || data.validUntil)
+  }
+  if (data.remark !== undefined || data.notes !== undefined) {
+    fields.push(`remark = $${paramIndex++}`)
+    values.push(data.remark || data.notes)
+  }
+  if (data.routeFrom !== undefined) {
+    fields.push(`route_from = $${paramIndex++}`)
+    values.push(data.routeFrom)
+  }
+  if (data.routeTo !== undefined) {
+    fields.push(`route_to = $${paramIndex++}`)
+    values.push(data.routeTo)
+  }
+  if (data.returnPoint !== undefined) {
+    fields.push(`return_point = $${paramIndex++}`)
+    values.push(data.returnPoint)
+  }
+  if (data.transportMode !== undefined) {
+    fields.push(`transport_mode = $${paramIndex++}`)
+    values.push(data.transportMode)
+  }
+  if (data.billingType !== undefined) {
+    fields.push(`billing_type = $${paramIndex++}`)
+    values.push(data.billingType)
+  }
+  if (data.isActive !== undefined) {
+    fields.push(`status = $${paramIndex++}`)
+    values.push(data.isActive ? 'active' : 'disabled')
+  }
+  
+  if (fields.length === 0) {
+    return getSupplierPriceById(id)
+  }
+  
+  fields.push(`updated_at = NOW()`)
+  values.push(id)
+  
+  try {
+    await db.pool.query(
+      `UPDATE supplier_price_items SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    )
+    return getSupplierPriceById(id)
+  } catch (error) {
+    console.error('更新采购价失败:', error.message)
+    throw error
+  }
+}
+
+/**
+ * 删除采购价
+ */
+export async function deleteSupplierPrice(id) {
+  const db = getDatabase()
+  try {
+    await db.pool.query('DELETE FROM supplier_price_items WHERE id = $1', [id])
+    return { success: true }
+  } catch (error) {
+    console.error('删除采购价失败:', error.message)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 根据费用名称查找采购价（用于发票生成时获取英文名称）
+ */
+export async function findSupplierPriceByName(supplierId, feeName) {
+  const db = getDatabase()
+  try {
+    const result = await db.pool.query(`
+      SELECT * FROM supplier_price_items 
+      WHERE supplier_id = $1 AND fee_name = $2
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [supplierId, feeName])
+    return result.rows[0] ? formatSupplierPriceItem(result.rows[0]) : null
+  } catch (error) {
+    console.error('查找采购价失败:', error.message)
+    return null
+  }
+}
+
+// ==================== 批量导入相关 ====================
+
+/**
+ * 批量创建供应商报价
+ */
+export async function batchCreateSupplierPrices(supplierId, items, options = {}) {
+  const db = getDatabase()
+  const { supplierName, importBatchId, fileName } = options
+  
+  let successCount = 0
+  let failCount = 0
+  
+  for (const item of items) {
+    try {
+      // id 是自增整数，不需要手动指定
+      await db.prepare(`
+        INSERT INTO supplier_price_items (
+          supplier_id, supplier_name, fee_name, fee_name_en,
+          fee_category, unit, price, currency,
+          effective_date, expiry_date, route_from, country, route_to, city, return_point,
+          transport_mode, remark, import_batch_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `).run(
+        supplierId,
+        supplierName || '',
+        item.feeName || '',
+        item.feeNameEn || '',
+        item.feeCategory || 'other',
+        item.unit || '票',
+        item.price || 0,
+        item.currency || 'EUR',
+        item.effectiveDate || null,
+        item.expiryDate || null,
+        item.routeFrom || '',      // 起运地
+        item.country || '',        // 国家
+        item.routeTo || '',        // 目的地邮编
+        item.city || '',           // 城市
+        item.returnPoint || '',    // 还柜点
+        item.transportMode || '',  // 运输方式
+        item.remark || '',
+        importBatchId
+      )
+      
+      successCount++
+    } catch (error) {
+      console.error('创建报价失败:', error)
+      failCount++
+    }
+  }
+  
+  return { successCount, failCount }
+}
+
+/**
+ * 创建导入记录
+ */
+export async function createImportRecord(data) {
+  const db = getDatabase()
+  
+  try {
+    await db.prepare(`
+      INSERT INTO import_records (
+        supplier_id, supplier_name, file_name, file_type,
+        record_count, status, created_by, created_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `).run(
+      data.supplierId,
+      data.supplierName || '',
+      data.fileName || '',
+      data.fileType || '',
+      data.recordCount || 0,
+      data.status || 'completed',
+      data.createdBy || null
+    )
+    
+    return { success: true }
+  } catch (error) {
+    console.error('创建导入记录失败:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 获取导入记录
+ */
+export async function getImportRecords(supplierId, options = {}) {
+  const db = getDatabase()
+  const { page = 1, pageSize = 20 } = options
+  
+  let query = 'SELECT * FROM import_records WHERE 1=1'
+  const params = []
+  
+  if (supplierId) {
+    query += ' AND supplier_id = ?'
+    params.push(supplierId)
+  }
+  
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  params.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(query).all(...params)
+  
+  return (rows || []).map(row => ({
+    id: row.id,
+    supplierId: row.supplier_id,
+    supplierName: row.supplier_name,
+    fileName: row.file_name,
+    fileType: row.file_type,
+    recordCount: row.record_count,
+    status: row.status,
+    createdAt: row.created_at,
+    completedAt: row.completed_at
+  }))
+}
+
 export default {
   // 常量
   SUPPLIER_TYPES,
@@ -495,5 +904,18 @@ export default {
   checkSupplierCodeExists,
   getSupplierStats,
   generateSupplierCode,
-  getActiveSuppliers
+  getActiveSuppliers,
+  
+  // 采购价管理
+  getSupplierPrices,
+  getSupplierPriceById,
+  createSupplierPrice,
+  updateSupplierPrice,
+  deleteSupplierPrice,
+  findSupplierPriceByName,
+  
+  // 批量导入
+  batchCreateSupplierPrices,
+  createImportRecord,
+  getImportRecords
 }

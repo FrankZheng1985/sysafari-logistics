@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { FileText, Printer } from 'lucide-react'
+import { FileText, Printer, Copy } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
+import { copyToClipboard } from '../components/Toast'
 import { useColumnSettings } from '../hooks/useColumnSettings'
 
 interface PureLabel {
@@ -79,10 +80,10 @@ export default function PureLabels() {
       label: '标签号',
       sorter: true,
       filterable: true,
-      render: (item: PureLabel) => (
+      render: (_value, record: PureLabel) => (
         <div>
           <div className="text-primary-600 hover:underline cursor-pointer">
-            {item.labelNumber}
+            {record.labelNumber}
           </div>
         </div>
       ),
@@ -92,9 +93,20 @@ export default function PureLabels() {
       label: '订单号',
       sorter: true,
       filterable: true,
-      render: (item: PureLabel) => (
-        <div className="text-primary-600 hover:underline cursor-pointer">
-          {item.orderNumber}
+      render: (_value, record: PureLabel) => (
+        <div className="flex items-center gap-1">
+          <span className="text-primary-600 hover:underline cursor-pointer">
+            {record.orderNumber}
+          </span>
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber, e)}
+              className="text-gray-400 hover:text-gray-600"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -108,9 +120,9 @@ export default function PureLabels() {
       key: 'address',
       label: '地址',
       filterable: true,
-      render: (item: PureLabel) => (
-        <div className="max-w-xs truncate" title={item.address}>
-          {item.address}
+      render: (_value, record: PureLabel) => (
+        <div className="max-w-xs truncate" title={record.address}>
+          {record.address}
         </div>
       ),
     },
@@ -119,7 +131,7 @@ export default function PureLabels() {
       key: 'weight',
       label: '重量 (KG)',
       sorter: (a, b) => a.weight - b.weight,
-      render: (item: PureLabel) => `${item.weight} KG`,
+      render: (_value, record: PureLabel) => `${record.weight} KG`,
     },
     {
       key: 'createTime',
@@ -138,12 +150,12 @@ export default function PureLabels() {
         { text: '未打印', value: '未打印' },
       ],
       onFilter: (value, record) => record.printStatus === value,
-      render: (item: PureLabel) => (
+      render: (_value, record: PureLabel) => (
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${
-            item.printStatus === '已打印' ? 'bg-green-500' : 'bg-gray-400'
+            record.printStatus === '已打印' ? 'bg-green-500' : 'bg-gray-400'
           }`}></span>
-          <span>{item.printStatus}</span>
+          <span>{record.printStatus}</span>
         </div>
       ),
     },
@@ -228,7 +240,7 @@ export default function PureLabels() {
           visibleColumns={visibleColumns}
           compact={true}
           pagination={{
-            pageSize: 10,
+            pageSize: 20,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条记录`,
           }}

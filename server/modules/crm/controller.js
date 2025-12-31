@@ -4,6 +4,9 @@
 
 import { success, successWithPagination, badRequest, notFound, conflict, serverError } from '../../utils/response.js'
 import * as model from './model.js'
+import ossService from '../../utils/ossService.js'
+import emailService from '../../utils/emailService.js'
+import { generateQuotationHtml, generatePdfFromHtml } from '../quotation/pdfGenerator.js'
 
 // ==================== 客户管理 ====================
 
@@ -76,25 +79,146 @@ export async function getCustomerById(req, res) {
 
 /**
  * 创建客户
+ * 支持自动生成报价单、上传COS、发送邮件
  */
 export async function createCustomer(req, res) {
   try {
-    const { customerCode, customerName } = req.body
+    const { 
+      customerName, 
+      productId, 
+      selectedFeeItemIds, 
+      selectedContactEmails,
+      contacts  // 联系人列表
+    } = req.body
     
-    if (!customerCode || !customerName) {
-      return badRequest(res, '客户代码和客户名称为必填项')
+    // 客户名称为必填项，客户编码由系统自动生成
+    if (!customerName) {
+      return badRequest(res, '客户名称为必填项')
     }
     
-    // 检查客户代码是否已存在
-    const existing = await model.getCustomerByCode(customerCode)
-    if (existing) {
-      return conflict(res, '客户代码已存在')
+    // 产品和费用项为必填（强制生成报价）
+    if (!productId) {
+      return badRequest(res, '请选择产品')
     }
     
+    if (!selectedFeeItemIds || selectedFeeItemIds.length === 0) {
+      return badRequest(res, '请选择至少一项费用')
+    }
+    
+    // 如果提供了customerCode，检查是否已存在
+    if (req.body.customerCode) {
+      const existing = await model.getCustomerByCode(req.body.customerCode)
+      if (existing) {
+        return conflict(res, '客户代码已存在')
+      }
+    }
+    
+    // 1. 创建客户
     const result = await model.createCustomer(req.body)
-    const newCustomer = await model.getCustomerById(result.id)
+    const customerId = result.id
     
-    return success(res, newCustomer, '创建成功')
+    // 2. 创建联系人（如果有）
+    if (contacts && contacts.length > 0) {
+      for (const contact of contacts) {
+        if (contact.contactName) {
+          await model.createContact({ ...contact, customerId })
+        }
+      }
+    }
+    
+    // 3. 自动生成报价单
+    let quotation = null
+    let pdfUrl = null
+    let emailResults = null
+    
+    try {
+      quotation = await model.createQuotationForCustomer({
+        customerId,
+        customerName,
+        productId,
+        selectedFeeItemIds,
+        user: req.user
+      })
+      
+      console.log(`✅ 报价单已生成: ${quotation.quoteNumber}`)
+      
+      // 4. 生成PDF并上传到OSS
+      try {
+        // 获取完整的报价单数据用于生成PDF
+        const fullQuotation = await model.getQuotationById(quotation.id)
+        const html = generateQuotationHtml(fullQuotation)
+        let pdfData = await generatePdfFromHtml(html)
+        
+        // 将 Uint8Array 转换为 Buffer（puppeteer返回的是Uint8Array）
+        const pdfBuffer = pdfData ? Buffer.from(pdfData) : null
+        
+        // 检查OSS配置
+        const ossCheck = ossService.checkOssConfig()
+        if (ossCheck.configured && pdfBuffer && pdfBuffer.length > 0) {
+          const uploadResult = await ossService.uploadQuotationPdf({
+            customerId,
+            quoteNumber: quotation.quoteNumber,
+            pdfBuffer
+          })
+          pdfUrl = uploadResult.url
+          console.log(`✅ PDF已上传到OSS: ${pdfUrl}`)
+        } else if (!ossCheck.configured) {
+          console.warn('⚠️ OSS未配置，跳过PDF上传')
+        } else {
+          console.warn('⚠️ PDF生成失败，跳过上传')
+        }
+        
+        // 5. 发送邮件给选中的联系人
+        if (selectedContactEmails && selectedContactEmails.length > 0) {
+          const emailCheck = emailService.checkEmailConfig()
+          if (emailCheck.configured) {
+            emailResults = await emailService.sendQuotationEmailBatch(
+              selectedContactEmails,
+              {
+                customerName,
+                quoteNumber: quotation.quoteNumber,
+                validUntil: quotation.validUntil,
+                pdfUrl,
+                pdfBuffer
+              }
+            )
+            console.log(`✅ 邮件发送完成: 成功${emailResults.success.length}封, 失败${emailResults.failed.length}封`)
+          } else {
+            console.warn('⚠️ 邮件服务未配置，跳过邮件发送')
+          }
+        }
+      } catch (pdfError) {
+        console.error('PDF生成或邮件发送失败:', pdfError)
+        // 不影响客户创建，继续返回成功
+      }
+    } catch (quotationError) {
+      console.error('报价单生成失败:', quotationError)
+      // 不影响客户创建，继续返回成功
+    }
+    
+    // 获取完整的客户信息
+    const newCustomer = await model.getCustomerById(customerId)
+    
+    // 构建返回消息
+    let message = '客户创建成功'
+    if (quotation) {
+      message += `，报价单 ${quotation.quoteNumber} 已生成`
+      if (emailResults && emailResults.success.length > 0) {
+        message += `，已发送邮件至 ${emailResults.success.length} 位联系人`
+      }
+    }
+    
+    return success(res, {
+      customer: newCustomer,
+      quotation: quotation ? {
+        id: quotation.id,
+        quoteNumber: quotation.quoteNumber,
+        validUntil: quotation.validUntil,
+        totalAmount: quotation.totalAmount,
+        pdfUrl
+      } : null,
+      emailResults
+    }, message)
   } catch (error) {
     console.error('创建客户失败:', error)
     return serverError(res, '创建客户失败')
@@ -107,22 +231,31 @@ export async function createCustomer(req, res) {
 export async function updateCustomer(req, res) {
   try {
     const { id } = req.params
+    console.log(`[API] 更新客户请求, ID: ${id}`)
     
     const existing = await model.getCustomerById(id)
     if (!existing) {
+      console.log(`[API] 客户不存在, ID: ${id}`)
       return notFound(res, '客户不存在')
     }
     
     const updated = await model.updateCustomer(id, req.body)
     if (!updated) {
+      console.log(`[API] 没有需要更新的字段, ID: ${id}`)
       return badRequest(res, '没有需要更新的字段')
     }
     
     const updatedCustomer = await model.getCustomerById(id)
+    console.log(`[API] 客户更新成功, ID: ${id}`)
     return success(res, updatedCustomer, '更新成功')
   } catch (error) {
-    console.error('更新客户失败:', error)
-    return serverError(res, '更新客户失败')
+    console.error('更新客户失败:', error.message)
+    console.error('错误详情:', error.stack)
+    // 返回更详细的错误信息（仅在非生产环境）
+    const errorMsg = process.env.NODE_ENV === 'production' 
+      ? '更新客户失败' 
+      : `更新客户失败: ${error.message}`
+    return serverError(res, errorMsg)
   }
 }
 
@@ -451,17 +584,71 @@ export async function deleteFollowUp(req, res) {
 export async function getCustomerOrderStats(req, res) {
   try {
     const { customerId } = req.params
-    
+
     const customer = await model.getCustomerById(customerId)
     if (!customer) {
       return notFound(res, '客户不存在')
     }
-    
+
     const stats = await model.getCustomerOrderStats(customerId)
     return success(res, stats)
   } catch (error) {
     console.error('获取客户订单统计失败:', error)
     return serverError(res, '获取客户订单统计失败')
+  }
+}
+
+/**
+ * 获取客户最新报价单PDF
+ */
+export async function getCustomerQuotationPdf(req, res) {
+  try {
+    const { customerId } = req.params
+
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+
+    const ossCheck = ossService.checkOssConfig()
+    if (!ossCheck.configured) {
+      return badRequest(res, 'OSS存储服务未配置')
+    }
+
+    const latest = await ossService.getLatestQuotationPdf(customerId)
+    if (!latest) {
+      return notFound(res, '该客户暂无报价单')
+    }
+
+    return success(res, latest)
+  } catch (error) {
+    console.error('获取客户报价单PDF失败:', error)
+    return serverError(res, '获取客户报价单PDF失败')
+  }
+}
+
+/**
+ * 获取客户报价单历史列表
+ */
+export async function getCustomerQuotationHistory(req, res) {
+  try {
+    const { customerId } = req.params
+
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+
+    const ossCheck = ossService.checkOssConfig()
+    if (!ossCheck.configured) {
+      return badRequest(res, 'OSS存储服务未配置')
+    }
+
+    const history = await ossService.getQuotationHistory(customerId)
+    return success(res, history)
+  } catch (error) {
+    console.error('获取客户报价单历史失败:', error)
+    return serverError(res, '获取客户报价单历史失败')
   }
 }
 
@@ -493,6 +680,278 @@ export async function getCustomerOrders(req, res) {
   } catch (error) {
     console.error('获取客户订单列表失败:', error)
     return serverError(res, '获取客户订单列表失败')
+  }
+}
+
+// ==================== 客户地址管理 ====================
+
+/**
+ * 获取客户地址列表
+ */
+export async function getCustomerAddresses(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const addresses = await model.getCustomerAddresses(customerId)
+    return success(res, addresses)
+  } catch (error) {
+    console.error('获取客户地址列表失败:', error)
+    return serverError(res, '获取客户地址列表失败')
+  }
+}
+
+/**
+ * 创建客户地址
+ */
+export async function createCustomerAddress(req, res) {
+  try {
+    const { customerId } = req.params
+    const { companyName, address } = req.body
+    
+    if (!companyName || !address) {
+      return badRequest(res, '公司名称和地址为必填项')
+    }
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const result = await model.createCustomerAddress(customerId, req.body)
+    return success(res, result, '地址创建成功')
+  } catch (error) {
+    console.error('创建客户地址失败:', error)
+    return serverError(res, '创建客户地址失败')
+  }
+}
+
+/**
+ * 更新客户地址
+ */
+export async function updateCustomerAddress(req, res) {
+  try {
+    const { addressId } = req.params
+    
+    const result = await model.updateCustomerAddress(addressId, req.body)
+    if (!result) {
+      return notFound(res, '地址不存在')
+    }
+    
+    return success(res, result, '地址更新成功')
+  } catch (error) {
+    console.error('更新客户地址失败:', error)
+    return serverError(res, '更新客户地址失败')
+  }
+}
+
+/**
+ * 删除客户地址
+ */
+export async function deleteCustomerAddress(req, res) {
+  try {
+    const { addressId } = req.params
+    
+    await model.deleteCustomerAddress(addressId)
+    return success(res, null, '地址删除成功')
+  } catch (error) {
+    console.error('删除客户地址失败:', error)
+    return serverError(res, '删除客户地址失败')
+  }
+}
+
+// ==================== 客户税号管理 ====================
+
+/**
+ * 获取客户税号列表
+ */
+export async function getCustomerTaxNumbers(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const taxNumbers = await model.getCustomerTaxNumbers(customerId)
+    return success(res, taxNumbers)
+  } catch (error) {
+    console.error('获取客户税号列表失败:', error)
+    return serverError(res, '获取客户税号列表失败')
+  }
+}
+
+/**
+ * 创建客户税号
+ */
+export async function createCustomerTaxNumber(req, res) {
+  try {
+    const { customerId } = req.params
+    const { taxType, taxNumber } = req.body
+    
+    if (!taxType || !taxNumber) {
+      return badRequest(res, '税号类型和税号为必填项')
+    }
+    
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+    
+    const result = await model.createCustomerTaxNumber(customerId, req.body)
+    return success(res, result, '税号创建成功')
+  } catch (error) {
+    console.error('创建客户税号失败:', error)
+    // 如果是重复错误，返回具体信息
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '创建客户税号失败')
+  }
+}
+
+/**
+ * 更新客户税号
+ */
+export async function updateCustomerTaxNumber(req, res) {
+  try {
+    const { taxId } = req.params
+    
+    const result = await model.updateCustomerTaxNumber(taxId, req.body)
+    if (!result) {
+      return notFound(res, '税号不存在')
+    }
+    
+    return success(res, result, '税号更新成功')
+  } catch (error) {
+    console.error('更新客户税号失败:', error)
+    // 如果是重复错误，返回具体信息
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '更新客户税号失败')
+  }
+}
+
+/**
+ * 删除客户税号
+ */
+export async function deleteCustomerTaxNumber(req, res) {
+  try {
+    const { taxId } = req.params
+    
+    await model.deleteCustomerTaxNumber(taxId)
+    return success(res, null, '税号删除成功')
+  } catch (error) {
+    console.error('删除客户税号失败:', error)
+    return serverError(res, '删除客户税号失败')
+  }
+}
+
+// ==================== 共享税号管理（公司级税号库） ====================
+
+/**
+ * 获取共享税号列表
+ */
+export async function getSharedTaxNumbers(req, res) {
+  try {
+    const { taxType, search, status, page, pageSize } = req.query
+    
+    const result = await model.getSharedTaxNumbers({
+      taxType,
+      search,
+      status,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取共享税号列表失败:', error)
+    return serverError(res, '获取共享税号列表失败')
+  }
+}
+
+/**
+ * 获取共享税号详情
+ */
+export async function getSharedTaxNumberById(req, res) {
+  try {
+    const { id } = req.params
+    const result = await model.getSharedTaxNumberById(id)
+    
+    if (!result) {
+      return notFound(res, '共享税号不存在')
+    }
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取共享税号详情失败:', error)
+    return serverError(res, '获取共享税号详情失败')
+  }
+}
+
+/**
+ * 创建共享税号
+ */
+export async function createSharedTaxNumber(req, res) {
+  try {
+    const { taxType, taxNumber } = req.body
+    
+    if (!taxType || !taxNumber) {
+      return badRequest(res, '税号类型和税号为必填项')
+    }
+    
+    const result = await model.createSharedTaxNumber(req.body)
+    return success(res, result, '共享税号创建成功')
+  } catch (error) {
+    console.error('创建共享税号失败:', error)
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '创建共享税号失败')
+  }
+}
+
+/**
+ * 更新共享税号
+ */
+export async function updateSharedTaxNumber(req, res) {
+  try {
+    const { id } = req.params
+    
+    const result = await model.updateSharedTaxNumber(id, req.body)
+    return success(res, result, '共享税号更新成功')
+  } catch (error) {
+    console.error('更新共享税号失败:', error)
+    if (error.message && error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '更新共享税号失败')
+  }
+}
+
+/**
+ * 删除共享税号
+ */
+export async function deleteSharedTaxNumber(req, res) {
+  try {
+    const { id } = req.params
+    
+    await model.deleteSharedTaxNumber(id)
+    return success(res, null, '共享税号删除成功')
+  } catch (error) {
+    console.error('删除共享税号失败:', error)
+    return serverError(res, '删除共享税号失败')
   }
 }
 
@@ -762,22 +1221,73 @@ export async function updateQuotation(req, res) {
 export async function deleteQuotation(req, res) {
   try {
     const { id } = req.params
-    
+
     const existing = await model.getQuotationById(id)
     if (!existing) {
       return notFound(res, '报价不存在')
     }
-    
+
     // 已接受的报价不能删除
     if (existing.status === 'accepted') {
       return badRequest(res, '已接受的报价不能删除')
     }
-    
+
     model.deleteQuotation(id)
     return success(res, null, '删除成功')
   } catch (error) {
     console.error('删除报价失败:', error)
     return serverError(res, '删除报价失败')
+  }
+}
+
+/**
+ * 生成报价单PDF
+ */
+export async function generateQuotationPdf(req, res) {
+  try {
+    const { id } = req.params
+
+    const quotation = await model.getQuotationById(id)
+    if (!quotation) {
+      return notFound(res, '报价不存在')
+    }
+
+    // 动态导入PDF生成器
+    const { generateQuotationHtml, generatePdfFromHtml } = await import('../quotation/pdfGenerator.js')
+    
+    // 公司信息（可从配置或数据库获取）
+    const company = {
+      companyName: 'BP Logistics',
+      companyNameEn: 'BP Logistics International',
+      registrationNo: '',
+      address: '',
+      phone: '',
+      email: ''
+    }
+
+    // 生成HTML
+    const html = generateQuotationHtml(quotation, company)
+    
+    // 尝试生成PDF
+    const pdfData = await generatePdfFromHtml(html)
+    
+    if (pdfData) {
+      // 将 Uint8Array 转换为 Buffer（puppeteer返回的是Uint8Array）
+      const pdfBuffer = Buffer.from(pdfData)
+      
+      // 返回PDF
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="Quotation_${quotation.quoteNumber}.pdf"`)
+      return res.send(pdfBuffer)
+    } else {
+      // 如果PDF生成失败，返回HTML（可在浏览器中打印为PDF）
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Content-Disposition', `inline; filename="Quotation_${quotation.quoteNumber}.html"`)
+      return res.send(html)
+    }
+  } catch (error) {
+    console.error('生成报价单PDF失败:', error)
+    return serverError(res, '生成报价单PDF失败')
   }
 }
 
@@ -898,11 +1408,242 @@ export async function deleteContract(req, res) {
       return badRequest(res, '生效中的合同不能删除')
     }
     
+    // 已签署的合同不能删除
+    if (existing.signStatus === 'signed') {
+      return badRequest(res, '已签署的合同不能删除')
+    }
+    
     model.deleteContract(id)
     return success(res, null, '删除成功')
   } catch (error) {
     console.error('删除合同失败:', error)
     return serverError(res, '删除合同失败')
+  }
+}
+
+// ==================== 合同签署管理 ====================
+
+/**
+ * 为销售机会生成合同
+ */
+export async function generateContract(req, res) {
+  try {
+    const { opportunityId } = req.body
+    
+    if (!opportunityId) {
+      return badRequest(res, '销售机会ID为必填项')
+    }
+    
+    // 检查是否已有合同
+    const existingContract = await model.getContractByOpportunityId(opportunityId)
+    if (existingContract) {
+      return badRequest(res, '该销售机会已有关联合同', { contract: existingContract })
+    }
+    
+    // 获取销售机会信息
+    const opportunity = await model.getOpportunityById(opportunityId)
+    if (!opportunity) {
+      return notFound(res, '销售机会不存在')
+    }
+    
+    // 生成合同
+    const result = await model.generateContractForOpportunity({
+      opportunityId,
+      opportunityName: opportunity.opportunityName,
+      customerId: opportunity.customerId,
+      customerName: opportunity.customerName,
+      expectedValue: opportunity.expectedValue
+    }, req.user)
+    
+    // 更新销售机会的合同关联
+    await model.updateOpportunityContract(opportunityId, result.id, result.contractNumber)
+    
+    // 获取完整的合同信息
+    const contract = await model.getContractById(result.id)
+    
+    return success(res, contract, '合同生成成功，请完成签署后再进行成交操作')
+  } catch (error) {
+    console.error('生成合同失败:', error)
+    return serverError(res, '生成合同失败')
+  }
+}
+
+/**
+ * 上传已签署合同
+ * 支持两种方式：1. 直接上传文件  2. 提供文件路径（兼容旧接口）
+ * 自动存储到COS并记录到文档管理系统
+ */
+export async function uploadSignedContract(req, res) {
+  try {
+    const { id } = req.params
+    const file = req.file
+    const { filePath, fileName } = req.body
+    
+    const contract = await model.getContractById(id)
+    if (!contract) {
+      return notFound(res, '合同不存在')
+    }
+    
+    // 只有待签署状态的合同可以上传
+    if (contract.signStatus === 'signed') {
+      return badRequest(res, '合同已签署，无需重复上传')
+    }
+
+    let finalFilePath = filePath
+    let finalFileName = fileName
+    let documentId = null
+
+    // 如果有文件上传，使用统一文档服务
+    if (file) {
+      const documentService = await import('../../../services/documentService.js')
+      
+      const docResult = await documentService.uploadContract({
+        fileBuffer: file.buffer,
+        fileName: file.originalname,
+        contractNumber: contract.contractNumber,
+        customerId: contract.customerId,
+        customerName: contract.customerName,
+        contractType: 'signed',
+        user: req.user
+      })
+
+      finalFilePath = docResult.cosUrl
+      finalFileName = file.originalname
+      documentId = docResult.documentId
+    } else if (!filePath || !fileName) {
+      return badRequest(res, '请选择要上传的合同文件')
+    }
+    
+    await model.uploadSignedContract(id, { 
+      filePath: finalFilePath, 
+      fileName: finalFileName 
+    }, req.user)
+    
+    const updatedContract = await model.getContractById(id)
+    return success(res, {
+      ...updatedContract,
+      documentId
+    }, '合同签署成功，已同步到文档管理')
+  } catch (error) {
+    console.error('上传签署合同失败:', error)
+    return serverError(res, '上传签署合同失败')
+  }
+}
+
+/**
+ * 更新合同签署状态
+ */
+export async function updateContractSignStatus(req, res) {
+  try {
+    const { id } = req.params
+    const { signStatus, remark } = req.body
+    
+    if (!signStatus) {
+      return badRequest(res, '签署状态为必填项')
+    }
+    
+    const validStatuses = ['unsigned', 'pending_sign', 'signed', 'rejected']
+    if (!validStatuses.includes(signStatus)) {
+      return badRequest(res, '无效的签署状态')
+    }
+    
+    const contract = await model.getContractById(id)
+    if (!contract) {
+      return notFound(res, '合同不存在')
+    }
+    
+    await model.updateContractSignStatus(id, signStatus, req.user, remark)
+    
+    const updatedContract = await model.getContractById(id)
+    return success(res, updatedContract, '状态更新成功')
+  } catch (error) {
+    console.error('更新签署状态失败:', error)
+    return serverError(res, '更新签署状态失败')
+  }
+}
+
+/**
+ * 获取合同签署历史
+ */
+export async function getContractSignHistory(req, res) {
+  try {
+    const { id } = req.params
+    
+    const contract = await model.getContractById(id)
+    if (!contract) {
+      return notFound(res, '合同不存在')
+    }
+    
+    const history = await model.getContractSignHistory(id)
+    return success(res, history)
+  } catch (error) {
+    console.error('获取签署历史失败:', error)
+    return serverError(res, '获取签署历史失败')
+  }
+}
+
+/**
+ * 检查销售机会是否可以成交
+ */
+export async function checkOpportunityCanClose(req, res) {
+  try {
+    const { opportunityId } = req.params
+    
+    const result = await model.canOpportunityClose(opportunityId)
+    return success(res, result)
+  } catch (error) {
+    console.error('检查成交条件失败:', error)
+    return serverError(res, '检查成交条件失败')
+  }
+}
+
+/**
+ * 销售机会成交（增加合同签署校验）
+ */
+export async function closeOpportunity(req, res) {
+  try {
+    const { id } = req.params
+    const { stage, lostReason } = req.body
+    
+    // 如果是成交（closed_won），需要检查合同签署状态
+    if (stage === 'closed_won') {
+      const checkResult = await model.canOpportunityClose(id)
+      
+      if (!checkResult.canClose) {
+        return badRequest(res, checkResult.reason, {
+          needGenerateContract: checkResult.needGenerateContract,
+          needSign: checkResult.needSign,
+          contract: checkResult.contract
+        })
+      }
+    }
+    
+    // 更新销售机会阶段
+    const updated = await model.updateOpportunity(id, { stage, lostReason })
+    if (!updated) {
+      return badRequest(res, '更新失败')
+    }
+    
+    const opportunity = await model.getOpportunityById(id)
+    return success(res, opportunity, stage === 'closed_won' ? '恭喜成交！' : '已更新')
+  } catch (error) {
+    console.error('成交操作失败:', error)
+    return serverError(res, '成交操作失败')
+  }
+}
+
+/**
+ * 获取客户的待签署合同列表
+ */
+export async function getPendingSignContracts(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const contracts = await model.getPendingSignContracts(customerId)
+    return success(res, contracts)
+  } catch (error) {
+    console.error('获取待签署合同失败:', error)
+    return serverError(res, '获取待签署合同失败')
   }
 }
 
@@ -1110,6 +1851,496 @@ export async function getCustomerActivityRanking(req, res) {
   } catch (error) {
     console.error('获取客户活跃度排行失败:', error)
     return serverError(res, '获取客户活跃度排行失败')
+  }
+}
+
+// ==================== 税号验证 ====================
+
+import * as taxValidation from './taxValidation.js'
+
+/**
+ * VAT税号验证
+ */
+export async function validateVAT(req, res) {
+  try {
+    const { vatNumber, countryCode } = req.body
+    
+    if (!vatNumber) {
+      return badRequest(res, 'VAT税号为必填项')
+    }
+    
+    console.log(`[VAT验证] 开始验证: ${vatNumber}, 国家: ${countryCode || '自动识别'}`)
+    
+    const result = await taxValidation.validateVAT(vatNumber, countryCode)
+    
+    console.log(`[VAT验证] 验证结果:`, {
+      valid: result.valid,
+      companyName: result.companyName,
+      error: result.error
+    })
+    
+    if (result.valid) {
+      return success(res, {
+        valid: true,
+        vatNumber: result.vatNumber,
+        countryCode: result.countryCode,
+        companyName: result.companyName,
+        companyAddress: result.companyAddress,
+        verifiedAt: result.verifiedAt
+      }, 'VAT税号验证通过')
+    } else {
+      return success(res, {
+        valid: false,
+        vatNumber: result.vatNumber,
+        countryCode: result.countryCode,
+        error: result.error
+      }, 'VAT税号验证失败')
+    }
+  } catch (error) {
+    console.error('VAT税号验证失败:', error)
+    return serverError(res, `VAT验证服务暂时不可用: ${error.message}`)
+  }
+}
+
+/**
+ * EORI号码验证
+ */
+export async function validateEORI(req, res) {
+  try {
+    const { eoriNumber } = req.body
+    
+    if (!eoriNumber) {
+      return badRequest(res, 'EORI号码为必填项')
+    }
+    
+    console.log(`[EORI验证] 开始验证: ${eoriNumber}`)
+    
+    const result = await taxValidation.validateEORI(eoriNumber)
+    
+    console.log(`[EORI验证] 验证结果:`, {
+      valid: result.valid,
+      companyName: result.companyName,
+      error: result.error
+    })
+    
+    if (result.valid) {
+      return success(res, {
+        valid: true,
+        eoriNumber: result.eoriNumber,
+        countryCode: result.countryCode,
+        companyName: result.companyName,
+        companyAddress: result.companyAddress,
+        verifiedAt: result.verifiedAt
+      }, 'EORI号码验证通过')
+    } else {
+      return success(res, {
+        valid: false,
+        eoriNumber: result.eoriNumber,
+        countryCode: result.countryCode,
+        error: result.error
+      }, 'EORI号码验证失败')
+    }
+  } catch (error) {
+    console.error('EORI号码验证失败:', error)
+    return serverError(res, `EORI验证服务暂时不可用: ${error.message}`)
+  }
+}
+
+/**
+ * 获取支持的VAT国家列表
+ */
+export async function getSupportedVatCountries(req, res) {
+  try {
+    const countries = taxValidation.getSupportedVatCountries()
+    return success(res, countries)
+  } catch (error) {
+    console.error('获取支持的VAT国家列表失败:', error)
+    return serverError(res, '获取支持的VAT国家列表失败')
+  }
+}
+
+// ==================== 税号自动验证 ====================
+
+import { validateAllTaxNumbers as runValidateAll, getValidationStats } from './taxScheduler.js'
+
+/**
+ * 手动触发批量验证所有税号
+ */
+export async function validateAllTaxNumbers(req, res) {
+  try {
+    console.log('🔄 [手动触发] 开始批量验证所有税号...')
+    const result = await runValidateAll()
+    
+    if (result.success) {
+      return success(res, result, `税号验证完成: 总计${result.total}个，有效${result.validated}个，无效${result.failed}个`)
+    } else {
+      return serverError(res, result.error || '批量验证失败')
+    }
+  } catch (error) {
+    console.error('批量验证税号失败:', error)
+    return serverError(res, `批量验证失败: ${error.message}`)
+  }
+}
+
+/**
+ * 获取税号验证统计
+ */
+export async function getTaxValidationStats(req, res) {
+  try {
+    const stats = await getValidationStats()
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取税号验证统计失败:', error)
+    return serverError(res, '获取统计失败')
+  }
+}
+
+// ==================== 营业执照OCR识别 ====================
+
+import * as ocrService from './ocrService.js'
+
+/**
+ * 识别营业执照图片
+ */
+export async function recognizeBusinessLicense(req, res) {
+  try {
+    const { imageBase64, imageUrl } = req.body
+    
+    if (!imageBase64 && !imageUrl) {
+      return badRequest(res, '请提供营业执照图片（Base64编码或URL）')
+    }
+    
+    // 检查配置
+    const config = ocrService.checkOcrConfig()
+    if (!config.configured) {
+      return serverError(res, '营业执照识别服务未配置，请联系管理员')
+    }
+    
+    // 调用OCR识别
+    const result = await ocrService.recognizeBusinessLicense(imageBase64, imageUrl)
+    
+    if (result.success) {
+      return success(res, result.data, '营业执照识别成功')
+    } else {
+      return badRequest(res, result.error || '营业执照识别失败')
+    }
+  } catch (error) {
+    console.error('营业执照识别失败:', error)
+    return serverError(res, '营业执照识别服务暂时不可用')
+  }
+}
+
+/**
+ * 检查OCR服务配置状态
+ */
+export async function checkOcrStatus(req, res) {
+  try {
+    const config = ocrService.checkOcrConfig()
+    return success(res, {
+      available: config.configured,
+      message: config.configured ? 'OCR服务已配置' : 'OCR服务未配置'
+    })
+  } catch (error) {
+    console.error('检查OCR状态失败:', error)
+    return serverError(res, '检查OCR状态失败')
+  }
+}
+
+// ==================== 客户门户账户管理 ====================
+
+/**
+ * 获取客户门户账户列表
+ */
+export async function getCustomerAccounts(req, res) {
+  try {
+    const { customerId, status, keyword, page, pageSize } = req.query
+    
+    const result = await model.getCustomerAccounts({
+      customerId,
+      status,
+      keyword,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取客户账户列表失败:', error)
+    return serverError(res, '获取客户账户列表失败')
+  }
+}
+
+/**
+ * 获取单个客户门户账户详情
+ */
+export async function getCustomerAccountById(req, res) {
+  try {
+    const account = await model.getCustomerAccountById(req.params.id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    return success(res, account)
+  } catch (error) {
+    console.error('获取账户详情失败:', error)
+    return serverError(res, '获取账户详情失败')
+  }
+}
+
+/**
+ * 创建客户门户账户
+ */
+export async function createCustomerAccount(req, res) {
+  try {
+    const { customerId, username, password, email, phone } = req.body
+    
+    if (!customerId || !username || !password) {
+      return badRequest(res, '客户ID、用户名和密码为必填项')
+    }
+    
+    // 密码强度检查
+    if (password.length < 8) {
+      return badRequest(res, '密码长度不能少于8位')
+    }
+    
+    const result = await model.createCustomerAccount({
+      customerId,
+      username,
+      password,
+      email,
+      phone,
+      createdBy: req.user?.userId
+    })
+    
+    return success(res, result, '客户账户创建成功')
+  } catch (error) {
+    console.error('创建客户账户失败:', error)
+    if (error.message.includes('已存在') || error.message.includes('已有')) {
+      return conflict(res, error.message)
+    }
+    return serverError(res, '创建客户账户失败')
+  }
+}
+
+/**
+ * 更新客户门户账户
+ */
+export async function updateCustomerAccount(req, res) {
+  try {
+    const { id } = req.params
+    const { email, phone, status } = req.body
+    
+    const account = await model.getCustomerAccountById(id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    
+    await model.updateCustomerAccount(id, { email, phone, status })
+    return success(res, null, '账户更新成功')
+  } catch (error) {
+    console.error('更新账户失败:', error)
+    return serverError(res, '更新账户失败')
+  }
+}
+
+/**
+ * 重置客户账户密码
+ */
+export async function resetCustomerAccountPassword(req, res) {
+  try {
+    const { id } = req.params
+    const { newPassword } = req.body
+    
+    if (!newPassword || newPassword.length < 8) {
+      return badRequest(res, '新密码长度不能少于8位')
+    }
+    
+    const account = await model.getCustomerAccountById(id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    
+    await model.resetCustomerAccountPassword(id, newPassword)
+    return success(res, null, '密码重置成功')
+  } catch (error) {
+    console.error('重置密码失败:', error)
+    return serverError(res, '重置密码失败')
+  }
+}
+
+/**
+ * 删除客户门户账户
+ */
+export async function deleteCustomerAccount(req, res) {
+  try {
+    const { id } = req.params
+    
+    const account = await model.getCustomerAccountById(id)
+    if (!account) {
+      return notFound(res, '账户不存在')
+    }
+    
+    await model.deleteCustomerAccount(id)
+    return success(res, null, '账户删除成功')
+  } catch (error) {
+    console.error('删除账户失败:', error)
+    return serverError(res, '删除账户失败')
+  }
+}
+
+// ==================== API 密钥管理 ====================
+
+/**
+ * 获取客户的 API 密钥列表
+ */
+export async function getCustomerApiKeys(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    const keys = await model.getCustomerApiKeys(customerId)
+    return success(res, keys)
+  } catch (error) {
+    console.error('获取API密钥列表失败:', error)
+    return serverError(res, '获取API密钥列表失败')
+  }
+}
+
+/**
+ * 创建 API 密钥
+ */
+export async function createApiKey(req, res) {
+  try {
+    const { customerId } = req.params
+    const { keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl } = req.body
+    
+    if (!keyName) {
+      return badRequest(res, '密钥名称为必填项')
+    }
+    
+    const result = await model.createApiKey({
+      customerId,
+      keyName,
+      permissions,
+      ipWhitelist,
+      rateLimit,
+      expiresAt,
+      webhookUrl,
+      createdBy: req.user?.userId
+    })
+    
+    // 返回完整信息（包括 API Secret，只显示一次）
+    return success(res, {
+      id: result.id,
+      apiKey: result.apiKey,
+      apiSecret: result.apiSecret,
+      webhookSecret: result.webhookSecret,
+      message: '请妥善保存 API Secret，此信息只显示一次'
+    }, 'API密钥创建成功')
+  } catch (error) {
+    console.error('创建API密钥失败:', error)
+    return serverError(res, '创建API密钥失败')
+  }
+}
+
+/**
+ * 更新 API 密钥
+ */
+export async function updateApiKey(req, res) {
+  try {
+    const { id } = req.params
+    const { keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl, isActive } = req.body
+    
+    await model.updateApiKey(id, {
+      keyName,
+      permissions,
+      ipWhitelist,
+      rateLimit,
+      expiresAt,
+      webhookUrl,
+      isActive
+    })
+    
+    return success(res, null, 'API密钥更新成功')
+  } catch (error) {
+    console.error('更新API密钥失败:', error)
+    return serverError(res, '更新API密钥失败')
+  }
+}
+
+/**
+ * 删除 API 密钥
+ */
+export async function deleteApiKey(req, res) {
+  try {
+    const { id } = req.params
+    
+    await model.deleteApiKey(id)
+    return success(res, null, 'API密钥删除成功')
+  } catch (error) {
+    console.error('删除API密钥失败:', error)
+    return serverError(res, '删除API密钥失败')
+  }
+}
+
+/**
+ * 获取 API 调用日志
+ */
+export async function getApiCallLogs(req, res) {
+  try {
+    const { customerId, apiKeyId, endpoint, status, startDate, endDate, page, pageSize } = req.query
+    
+    const result = await model.getApiCallLogs({
+      customerId,
+      apiKeyId: apiKeyId ? parseInt(apiKeyId) : undefined,
+      endpoint,
+      status: status ? parseInt(status) : undefined,
+      startDate,
+      endDate,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取API调用日志失败:', error)
+    return serverError(res, '获取API调用日志失败')
+  }
+}
+
+// ==================== 最后里程费率集成 ====================
+
+/**
+ * 获取最后里程费率用于报价单
+ */
+export async function getLastMileRateForQuotation(req, res) {
+  try {
+    const { carrierId, zoneCode, weight } = req.query
+    
+    if (!carrierId || !zoneCode || !weight) {
+      return badRequest(res, '承运商ID、Zone和重量为必填项')
+    }
+    
+    const rate = await model.getLastMileRateForQuotation({
+      carrierId: parseInt(carrierId),
+      zoneCode,
+      weight: parseFloat(weight)
+    })
+    
+    if (!rate) {
+      return notFound(res, '未找到匹配的费率')
+    }
+    
+    return success(res, rate)
+  } catch (error) {
+    console.error('获取最后里程费率失败:', error)
+    return serverError(res, '获取最后里程费率失败')
   }
 }
 

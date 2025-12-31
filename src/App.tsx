@@ -22,18 +22,20 @@ import InspectionBillDetails from './pages/InspectionBillDetails'
 import CMRManage from './pages/CMRManage'
 import CMRBillDetails from './pages/CMRBillDetails'
 import LastMile from './pages/LastMile'
+import LastMileDashboard from './pages/LastMileDashboard'
+import LastMileCarriers from './pages/LastMile/LastMileCarriers'
+import LastMileZones from './pages/LastMile/LastMileZones'
+import LastMileRates from './pages/LastMile/LastMileRates'
+import LastMileQuickQuote from './pages/LastMile/LastMileQuickQuote'
+import LastMileShipments from './pages/LastMile/LastMileShipments'
+import LastMileRateImport from './pages/LastMile/LastMileRateImport'
 import Inquiry from './pages/Inquiry'
 import TariffCalculator from './pages/TariffCalculator'
-import PaymentInvoice from './pages/PaymentInvoice'
-import AddressTax from './pages/AddressTax'
-import CommodityCode from './pages/CommodityCode'
-import ProductCategory from './pages/ProductCategory'
-import EditableTableDemo from './pages/EditableTableDemo'
-import ComponentsDemo from './pages/ComponentsDemo'
 import MenuSettings from './pages/MenuSettings'
 import UserManage from './pages/UserManage'
 import RolePermissions from './pages/RolePermissions'
 import SecuritySettings from './pages/SecuritySettings'
+import SecurityCenter from './pages/SecurityCenter'
 import LogoManage from './pages/LogoManage'
 import BasicDataManage from './pages/BasicDataManage'
 import TariffRateManage from './pages/TariffRateManage'
@@ -41,33 +43,82 @@ import TariffRateManage from './pages/TariffRateManage'
 import CRMDashboard from './pages/CRMDashboard'
 import CRMCustomers from './pages/CRMCustomers'
 import CRMCustomerDetail from './pages/CRMCustomerDetail'
+import CRMCustomerEdit from './pages/CRMCustomerEdit'
+import CRMBillDetails from './pages/CRMBillDetails'
 import CRMOpportunities from './pages/CRMOpportunities'
 import CRMQuotations from './pages/CRMQuotations'
 import CRMContracts from './pages/CRMContracts'
 import CRMFeedbacks from './pages/CRMFeedbacks'
+import CRMCommissionRules from './pages/CRMCommissionRules'
+import CRMCommissionRecords from './pages/CRMCommissionRecords'
+import CRMPenaltyRecords from './pages/CRMPenaltyRecords'
+import CRMCommissionSettlements from './pages/CRMCommissionSettlements'
+// 合同模板模块
+import ContractTemplateConfig from './pages/ContractTemplateConfig'
+import CustomsContracts from './pages/CustomsContracts'
+import ContractPreview from './pages/ContractPreview'
 // 财务模块
 import FinanceDashboard from './pages/FinanceDashboard'
 import FinanceInvoices from './pages/FinanceInvoices'
+import CarrierSettlement from './pages/Finance/CarrierSettlement'
+import FinanceInvoiceHistory from './pages/FinanceInvoiceHistory'
+import InvoiceDetail from './pages/InvoiceDetail'
+import EditInvoice from './pages/EditInvoice'
+import RegisterPayment from './pages/RegisterPayment'
 import FinancePayments from './pages/FinancePayments'
 import FinanceFees from './pages/FinanceFees'
 import FinanceReports from './pages/FinanceReports'
+import FinanceOrderReport from './pages/FinanceOrderReport'
+import FinancialStatements from './pages/FinancialStatements'
+import FeeItemApprovals from './pages/FeeItemApprovals'
+import BankAccounts from './pages/BankAccounts'
+import CreateInvoice from './pages/CreateInvoice'
 // TMS模块
 import TMSDashboard from './pages/TMSDashboard'
-import ServiceProviders from './pages/ServiceProviders'
 import TransportPricing from './pages/TransportPricing'
 import CMRExceptionManage from './pages/CMRExceptionManage'
+import TMSConditions from './pages/TMSConditions'
 // 工具模块
 import ToolsDashboard from './pages/ToolsDashboard'
+import SharedTaxManage from './pages/SharedTaxManage'
+import ProductPricing from './pages/ProductPricing'
 // 系统模块
 import SystemManageDashboard from './pages/SystemManageDashboard'
 import ActivityLogs from './pages/ActivityLogs'
 import ApprovalList from './pages/ApprovalList'
 import Auth0UserBinding from './pages/Auth0UserBinding'
+import ApiIntegrations from './pages/ApiIntegrations'
+// 消息/审批/预警模块
+import MessageCenter from './pages/MessageCenter'
+import ApprovalWorkbench from './pages/ApprovalWorkbench'
+import ApprovalCenter from './pages/ApprovalCenter'
+import AlertDashboard from './pages/AlertDashboard'
+import InfoCenter from './pages/InfoCenter'
+import DataImportCenter from './pages/DataImportCenter'
 import SupplierDashboard from './pages/SupplierDashboard'
 import SupplierManage from './pages/SupplierManage'
+import SupplierPrices from './pages/SupplierPrices'
+import SupplierPriceImport from './pages/SupplierPriceImport'
+// 单证管理模块
+import DocumentDashboard from './pages/DocumentDashboard'
+import DocumentImport from './pages/DocumentImport'
+import DocumentMatching from './pages/DocumentMatching'
+import DocumentTaxCalc from './pages/DocumentTaxCalc'
+import DocumentSupplement from './pages/DocumentSupplement'
+import HSMatchRecords from './pages/HSMatchRecords'
+// 文档中心模块
+import DocumentCenter from './pages/DocumentCenter'
+// 帮助中心模块
+import HelpCenter from './pages/HelpCenter'
+import HelpVideoManage from './pages/HelpVideoManage'
 import { initMenuSettings } from './utils/menuSettings'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { SocketProvider } from './contexts/SocketContext'
+import { TabsProvider } from './contexts/TabsContext'
+import { KeepAliveProvider } from './contexts/KeepAliveContext'
+import { ToastProvider } from './components/Toast'
 import { Loader2 } from 'lucide-react'
+// Vercel Speed Insights 已移除 - 系统已迁移至阿里云
 
 // 保护路由组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -113,14 +164,23 @@ function AppRoutes() {
         {/* TMS运输管理 */}
         <Route path="/tms" element={<TMSDashboard />} />
         <Route path="/tms/exceptions" element={<CMRExceptionManage />} />
-        <Route path="/tms/service-providers" element={<ServiceProviders />} />
         <Route path="/tms/pricing" element={<TransportPricing />} />
+        <Route path="/tms/conditions" element={<TMSConditions />} />
         <Route path="/cmr-manage" element={<CMRManage />} />
         <Route path="/cmr-manage/delivering" element={<CMRManage />} />
         <Route path="/cmr-manage/exception" element={<CMRManage />} />
         <Route path="/cmr-manage/archived" element={<CMRManage />} />
         <Route path="/cmr-manage/:id" element={<CMRBillDetails />} />
-        <Route path="/last-mile" element={<LastMile />} />
+        {/* 最后里程模块 */}
+        <Route path="/last-mile" element={<LastMileDashboard />} />
+        <Route path="/last-mile/carriers" element={<LastMileCarriers />} />
+        <Route path="/last-mile/zones" element={<LastMileZones />} />
+        <Route path="/last-mile/rates" element={<LastMileRates />} />
+        <Route path="/last-mile/import" element={<LastMileRateImport />} />
+        <Route path="/last-mile/shipments" element={<LastMileShipments />} />
+        <Route path="/last-mile/quote" element={<LastMileQuickQuote />} />
+        {/* 旧的最后里程派送页面 */}
+        <Route path="/last-mile/delivery" element={<LastMile />} />
         <Route path="/system" element={<SystemManageDashboard />} />
         <Route path="/system/menu-settings" element={<MenuSettings />} />
         <Route path="/system/user-manage" element={<UserManage />} />
@@ -128,6 +188,7 @@ function AppRoutes() {
         <Route path="/system/user-binding" element={<Auth0UserBinding />} />
         <Route path="/system/security-settings" element={<SecuritySettings />} />
         <Route path="/system/security-settings/logs" element={<SecuritySettings />} />
+        <Route path="/system/security-center" element={<SecurityCenter />} />
         <Route path="/system/activity-logs" element={<ActivityLogs />} />
         <Route path="/system/logo-manage" element={<LogoManage />} />
         <Route path="/system/basic-data" element={<BasicDataManage />} />
@@ -138,34 +199,71 @@ function AppRoutes() {
         <Route path="/system/basic-data/fee-category" element={<BasicDataManage />} />
         <Route path="/system/basic-data/transport-method" element={<BasicDataManage />} />
         <Route path="/system/tariff-rates" element={<TariffRateManage />} />
-        <Route path="/system/approvals" element={<ApprovalList />} />
+        <Route path="/system/approvals" element={<ApprovalWorkbench />} />
+        <Route path="/system/approval-center" element={<ApprovalCenter />} />
+        <Route path="/system/messages" element={<MessageCenter />} />
+        <Route path="/system/alerts" element={<AlertDashboard />} />
+        <Route path="/system/info-center" element={<InfoCenter />} />
+        <Route path="/system/data-import" element={<DataImportCenter />} />
+        <Route path="/system/api-integrations" element={<ApiIntegrations />} />
         {/* 供应商管理模块 */}
         <Route path="/suppliers" element={<SupplierDashboard />} />
         <Route path="/suppliers/list" element={<SupplierManage />} />
+        <Route path="/suppliers/manage" element={<SupplierManage />} />
+        <Route path="/suppliers/prices" element={<SupplierPrices />} />
+        <Route path="/suppliers/import" element={<SupplierPriceImport />} />
         <Route path="/tools" element={<ToolsDashboard />} />
         <Route path="/tools/inquiry" element={<Inquiry />} />
         <Route path="/tools/tariff-calculator" element={<TariffCalculator />} />
-        <Route path="/tools/payment" element={<PaymentInvoice />} />
-        <Route path="/tools/address" element={<AddressTax />} />
-        <Route path="/tools/commodity-code" element={<CommodityCode />} />
-        <Route path="/tools/productCare" element={<ProductCategory />} />
-        <Route path="/tools/editable-table" element={<EditableTableDemo />} />
-        <Route path="/tools/components-demo" element={<ComponentsDemo />} />
+        <Route path="/tools/shared-tax" element={<SharedTaxManage />} />
+        <Route path="/tools/product-pricing" element={<ProductPricing />} />
         {/* CRM 客户关系管理 */}
         <Route path="/crm" element={<CRMDashboard />} />
         <Route path="/crm/customers" element={<CRMCustomers />} />
+        <Route path="/crm/customers/:id/edit" element={<CRMCustomerEdit />} />
         <Route path="/crm/customers/:id" element={<CRMCustomerDetail />} />
+        <Route path="/crm/bill/:id" element={<CRMBillDetails />} />
         <Route path="/crm/opportunities" element={<CRMOpportunities />} />
         <Route path="/crm/quotations" element={<CRMQuotations />} />
         <Route path="/crm/contracts" element={<CRMContracts />} />
         <Route path="/crm/feedbacks" element={<CRMFeedbacks />} />
+        <Route path="/crm/commission/rules" element={<CRMCommissionRules />} />
+        <Route path="/crm/commission/records" element={<CRMCommissionRecords />} />
+        <Route path="/crm/commission/penalties" element={<CRMPenaltyRecords />} />
+        <Route path="/crm/commission/settlements" element={<CRMCommissionSettlements />} />
+        {/* 合同管理 */}
+        <Route path="/contracts" element={<CustomsContracts />} />
+        <Route path="/contracts/config" element={<ContractTemplateConfig />} />
+        <Route path="/contracts/preview/:id" element={<ContractPreview />} />
+        {/* 单证管理 */}
+        <Route path="/documents" element={<DocumentDashboard />} />
+        <Route path="/documents/import" element={<DocumentImport />} />
+        <Route path="/documents/matching" element={<DocumentMatching />} />
+        <Route path="/documents/tax-calc" element={<DocumentTaxCalc />} />
+        <Route path="/documents/supplement" element={<DocumentSupplement />} />
+        <Route path="/documents/match-records" element={<HSMatchRecords />} />
+        {/* 文档中心（COS存储） */}
+        <Route path="/document-center" element={<DocumentCenter />} />
+        {/* 帮助中心 */}
+        <Route path="/help" element={<HelpCenter />} />
+        <Route path="/help/videos" element={<HelpVideoManage />} />
         {/* 财务管理 */}
         <Route path="/finance" element={<FinanceDashboard />} />
         <Route path="/finance/invoices" element={<FinanceInvoices />} />
-        <Route path="/finance/invoices/:id" element={<FinanceInvoices />} />
+        <Route path="/finance/invoices/history" element={<FinanceInvoiceHistory />} />
+        <Route path="/finance/invoices/create" element={<CreateInvoice />} />
+        <Route path="/finance/invoices/:id/edit" element={<EditInvoice />} />
+        <Route path="/finance/invoices/:id/payment" element={<RegisterPayment />} />
+        <Route path="/finance/invoices/:id" element={<InvoiceDetail />} />
         <Route path="/finance/payments" element={<FinancePayments />} />
         <Route path="/finance/fees" element={<FinanceFees />} />
         <Route path="/finance/reports" element={<FinanceReports />} />
+        <Route path="/finance/order-report" element={<FinanceOrderReport />} />
+        <Route path="/finance/bill-details/:id" element={<BillDetails />} />
+        <Route path="/finance/carrier-settlement" element={<CarrierSettlement />} />
+        <Route path="/finance/statements" element={<FinancialStatements />} />
+        <Route path="/finance/bank-accounts" element={<BankAccounts />} />
+        <Route path="/finance/fee-approvals" element={<FeeItemApprovals />} />
       </Routes>
     </Layout>
   )
@@ -178,23 +276,31 @@ function App() {
   }, [])
 
   return (
-    <AuthProvider>
-      <Router>
-        <Routes>
-          {/* 登录页面 */}
-          <Route path="/login" element={<Login />} />
-          {/* 受保护的路由 */}
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <AppRoutes />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </Router>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            {/* 登录页面 */}
+            <Route path="/login" element={<Login />} />
+            {/* 受保护的路由 */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <SocketProvider>
+                    <TabsProvider>
+                      <KeepAliveProvider>
+                        <AppRoutes />
+                      </KeepAliveProvider>
+                    </TabsProvider>
+                  </SocketProvider>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ToastProvider>
   )
 }
 

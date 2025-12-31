@@ -133,7 +133,7 @@ export async function getClearanceStats(params = {}) {
   const byType = await db.prepare(`
     SELECT document_type, document_type_name, COUNT(*) as count
     FROM clearance_documents ${whereClause}
-    GROUP BY document_type
+    GROUP BY document_type, document_type_name
     ORDER BY count DESC
   `).all(...queryParams)
   
@@ -232,9 +232,9 @@ export async function generateDocumentNo(documentType) {
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
   const prefix = documentType || 'DOC'
   
-  // 获取当日最大序号
+  // 获取当日最大序号（使用 PostgreSQL RIGHT() 函数获取最后4位）
   const result = await db.prepare(`
-    SELECT MAX(CAST(SUBSTR(document_no, -4) AS INTEGER)) as max_seq
+    SELECT MAX(CAST(RIGHT(document_no, 4) AS INTEGER)) as max_seq
     FROM clearance_documents
     WHERE document_no LIKE ?
   `).get(`${prefix}${dateStr}%`)
@@ -283,7 +283,7 @@ export async function createClearanceDocument(data) {
       ?, ?, ?,
       ?, ?,
       ?, ?, ?, ?,
-      ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime')
+      ?, ?, NOW(), NOW()
     )
   `).run(
     id, documentNo, data.billId || null, data.billNumber || null,
@@ -294,7 +294,7 @@ export async function createClearanceDocument(data) {
     data.grossWeight || 0, data.netWeight || 0, data.weightUnit || 'KGS',
     data.volume || 0, data.volumeUnit || 'CBM',
     data.packages || 0, data.packageType || '',
-    data.currency || 'USD', data.totalValue || 0, data.unitPrice || 0,
+    data.currency || 'EUR', data.totalValue || 0, data.unitPrice || 0,
     data.freightAmount || 0, data.insuranceAmount || 0,
     data.transportMethod || '', data.vesselName || '', data.voyageNo || '',
     data.portOfLoading || '', data.portOfDischarge || '',
@@ -315,7 +315,7 @@ export async function createClearanceDocument(data) {
         quantity, quantity_unit, unit_price, total_price,
         gross_weight, net_weight, volume, country_of_origin, remark,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `)
     
     data.items.forEach((item, index) => {
@@ -402,7 +402,7 @@ export async function updateClearanceDocument(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = db.prepare(`UPDATE clearance_documents SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -418,7 +418,7 @@ export async function updateClearanceDocument(id, data) {
           quantity, quantity_unit, unit_price, total_price,
           gross_weight, net_weight, volume, country_of_origin, remark,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
       `)
       
       data.items.forEach((item, index) => {
@@ -456,11 +456,12 @@ export async function deleteClearanceDocument(id) {
  */
 export async function reviewClearanceDocument(id, reviewStatus, reviewNote, reviewer) {
   const db = getDatabase()
+  const now = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   const result = db.prepare(`
     UPDATE clearance_documents 
-    SET review_status = ?, review_note = ?, reviewer = ?, review_time = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
+    SET review_status = ?, review_note = ?, reviewer = ?, review_time = ?, updated_at = NOW()
     WHERE id = ?
-  `).run(reviewStatus, reviewNote || '', reviewer || '', id)
+  `).run(reviewStatus, reviewNote || '', reviewer || '', now, id)
   return result.changes > 0
 }
 
@@ -471,7 +472,7 @@ export async function updateClearanceDocumentStatus(id, status) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE clearance_documents 
-    SET status = ?, updated_at = datetime('now', 'localtime')
+    SET status = ?, updated_at = NOW()
     WHERE id = ?
   `).run(status, id)
   return result.changes > 0

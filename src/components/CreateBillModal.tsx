@@ -1,13 +1,69 @@
-import { useState, useEffect, useMemo } from 'react'
-import { X, Play, Plane, Ship, Train, Truck, Upload, Download, HelpCircle, Plus, Trash2, FileText, ChevronDown, Loader2, Users } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { X, Play, Plane, Ship, Train, Truck, Upload, Download, HelpCircle, Plus, Trash2, FileText, ChevronDown, Loader2, Users, CheckCircle, AlertCircle, Eye } from 'lucide-react'
 import DatePicker from './DatePicker'
-import { createBill, getShippingCompanyByContainerCode, searchContainerCodes, parseBillFile, getPortsOfLoadingList, getDestinationPortsList, getCustomers, type ContainerCode, type PortOfLoadingItem, type DestinationPortItem, type Customer } from '../utils/api'
+import { createBill, updateBill, getShippingCompanyByContainerCode, searchContainerCodes, parseBillFile, getPortsOfLoadingList, getDestinationPortsList, getCustomers, parseTransportDocument, getTrackingSupplementInfo, getCustomerTaxNumbers, getCustomerAddresses, smartTrack, getApiBaseUrl, type ContainerCode, type PortOfLoadingItem, type DestinationPortItem, type Customer, type ParsedTransportData, type TrackingSupplementInfo, type CustomerTaxNumber, type CustomerAddress, type ScraperTrackingResult } from '../utils/api'
+
+// 编辑模式下传入的提单数据类型
+interface EditBillData {
+  id: string
+  billNumber?: string
+  containerNumber?: string  // 集装箱号
+  shippingCompany?: string
+  origin?: string
+  destination?: string
+  portOfLoading?: string
+  portOfDischarge?: string
+  pieces?: number
+  weight?: number
+  volume?: number
+  eta?: string
+  etd?: string
+  transportMethod?: string
+  // 航程信息
+  vessel?: string
+  voyage?: string
+  groundHandling?: string
+  terminal?: string
+  // 集装箱信息
+  sealNumber?: string
+  containerSize?: string
+  // 发货人信息
+  shipper?: string
+  // Reference List
+  referenceList?: Array<{
+    referenceNumber: string
+    pieces: string
+    grossWeight: string
+    shipper: string
+    shipperDetails: string
+    consigneeAddress: string
+    consigneeAddressDetails: string
+  }>
+  // 附加属性
+  containerType?: string
+  billType?: string
+  consigneeType?: string
+  containerReturn?: string
+  fullContainerTransport?: string
+  lastMileTransport?: string
+  devanning?: string
+  t1Declaration?: string
+  transportArrangement?: string
+  customerId?: string
+  customerName?: string
+  status?: string
+  // 系统导入/人工录入字段
+  customsReleaseTime?: string  // 清关完成时间
+  cmrUnloadingCompleteTime?: string  // 卸货日期
+}
 
 interface CreateBillModalProps {
   visible: boolean
   onClose: () => void
   onSubmit?: (type: 'official' | 'temporary') => void
   onSuccess?: () => void // 成功回调，用于刷新列表
+  mode?: 'create' | 'edit' // 模式：创建或编辑
+  editData?: EditBillData | null // 编辑模式下的提单数据
 }
 
 export default function CreateBillModal({
@@ -15,11 +71,23 @@ export default function CreateBillModal({
   onClose,
   onSubmit,
   onSuccess,
+  mode = 'create',
+  editData = null,
 }: CreateBillModalProps) {
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1)
+  const isEditMode = mode === 'edit' && editData !== null
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(isEditMode ? 3 : 1) // 编辑模式直接跳到第三步
   const [selectedType, setSelectedType] = useState<'official' | 'temporary' | null>(null)
   const [selectedTransport, setSelectedTransport] = useState<'air' | 'sea' | 'rail' | 'truck' | null>(null)
   const [easyBill, setEasyBill] = useState(true)
+  
+  // OCR解析相关状态
+  const [ocrParsing, setOcrParsing] = useState(false)
+  const [ocrResult, setOcrResult] = useState<ParsedTransportData | null>(null)
+  const [ocrError, setOcrError] = useState<string | null>(null)
+  const [showOcrPreview, setShowOcrPreview] = useState(false)
+  
+  // 提单发货人信息（用于 Reference List 自动填充）
+  const [billShipper, setBillShipper] = useState('')
   
   // 第三步表单数据
   const [formData, setFormData] = useState({
@@ -47,11 +115,18 @@ export default function CreateBillModal({
     // 海运特有字段
     containerType: '' as 'cfs' | 'fcl' | '', // 箱型
     billType: '' as 'master' | 'house' | '', // 提单类型
-    consigneeType: '' as 'asl' | 'not-asl' | '', // 收货人类型
+    consigneeType: '', // 收货人（ASL/税号）
     containerReturn: '' as 'off-site' | 'local' | '', // 异地还柜
     fullContainerTransport: '' as 'must-full' | 'can-split' | '', // 全程整柜运输
     lastMileTransport: 'truck', // 末端运输方式
     devanning: '' as 'required' | 'not-required' | '', // 拆柜
+    // 新增字段：从追踪API获取
+    containerNumber: '', // 集装箱号（完整柜号）
+    sealNumber: '', // 封号
+    containerSize: '', // 柜型（如 20GP, 40GP, 40HQ）
+    // 系统导入/人工录入字段
+    customsReleaseTime: '', // 清关完成时间
+    cmrUnloadingCompleteTime: '', // 卸货日期
   })
   const [bindResourceTab, setBindResourceTab] = useState<'general' | 'pallet'>('general')
   const [resourceFile, setResourceFile] = useState<File | null>(null)
@@ -87,6 +162,36 @@ export default function CreateBillModal({
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  
+  // 客户税号列表（用于收货人下拉选择）
+  const [customerTaxNumbers, setCustomerTaxNumbers] = useState<CustomerTaxNumber[]>([])
+  const [loadingTaxNumbers, setLoadingTaxNumbers] = useState(false)
+  
+  // 客户地址列表（用于收货地址下拉选择）
+  const [customerAddresses, setCustomerAddresses] = useState<CustomerAddress[]>([])
+  const [loadingAddresses, setLoadingAddresses] = useState(false)
+  
+  // 船公司来源追踪：'container' = 集装箱代码匹配, 'file' = 文件解析, 'manual' = 手动输入
+  const [shippingCompanySource, setShippingCompanySource] = useState<'container' | 'file' | 'manual' | ''>('')
+  
+  // 爬虫追踪状态
+  const [isScrapingContainer, setIsScrapingContainer] = useState(false)
+  const [scraperError, setScraperError] = useState<string | null>(null)
+  
+  // 模板导入相关状态
+  const [templateFile, setTemplateFile] = useState<File | null>(null)
+  const [templateImporting, setTemplateImporting] = useState(false)
+  const [templatePreview, setTemplatePreview] = useState<{
+    previewId: string
+    totalRows: number
+    validRows: number
+    errorRows: number
+    warningRows: number
+    errors?: Array<{ row: number; errors?: string[]; error?: string }>
+    warnings?: Array<{ row: number; warnings: string[] }>
+  } | null>(null)
+  const [templateError, setTemplateError] = useState<string | null>(null)
+  const [templateSuccess, setTemplateSuccess] = useState<string | null>(null)
 
   // 加载集装箱代码列表（仅海运时）
   useEffect(() => {
@@ -183,16 +288,20 @@ export default function CreateBillModal({
     if (visible && selectedTransport) {
       const loadPortsOfLoading = async () => {
         try {
+          console.log('加载起运港列表，运输方式:', selectedTransport)
           // 根据运输方式加载对应的起运港数据
           const response = await getPortsOfLoadingList({
             transportType: selectedTransport,
             status: 'active'
           })
+          console.log('起运港API响应:', response)
           if (response.errCode === 200 && response.data) {
             // 只显示启用的港口
             const activePorts = response.data.filter((port: PortOfLoadingItem) => port.status === 'active')
+            console.log('过滤后的起运港数量:', activePorts.length)
             setPortsOfLoading(activePorts)
           } else {
+            console.warn('起运港API返回异常:', response)
             setPortsOfLoading([])
           }
         } catch (error) {
@@ -202,6 +311,7 @@ export default function CreateBillModal({
       }
       loadPortsOfLoading()
     } else {
+      console.log('未选择运输方式或弹窗未打开，清空起运港列表')
       setPortsOfLoading([])
     }
   }, [visible, selectedTransport])
@@ -255,8 +365,257 @@ export default function CreateBillModal({
       setCustomers([])
       setSelectedCustomer(null)
       setCustomerSearch('')
+      setShippingCompanySource('')
     }
   }, [visible])
+
+  // 当选择客户后，加载该客户的税号列表（用于收货人下拉选择）
+  useEffect(() => {
+    if (selectedCustomer?.id) {
+      const loadTaxNumbers = async () => {
+        setLoadingTaxNumbers(true)
+        try {
+          const response = await getCustomerTaxNumbers(selectedCustomer.id)
+          if (response.errCode === 200 && response.data) {
+            setCustomerTaxNumbers(response.data)
+          } else {
+            setCustomerTaxNumbers([])
+          }
+        } catch (error) {
+          console.error('加载客户税号失败:', error)
+          setCustomerTaxNumbers([])
+        } finally {
+          setLoadingTaxNumbers(false)
+        }
+      }
+      loadTaxNumbers()
+    } else {
+      setCustomerTaxNumbers([])
+    }
+  }, [selectedCustomer?.id])
+
+  // 当选择客户后，加载该客户的地址列表（用于收货地址下拉选择）
+  useEffect(() => {
+    if (selectedCustomer?.id) {
+      const loadAddresses = async () => {
+        setLoadingAddresses(true)
+        try {
+          const response = await getCustomerAddresses(selectedCustomer.id)
+          if (response.errCode === 200 && response.data) {
+            setCustomerAddresses(response.data)
+          } else {
+            setCustomerAddresses([])
+          }
+        } catch (error) {
+          console.error('加载客户地址失败:', error)
+          setCustomerAddresses([])
+        } finally {
+          setLoadingAddresses(false)
+        }
+      }
+      loadAddresses()
+    } else {
+      setCustomerAddresses([])
+    }
+  }, [selectedCustomer?.id])
+
+  // 编辑模式初始化：当打开编辑模式时，用现有数据填充表单
+  useEffect(() => {
+    if (visible && mode === 'edit' && editData) {
+      // 调试日志：打印编辑数据中的附加属性字段
+      console.log('编辑模式初始化 - editData 附加属性字段:', {
+        containerType: editData.containerType,
+        billType: editData.billType,
+        consigneeType: editData.consigneeType,
+        containerReturn: editData.containerReturn,
+        fullContainerTransport: editData.fullContainerTransport,
+        lastMileTransport: editData.lastMileTransport,
+        devanning: editData.devanning,
+        t1Declaration: editData.t1Declaration,
+        transportArrangement: editData.transportArrangement,
+        transportMethod: editData.transportMethod,
+      })
+      
+      // 设置运输方式
+      const transport = editData.transportMethod as 'air' | 'sea' | 'rail' | 'truck' | null
+      if (transport) {
+        setSelectedTransport(transport)
+      }
+      // 设置提单类型（正式单/临时单）
+      setSelectedType(editData.status === 'draft' ? 'temporary' : 'official')
+      // 直接跳到第三步
+      setCurrentStep(3)
+      
+      // 合并 vessel 和 voyage 为 flightNumber
+      const flightNumber = editData.vessel 
+        ? (editData.voyage ? `${editData.vessel} ${editData.voyage}` : editData.vessel)
+        : ''
+      
+      // 填充表单数据
+      const newFormData = {
+        ...formData,
+        masterBillNumber: editData.billNumber || '',
+        shippingCompany: editData.shippingCompany || '',
+        origin: editData.portOfLoading || editData.origin || '',
+        destination: editData.portOfDischarge || editData.destination || '',
+        pieces: editData.pieces?.toString() || '',
+        grossWeight: editData.weight?.toString() || '',
+        volume: editData.volume?.toString() || '',
+        estimatedDeparture: editData.etd || '',
+        estimatedArrival: editData.eta || '',
+        flightNumber: flightNumber, // 航班号/船名航次
+        groundHandling: editData.groundHandling || editData.terminal || '', // 地勤（码头）
+        // 集装箱信息
+        containerNumber: editData.containerNumber || '', // 集装箱号
+        sealNumber: editData.sealNumber || '', // 封号
+        containerSize: editData.containerSize || '', // 柜型
+        // 附加属性
+        containerType: (editData.containerType || '') as 'cfs' | 'fcl' | '',
+        billType: (editData.billType || '') as 'master' | 'house' | '',
+        consigneeType: editData.consigneeType || '',
+        containerReturn: (editData.containerReturn || '') as 'off-site' | 'local' | '',
+        fullContainerTransport: (editData.fullContainerTransport || '') as 'must-full' | 'can-split' | '',
+        lastMileTransport: editData.lastMileTransport || 'truck',
+        devanning: (editData.devanning || '') as 'required' | 'not-required' | '',
+        isT1Customs: (editData.t1Declaration === 'yes' ? 'yes' : 'no') as 'yes' | 'no',
+        transportation: (editData.transportArrangement || '') as 'entrust' | 'self' | '',
+        // 系统导入/人工录入字段
+        customsReleaseTime: editData.customsReleaseTime || '',
+        cmrUnloadingCompleteTime: editData.cmrUnloadingCompleteTime || '',
+      }
+      setFormData(newFormData)
+
+      // 在编辑模式下，自动根据提单号或柜号识别船公司
+      // 增强逻辑：不依赖 transportType 字段名，直接检查单号前缀
+      const autoIdentifyCompany = async () => {
+        const billNo = (editData.billNumber || '').toUpperCase()
+        const cntrNo = (editData.containerNumber || '').toUpperCase()
+        
+        console.log('编辑模式尝试识别船公司:', { billNo, cntrNo })
+        
+        // 尝试从提单号识别
+        let code = billNo.substring(0, 4)
+        if (!/^[A-Z]{4}$/.test(code)) {
+          // 如果提单号不是4位大写字母开头，尝试从柜号识别
+          code = cntrNo.substring(0, 4)
+        }
+        
+        if (/^[A-Z]{4}$/.test(code)) {
+          try {
+            const response = await getShippingCompanyByContainerCode(code)
+            if (response.errCode === 200 && response.data) {
+              const companyName = response.data.companyName || response.data.companyCode
+              if (companyName) {
+                setFormData(prev => ({ ...prev, shippingCompany: companyName }))
+                setShippingCompanySource('container')
+                console.log('编辑模式识别成功:', companyName)
+              }
+            }
+          } catch (error) {
+            console.warn('编辑模式识别船公司失败:', error)
+          }
+        }
+      }
+
+      // 如果当前没有船公司信息，则执行自动识别
+      if (!editData.shippingCompany) {
+        // 使用 setTimeout 确保在 formData 更新后执行，避免竞态
+        setTimeout(autoIdentifyCompany, 100)
+      }
+      
+      // 设置发货人信息（用于 Reference List 自动填充）
+      if (editData.shipper) {
+        setBillShipper(editData.shipper)
+      }
+      
+      // 设置客户
+      if (editData.customerId) {
+        setSelectedCustomer({
+          id: editData.customerId,
+          customerCode: '',
+          customerName: editData.customerName || '',
+          companyName: editData.customerName || '',
+          customerType: 'both',
+          customerLevel: 'normal',
+          contactPerson: '',
+          contactPhone: '',
+          contactEmail: '',
+          address: '',
+          countryCode: '',
+          status: 'active',
+          creditLimit: 0,
+          paymentTerms: '',
+          notes: '',
+          assignedTo: 0,
+          assignedName: '',
+          createTime: '',
+          updateTime: '',
+        } as Customer)
+        setCustomerSearch(editData.customerName || '')
+      }
+      
+      // 加载 Reference List
+      if (editData.referenceList && editData.referenceList.length > 0) {
+        setReferenceList(editData.referenceList.map((item, idx) => ({
+          id: `edit-${idx}-${Date.now()}`,
+          referenceNumber: item.referenceNumber || '',
+          pieces: item.pieces || '',
+          grossWeight: item.grossWeight || '',
+          shipper: item.shipper || '',
+          shipperDetails: item.shipperDetails || '',
+          consigneeAddress: item.consigneeAddress || '',
+          consigneeAddressDetails: item.consigneeAddressDetails || '',
+        })))
+      }
+    }
+  }, [visible, mode, editData])
+
+  // 自动识别船公司（提单号或集装箱号）
+  const identifyShippingCompany = useCallback(async () => {
+    const billNo = formData.masterBillNumber?.toUpperCase() || ''
+    const cntrNo = formData.containerNumber?.toUpperCase() || ''
+    if (!billNo && !cntrNo) return
+
+    let code = ''
+    if (/^[A-Z]{4}/.test(billNo)) {
+      code = billNo.substring(0, 4)
+    } else if (/^[A-Z]{4}/.test(cntrNo)) {
+      code = cntrNo.substring(0, 4)
+    }
+
+    if (!/^[A-Z]{4}$/.test(code)) return
+
+    try {
+      const response = await getShippingCompanyByContainerCode(code)
+      if (response.errCode === 200 && response.data) {
+        const companyName = response.data.companyName || response.data.companyCode
+        if (companyName) {
+          handleInputChange('shippingCompany', companyName)
+          setShippingCompanySource('container')
+          console.log('自动识别船公司:', companyName)
+        }
+      }
+    } catch (error) {
+      console.warn('自动识别船公司失败:', error)
+    }
+  }, [formData.masterBillNumber, formData.containerNumber])
+
+  useEffect(() => {
+    if (!visible) return
+    if (
+      (!formData.shippingCompany || shippingCompanySource === 'container') &&
+      (formData.masterBillNumber || formData.containerNumber)
+    ) {
+      identifyShippingCompany()
+    }
+  }, [
+    visible,
+    formData.masterBillNumber,
+    formData.containerNumber,
+    formData.shippingCompany,
+    shippingCompanySource,
+    identifyShippingCompany,
+  ])
 
   // 早期返回必须在所有hooks之后
   if (!visible) return null
@@ -275,9 +634,12 @@ export default function CreateBillModal({
         const response = await getShippingCompanyByContainerCode(code)
         if (response.errCode === 200 && response.data) {
           handleInputChange('shippingCompany', response.data.companyCode)
+          setShippingCompanySource('container')
+          console.log('船公司识别来源: 集装箱代码匹配', response.data.companyCode)
         }
       } catch (error) {
         handleInputChange('shippingCompany', '')
+        setShippingCompanySource('')
       }
     }
     
@@ -287,7 +649,6 @@ export default function CreateBillModal({
   }
 
   // 处理主单号后缀变化 - 保留用于自定义提单号功能
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMasterBillNumberSuffixChange = (value: string) => {
     handleInputChange('masterBillNumberSuffix', value)
     // 更新完整主单号
@@ -306,27 +667,55 @@ export default function CreateBillModal({
     // 如果输入的是集装箱代码（4位大写字母），尝试识别船公司
     if (value.length >= 4 && selectedTransport === 'sea') {
       const code = value.substring(0, 4).toUpperCase()
-      // 如果前4位匹配某个集装箱代码，自动设置前缀
+      
+      // 自动设置前缀
       const matchedCode = containerCodes.find(c => c && c.containerCode === code)
       if (matchedCode) {
         handleInputChange('containerCodePrefix', code)
         handleInputChange('masterBillNumberSuffix', value.substring(4))
       }
       
-      try {
-        const response = await getShippingCompanyByContainerCode(code)
-        if (response.errCode === 200 && response.data) {
-          handleInputChange('shippingCompany', response.data.companyCode)
-        }
-      } catch (error) {
-        if (value.length === 4) {
-          handleInputChange('shippingCompany', '')
+      // 只有在船公司为空或来源是自动识别时才更新，避免覆盖用户手动输入
+      if (!formData.shippingCompany || shippingCompanySource === 'container' || shippingCompanySource === '') {
+        try {
+          const response = await getShippingCompanyByContainerCode(code)
+          if (response.errCode === 200 && response.data) {
+            handleInputChange('shippingCompany', response.data.companyName || response.data.companyCode)
+            setShippingCompanySource('container')
+            console.log('从提单号自动识别船公司:', response.data.companyName)
+          }
+        } catch (error) {
+          console.warn('识别船公司失败:', error)
         }
       }
     }
     
     if (errors.masterBillNumber) {
       setErrors(prev => ({ ...prev, masterBillNumber: '' }))
+    }
+  }
+
+  // 处理集装箱号变化并自动识别船公司
+  const handleContainerNumberChange = async (value: string) => {
+    handleInputChange('containerNumber', value)
+    
+    // 如果输入的是集装箱代码（4位大写字母），尝试识别船公司
+    if (value.length >= 4 && selectedTransport === 'sea') {
+      const code = value.substring(0, 4).toUpperCase()
+      
+      // 只有在船公司为空或来源是自动识别时才更新，避免覆盖用户手动输入
+      if (!formData.shippingCompany || shippingCompanySource === 'container' || shippingCompanySource === '') {
+        try {
+          const response = await getShippingCompanyByContainerCode(code)
+          if (response.errCode === 200 && response.data) {
+            handleInputChange('shippingCompany', response.data.companyName || response.data.companyCode)
+            setShippingCompanySource('container')
+            console.log('从集装箱号自动识别船公司:', response.data.companyName)
+          }
+        } catch (error) {
+          console.warn('识别船公司失败:', error)
+        }
+      }
     }
   }
 
@@ -370,6 +759,227 @@ export default function CreateBillModal({
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  // 通过爬虫查询提单/集装箱信息（免费）
+  const handleScrapeTracking = async () => {
+    // 优先使用提单号追踪
+    const trackingNumber = formData.masterBillNumber || formData.containerNumber
+    
+    if (!trackingNumber) {
+      setScraperError('请先输入提单号')
+      return
+    }
+    
+    setIsScrapingContainer(true)
+    setScraperError(null)
+    
+    try {
+      // 传递船公司名称，用于纯数字提单号的识别
+      console.log('[CreateBillModal] 爬虫查询:', trackingNumber, '船公司:', formData.shippingCompany)
+      const response = await smartTrack(trackingNumber, formData.shippingCompany || undefined)
+      
+      if (response.errCode === 200 && response.data) {
+        const data = response.data
+        console.log('[CreateBillModal] 爬虫查询结果:', data)
+        
+        // 自动填充表单字段
+        if (data.billNumber && !formData.masterBillNumber) {
+          handleInputChange('masterBillNumber', data.billNumber)
+        }
+        if (data.containerNumber && !formData.containerNumber) {
+          handleInputChange('containerNumber', data.containerNumber)
+        }
+        if (data.vessel) {
+          const vesselVoyage = data.voyage ? `${data.vessel} ${data.voyage}` : data.vessel
+          handleInputChange('flightNumber', vesselVoyage)
+        }
+        if (data.portOfLoading && !formData.origin) {
+          handleInputChange('origin', data.portOfLoading)
+        }
+        if (data.portOfDischarge && !formData.destination) {
+          handleInputChange('destination', data.portOfDischarge)
+        }
+        if (data.etd && !formData.estimatedDeparture) {
+          handleInputChange('estimatedDeparture', data.etd)
+        }
+        if (data.eta && !formData.estimatedArrival) {
+          handleInputChange('estimatedArrival', data.eta)
+        }
+        if (data.containerType && !formData.containerSize) {
+          handleInputChange('containerSize', data.containerType)
+        }
+        if (data.sealNumber && !formData.sealNumber) {
+          handleInputChange('sealNumber', data.sealNumber)
+        }
+        if (data.grossWeight && !formData.grossWeight) {
+          handleInputChange('grossWeight', String(data.grossWeight))
+        }
+        if (data.volume && !formData.volume) {
+          handleInputChange('volume', String(data.volume))
+        }
+        
+        // 根据船公司代码设置船公司
+        if (data.carrierCode) {
+          handleInputChange('containerCodePrefix', data.carrierCode.substring(0, 4))
+          // 尝试获取船公司名称
+          try {
+            const companyResponse = await getShippingCompanyByContainerCode(data.carrierCode.substring(0, 4))
+            if (companyResponse.errCode === 200 && companyResponse.data?.companyName) {
+              handleInputChange('shippingCompany', companyResponse.data.companyName)
+              setShippingCompanySource('container')
+            }
+          } catch (e) {
+            console.warn('获取船公司信息失败:', e)
+          }
+        }
+        
+        setScraperError(null)
+        alert(`✅ 查询成功！\n来源: ${data._source}\n获取时间: ${data._fetchedAt}`)
+      } else {
+        setScraperError(response.msg || '未找到追踪信息')
+      }
+    } catch (error) {
+      console.error('[CreateBillModal] 爬虫查询失败:', error)
+      setScraperError(error instanceof Error ? error.message : '查询失败')
+    } finally {
+      setIsScrapingContainer(false)
+    }
+  }
+
+  // 获取存储的认证 Token
+  const getStoredToken = (): string | null => {
+    const testData = localStorage.getItem('bp_logistics_test_mode')
+    if (!testData) return null
+    try {
+      const data = JSON.parse(testData)
+      return data.token || null
+    } catch {
+      return null
+    }
+  }
+
+  // 处理模板上传
+  const handleTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setTemplateFile(file)
+    setTemplateImporting(true)
+    setTemplateError(null)
+    setTemplateSuccess(null)
+    setTemplatePreview(null)
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || getApiBaseUrl()
+      
+      // 获取认证 Token
+      const token = getStoredToken()
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${apiUrl}/api/data-import/preview/orders`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+      
+      // 检查响应状态，先处理非 OK 响应
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('上传文件失败，服务器响应:', response.status, errorText)
+        throw new Error(`服务器返回错误 (${response.status}): ${errorText.slice(0, 100)}`)
+      }
+      
+      const result = await response.json()
+      
+      if (result.errCode === 200 && result.data) {
+        setTemplatePreview({
+          previewId: result.data.previewId,
+          totalRows: result.data.totalRows,
+          validRows: result.data.validRows,
+          errorRows: result.data.errorRows,
+          warningRows: result.data.warningRows,
+          errors: result.data.errors,
+          warnings: result.data.warnings,
+        })
+      } else {
+        setTemplateError(result.msg || '解析文件失败')
+      }
+    } catch (error) {
+      console.error('模板上传失败:', error)
+      setTemplateError(error instanceof Error ? error.message : '上传失败')
+    } finally {
+      setTemplateImporting(false)
+      // 重置input，允许重复上传同一文件
+      e.target.value = ''
+    }
+  }
+  
+  // 确认导入模板数据
+  const handleConfirmTemplateImport = async () => {
+    if (!templatePreview?.previewId) return
+    
+    setTemplateImporting(true)
+    setTemplateError(null)
+    setTemplateSuccess(null)
+    
+    try {
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || getApiBaseUrl()
+      
+      // 获取认证 Token
+      const token = getStoredToken()
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const response = await fetch(`${apiUrl}/api/data-import/confirm/orders`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          previewId: templatePreview.previewId,
+          skipErrors: false,
+        }),
+      })
+      
+      // 检查响应状态
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('确认导入失败，服务器响应:', response.status, errorText)
+        throw new Error(`服务器返回错误 (${response.status}): ${errorText.slice(0, 100)}`)
+      }
+      
+      const result = await response.json()
+      
+      if (result.errCode === 200 && result.data) {
+        const { successCount, errorCount } = result.data
+        setTemplateSuccess(`成功导入 ${successCount} 条提单记录${errorCount > 0 ? `，${errorCount} 条失败` : ''}`)
+        setTemplatePreview(null)
+        setTemplateFile(null)
+        
+        // 触发刷新回调
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess()
+          }, 1500)
+        }
+      } else {
+        setTemplateError(result.msg || '导入失败')
+      }
+    } catch (error) {
+      console.error('确认导入失败:', error)
+      setTemplateError(error instanceof Error ? error.message : '导入失败')
+    } finally {
+      setTemplateImporting(false)
+    }
+  }
+
   // 处理运输方式变化 - 清空起运港和目的港
   const handleTransportChange = (transport: 'air' | 'sea' | 'rail' | 'truck') => {
     if (transport !== selectedTransport) {
@@ -382,94 +992,430 @@ export default function CreateBillModal({
     setSelectedTransport(transport)
   }
 
-  // 解析提单文件
-  const handleParseFile = async () => {
-    if (!formData.masterBillFile) {
+  // 解析提单文件（优先使用本地PDF解析，OCR作为增强）
+  // 支持直接传入文件参数，解决React状态更新异步问题
+  const handleParseFile = async (fileParam?: File) => {
+    const fileToProcess = fileParam || formData.masterBillFile
+    
+    if (!fileToProcess) {
       alert('请先选择文件')
       return
     }
 
     setParsingFile(true)
+    setOcrParsing(true)
+    setOcrError(null)
+    setOcrResult(null)
     
     try {
-      const response = await parseBillFile(formData.masterBillFile)
+      // 优先使用本地PDF解析API（已证实可工作）
+      const response = await parseBillFile(fileToProcess)
+      
       if (response.errCode === 200 && response.data) {
         const data = response.data
+        console.log('PDF解析结果:', data)
         
-        // 自动填充表单字段
+        // 自动填充表单字段 - 使用后端映射后的字段名
+        // 提单号 (后端映射为 masterBillNumber)
         if (data.masterBillNumber) {
-          // 解析主单号（可能是完整号码，需要拆分）
-          const billNumber = data.masterBillNumber.toUpperCase()
-          // 尝试匹配格式：4个字母+数字（如 EMCU1608836）
-          const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
-          if (match) {
-            handleInputChange('containerCodePrefix', match[1])
-            handleInputChange('masterBillNumberSuffix', match[2])
-            handleInputChange('masterBillNumber', billNumber)
-          } else {
-            // 如果不是标准格式，直接填入主单号
-            handleInputChange('masterBillNumber', billNumber)
+          const billNumber = String(data.masterBillNumber).toUpperCase()
+          // 海运：尝试匹配格式：4个字母+数字（如 COSU6435174570）
+          if (selectedTransport === 'sea') {
+            const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
+            if (match) {
+              handleInputChange('containerCodePrefix', match[1])
+              handleInputChange('masterBillNumberSuffix', match[2])
+            }
           }
+          handleInputChange('masterBillNumber', billNumber)
         }
         
+        // 船公司
         if (data.shippingCompany) {
           handleInputChange('shippingCompany', data.shippingCompany)
         }
         
+        // 起运港 (后端映射为 origin)
         if (data.origin) {
           handleInputChange('origin', data.origin)
         }
         
+        // 目的港 (后端映射为 destination)
         if (data.destination) {
           handleInputChange('destination', data.destination)
         }
         
+        // 件数
         if (data.pieces) {
-          handleInputChange('pieces', data.pieces)
+          handleInputChange('pieces', String(data.pieces))
         }
         
+        // 毛重 (后端映射为 weight)
         if (data.weight) {
-          handleInputChange('grossWeight', data.weight)
+          handleInputChange('grossWeight', String(data.weight))
         }
         
+        // 体积
         if (data.volume) {
-          handleInputChange('volume', data.volume)
+          handleInputChange('volume', String(data.volume))
         }
         
+        // 船名航次
         if (data.vessel) {
-          handleInputChange('flightNumber', data.vessel) // 海运时 vessel 对应 flightNumber 字段
+          handleInputChange('flightNumber', data.vessel)
         }
         
+        // ETD预计离开时间 (后端映射为 estimatedDeparture)
         if (data.estimatedDeparture) {
           handleInputChange('estimatedDeparture', data.estimatedDeparture)
         }
         
-        // 如果提取到集装箱代码，尝试获取海运公司信息
+        // ETA预计到港时间 (后端映射为 estimatedArrival)
+        if (data.estimatedArrival) {
+          handleInputChange('estimatedArrival', data.estimatedArrival)
+        }
+        
+        // 集装箱号
         if (data.containerNumber) {
-          const containerCode = data.containerNumber.substring(0, 4).toUpperCase()
-          if (containerCode && selectedTransport === 'sea') {
-            try {
-              const companyResponse = await getShippingCompanyByContainerCode(containerCode)
-              if (companyResponse.errCode === 200 && companyResponse.data) {
-                handleInputChange('shippingCompany', companyResponse.data.companyName)
+          handleInputChange('containerNumber', String(data.containerNumber).toUpperCase())
+          // 尝试获取船公司信息
+          if (selectedTransport === 'sea') {
+            const containerCode = String(data.containerNumber).substring(0, 4).toUpperCase()
+            if (containerCode) {
+              try {
+                const companyResponse = await getShippingCompanyByContainerCode(containerCode)
+                if (companyResponse.errCode === 200 && companyResponse.data) {
+                  handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+                }
+              } catch (err) {
+                console.error('获取船公司信息失败:', err)
               }
-            } catch (err) {
-              console.error('获取海运公司信息失败:', err)
             }
           }
         }
         
-        // 显示成功提示
-        alert('提单信息已自动提取并填充到表单中')
+        // 封签号
+        if (data.sealNumber) {
+          handleInputChange('sealNumber', String(data.sealNumber).toUpperCase())
+        }
+        
+        // 柜型
+        if (data.containerSize) {
+          handleInputChange('containerSize', String(data.containerSize).toUpperCase())
+        }
+        
+        // 发货人
+        if (data.shipper) {
+          handleInputChange('shipper', data.shipper)
+        }
+        
+        // 检查是否提取到有效数据
+        const hasData = data.masterBillNumber || data.origin || data.destination || data.pieces || data.weight || data.containerNumber
+        if (hasData) {
+          // 异步获取追踪补充信息（码头、船名航次等）
+          // 不阻塞主流程
+          fetchSupplementInfo(data.masterBillNumber, data.containerNumber)
+          alert('提单信息已自动提取并填充到表单中')
+        } else {
+          alert('解析完成，但未识别到有效信息，请手动填写')
+        }
       } else {
         console.warn('解析返回异常:', response)
-        alert('解析文件完成，但未提取到有效信息')
+        alert('解析文件完成，但未提取到有效信息，请手动填写')
       }
     } catch (error: any) {
       console.error('解析提单文件失败:', error)
       alert('解析文件失败: ' + (error.message || '未知错误') + '\n请手动填写表单信息')
     } finally {
       setParsingFile(false)
+      setOcrParsing(false)
+    }
+  }
+  
+  // 将OCR结果应用到表单
+  const applyOcrResultToForm = (data: ParsedTransportData) => {
+    // 主单号/提单号
+    if (data.billNumber) {
+      const billNumber = String(data.billNumber).toUpperCase()
+      // 海运：尝试匹配格式：4个字母+数字（如 EMCU1608836）
+      if (selectedTransport === 'sea') {
+        const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
+        if (match) {
+          handleInputChange('containerCodePrefix', match[1])
+          handleInputChange('masterBillNumberSuffix', match[2])
+        }
+      }
+      handleInputChange('masterBillNumber', billNumber)
+    }
+    
+    // 集装箱号 - 优先使用集装箱代码匹配船公司
+    if (data.containerNumber) {
+      const containerNumber = String(data.containerNumber).toUpperCase()
+      handleInputChange('containerNumber', containerNumber) // 填充集装箱号字段
+      
+      const containerCode = containerNumber.substring(0, 4)
+      if (containerCode && selectedTransport === 'sea') {
+        handleInputChange('containerCodePrefix', containerCode)
+        // 异步获取船公司信息 - 集装箱代码匹配优先级最高
+        getShippingCompanyByContainerCode(containerCode).then(companyResponse => {
+          if (companyResponse.errCode === 200 && companyResponse.data) {
+            handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+            setShippingCompanySource('container')
+            console.log('船公司识别来源: 集装箱代码匹配', companyResponse.data.companyCode)
+          }
+        }).catch(console.error)
+      }
+    }
+    
+    // 航班号/船名航次/列车号
+    if (data.vessel) {
+      handleInputChange('flightNumber', data.vessel)
+    } else if (data.flightNumber) {
+      handleInputChange('flightNumber', data.flightNumber)
+    } else if (data.trainNumber) {
+      handleInputChange('flightNumber', data.trainNumber)
+    }
+    
+    // 起运港
+    if (data.portOfLoading) {
+      handleInputChange('origin', data.portOfLoading)
+    }
+    
+    // 目的港
+    if (data.portOfDischarge) {
+      handleInputChange('destination', data.portOfDischarge)
+    }
+    
+    // 件数
+    if (data.pieces) {
+      handleInputChange('pieces', String(data.pieces))
+    }
+    
+    // 毛重
+    if (data.grossWeight) {
+      handleInputChange('grossWeight', String(data.grossWeight))
+    }
+    
+    // 体积
+    if (data.volume) {
+      handleInputChange('volume', String(data.volume))
+    }
+    
+    // 船公司/航空公司 - 只有在没有集装箱号时才使用文件解析的结果
+    // 如果有集装箱号，优先使用集装箱代码匹配的船公司（在上面已处理）
+    if (!data.containerNumber) {
+      if (data.shippingCompany) {
+        handleInputChange('shippingCompany', data.shippingCompany)
+        setShippingCompanySource('file')
+        console.log('船公司识别来源: 文件解析', data.shippingCompany)
+      } else if (data.airline) {
+        handleInputChange('shippingCompany', data.airline)
+        setShippingCompanySource('file')
+        console.log('航空公司识别来源: 文件解析', data.airline)
+      }
+    }
+    
+    // ETA
+    if (data.eta) {
+      handleInputChange('estimatedArrival', data.eta)
+    }
+    
+    // ETD (预计离开时间 / 装船日期)
+    if (data.etd) {
+      handleInputChange('estimatedDeparture', data.etd)
+    }
+    
+    // 封签号
+    if (data.sealNumber) {
+      handleInputChange('sealNumber', String(data.sealNumber).toUpperCase())
+    }
+    
+    // 柜型（集装箱型号）
+    if (data.containerSize) {
+      handleInputChange('containerSize', String(data.containerSize).toUpperCase())
+    }
+    
+    // 发货人
+    if (data.shipper) {
+      handleInputChange('shipper', data.shipper)
+    }
+  }
+  
+  // 获取追踪补充信息（码头、船名航次、件数、毛重等）
+  // 用于填充提单解析未提取到的字段
+  // 重要：只填充真实数据，不填充虚拟数据。如果字段已有值，不覆盖。
+  const fetchSupplementInfo = async (billNumber?: string, containerNumber?: string) => {
+    if (!billNumber && !containerNumber) return
+    
+    try {
+      console.log('获取追踪补充信息...', { billNumber, containerNumber })
+      const response = await getTrackingSupplementInfo({
+        trackingNumber: billNumber,
+        containerNumber: containerNumber,
+        transportType: selectedTransport || 'sea',
+      })
+      
+      // 如果API返回null或没有数据，说明没有真实数据，不填充
+      if (response.errCode === 200 && response.data) {
+        const info = response.data
+        
+        // 检查是否是虚拟数据（这些值正好是mock数据中的值）
+        const isMockData = (
+          (info.pieces === 120 && info.grossWeight === 2500.5 && info.volume === 45.8) ||
+          (info.vessel === 'COSCO TAURUS' && info.voyage === 'V.025E')
+        )
+        
+        if (isMockData) {
+          console.warn('⚠️ 检测到虚拟数据，跳过填充。保留已提取的真实数据。')
+          return
+        }
+        
+        console.log('追踪补充信息（真实数据）:', info)
+        
+        // 自动填充码头/地勤信息（只在字段为空时填充）
+        if (info.terminal && !formData.groundHandling) {
+          handleInputChange('groundHandling', info.terminal)
+        }
+        
+        // 自动填充船名航次（只在字段为空时填充）
+        if (info.vessel && !formData.flightNumber) {
+          const vesselInfo = info.voyage ? `${info.vessel} ${info.voyage}` : info.vessel
+          handleInputChange('flightNumber', vesselInfo)
+        }
+        
+        // 自动填充 ETA（只在字段为空时填充）
+        if (info.eta && !formData.estimatedArrival) {
+          handleInputChange('estimatedArrival', info.eta)
+        }
+        
+        // 自动填充 ETD（只在字段为空时填充）
+        if (info.etd && !formData.estimatedDeparture) {
+          handleInputChange('estimatedDeparture', info.etd)
+        }
+        
+        // 自动填充件数（只在字段为空时填充）
+        if (info.pieces && !formData.pieces) {
+          handleInputChange('pieces', String(info.pieces))
+        }
+        
+        // 自动填充毛重（只在字段为空时填充）
+        if (info.grossWeight && !formData.grossWeight) {
+          handleInputChange('grossWeight', String(info.grossWeight))
+        }
+        
+        // 自动填充体积（只在字段为空时填充）
+        if (info.volume && !formData.volume) {
+          handleInputChange('volume', String(info.volume))
+        }
+        
+        // 自动填充集装箱号（只在字段为空时填充）
+        if (info.containerNumber && !formData.containerNumber) {
+          handleInputChange('containerNumber', info.containerNumber)
+        }
+        
+        // 自动填充封号（只在字段为空时填充）
+        if (info.sealNumber && !formData.sealNumber) {
+          handleInputChange('sealNumber', info.sealNumber)
+        }
+        
+        // 自动填充柜型（只在字段为空时填充）
+        if (info.containerType && !formData.containerSize) {
+          handleInputChange('containerSize', info.containerType)
+        }
+        
+        // 显示获取到的补充信息
+        const supplementFields: string[] = []
+        if (info.terminal) supplementFields.push(`码头: ${info.terminal}`)
+        if (info.vessel) supplementFields.push(`船名: ${info.vessel}`)
+        if (info.voyage) supplementFields.push(`航次: ${info.voyage}`)
+        if (info.eta) supplementFields.push(`ETA: ${info.eta}`)
+        if (info.pieces) supplementFields.push(`件数: ${info.pieces}`)
+        if (info.grossWeight) supplementFields.push(`毛重: ${info.grossWeight}KG`)
+        if (info.containerNumber) supplementFields.push(`柜号: ${info.containerNumber}`)
+        if (info.sealNumber) supplementFields.push(`封号: ${info.sealNumber}`)
+        if (info.containerType) supplementFields.push(`柜型: ${info.containerType}`)
+        
+        if (supplementFields.length > 0) {
+          console.log('已自动填充补充信息（真实数据）:', supplementFields.join(', '))
+        }
+      } else if (response.errCode === 200 && !response.data) {
+        // API返回成功但没有数据，说明没有获取到真实数据（可能是未配置API或API失败）
+        console.log('⚠️ 未获取到真实跟踪数据，保留已提取的数据')
+      }
+    } catch (error) {
+      console.error('获取追踪补充信息失败:', error)
+      // 不影响主流程，静默失败
+    }
+  }
+  
+  // 回退到旧的解析方法
+  const fallbackParseBillFile = async () => {
+    if (!formData.masterBillFile) return
+    
+    try {
+      const response = await parseBillFile(formData.masterBillFile)
+      if (response.errCode === 200 && response.data) {
+        const data = response.data
+        let containerCodeFromBill = ''
+        
+        // 提单号 (后端映射为 masterBillNumber)
+        if (data.masterBillNumber) {
+          const billNumber = String(data.masterBillNumber).toUpperCase()
+          const match = billNumber.match(/^([A-Z]{4})(\d+)$/)
+          if (match) {
+            containerCodeFromBill = match[1]
+            handleInputChange('containerCodePrefix', match[1])
+            handleInputChange('masterBillNumberSuffix', match[2])
+            handleInputChange('masterBillNumber', billNumber)
+          } else {
+            handleInputChange('masterBillNumber', billNumber)
+          }
+        }
+        
+        // 船公司识别：优先使用集装箱代码匹配
+        if (containerCodeFromBill && selectedTransport === 'sea') {
+          try {
+            const companyResponse = await getShippingCompanyByContainerCode(containerCodeFromBill)
+            if (companyResponse.errCode === 200 && companyResponse.data) {
+              handleInputChange('shippingCompany', companyResponse.data.companyCode || companyResponse.data.companyName)
+              setShippingCompanySource('container')
+              console.log('船公司识别来源: 集装箱代码匹配', companyResponse.data.companyCode)
+            } else if (data.shippingCompany) {
+              // 集装箱代码匹配失败，回退到文件解析
+              handleInputChange('shippingCompany', data.shippingCompany)
+              setShippingCompanySource('file')
+            }
+          } catch {
+            // 集装箱代码匹配失败，回退到文件解析
+            if (data.shippingCompany) {
+              handleInputChange('shippingCompany', data.shippingCompany)
+              setShippingCompanySource('file')
+            }
+          }
+        } else if (data.shippingCompany) {
+          handleInputChange('shippingCompany', data.shippingCompany)
+          setShippingCompanySource('file')
+        }
+        
+        // 使用后端映射后的字段名
+        if (data.origin) handleInputChange('origin', data.origin)
+        if (data.destination) handleInputChange('destination', data.destination)
+        if (data.pieces) handleInputChange('pieces', String(data.pieces))
+        if (data.weight) handleInputChange('grossWeight', String(data.weight))
+        if (data.volume) handleInputChange('volume', String(data.volume))
+        if (data.vessel) handleInputChange('flightNumber', data.vessel)
+        if (data.estimatedDeparture) handleInputChange('estimatedDeparture', data.estimatedDeparture)
+        if (data.estimatedArrival) handleInputChange('estimatedArrival', data.estimatedArrival)
+        if (data.containerNumber) handleInputChange('containerNumber', String(data.containerNumber).toUpperCase())
+        if (data.sealNumber) handleInputChange('sealNumber', String(data.sealNumber).toUpperCase())
+        if (data.containerSize) handleInputChange('containerSize', String(data.containerSize).toUpperCase())
+        if (data.shipper) handleInputChange('shipper', data.shipper)
+        
+        alert('提单信息已自动提取并填充到表单中')
+      }
+    } catch (error) {
+      console.error('回退解析失败:', error)
+      alert('解析文件失败，请手动填写表单信息')
     }
   }
 
@@ -485,7 +1431,7 @@ export default function CreateBillModal({
   const handleDownloadTemplate = () => {
     // 创建提单信息模板 CSV
     const templateHeaders = [
-      '主单号', '起运港', '目的港', '船公司', '船名/航次', 
+      '提单号', '起运港', '目的港', '船公司', '船名/航次', 
       '件数', '毛重(KG)', '体积(CBM)', '货物描述', '发货人', '收货人'
     ]
     const sampleRow = [
@@ -526,15 +1472,46 @@ export default function CreateBillModal({
   }
 
   const handleAddReferenceRow = () => {
+    // 自动生成参考号：REF-{序号}，序号基于当前列表长度+1，补零到3位
+    const nextNumber = (referenceList.length + 1).toString().padStart(3, '0')
+    const autoReferenceNumber = `REF-${nextNumber}`
+    
+    // 件数：优先从OCR解析结果获取，否则从表单件数获取，无数据显示 -
+    const autoPieces = ocrResult?.pieces?.toString() || formData.pieces || '-'
+    
+    // 毛重：优先从OCR解析结果获取，否则从表单毛重获取，无数据显示 -
+    const autoGrossWeight = ocrResult?.grossWeight?.toString() || formData.grossWeight || '-'
+    
+    // 发货人信息：从OCR解析结果、billShipper state 或提单数据获取
+    // shipper 第一行是公司名，后续行是详情地址
+    const shipperText = ocrResult?.shipper || billShipper || editData?.shipper || ''
+    const shipperLines = shipperText.split('\n').filter((line: string) => line.trim())
+    const autoShipper = shipperLines[0] || '-' // 第一行：公司名，无数据显示 -
+    const autoShipperDetails = shipperLines.slice(1).join(', ') || '-' // 后续行：详情地址，无数据显示 -
+    
+    // 收货地址：默认选择第一个地址（如果有），无数据显示 -
+    let autoConsigneeAddress = '-'
+    let autoConsigneeAddressDetails = '-'
+    if (customerAddresses.length > 0) {
+      const firstAddr = customerAddresses[0]
+      autoConsigneeAddress = firstAddr.companyName || firstAddr.address || '-'
+      autoConsigneeAddressDetails = [
+        firstAddr.address,
+        firstAddr.city,
+        firstAddr.postalCode,
+        firstAddr.country
+      ].filter(Boolean).join(', ') || '-'
+    }
+    
     const newRow = {
       id: Date.now().toString(),
-      referenceNumber: '',
-      pieces: '',
-      grossWeight: '',
-      shipper: '',
-      shipperDetails: '',
-      consigneeAddress: '',
-      consigneeAddressDetails: '',
+      referenceNumber: autoReferenceNumber,
+      pieces: autoPieces,
+      grossWeight: autoGrossWeight,
+      shipper: autoShipper,
+      shipperDetails: autoShipperDetails,
+      consigneeAddress: autoConsigneeAddress,
+      consigneeAddressDetails: autoConsigneeAddressDetails,
     }
     setReferenceList([...referenceList, newRow])
   }
@@ -575,7 +1552,7 @@ export default function CreateBillModal({
     
     // 基本信息必填字段验证
     if (!formData.masterBillNumber) {
-      newErrors.masterBillNumber = '主单号为必填项'
+      newErrors.masterBillNumber = '提单号为必填项'
     }
     if (!formData.origin) {
       newErrors.origin = '起运港为必填项'
@@ -605,7 +1582,7 @@ export default function CreateBillModal({
         newErrors.billType = '提单类型为必填项'
       }
       if (!formData.consigneeType) {
-        newErrors.consigneeType = '收货人类型为必填项'
+        newErrors.consigneeType = '请选择收货人'
       }
     }
     
@@ -658,13 +1635,34 @@ export default function CreateBillModal({
       // 构建提交数据
       // 注意：billNumber 由后端自动生成（格式：BP2500001）
       // masterBillNumber 保存为 containerNumber（运单号/集装箱号）
+      // 解析船名和航次（格式可能是 "EVER ACME 1375-011W" 或 "EVER ACME V.011W"）
+      let vesselName = formData.flightNumber
+      let voyageNo = ''
+      
+      // 尝试解析航次（常见格式：V.xxx, xxx-xxxW, xxxE, xxxW）
+      const voyageMatch = formData.flightNumber.match(/\s+(V\.?\d+[A-Z]?|\d+[-]?\d*[EW]?)$/i)
+      if (voyageMatch) {
+        voyageNo = voyageMatch[1]
+        vesselName = formData.flightNumber.substring(0, voyageMatch.index).trim()
+      }
+      
       const billData = {
-        // billNumber 不传，由后端自动生成
-        containerNumber: formData.masterBillNumber, // 主单号保存为集装箱号/运单号
+        // billNumber 从提单上传获取或手动填入，不自动生成
+        billNumber: formData.masterBillNumber || '', // 提单号（从提单OCR识别或手动填入）
+        containerNumber: formData.containerNumber || '', // 集装箱号
         transportMethod: transportMethodMap[selectedTransport || ''],
-        vessel: formData.flightNumber,
+        vessel: vesselName,
+        voyage: voyageNo, // 新增航次字段
+        groundHandling: formData.groundHandling || '', // 地勤（码头）
+        // 集装箱信息
+        sealNumber: formData.sealNumber || '', // 封号
+        containerSize: formData.containerSize || '', // 柜型
+        etd: formData.estimatedDeparture || '', // 装船日期 (Date Laden on Board)
         eta: formData.estimatedArrival,
         ata: '', // 实际到港时间，创建时为空
+        // 系统导入/人工录入字段
+        customsReleaseTime: formData.customsReleaseTime || '', // 清关完成时间
+        cmrUnloadingCompleteTime: formData.cmrUnloadingCompleteTime || '', // 卸货日期
         pieces: parseInt(formData.pieces),
         weight: parseFloat(formData.grossWeight),
         volume: parseFloat(formData.volume),
@@ -686,12 +1684,30 @@ export default function CreateBillModal({
         customerId: selectedCustomer?.id || '',
         customerName: selectedCustomer?.customerName || '',
         customerCode: selectedCustomer?.customerCode || '',
+        // 附加属性字段
+        containerType: formData.containerType,
+        billType: formData.billType,
+        transportArrangement: formData.transportation,
+        consigneeType: formData.consigneeType,
+        containerReturn: formData.containerReturn,
+        fullContainerTransport: formData.fullContainerTransport,
+        lastMileTransport: formData.lastMileTransport,
+        devanning: formData.devanning,
+        t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
+        // Reference List
+        referenceList: JSON.stringify(referenceList),
+      }
+
+      // 根据模式决定是创建还是更新
+      let response
+      if (isEditMode && editData?.id) {
+        response = await updateBill(editData.id, billData)
+      } else {
+        response = await createBill(billData)
       }
       
-      const response = await createBill(billData)
-      
       if (response.errCode === 200) {
-        alert('提单创建成功')
+        alert(isEditMode ? '提单更新成功' : '提单创建成功')
         onSubmit?.(selectedType!)
         onSuccess?.() // 刷新列表
         // 重置表单
@@ -728,7 +1744,13 @@ export default function CreateBillModal({
           fullContainerTransport: '',
           lastMileTransport: 'truck',
           devanning: '',
+          containerNumber: '',
+          sealNumber: '',
+          containerSize: '',
+          customsReleaseTime: '',
+          cmrUnloadingCompleteTime: '',
         })
+        setShippingCompanySource('')
         setReferenceList([])
         setErrors({})
         onClose()
@@ -736,8 +1758,8 @@ export default function CreateBillModal({
         alert(`创建失败: ${response.msg}`)
       }
     } catch (error) {
-      console.error('创建提单失败:', error)
-      alert('创建提单失败，请稍后重试')
+      console.error(isEditMode ? '更新提单失败:' : '创建提单失败:', error)
+      alert(isEditMode ? '更新提单失败，请稍后重试' : '创建提单失败，请稍后重试')
     } finally {
       setSubmitting(false)
     }
@@ -745,9 +1767,9 @@ export default function CreateBillModal({
 
   // 保存草稿（不验证必填字段）
   const handleSaveDraft = async () => {
-    // 草稿只需要有主单号即可
+    // 草稿只需要有提单号即可
     if (!formData.masterBillNumber) {
-      alert('请至少填写主单号')
+      alert('请至少填写提单号')
       return
     }
     
@@ -764,13 +1786,35 @@ export default function CreateBillModal({
       // 构建草稿数据
       // 注意：billNumber 由后端自动生成（格式：BP2500001）
       // masterBillNumber 保存为 containerNumber（运单号/集装箱号）
+      // 解析船名和航次
+      let draftVesselName = formData.flightNumber || ''
+      let draftVoyageNo = ''
+      
+      if (formData.flightNumber) {
+        const draftVoyageMatch = formData.flightNumber.match(/\s+(V\.?\d+[A-Z]?|\d+[-]?\d*[EW]?)$/i)
+        if (draftVoyageMatch) {
+          draftVoyageNo = draftVoyageMatch[1]
+          draftVesselName = formData.flightNumber.substring(0, draftVoyageMatch.index).trim()
+        }
+      }
+      
       const draftData = {
-        // billNumber 不传，由后端自动生成
-        containerNumber: formData.masterBillNumber || '', // 主单号保存为集装箱号/运单号
+        // billNumber 从提单上传获取或手动填入，不自动生成
+        billNumber: formData.masterBillNumber || '', // 提单号（从提单OCR识别或手动填入）
+        containerNumber: formData.containerNumber || '', // 集装箱号
         transportMethod: transportMethodMap[selectedTransport || ''] || '',
-        vessel: formData.flightNumber || '',
+        vessel: draftVesselName,
+        voyage: draftVoyageNo, // 新增航次字段
+        groundHandling: formData.groundHandling || '', // 地勤（码头）
+        // 集装箱信息
+        sealNumber: formData.sealNumber || '', // 封号
+        containerSize: formData.containerSize || '', // 柜型
+        etd: formData.estimatedDeparture || '', // 装船日期 (Date Laden on Board)
         eta: formData.estimatedArrival || '',
         ata: '',
+        // 系统导入/人工录入字段
+        customsReleaseTime: formData.customsReleaseTime || '', // 清关完成时间
+        cmrUnloadingCompleteTime: formData.cmrUnloadingCompleteTime || '', // 卸货日期
         pieces: formData.pieces ? parseInt(formData.pieces) : 0,
         weight: formData.grossWeight ? parseFloat(formData.grossWeight) : 0,
         volume: formData.volume ? parseFloat(formData.volume) : 0,
@@ -791,9 +1835,23 @@ export default function CreateBillModal({
         customerId: selectedCustomer?.id || '',
         customerName: selectedCustomer?.customerName || '',
         customerCode: selectedCustomer?.customerCode || '',
+        // 附加属性字段（草稿也保存，即使可能为空）
+        containerType: formData.containerType || '',
+        billType: formData.billType || '',
+        transportArrangement: formData.transportation || '',
+        consigneeType: formData.consigneeType || '',
+        containerReturn: formData.containerReturn || '',
+        fullContainerTransport: formData.fullContainerTransport || '',
+        lastMileTransport: formData.lastMileTransport || 'truck',
+        devanning: formData.devanning || '',
+        t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
+        // Reference List
+        referenceList: JSON.stringify(referenceList),
       }
-      
+
+      console.log('准备保存草稿，数据:', draftData)
       const response = await createBill(draftData)
+      console.log('保存草稿API响应:', response)
       
       if (response.errCode === 200) {
         alert('草稿保存成功')
@@ -833,16 +1891,28 @@ export default function CreateBillModal({
           fullContainerTransport: '',
           lastMileTransport: 'truck',
           devanning: '',
+          containerNumber: '',
+          sealNumber: '',
+          containerSize: '',
+          customsReleaseTime: '',
+          cmrUnloadingCompleteTime: '',
         })
+        setShippingCompanySource('')
         setReferenceList([])
         setErrors({})
         onClose()
       } else {
         alert(`保存失败: ${response.msg}`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('保存草稿失败:', error)
-      alert('保存草稿失败，请稍后重试')
+      console.error('错误详情:', {
+        message: error?.message,
+        stack: error?.stack,
+        response: error?.response
+      })
+      const errorMsg = error?.response?.data?.msg || error?.message || '保存草稿失败，请稍后重试'
+      alert(`保存草稿失败: ${errorMsg}`)
     } finally {
       setSubmitting(false)
     }
@@ -866,7 +1936,7 @@ export default function CreateBillModal({
         <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center gap-2">
             <Play className="w-4 h-4 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">创建提单</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{isEditMode ? '编辑提单' : '创建提单'}</h2>
           </div>
           <button
             onClick={handleCancel}
@@ -934,7 +2004,7 @@ export default function CreateBillModal({
                     : 'text-gray-500'
                 }`}
               >
-                选择运输方式
+                运输方式 + 上传运输单
               </span>
             </div>
 
@@ -963,7 +2033,7 @@ export default function CreateBillModal({
                     : 'text-gray-500'
                 }`}
               >
-                绑定数据
+                确认信息 + 补录
               </span>
             </div>
           </div>
@@ -974,8 +2044,10 @@ export default function CreateBillModal({
           {currentStep === 1 && (
             <div className="flex items-center justify-center gap-6 min-h-[300px]">
               {/* 正式提单 */}
-              <div
+              <button
+                type="button"
                 onClick={() => setSelectedType('official')}
+                aria-label="正式提单"
                 className={`flex-1 max-w-xs h-32 border-2 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                   selectedType === 'official'
                     ? 'border-green-500 bg-green-50'
@@ -991,11 +2063,13 @@ export default function CreateBillModal({
                 >
                   正式提单
                 </span>
-              </div>
+              </button>
 
               {/* 临时提单 */}
-              <div
+              <button
+                type="button"
                 onClick={() => setSelectedType('temporary')}
+                aria-label="临时提单"
                 className={`flex-1 max-w-xs h-32 border-2 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
                   selectedType === 'temporary'
                     ? 'border-green-500 bg-green-50'
@@ -1011,7 +2085,7 @@ export default function CreateBillModal({
                 >
                   临时提单
                 </span>
-              </div>
+              </button>
             </div>
           )}
 
@@ -1020,8 +2094,10 @@ export default function CreateBillModal({
               {/* 运输方式选择 */}
               <div className="grid grid-cols-4 gap-4 mb-6">
                 {/* 空运 */}
-                <div
+                <button
+                  type="button"
                   onClick={() => handleTransportChange('air')}
+                  aria-label="空运"
                   className={`flex flex-col items-center justify-center gap-2 h-24 border-2 rounded-lg transition-all cursor-pointer ${
                     selectedTransport === 'air'
                       ? 'border-green-500 bg-green-50'
@@ -1032,11 +2108,13 @@ export default function CreateBillModal({
                   <span className={`text-sm font-medium ${selectedTransport === 'air' ? 'text-green-600' : 'text-gray-700'}`}>
                     空运
                   </span>
-                </div>
+                </button>
 
                 {/* 海运 */}
-                <div
+                <button
+                  type="button"
                   onClick={() => handleTransportChange('sea')}
+                  aria-label="海运"
                   className={`flex flex-col items-center justify-center gap-2 h-24 border-2 rounded-lg transition-all cursor-pointer ${
                     selectedTransport === 'sea'
                       ? 'border-green-500 bg-green-50'
@@ -1047,11 +2125,13 @@ export default function CreateBillModal({
                   <span className={`text-sm font-medium ${selectedTransport === 'sea' ? 'text-green-600' : 'text-gray-700'}`}>
                     海运
                   </span>
-                </div>
+                </button>
 
                 {/* 铁路货运 */}
-                <div
+                <button
+                  type="button"
                   onClick={() => handleTransportChange('rail')}
+                  aria-label="铁路货运"
                   className={`flex flex-col items-center justify-center gap-2 h-24 border-2 rounded-lg transition-all cursor-pointer ${
                     selectedTransport === 'rail'
                       ? 'border-green-500 bg-green-50'
@@ -1062,11 +2142,13 @@ export default function CreateBillModal({
                   <span className={`text-sm font-medium ${selectedTransport === 'rail' ? 'text-green-600' : 'text-gray-700'}`}>
                     铁路货运
                   </span>
-                </div>
+                </button>
 
                 {/* 卡车派送 */}
-                <div
+                <button
+                  type="button"
                   onClick={() => handleTransportChange('truck')}
+                  aria-label="卡车派送"
                   className={`flex flex-col items-center justify-center gap-2 h-24 border-2 rounded-lg transition-all cursor-pointer ${
                     selectedTransport === 'truck'
                       ? 'border-green-500 bg-green-50'
@@ -1077,12 +2159,12 @@ export default function CreateBillModal({
                   <span className={`text-sm font-medium ${selectedTransport === 'truck' ? 'text-green-600' : 'text-gray-700'}`}>
                     卡车派送
                   </span>
-                </div>
+                </button>
               </div>
 
               {/* 简易创建提单选项 - 仅正式提单显示 */}
               {selectedType === 'official' && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-4">
                   <input
                     type="checkbox"
                     id="easyBill"
@@ -1093,6 +2175,302 @@ export default function CreateBillModal({
                   <label htmlFor="easyBill" className="text-sm text-gray-700 cursor-pointer">
                     简易创建提单(Easy Bill)请勾选
                   </label>
+                </div>
+              )}
+              
+              {/* 上传运输单 - 选择运输方式后显示 */}
+              {selectedTransport && (
+                <div className="mt-6 p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    上传运输单（可选，支持OCR智能识别）
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-3">
+                    支持 PDF、图片(JPG/PNG)、Excel 格式，系统将自动识别并填充表单字段
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <label className={`px-3 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 cursor-pointer text-xs flex items-center gap-1.5 transition-colors ${ocrParsing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>选择文件</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          setFormData(prev => ({ ...prev, masterBillFile: file }))
+                          // 自动开始解析 - 直接传入文件参数，避免状态更新异步问题
+                          if (file) {
+                            handleParseFile(file)
+                          }
+                        }}
+                        className="hidden"
+                        disabled={ocrParsing}
+                      />
+                    </label>
+                    {formData.masterBillFile && (
+                      <span className="text-xs text-gray-600 flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        {formData.masterBillFile.name}
+                      </span>
+                    )}
+                    {ocrParsing && (
+                      <span className="text-xs text-primary-600 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        正在智能识别...
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* OCR识别结果预览 */}
+                  {showOcrPreview && ocrResult && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-green-700 flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          OCR识别成功，已自动填充以下字段
+                        </span>
+                        <button
+                          onClick={() => setShowOcrPreview(false)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        {ocrResult.billNumber && (
+                          <div><span className="text-gray-500">单号:</span> <span className="font-medium">{ocrResult.billNumber}</span></div>
+                        )}
+                        {ocrResult.portOfLoading && (
+                          <div><span className="text-gray-500">起运:</span> <span className="font-medium">{ocrResult.portOfLoading}</span></div>
+                        )}
+                        {ocrResult.portOfDischarge && (
+                          <div><span className="text-gray-500">目的:</span> <span className="font-medium">{ocrResult.portOfDischarge}</span></div>
+                        )}
+                        {ocrResult.pieces && (
+                          <div><span className="text-gray-500">件数:</span> <span className="font-medium">{ocrResult.pieces}</span></div>
+                        )}
+                        {ocrResult.grossWeight && (
+                          <div><span className="text-gray-500">毛重:</span> <span className="font-medium">{ocrResult.grossWeight} KG</span></div>
+                        )}
+                        {(ocrResult.vessel || ocrResult.flightNumber) && (
+                          <div><span className="text-gray-500">航次:</span> <span className="font-medium">{ocrResult.vessel || ocrResult.flightNumber}</span></div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* OCR识别错误 */}
+                  {ocrError && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                      <span className="text-xs text-yellow-700 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {ocrError}，您可以继续手动填写
+                      </span>
+                    </div>
+                  )}
+                  
+                  <p className="mt-3 text-[10px] text-gray-400">
+                    提示：如果识别结果不准确，可在下一步手动修改
+                  </p>
+                </div>
+              )}
+
+              {/* 批量导入提单 - 选择运输方式后显示 */}
+              {selectedTransport && (
+                <div className="mt-6 p-4 border-2 border-dashed border-blue-200 rounded-lg bg-blue-50/50">
+                  <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    批量导入提单（Excel模板导入）
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-3">
+                    下载模板 → 填写数据 → 上传导入，支持批量创建多个提单
+                  </p>
+                  
+                  {/* 操作按钮 */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* 下载模板按钮 */}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          // 下载模板不需要认证，使用正确的 API 地址
+                          const apiBase = getApiBaseUrl()
+                          const response = await fetch(`${apiBase}/api/data-import/templates/orders`)
+                          
+                          if (!response.ok) {
+                            throw new Error(`下载失败: ${response.status}`)
+                          }
+                          
+                          const blob = await response.blob()
+                          const url = window.URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = '订单数据导入模板.xlsx'
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          window.URL.revokeObjectURL(url)
+                        } catch (error) {
+                          console.error('下载模板失败:', error)
+                          alert('下载模板失败，请重试')
+                        }
+                      }}
+                      className="px-3 py-2 bg-white border border-blue-300 text-blue-600 rounded hover:bg-blue-50 cursor-pointer text-xs flex items-center gap-1.5 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>下载导入模板</span>
+                    </button>
+                    
+                    {/* 上传模板按钮 */}
+                    <label className={`px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer text-xs flex items-center gap-1.5 transition-colors ${templateImporting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>上传已填模板</span>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleTemplateUpload}
+                        className="hidden"
+                        disabled={templateImporting}
+                      />
+                    </label>
+                    
+                    {/* 上传状态 */}
+                    {templateImporting && (
+                      <span className="text-xs text-blue-600 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        正在解析文件...
+                      </span>
+                    )}
+                    
+                    {templateFile && !templateImporting && (
+                      <span className="text-xs text-gray-600 flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        {templateFile.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 预览结果 */}
+                  {templatePreview && (
+                    <div className="mt-4 p-3 bg-white border border-blue-200 rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-blue-700 flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          文件解析成功
+                        </span>
+                        <button
+                          onClick={() => {
+                            setTemplatePreview(null)
+                            setTemplateFile(null)
+                          }}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 text-xs mb-3">
+                        <div className="bg-blue-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-blue-700">{templatePreview.totalRows}</div>
+                          <div className="text-gray-500">总记录数</div>
+                        </div>
+                        <div className="bg-green-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-green-700">{templatePreview.validRows}</div>
+                          <div className="text-gray-500">有效记录</div>
+                        </div>
+                        <div className="bg-yellow-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-yellow-700">{templatePreview.warningRows}</div>
+                          <div className="text-gray-500">警告记录</div>
+                        </div>
+                        <div className="bg-red-50 rounded p-2 text-center">
+                          <div className="text-lg font-semibold text-red-700">{templatePreview.errorRows}</div>
+                          <div className="text-gray-500">错误记录</div>
+                        </div>
+                      </div>
+                      
+                      {/* 警告信息提示 */}
+                      {templatePreview.warnings && templatePreview.warnings.length > 0 && (
+                        <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+                          <div className="font-medium mb-1 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            警告详情（{templatePreview.warnings.length}条）:
+                          </div>
+                          <div className="max-h-24 overflow-y-auto">
+                            {templatePreview.warnings.slice(0, 10).map((warn: any, idx: number) => (
+                              <div key={idx} className="py-0.5 border-b border-yellow-100 last:border-0">
+                                第{warn.row}行: {warn.warnings?.join(', ') || warn.warning}
+                              </div>
+                            ))}
+                            {templatePreview.warnings.length > 10 && (
+                              <div className="pt-1 text-yellow-500">...还有 {templatePreview.warnings.length - 10} 条警告</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 错误信息提示 */}
+                      {templatePreview.errors && templatePreview.errors.length > 0 && (
+                        <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                          <div className="font-medium mb-1 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            错误详情（{templatePreview.errors.length}条）:
+                          </div>
+                          <div className="max-h-24 overflow-y-auto">
+                            {templatePreview.errors.slice(0, 10).map((err: any, idx: number) => (
+                              <div key={idx} className="py-0.5 border-b border-red-100 last:border-0">
+                                第{err.row}行: {err.errors?.join(', ') || err.error}
+                              </div>
+                            ))}
+                            {templatePreview.errors.length > 10 && (
+                              <div className="pt-1 text-red-500">...还有 {templatePreview.errors.length - 10} 条错误</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 确认导入按钮 */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleConfirmTemplateImport}
+                          disabled={templateImporting || templatePreview.errorRows > 0}
+                          className={`px-3 py-1.5 rounded text-xs flex items-center gap-1.5 transition-colors ${
+                            templatePreview.errorRows > 0
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-green-600 text-white hover:bg-green-700'
+                          }`}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          确认导入 {templatePreview.validRows} 条记录
+                        </button>
+                        {templatePreview.errorRows > 0 && (
+                          <span className="text-xs text-red-500">请先修正模板中的错误</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 导入错误 */}
+                  {templateError && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+                      <span className="text-xs text-red-700 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {templateError}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 导入成功 */}
+                  {templateSuccess && (
+                    <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+                      <span className="text-xs text-green-700 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        {templateSuccess}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <p className="mt-3 text-[10px] text-gray-400">
+                    提示：模板包含所有可导入字段，红色标记为必填项。导入后可在提单列表查看。
+                  </p>
                 </div>
               )}
             </div>
@@ -1115,12 +2493,12 @@ export default function CreateBillModal({
                 </div>
               )}
 
-              {/* 基本信息 */}
+              {/* ===== 基本信息 ===== */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-4">基本信息</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* 左列 */}
-                  <div className="space-y-4">
+                <div className="space-y-4">
+                  {/* 第一行：运输方式 + 主单文件 */}
+                  <div className="grid grid-cols-2 gap-x-6">
                     {/* 运输方式 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1129,60 +2507,46 @@ export default function CreateBillModal({
                       <select
                         value={getTransportText()}
                         disabled
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50 text-gray-500"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs bg-gray-50 text-gray-500"
                       >
                         <option>{getTransportText()}</option>
                       </select>
                     </div>
 
-                    {/* 主单文件 */}
+                    {/* 主单文件 - 显示已上传的文件名 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
                         主单文件 <span className="text-red-500">*</span>
                       </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={formData.masterBillFile?.name || ''}
-                          placeholder="未选择文件"
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
-                        />
-                        <label className={`px-1.5 py-0.5 bg-primary-600 text-white rounded hover:bg-primary-700 cursor-pointer text-xs flex items-center gap-1 ${parsingFile ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                          <Upload className="w-3 h-3" />
-                          <span>选择文件</span>
-                          <input
-                            type="file"
-                            accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={(e) => handleFileUpload('masterBillFile', e.target.files?.[0] || null)}
-                            className="hidden"
-                            disabled={parsingFile}
-                          />
-                        </label>
-                        {formData.masterBillFile && !parsingFile && (
-                          <button
-                            onClick={handleParseFile}
-                            className="px-1.5 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 text-xs flex items-center gap-1"
-                          >
-                            <FileText className="w-3 h-3" />
-                            <span>确认解析</span>
-                          </button>
-                        )}
-                        {parsingFile && (
-                          <div className="px-1.5 py-0.5 bg-gray-400 text-white rounded text-xs flex items-center gap-1">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            <span>解析中...</span>
-                          </div>
-                        )}
-                      </div>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.masterBillFile?.name || ''}
+                        placeholder="请在上方OCR区域上传文件"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs bg-gray-50"
+                      />
                     </div>
+                  </div>
 
-                    {/* 客户选择 */}
+                  {/* 第二行：关联客户（占整行） */}
+                  <div className="grid grid-cols-2 gap-x-6">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         关联客户
+                        {mode === 'edit' && (
+                          <span className="text-[10px] text-gray-400 ml-1">(不可修改)</span>
+                        )}
                       </label>
+                      {/* 编辑模式：显示只读客户信息 */}
+                      {mode === 'edit' ? (
+                        <div className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-700 cursor-not-allowed">
+                          {selectedCustomer 
+                            ? `${selectedCustomer.customerCode} - ${selectedCustomer.customerName}`
+                            : '无关联客户'}
+                        </div>
+                      ) : (
+                      /* 创建模式：显示可搜索下拉框 */
                       <div className="relative customer-dropdown">
                         <input
                           type="text"
@@ -1198,7 +2562,7 @@ export default function CreateBillModal({
                               setShowCustomerDropdown(false)
                             }
                           }}
-                          className="w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 border-gray-300 focus:ring-primary-500"
+                          className="w-full px-2 py-1.5 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 border-gray-300 focus:ring-primary-500"
                           placeholder="搜索或选择客户（可选）"
                         />
                         <button
@@ -1276,184 +2640,241 @@ export default function CreateBillModal({
                           </div>
                         )}
                       </div>
-                      <p className="mt-0.5 text-[10px] text-gray-400">选择后可在CRM中查看该客户的所有订单</p>
+                      )}
+                      {mode !== 'edit' && (
+                        <p className="mt-1 text-[10px] text-gray-400">选择后可在CRM中查看该客户的所有订单</p>
+                      )}
                     </div>
 
-                    {/* 主单号 */}
+                    {/* 船公司（海运时显示） */}
+                    {selectedTransport === 'sea' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          船公司
+                        </label>
+                        <div className="relative">
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={formData.shippingCompany}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                handleInputChange('shippingCompany', value)
+                                setShowContainerCodeDropdown(true)
+                              }}
+                              onFocus={() => {
+                                setShowContainerCodeDropdown(true)
+                                if (containerCodes.length === 0) {
+                                  const loadContainerCodes = async () => {
+                                    try {
+                                      const response = await searchContainerCodes('')
+                                      if (response.errCode === 200 && response.data) {
+                                        const codes = response.data.map((item: any) => ({
+                                          containerCode: item.container_code || item.containerCode || '',
+                                          companyName: item.company_name || item.companyName || '',
+                                          companyCode: item.company_code || item.companyCode || '',
+                                          description: item.description || '',
+                                        })).filter((item: any) => item.containerCode)
+                                        setContainerCodes(codes)
+                                      }
+                                    } catch (error) {
+                                      console.error('加载船公司列表失败:', error)
+                                    }
+                                  }
+                                  loadContainerCodes()
+                                }
+                              }}
+                              placeholder="选择或输入船公司"
+                              className="w-full px-2 py-1.5 pr-6 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newState = !showContainerCodeDropdown
+                                setShowContainerCodeDropdown(newState)
+                                if (newState && containerCodes.length === 0) {
+                                  const loadContainerCodes = async () => {
+                                    try {
+                                      const response = await searchContainerCodes('')
+                                      if (response.errCode === 200 && response.data) {
+                                        const codes = response.data.map((item: any) => ({
+                                          containerCode: item.container_code || item.containerCode || '',
+                                          companyName: item.company_name || item.companyName || '',
+                                          companyCode: item.company_code || item.companyCode || '',
+                                          description: item.description || '',
+                                        })).filter((item: any) => item.containerCode)
+                                        setContainerCodes(codes)
+                                      }
+                                    } catch (error) {
+                                      console.error('加载船公司列表失败:', error)
+                                    }
+                                  }
+                                  loadContainerCodes()
+                                }
+                              }}
+                              className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                              title="打开/关闭下拉菜单"
+                              aria-label="打开/关闭下拉菜单"
+                            >
+                              <ChevronDown className={`w-3 h-3 transition-transform ${showContainerCodeDropdown ? 'rotate-180' : ''}`} />
+                            </button>
+                          </div>
+                          {/* 下拉菜单 */}
+                          {showContainerCodeDropdown && (
+                            <>
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
+                                <div className="max-h-48 overflow-y-auto">
+                                  {containerCodes.length === 0 ? (
+                                    <div className="px-2 py-1 text-xs text-gray-500 text-center">
+                                      加载中...
+                                    </div>
+                                  ) : (
+                                    // 去重：按船公司名称去重，只显示唯一的船公司
+                                    [...new Map(containerCodes.map(code => [code.companyName, code])).values()]
+                                      .filter(code => {
+                                        if (!formData.shippingCompany) return true
+                                        const search = formData.shippingCompany.toLowerCase()
+                                        return (code.companyName || '').toLowerCase().includes(search)
+                                      })
+                                      .slice(0, 50)
+                                      .map((code) => (
+                                        <div
+                                          key={code.companyName || code.containerCode}
+                                          onClick={() => {
+                                            handleInputChange('shippingCompany', code.companyName || '')
+                                            setShippingCompanySource('container')
+                                            setShowContainerCodeDropdown(false)
+                                          }}
+                                          className="px-2 py-2 text-xs hover:bg-gray-100 cursor-pointer border-b border-gray-100"
+                                        >
+                                          <div className="font-medium text-gray-900">{code.companyName}</div>
+                                        </div>
+                                      ))
+                                  )}
+                                </div>
+                              </div>
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => setShowContainerCodeDropdown(false)}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 提单号 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                        主单号 <span className="text-red-500">*</span>
+                        提单号 <span className="text-red-500">*</span>
                         <HelpCircle className="w-3 h-3 text-gray-400" />
                       </label>
                       {selectedTransport === 'sea' ? (
-                        // 海运：使用下拉菜单选择集装箱代码前缀
-                        <div className="relative">
+                        // 海运：直接输入完整提单号 + 追踪按钮
+                        <div>
                           <div className="flex gap-1">
-                            {/* 集装箱代码下拉菜单 */}
-                            <div className="relative flex-1">
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  value={formData.containerCodePrefix}
-                                  onChange={(e) => {
-                                    const value = e.target.value.toUpperCase()
-                                    handleInputChange('containerCodePrefix', value)
-                                    // 打开下拉菜单，实时显示筛选结果
-                                    setShowContainerCodeDropdown(true)
-                                    // 更新完整主单号
-                                    const fullNumber = value + formData.masterBillNumberSuffix
-                                    handleInputChange('masterBillNumber', fullNumber)
-                                  }}
-                                  onFocus={() => {
-                                    // 打开下拉菜单，显示筛选结果
-                                    setShowContainerCodeDropdown(true)
-                                    // 如果数据为空，立即加载（不依赖 selectedTransport）
-                                    if (containerCodes.length === 0) {
-                                      const loadContainerCodes = async () => {
-                                        try {
-                                          const response = await searchContainerCodes('')
-                                          if (response.errCode === 200 && response.data) {
-                                            const codes = response.data.map((item: any) => ({
-                                              containerCode: item.container_code || item.containerCode || '',
-                                              companyName: item.company_name || item.companyName || '',
-                                              companyCode: item.company_code || item.companyCode || '',
-                                              description: item.description || '',
-                                            })).filter((item: any) => item.containerCode)
-                                            setContainerCodes(codes)
-                                          } else {
-                                            console.warn('输入框焦点加载API返回异常:', response)
-                                          }
-                                        } catch (error) {
-                                          console.error('输入框焦点加载集装箱代码列表失败:', error)
-                                        }
-                                      }
-                                      loadContainerCodes()
-                                    }
-                                  }}
-                                  placeholder="代码"
-                                  className={`w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
-                                    errors.masterBillNumber
-                                      ? 'border-red-500 focus:ring-red-500'
-                                      : 'border-gray-300 focus:ring-primary-500'
-                                  }`}
-                                />
-                                {/* 下拉箭头按钮 */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newState = !showContainerCodeDropdown
-                                    setShowContainerCodeDropdown(newState)
-                                    // 如果打开下拉菜单且数据为空，立即加载（不依赖 selectedTransport）
-                                    if (newState && containerCodes.length === 0) {
-                                      const loadContainerCodes = async () => {
-                                        try {
-                                          const response = await searchContainerCodes('')
-                                          if (response.errCode === 200 && response.data) {
-                                            const codes = response.data.map((item: any) => ({
-                                              containerCode: item.container_code || item.containerCode || '',
-                                              companyName: item.company_name || item.companyName || '',
-                                              companyCode: item.company_code || item.companyCode || '',
-                                              description: item.description || '',
-                                            })).filter((item: any) => item.containerCode)
-                                            setContainerCodes(codes)
-                                          } else {
-                                            console.warn('下拉箭头加载API返回异常:', response)
-                                          }
-                                        } catch (error) {
-                                          console.error('下拉箭头加载集装箱代码列表失败:', error)
-                                        }
-                                      }
-                                      loadContainerCodes()
-                                    }
-                                  }}
-                                  className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
-                                  title="打开/关闭下拉菜单"
-                                  aria-label="打开/关闭下拉菜单"
-                                >
-                                  <ChevronDown className={`w-3 h-3 transition-transform ${showContainerCodeDropdown ? 'rotate-180' : ''}`} />
-                                </button>
-                              </div>
-                              {/* 下拉菜单 - 直接显示筛选结果 */}
-                              {showContainerCodeDropdown && (
-                                <>
-                                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
-                                    {/* 代码列表 */}
-                                    <div className="max-h-48 overflow-y-auto">
-                                      {containerCodes.length === 0 ? (
-                                        <div className="px-2 py-1 text-xs text-gray-500 text-center">
-                                          加载中...
-                                        </div>
-                                      ) : filteredContainerCodes.length > 0 ? (
-                                        filteredContainerCodes
-                                          .slice(0, 100) // 限制显示前100条
-                                          .map((code) => (
-                                            <div
-                                              key={code.containerCode}
-                                              onClick={() => {
-                                                handleContainerCodePrefixChange(code.containerCode)
-                                                setShowContainerCodeDropdown(false) // 关闭下拉菜单
-                                              }}
-                                              className="px-2 py-1.5 text-xs hover:bg-gray-100 cursor-pointer border-b border-gray-100"
-                                            >
-                                              <div className="font-medium text-gray-900">{code.containerCode || ''}</div>
-                                              {code.companyName && (
-                                                <div className="text-[10px] text-gray-500 mt-0.5">{code.companyName}</div>
-                                              )}
-                                            </div>
-                                          ))
-                                      ) : (
-                                        <div className="px-2 py-1 text-xs text-gray-500 text-center">
-                                          {formData.containerCodePrefix ? '未找到匹配的代码' : '暂无数据'}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {/* 点击外部关闭下拉菜单 */}
-                                  <div
-                                    className="fixed inset-0 z-40"
-                                    onClick={() => setShowContainerCodeDropdown(false)}
-                                  />
-                                </>
-                              )}
-                            </div>
-                            {/* 主单号后缀输入 - 只读，仅从提单文件自动填充 */}
                             <input
                               type="text"
-                              value={formData.masterBillNumberSuffix}
-                              readOnly
-                              placeholder="1234567"
-                              className={`flex-1 px-2 py-1 border rounded text-xs focus:outline-none bg-gray-100 text-gray-600 cursor-not-allowed ${
+                              value={formData.masterBillNumber}
+                              onChange={(e) => handleMasterBillNumberChange(e.target.value.toUpperCase())}
+                              placeholder="输入完整提单号"
+                              className={`flex-1 px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                                 errors.masterBillNumber
-                                  ? 'border-red-500'
-                                  : 'border-gray-300'
+                                  ? 'border-red-500 focus:ring-red-500'
+                                  : 'border-gray-300 focus:ring-primary-500'
                               }`}
-                              title="此字段只能从提单文件自动获取"
                             />
+                            {/* 追踪按钮 */}
+                            <button
+                              type="button"
+                              onClick={handleScrapeTracking}
+                              disabled={isScrapingContainer || !formData.masterBillNumber}
+                              className="px-2 py-1.5 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1 whitespace-nowrap"
+                              title="通过提单号查询物流信息（免费）"
+                            >
+                              {isScrapingContainer ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  查询中
+                                </>
+                              ) : (
+                                <>
+                                  <Ship className="w-3 h-3" />
+                                  追踪
+                                </>
+                              )}
+                            </button>
                           </div>
+                          {scraperError && (
+                            <p className="mt-1 text-xs text-red-500">{scraperError}</p>
+                          )}
                         </div>
                       ) : (
-                        // 非海运：普通输入框
-                        <input
-                          type="text"
-                          value={formData.masterBillNumber}
-                          onChange={(e) => handleMasterBillNumberChange(e.target.value)}
-                          className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
-                            errors.masterBillNumber
-                              ? 'border-red-500 focus:ring-red-500'
-                              : 'border-gray-300 focus:ring-primary-500'
-                          }`}
-                        />
+                        // 非海运：普通输入框 + 追踪按钮
+                        <div>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={formData.masterBillNumber}
+                              onChange={(e) => handleMasterBillNumberChange(e.target.value)}
+                              className={`flex-1 px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                                errors.masterBillNumber
+                                  ? 'border-red-500 focus:ring-red-500'
+                                  : 'border-gray-300 focus:ring-primary-500'
+                              }`}
+                            />
+                            {/* 追踪按钮 */}
+                            <button
+                              type="button"
+                              onClick={handleScrapeTracking}
+                              disabled={isScrapingContainer || !formData.masterBillNumber}
+                              className="px-2 py-1.5 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1 whitespace-nowrap"
+                              title="通过提单号查询物流信息（免费）"
+                            >
+                              {isScrapingContainer ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  查询中
+                                </>
+                              ) : (
+                                <>
+                                  <Ship className="w-3 h-3" />
+                                  追踪
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          {scraperError && (
+                            <p className="mt-1 text-xs text-red-500">{scraperError}</p>
+                          )}
+                        </div>
                       )}
                       {formData.masterBillNumber && formData.shippingCompany && (
                         <p className="mt-1 text-xs text-gray-500">
-                          船公司: {formData.shippingCompany} BLNo: {formData.masterBillNumber}
+                          船公司: {formData.shippingCompany}
+                          {shippingCompanySource && (
+                            <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${
+                              shippingCompanySource === 'container' 
+                                ? 'bg-green-100 text-green-700' 
+                                : shippingCompanySource === 'file'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {shippingCompanySource === 'container' ? '集装箱代码匹配' : 
+                               shippingCompanySource === 'file' ? '文件解析' : '手动输入'}
+                            </span>
+                          )}
+                          <span className="ml-2">BLNo: {formData.masterBillNumber}</span>
                         </p>
                       )}
                       {errors.masterBillNumber && (
                         <p className="mt-1 text-xs text-red-500">{errors.masterBillNumber}</p>
                       )}
                     </div>
+                  </div>
 
+                  {/* 第三行：起运港 + 目的港 */}
+                  <div className="grid grid-cols-2 gap-x-6">
                     {/* 起运港 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1493,7 +2914,7 @@ export default function CreateBillModal({
                               setShowPortOfLoadingDropdown(false)
                             }
                           }}
-                          className={`w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                          className={`w-full px-2 py-1.5 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                             errors.origin
                               ? 'border-red-500 focus:ring-red-500'
                               : 'border-gray-300 focus:ring-primary-500'
@@ -1620,7 +3041,7 @@ export default function CreateBillModal({
                               setShowDestinationPortDropdown(false)
                             }
                           }}
-                          className={`w-full px-2 py-1 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                          className={`w-full px-2 py-1.5 pr-6 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
                             errors.destination
                               ? 'border-red-500 focus:ring-red-500'
                               : 'border-gray-300 focus:ring-primary-500'
@@ -1707,7 +3128,174 @@ export default function CreateBillModal({
                         <p className="mt-1 text-xs text-red-500">{errors.destination}</p>
                       )}
                     </div>
+                  </div>
 
+                  {/* 海运特有字段 - 集装箱号、柜型、封号 */}
+                  {selectedTransport === 'sea' && (
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                      {/* 集装箱号 */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          集装箱号
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.containerNumber}
+                          onChange={(e) => handleContainerNumberChange(e.target.value.toUpperCase())}
+                          placeholder="如 COSU1234567"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        />
+                      </div>
+                      
+                      {/* 柜型 */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          柜型
+                        </label>
+                        <select
+                          value={formData.containerSize}
+                          onChange={(e) => handleInputChange('containerSize', e.target.value)}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        >
+                          <option value="">请选择</option>
+                          <option value="20GP">20GP</option>
+                          <option value="40GP">40GP</option>
+                          <option value="40HQ">40HQ</option>
+                          <option value="45HQ">45HQ</option>
+                          <option value="20RF">20RF (冷柜)</option>
+                          <option value="40RF">40RF (冷柜)</option>
+                          <option value="20OT">20OT (开顶)</option>
+                          <option value="40OT">40OT (开顶)</option>
+                          <option value="20FR">20FR (框架)</option>
+                          <option value="40FR">40FR (框架)</option>
+                        </select>
+                      </div>
+                      
+                      {/* 封号 */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          封号
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.sealNumber}
+                          onChange={(e) => handleInputChange('sealNumber', e.target.value.toUpperCase())}
+                          placeholder="铅封号"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ===== 航程信息 ===== */}
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">航程信息</h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  {/* 航班号/船名航次 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      航班号/船名航次 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.flightNumber}
+                      onChange={(e) => {
+                        handleInputChange('flightNumber', e.target.value)
+                        if (errors.flightNumber) {
+                          setErrors(prev => ({ ...prev, flightNumber: '' }))
+                        }
+                      }}
+                      className={`w-full px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                        errors.flightNumber
+                          ? 'border-red-500 focus:ring-red-500'
+                          : 'border-gray-300 focus:ring-primary-500'
+                      }`}
+                    />
+                    {errors.flightNumber && (
+                      <p className="mt-1 text-xs text-red-500">{errors.flightNumber}</p>
+                    )}
+                  </div>
+
+                  {/* 地勤（码头） */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      地勤（码头） <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.groundHandling}
+                      onChange={(e) => handleInputChange('groundHandling', e.target.value)}
+                      placeholder="集装箱落在哪个码头"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                    />
+                  </div>
+
+                  {/* 预计离开时间 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      预计离开时间 <span className="text-red-500">*</span>
+                    </label>
+                    <DatePicker
+                      id="estimatedDeparture"
+                      value={formData.estimatedDeparture}
+                      onChange={(value) => handleInputChange('estimatedDeparture', value)}
+                      placeholder="请选择日期"
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* 预计到达时间 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      预计到达时间 <span className="text-red-500">*</span>
+                    </label>
+                    <DatePicker
+                      id="estimatedArrival"
+                      value={formData.estimatedArrival}
+                      onChange={(value) => handleInputChange('estimatedArrival', value)}
+                      placeholder="请选择日期"
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* 清关完成日期 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      清关完成日期
+                    </label>
+                    <DatePicker
+                      id="customsReleaseTime"
+                      value={formData.customsReleaseTime}
+                      onChange={(value) => handleInputChange('customsReleaseTime', value)}
+                      placeholder="请选择日期"
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* 卸货日期 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      卸货日期
+                    </label>
+                    <DatePicker
+                      id="cmrUnloadingCompleteTime"
+                      value={formData.cmrUnloadingCompleteTime}
+                      onChange={(value) => handleInputChange('cmrUnloadingCompleteTime', value)}
+                      placeholder="请选择日期"
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ===== 货物信息 ===== */}
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-4">货物信息</h3>
+                <div className="space-y-4">
+                  {/* 第一行：件数 + 毛重 */}
+                  <div className="grid grid-cols-2 gap-x-6">
                     {/* 件数 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
@@ -1718,126 +3306,7 @@ export default function CreateBillModal({
                         type="number"
                         value={formData.pieces}
                         onChange={(e) => handleInputChange('pieces', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                      />
-                    </div>
-
-                    {/* 体积 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        体积 <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={formData.volume}
-                          onChange={(e) => handleInputChange('volume', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                        />
-                        <select
-                          value={formData.volumeUnit}
-                          onChange={(e) => handleInputChange('volumeUnit', e.target.value)}
-                          className={`px-2 py-1 border border-gray-300 rounded text-xs bg-white ${
-                            formData.volumeUnit === 'CBM' ? 'text-gray-500' : 'text-gray-900'
-                          }`}
-                        >
-                          <option value="CBM" className="text-gray-500">CBM</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* 每公斤运费单价 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
-                        每公斤运费单价 <span className="text-red-500">*</span>
-                        <HelpCircle className="w-3 h-3 text-gray-400" />
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={formData.freightRate}
-                          onChange={(e) => handleInputChange('freightRate', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                        />
-                        <select
-                          value={formData.freightRateUnit}
-                          onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
-                        >
-                          <option value="CNY">CNY</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 右列 */}
-                  <div className="space-y-4">
-                    {/* 占位符 - 与左列"运输方式"对齐 */}
-                    <div className="h-[52px]"></div>
-                    
-                    {/* 航班号/船名航次 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        航班号/船名航次 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.flightNumber}
-                        onChange={(e) => {
-                          handleInputChange('flightNumber', e.target.value)
-                          if (errors.flightNumber) {
-                            setErrors(prev => ({ ...prev, flightNumber: '' }))
-                          }
-                        }}
-                        className={`w-full px-2 py-1 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
-                          errors.flightNumber
-                            ? 'border-red-500 focus:ring-red-500'
-                            : 'border-gray-300 focus:ring-primary-500'
-                        }`}
-                      />
-                      {errors.flightNumber && (
-                        <p className="mt-1 text-xs text-red-500">{errors.flightNumber}</p>
-                      )}
-                    </div>
-
-                    {/* 地勤 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        地勤 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.groundHandling}
-                        onChange={(e) => handleInputChange('groundHandling', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                      />
-                    </div>
-
-                    {/* 预计离开时间 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        预计离开时间 <span className="text-red-500">*</span>
-                      </label>
-                      <DatePicker
-                        id="estimatedDeparture"
-                        value={formData.estimatedDeparture}
-                        onChange={(value) => handleInputChange('estimatedDeparture', value)}
-                        placeholder="请选择日期"
-                        className="w-full"
-                      />
-                    </div>
-
-                    {/* 预计到达时间 */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        预计到达时间 <span className="text-red-500">*</span>
-                      </label>
-                      <DatePicker
-                        id="estimatedArrival"
-                        value={formData.estimatedArrival}
-                        onChange={(value) => handleInputChange('estimatedArrival', value)}
-                        placeholder="请选择日期"
-                        className="w-full"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       />
                     </div>
 
@@ -1851,20 +3320,74 @@ export default function CreateBillModal({
                           type="number"
                           value={formData.grossWeight}
                           onChange={(e) => handleInputChange('grossWeight', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                         />
                         <select
                           value={formData.grossWeightUnit}
                           onChange={(e) => handleInputChange('grossWeightUnit', e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                          className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
                         >
                           <option value="KGS">KGS</option>
                           <option value="LBS">LBS</option>
-                          <option value="g">g</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 第二行：体积 + 每公斤运费单价（仅卡航和铁路显示） */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    {/* 体积 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        体积 <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={formData.volume}
+                          onChange={(e) => handleInputChange('volume', e.target.value)}
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        />
+                        <select
+                          value={formData.volumeUnit}
+                          onChange={(e) => handleInputChange('volumeUnit', e.target.value)}
+                          className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                        >
+                          <option value="CBM">CBM</option>
                         </select>
                       </div>
                     </div>
 
+                    {/* 每公斤运费单价 - 仅卡航(truck)和铁路(rail)显示 */}
+                    {(selectedTransport === 'truck' || selectedTransport === 'rail') && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                          每公斤运费单价 <span className="text-red-500">*</span>
+                          <HelpCircle className="w-3 h-3 text-gray-400" />
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            value={formData.freightRate}
+                            onChange={(e) => handleInputChange('freightRate', e.target.value)}
+                            className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                          />
+                          <select
+                            value={formData.freightRateUnit}
+                            onChange={(e) => handleInputChange('freightRateUnit', e.target.value)}
+                            className="w-16 px-2 py-1.5 border border-gray-300 rounded text-xs bg-white text-gray-900"
+                          >
+                            <option value="CNY">CNY</option>
+                            <option value="EUR">EUR</option>
+                            <option value="USD">USD</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 第三行：派送 */}
+                  <div className="grid grid-cols-2 gap-x-6">
                     {/* 派送 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1873,10 +3396,10 @@ export default function CreateBillModal({
                       <select
                         value={formData.delivery}
                         onChange={(e) => handleInputChange('delivery', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
                       >
-                        <option value="After Bill">After Bill(创建完提单后可派送)</option>
-                        <option value="After Clearance">After Clearance(报关后可派送)</option>
+                        <option value="After Bill">After Bill</option>
+                        <option value="After Clearance">After Clearance</option>
                       </select>
                     </div>
                   </div>
@@ -1981,35 +3504,58 @@ export default function CreateBillModal({
                       </div>
                     </div>
 
-                    {/* 收货人 */}
+                    {/* 收货人（关联客户税号） */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-2">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
                         收货人 <span className="text-red-500">*</span>
                       </label>
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="consigneeType"
-                            value="asl"
-                            checked={formData.consigneeType === 'asl'}
-                            onChange={(e) => handleInputChange('consigneeType', e.target.value)}
-                            className="w-3 h-3 text-primary-600 bg-white border-gray-300"
-                          />
-                          <span className="text-xs text-gray-700">ASL为收货人</span>
-                        </label>
-                        <label className="flex items-center gap-1 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="consigneeType"
-                            value="not-asl"
-                            checked={formData.consigneeType === 'not-asl'}
-                            onChange={(e) => handleInputChange('consigneeType', e.target.value)}
-                            className="w-3 h-3 text-primary-600 bg-white border-gray-300"
-                          />
-                          <span className="text-xs text-gray-700">ASL不是提单收货人</span>
-                        </label>
-                      </div>
+                      <select
+                        value={formData.consigneeType}
+                        onChange={(e) => handleInputChange('consigneeType', e.target.value)}
+                        className={`w-full px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
+                          errors.consigneeType ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-primary-500'
+                        }`}
+                        disabled={loadingTaxNumbers || !selectedCustomer}
+                      >
+                        <option value="">请选择收货人</option>
+                        {/* 按公司名称分组显示，每个公司一行 */}
+                        {selectedCustomer && customerTaxNumbers.length > 0 && (() => {
+                          // 按公司名称分组
+                          const grouped = customerTaxNumbers.reduce((acc, tax) => {
+                            const key = tax.companyName || '未知公司'
+                            if (!acc[key]) {
+                              acc[key] = { companyName: key, taxNumbers: [], firstTaxNumber: tax.taxNumber }
+                            }
+                            acc[key].taxNumbers.push(`${tax.taxType === 'vat' ? 'VAT' : tax.taxType === 'eori' ? 'EORI' : '其他'}: ${tax.taxNumber}`)
+                            return acc
+                          }, {} as Record<string, { companyName: string; taxNumbers: string[]; firstTaxNumber: string }>)
+                          
+                          return Object.values(grouped).map((group) => (
+                            <option key={group.companyName} value={group.firstTaxNumber}>
+                              {group.companyName}
+                            </option>
+                          ))
+                        })()}
+                      </select>
+                      {loadingTaxNumbers && (
+                        <p className="mt-1 text-[10px] text-gray-400 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          正在加载客户税号...
+                        </p>
+                      )}
+                      {!loadingTaxNumbers && selectedCustomer && customerTaxNumbers.length === 0 && (
+                        <p className="mt-1 text-[10px] text-amber-500">
+                          该客户暂无税号，请先在CRM客户管理中添加税号
+                        </p>
+                      )}
+                      {!selectedCustomer && (
+                        <p className="mt-1 text-[10px] text-amber-500">
+                          请先选择关联客户
+                        </p>
+                      )}
+                      {errors.consigneeType && (
+                        <p className="mt-1 text-[10px] text-red-500">{errors.consigneeType}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2343,39 +3889,72 @@ export default function CreateBillModal({
                                     />
                                   </td>
                                   <td className="px-2 py-1.5 whitespace-nowrap">
+                                    {/* 发货人：从提单 Shipper 自动获取第一行，只读 */}
                                     <input
                                       type="text"
                                       value={row.shipper}
-                                      onChange={(e) => handleReferenceChange(row.id, 'shipper', e.target.value)}
-                                      className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                                      placeholder="发货人"
+                                      readOnly
+                                      className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-600 cursor-not-allowed"
+                                      placeholder="从提单自动获取"
                                     />
                                   </td>
                                   <td className="px-2 py-1.5 whitespace-nowrap">
+                                    {/* 发货人详情：从提单 Shipper 自动获取后续行，只读 */}
                                     <input
                                       type="text"
                                       value={row.shipperDetails}
-                                      onChange={(e) => handleReferenceChange(row.id, 'shipperDetails', e.target.value)}
-                                      className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                                      placeholder="发件人详情"
+                                      readOnly
+                                      className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-600 cursor-not-allowed"
+                                      placeholder="从提单自动获取"
                                     />
                                   </td>
                                   <td className="px-2 py-1.5 whitespace-nowrap">
-                                    <input
-                                      type="text"
+                                    <select
                                       value={row.consigneeAddress}
-                                      onChange={(e) => handleReferenceChange(row.id, 'consigneeAddress', e.target.value)}
+                                      onChange={(e) => {
+                                        const value = e.target.value
+                                        handleReferenceChange(row.id, 'consigneeAddress', value)
+                                        // 自动填充详细地址
+                                        const selectedAddr = customerAddresses.find(
+                                          addr => (addr.companyName || addr.address) === value
+                                        )
+                                        if (selectedAddr) {
+                                          const details = [
+                                            selectedAddr.address,
+                                            selectedAddr.city,
+                                            selectedAddr.postalCode,
+                                            selectedAddr.country
+                                          ].filter(Boolean).join(', ')
+                                          handleReferenceChange(row.id, 'consigneeAddressDetails', details)
+                                        } else {
+                                          handleReferenceChange(row.id, 'consigneeAddressDetails', '')
+                                        }
+                                      }}
                                       className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                                      placeholder="收货地址"
-                                    />
+                                      disabled={!selectedCustomer || loadingAddresses}
+                                    >
+                                      <option value="">
+                                        {!selectedCustomer ? '请先选择客户' : loadingAddresses ? '加载中...' : customerAddresses.length === 0 ? '暂无地址' : '选择收货地址'}
+                                      </option>
+                                      {/* 如果当前值不在选项中，显示当前值 */}
+                                      {row.consigneeAddress && !customerAddresses.some(addr => (addr.companyName || addr.address) === row.consigneeAddress) && (
+                                        <option value={row.consigneeAddress}>{row.consigneeAddress}</option>
+                                      )}
+                                      {customerAddresses.map((addr) => (
+                                        <option key={addr.id} value={addr.companyName || addr.address}>
+                                          {addr.companyName || addr.contactPerson || addr.address}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </td>
                                   <td className="px-2 py-1.5 whitespace-nowrap">
+                                    {/* 收货地址详情：自动填充，只读显示 */}
                                     <input
                                       type="text"
                                       value={row.consigneeAddressDetails}
-                                      onChange={(e) => handleReferenceChange(row.id, 'consigneeAddressDetails', e.target.value)}
-                                      className="w-full px-1.5 py-0.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                                      placeholder="收货地址详情"
+                                      readOnly
+                                      className="w-full px-1.5 py-0.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-600 cursor-not-allowed"
+                                      placeholder="选择收货地址后自动填充"
                                     />
                                   </td>
                                   <td className="px-2 py-1.5 whitespace-nowrap">

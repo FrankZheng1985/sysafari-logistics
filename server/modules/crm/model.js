@@ -4,6 +4,9 @@
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
+import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+import { translateText } from '../../utils/translate.js'
 
 // ==================== 常量定义 ====================
 
@@ -59,6 +62,14 @@ export const CONTRACT_STATUS = {
   ACTIVE: 'active',         // 生效中
   EXPIRED: 'expired',       // 已过期
   TERMINATED: 'terminated'  // 已终止
+}
+
+// 合同签署状态
+export const CONTRACT_SIGN_STATUS = {
+  UNSIGNED: 'unsigned',         // 未签署
+  PENDING_SIGN: 'pending_sign', // 待签署（合同已生成，待跟单人员签署）
+  SIGNED: 'signed',             // 已签署
+  REJECTED: 'rejected'          // 已拒签
 }
 
 export const FEEDBACK_TYPE = {
@@ -212,28 +223,75 @@ export async function getCustomerByCode(code) {
 }
 
 /**
+ * 生成客户编码
+ * 格式：C + 年月日 + 3位序号（如：C20241216001）
+ */
+export async function generateCustomerCode() {
+  const db = getDatabase()
+  const today = new Date()
+  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
+  const prefix = `C${dateStr}`
+  
+  // 查询今天已有的最大序号
+  const result = await db.prepare(`
+    SELECT customer_code FROM customers 
+    WHERE customer_code LIKE ? 
+    ORDER BY customer_code DESC 
+    LIMIT 1
+  `).get(`${prefix}%`)
+  
+  let seq = 1
+  if (result && result.customer_code) {
+    const lastSeq = parseInt(result.customer_code.slice(-3), 10)
+    if (!isNaN(lastSeq)) {
+      seq = lastSeq + 1
+    }
+  }
+  
+  return `${prefix}${seq.toString().padStart(3, '0')}`
+}
+
+/**
  * 创建客户
  */
 export async function createCustomer(data) {
   const db = getDatabase()
   const id = generateId()
   
+  // 自动生成客户编码（如果没有提供）
+  const customerCode = data.customerCode || await generateCustomerCode()
+  
+  // 自动翻译公司中文全称为英文（如果有中文名称且没有提供英文名称）
+  let companyNameEn = data.companyNameEn || ''
+  if (data.companyName && !companyNameEn) {
+    try {
+      companyNameEn = await translateText(data.companyName, 'zh-CN', 'en')
+      console.log(`[客户创建] 自动翻译公司名称: ${data.companyName} -> ${companyNameEn}`)
+    } catch (error) {
+      console.error('[客户创建] 翻译公司名称失败:', error.message)
+      companyNameEn = '' // 翻译失败时保持为空
+    }
+  }
+  
   const result = await db.prepare(`
     INSERT INTO customers (
-      id, customer_code, customer_name, company_name, customer_type,
-      customer_level, country_code, province, city, address, postal_code,
+      id, customer_code, customer_name, company_name, company_name_en, customer_type,
+      customer_level, customer_region, country_code, province, city, address, postal_code,
       contact_person, contact_phone, contact_email, tax_number,
+      legal_person, registered_capital, establishment_date, business_scope,
       bank_name, bank_account, credit_limit, payment_terms,
       assigned_to, assigned_name, tags, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
-    data.customerCode,
+    customerCode,
     data.customerName,
     data.companyName || '',
+    companyNameEn,
     data.customerType || 'shipper',
     data.customerLevel || 'normal',
+    data.customerRegion || 'china',
     data.countryCode || '',
     data.province || '',
     data.city || '',
@@ -243,6 +301,10 @@ export async function createCustomer(data) {
     data.contactPhone || '',
     data.contactEmail || '',
     data.taxNumber || '',
+    data.legalPerson || '',
+    data.registeredCapital || '',
+    data.establishmentDate || '',
+    data.businessScope || '',
     data.bankName || '',
     data.bankAccount || '',
     data.creditLimit || 0,
@@ -254,7 +316,7 @@ export async function createCustomer(data) {
     data.status || 'active'
   )
   
-  return { id }
+  return { id, customerCode }
 }
 
 /**
@@ -265,11 +327,29 @@ export async function updateCustomer(id, data) {
   const fields = []
   const values = []
   
+  // 如果更新了公司中文名称，自动重新翻译英文名称
+  // 翻译服务设置了 5 秒超时，不会阻塞主流程
+  if (data.companyName !== undefined && data.companyName) {
+    try {
+      const companyNameEn = await translateText(data.companyName, 'zh-CN', 'en')
+      // 只有翻译成功且结果不同于原文时才更新
+      if (companyNameEn && companyNameEn !== data.companyName) {
+        console.log(`[客户更新] 自动翻译公司名称: ${data.companyName} -> ${companyNameEn}`)
+        data.companyNameEn = companyNameEn
+      }
+    } catch (error) {
+      console.warn('[客户更新] 翻译公司名称失败，跳过翻译:', error.message)
+      // 翻译失败不影响其他字段更新
+    }
+  }
+  
   const fieldMap = {
     customerName: 'customer_name',
     companyName: 'company_name',
+    companyNameEn: 'company_name_en',
     customerType: 'customer_type',
     customerLevel: 'customer_level',
+    customerRegion: 'customer_region',
     countryCode: 'country_code',
     province: 'province',
     city: 'city',
@@ -279,6 +359,10 @@ export async function updateCustomer(id, data) {
     contactPhone: 'contact_phone',
     contactEmail: 'contact_email',
     taxNumber: 'tax_number',
+    legalPerson: 'legal_person',
+    registeredCapital: 'registered_capital',
+    establishmentDate: 'establishment_date',
+    businessScope: 'business_scope',
     bankName: 'bank_name',
     bankAccount: 'bank_account',
     creditLimit: 'credit_limit',
@@ -302,13 +386,24 @@ export async function updateCustomer(id, data) {
     values.push(JSON.stringify(data.tags))
   }
   
-  if (fields.length === 0) return false
+  if (fields.length === 0) {
+    console.log('[客户更新] 没有需要更新的字段')
+    return false
+  }
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
-  const result = await db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values)
-  return result.changes > 0
+  try {
+    const sql = `UPDATE customers SET ${fields.join(', ')} WHERE id = ?`
+    console.log(`[客户更新] 执行SQL, 客户ID: ${id}, 更新字段数: ${fields.length - 1}`)
+    const result = await db.prepare(sql).run(...values)
+    console.log(`[客户更新] 更新结果: ${result.changes > 0 ? '成功' : '无变化'}`)
+    return result.changes > 0
+  } catch (error) {
+    console.error('[客户更新] 数据库执行失败:', error.message)
+    throw error // 重新抛出错误，让 controller 捕获
+  }
 }
 
 /**
@@ -326,7 +421,7 @@ export async function deleteCustomer(id) {
 export async function updateCustomerStatus(id, status) {
   const db = getDatabase()
   const result = await db.prepare(`
-    UPDATE customers SET status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?
+    UPDATE customers SET status = ?, updated_at = NOW() WHERE id = ?
   `).run(status, id)
   return result.changes > 0
 }
@@ -338,7 +433,7 @@ export async function assignCustomer(id, assignedTo, assignedName) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE customers 
-    SET assigned_to = ?, assigned_name = ?, updated_at = datetime('now', 'localtime') 
+    SET assigned_to = ?, assigned_name = ?, updated_at = NOW() 
     WHERE id = ?
   `).run(assignedTo, assignedName, id)
   return result.changes > 0
@@ -381,15 +476,16 @@ export async function createContact(data) {
   
   const result = await db.prepare(`
     INSERT INTO customer_contacts (
-      id, customer_id, contact_name, position, department,
+      id, customer_id, contact_name, contact_type, position, department,
       phone, mobile, email, wechat, qq,
       is_primary, is_decision_maker, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.customerId,
     data.contactName,
+    data.contactType || 'other',
     data.position || '',
     data.department || '',
     data.phone || '',
@@ -416,6 +512,7 @@ export async function updateContact(id, data) {
   
   const fieldMap = {
     contactName: 'contact_name',
+    contactType: 'contact_type',
     position: 'position',
     department: 'department',
     phone: 'phone',
@@ -454,7 +551,7 @@ export async function updateContact(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_contacts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -538,7 +635,7 @@ export async function createFollowUp(data) {
       content, result, next_follow_up_time, next_action,
       operator_id, operator_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.customerId,
@@ -555,7 +652,7 @@ export async function createFollowUp(data) {
   
   // 更新客户最后跟进时间
   await db.prepare(`
-    UPDATE customers SET last_follow_up_time = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?
+    UPDATE customers SET last_follow_up_time = NOW(), updated_at = NOW() WHERE id = ?
   `).run(data.customerId)
   
   return { id }
@@ -587,7 +684,7 @@ export async function updateFollowUp(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_follow_ups SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -612,48 +709,36 @@ export async function getCustomerOrderStats(customerId) {
   const db = getDatabase()
   
   // 根据客户ID关联提单统计
-  const customer = getCustomerById(customerId)
+  const customer = await getCustomerById(customerId)
   if (!customer) return null
   
-  // 统计作为发货人的订单
-  const shipperStats = await db.prepare(`
-    SELECT 
-      COUNT(*) as total_orders,
-      SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
-      SUM(CASE WHEN status = '进行中' OR ship_status NOT IN ('已送达', '已完成') THEN 1 ELSE 0 END) as active_orders,
-      SUM(pieces) as total_pieces,
-      SUM(weight) as total_weight
-    FROM bills_of_lading
-    WHERE shipper LIKE ? AND is_void = 0
-  `).get(`%${customer.customerName}%`)
+  const searchPattern = `%${customer.customerName}%`
   
-  // 统计作为收货人的订单
-  const consigneeStats = await db.prepare(`
+  // 统计该客户相关的所有订单（通过customer_id或名称匹配）
+  const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total_orders,
-      SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
-      SUM(CASE WHEN status = '进行中' OR ship_status NOT IN ('已送达', '已完成') THEN 1 ELSE 0 END) as active_orders,
-      SUM(pieces) as total_pieces,
-      SUM(weight) as total_weight
+      SUM(CASE WHEN delivery_status = '已送达' OR delivery_status = '已完成' THEN 1 ELSE 0 END) as completed_orders,
+      SUM(CASE WHEN delivery_status NOT IN ('已送达', '已完成') OR delivery_status IS NULL THEN 1 ELSE 0 END) as active_orders,
+      COALESCE(SUM(pieces), 0) as total_pieces,
+      COALESCE(SUM(weight), 0) as total_weight,
+      COALESCE(SUM(volume), 0) as total_volume
     FROM bills_of_lading
-    WHERE consignee LIKE ? AND is_void = 0
-  `).get(`%${customer.customerName}%`)
+    WHERE (is_void = 0 OR is_void IS NULL)
+      AND (
+        customer_id = ? OR 
+        shipper LIKE ? OR 
+        consignee LIKE ?
+      )
+  `).get(customerId, searchPattern, searchPattern)
   
   return {
-    asShipper: {
-      totalOrders: shipperStats?.total_orders || 0,
-      completedOrders: shipperStats?.completed_orders || 0,
-      activeOrders: shipperStats?.active_orders || 0,
-      totalPieces: shipperStats?.total_pieces || 0,
-      totalWeight: shipperStats?.total_weight || 0
-    },
-    asConsignee: {
-      totalOrders: consigneeStats?.total_orders || 0,
-      completedOrders: consigneeStats?.completed_orders || 0,
-      activeOrders: consigneeStats?.active_orders || 0,
-      totalPieces: consigneeStats?.total_pieces || 0,
-      totalWeight: consigneeStats?.total_weight || 0
-    }
+    totalOrders: Number(stats?.total_orders || 0),
+    activeOrders: Number(stats?.active_orders || 0),
+    completedOrders: Number(stats?.completed_orders || 0),
+    totalPieces: Number(stats?.total_pieces || 0),
+    totalWeight: Number(stats?.total_weight || 0),
+    totalVolume: Number(stats?.total_volume || 0)
   }
 }
 
@@ -664,7 +749,7 @@ export async function getCustomerOrders(customerId, params = {}) {
   const db = getDatabase()
   const { page = 1, pageSize = 10, search, status } = params
   
-  const customer = getCustomerById(customerId)
+  const customer = await getCustomerById(customerId)
   if (!customer) return { list: [], total: 0, page, pageSize }
   
   // 优先通过customer_id查找，同时也支持通过shipper/consignee名称匹配（兼容历史数据）
@@ -703,30 +788,510 @@ export async function getCustomerOrders(customerId, params = {}) {
   const list = await db.prepare(query).all(...queryParams)
   
   return {
-    list: list.map(row => ({
-      id: row.id,
-      billNumber: row.bill_number,
-      containerNumber: row.container_number,
-      shipper: row.shipper,
-      consignee: row.consignee,
-      status: row.status,
-      shipStatus: row.ship_status,
-      customsStatus: row.customs_status,
-      inspection: row.inspection,
-      deliveryStatus: row.delivery_status,
-      pieces: row.pieces,
-      weight: row.weight,
-      eta: row.eta,
-      portOfLoading: row.port_of_loading,
-      portOfDischarge: row.port_of_discharge,
-      customerId: row.customer_id,
-      customerName: row.customer_name,
-      createTime: row.created_at
-    })),
+    list: list.map(row => {
+      // 根据 order_seq 和创建时间生成订单号
+      let orderNumber = null
+      if (row.order_seq) {
+        const createDate = row.created_at ? new Date(row.created_at) : new Date()
+        const year = createDate.getFullYear().toString().slice(-2)
+        orderNumber = `BP${year}${String(row.order_seq).padStart(5, '0')}`
+      }
+      return {
+        id: row.id,
+        orderNumber,
+        billNumber: row.bill_number,
+        containerNumber: row.container_number,
+        shipper: row.shipper,
+        consignee: row.consignee,
+        status: row.status,
+        shipStatus: row.ship_status,
+        customsStatus: row.customs_status,
+        inspection: row.inspection,
+        deliveryStatus: row.delivery_status,
+        pieces: row.pieces,
+        weight: row.weight,
+        eta: row.eta,
+        portOfLoading: row.port_of_loading,
+        portOfDischarge: row.port_of_discharge,
+        customerId: row.customer_id,
+        customerName: row.customer_name,
+        createTime: row.created_at
+      }
+    }),
     total: totalResult.total,
     page,
     pageSize
   }
+}
+
+// ==================== 客户地址管理 ====================
+
+/**
+ * 获取客户地址列表
+ */
+export async function getCustomerAddresses(customerId) {
+  const db = getDatabase()
+  const rows = await db.prepare(`
+    SELECT * FROM customer_addresses 
+    WHERE customer_id = ? 
+    ORDER BY is_default DESC, created_at DESC
+  `).all(customerId)
+  
+  return rows.map(row => ({
+    id: row.id,
+    customerId: row.customer_id,
+    addressCode: row.address_code,
+    companyName: row.company_name,
+    contactPerson: row.contact_person,
+    phone: row.phone,
+    country: row.country,
+    city: row.city,
+    address: row.address,
+    postalCode: row.postal_code,
+    isDefault: row.is_default === 1,
+    addressType: row.address_type,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
+}
+
+/**
+ * 创建客户地址
+ */
+export async function createCustomerAddress(customerId, data) {
+  const db = getDatabase()
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_addresses SET is_default = 0 WHERE customer_id = ?
+    `).run(customerId)
+  }
+  
+  const id = crypto.randomUUID()
+  
+  await db.prepare(`
+    INSERT INTO customer_addresses (
+      id, customer_id, address_code, company_name, contact_person, phone,
+      country, city, address, postal_code, is_default, address_type
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    customerId,
+    data.addressCode || null,
+    data.companyName || null,
+    data.contactPerson || null,
+    data.phone || null,
+    data.country || null,
+    data.city || null,
+    data.address,
+    data.postalCode || null,
+    data.isDefault ? 1 : 0,
+    data.addressType || 'both'
+  )
+  
+  return { id }
+}
+
+/**
+ * 更新客户地址
+ */
+export async function updateCustomerAddress(addressId, data) {
+  const db = getDatabase()
+  
+  // 获取当前地址信息
+  const current = await db.prepare('SELECT customer_id FROM customer_addresses WHERE id = ?').get(addressId)
+  if (!current) return null
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_addresses SET is_default = 0 WHERE customer_id = ?
+    `).run(current.customer_id)
+  }
+  
+  await db.prepare(`
+    UPDATE customer_addresses SET
+      address_code = COALESCE(?, address_code),
+      company_name = COALESCE(?, company_name),
+      contact_person = COALESCE(?, contact_person),
+      phone = COALESCE(?, phone),
+      country = COALESCE(?, country),
+      city = COALESCE(?, city),
+      address = COALESCE(?, address),
+      postal_code = COALESCE(?, postal_code),
+      is_default = ?,
+      address_type = COALESCE(?, address_type),
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    data.addressCode,
+    data.companyName,
+    data.contactPerson,
+    data.phone,
+    data.country,
+    data.city,
+    data.address,
+    data.postalCode,
+    data.isDefault ? 1 : 0,
+    data.addressType,
+    addressId
+  )
+  
+  return { id: addressId }
+}
+
+/**
+ * 删除客户地址
+ */
+export async function deleteCustomerAddress(addressId) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_addresses WHERE id = ?').run(addressId)
+  return { success: true }
+}
+
+// ==================== 客户税号管理 ====================
+
+/**
+ * 获取客户税号列表
+ */
+export async function getCustomerTaxNumbers(customerId) {
+  const db = getDatabase()
+  const rows = await db.prepare(`
+    SELECT * FROM customer_tax_numbers 
+    WHERE customer_id = ? 
+    ORDER BY is_default DESC, created_at DESC
+  `).all(customerId)
+  
+  return rows.map(row => ({
+    id: row.id,
+    customerId: row.customer_id,
+    taxType: row.tax_type,
+    taxNumber: row.tax_number,
+    country: row.country,
+    companyShortName: row.company_short_name,
+    companyName: row.company_name,
+    companyAddress: row.company_address,
+    isVerified: row.is_verified === 1,
+    verifiedAt: row.verified_at,
+    verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
+    isDefault: row.is_default === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
+}
+
+/**
+ * 创建客户税号
+ */
+export async function createCustomerTaxNumber(customerId, data) {
+  const db = getDatabase()
+  
+  // 检查VAT或EORI号码是否在该客户下已存在（同一客户下不能重复）
+  if (data.taxType === 'vat' || data.taxType === 'eori') {
+    const existing = await db.prepare(`
+      SELECT id FROM customer_tax_numbers 
+      WHERE customer_id = ? AND tax_type = ? AND tax_number = ?
+    `).get(customerId, data.taxType, data.taxNumber)
+    
+    if (existing) {
+      const taxTypeName = data.taxType === 'vat' ? 'VAT税号' : 'EORI号码'
+      throw new Error(`该客户已存在相同的${taxTypeName}`)
+    }
+  }
+  
+  // 如果设为默认，先取消同类型的其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_tax_numbers SET is_default = 0 
+      WHERE customer_id = ? AND tax_type = ?
+    `).run(customerId, data.taxType)
+  }
+  
+  // 使用 PostgreSQL SERIAL 自动生成 id，通过 RETURNING 获取生成的 id
+  const result = await db.prepare(`
+    INSERT INTO customer_tax_numbers (
+      customer_id, tax_type, tax_number, country, 
+      company_short_name, company_name, company_address, is_verified, verified_at, verification_data,
+      is_default
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    customerId,
+    data.taxType,
+    data.taxNumber,
+    data.country || null,
+    data.companyShortName || null,
+    data.companyName || null,
+    data.companyAddress || null,
+    data.isVerified ? 1 : 0,
+    data.verifiedAt || null,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
+    data.isDefault ? 1 : 0
+  )
+  
+  return { id: result?.id }
+}
+
+/**
+ * 更新客户税号
+ */
+export async function updateCustomerTaxNumber(taxId, data) {
+  const db = getDatabase()
+  
+  // 获取当前税号信息
+  const current = await db.prepare('SELECT customer_id, tax_type, tax_number FROM customer_tax_numbers WHERE id = ?').get(taxId)
+  if (!current) return null
+  
+  // 如果修改了税号，检查VAT或EORI号码是否在该客户下已存在（排除当前记录）
+  const newTaxType = data.taxType || current.tax_type
+  const newTaxNumber = data.taxNumber || current.tax_number
+  if ((newTaxType === 'vat' || newTaxType === 'eori') && newTaxNumber !== current.tax_number) {
+    const existing = await db.prepare(`
+      SELECT id FROM customer_tax_numbers 
+      WHERE customer_id = ? AND tax_type = ? AND tax_number = ? AND id != ?
+    `).get(current.customer_id, newTaxType, newTaxNumber, taxId)
+    
+    if (existing) {
+      const taxTypeName = newTaxType === 'vat' ? 'VAT税号' : 'EORI号码'
+      throw new Error(`该客户已存在相同的${taxTypeName}`)
+    }
+  }
+  
+  // 如果设为默认，先取消同类型的其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_tax_numbers SET is_default = 0 
+      WHERE customer_id = ? AND tax_type = ?
+    `).run(current.customer_id, data.taxType || current.tax_type)
+  }
+  
+  await db.prepare(`
+    UPDATE customer_tax_numbers SET
+      tax_type = COALESCE(?, tax_type),
+      tax_number = COALESCE(?, tax_number),
+      country = COALESCE(?, country),
+      company_short_name = COALESCE(?, company_short_name),
+      company_name = COALESCE(?, company_name),
+      company_address = COALESCE(?, company_address),
+      is_verified = COALESCE(?, is_verified),
+      verified_at = COALESCE(?, verified_at),
+      verification_data = COALESCE(?, verification_data),
+      is_default = ?,
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    data.taxType,
+    data.taxNumber,
+    data.country,
+    data.companyShortName,
+    data.companyName,
+    data.companyAddress,
+    data.isVerified !== undefined ? (data.isVerified ? 1 : 0) : null,
+    data.verifiedAt,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
+    data.isDefault ? 1 : 0,
+    taxId
+  )
+  
+  return { id: taxId }
+}
+
+/**
+ * 删除客户税号
+ */
+export async function deleteCustomerTaxNumber(taxId) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_tax_numbers WHERE id = ?').run(taxId)
+  return { success: true }
+}
+
+// ==================== 共享税号管理（公司级税号库） ====================
+
+/**
+ * 获取共享税号列表
+ */
+export async function getSharedTaxNumbers(params = {}) {
+  const db = getDatabase()
+  const { taxType, search, status = 'active', page = 1, pageSize = 50 } = params
+  
+  let query = 'SELECT * FROM shared_tax_numbers WHERE 1=1'
+  const queryParams = []
+  
+  if (status) {
+    query += ' AND status = ?'
+    queryParams.push(status)
+  }
+  
+  if (taxType) {
+    query += ' AND tax_type = ?'
+    queryParams.push(taxType)
+  }
+  
+  if (search) {
+    query += ' AND (tax_number LIKE ? OR company_name LIKE ? OR company_short_name LIKE ?)'
+    const searchPattern = `%${search}%`
+    queryParams.push(searchPattern, searchPattern, searchPattern)
+  }
+  
+  // 获取总数
+  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const countResult = await db.prepare(countQuery).get(...queryParams)
+  const total = countResult?.total || 0
+  
+  // 分页
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  queryParams.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(query).all(...queryParams)
+  
+  return {
+    list: rows.map(row => ({
+      id: row.id,
+      taxType: row.tax_type,
+      taxNumber: row.tax_number,
+      country: row.country,
+      companyShortName: row.company_short_name,
+      companyName: row.company_name,
+      companyAddress: row.company_address,
+      isVerified: row.is_verified === 1,
+      verifiedAt: row.verified_at,
+      verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
+      status: row.status,
+      remark: row.remark,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    })),
+    total,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 根据ID获取共享税号
+ */
+export async function getSharedTaxNumberById(id) {
+  const db = getDatabase()
+  const row = await db.prepare('SELECT * FROM shared_tax_numbers WHERE id = ?').get(id)
+  if (!row) return null
+  
+  return {
+    id: row.id,
+    taxType: row.tax_type,
+    taxNumber: row.tax_number,
+    country: row.country,
+    companyShortName: row.company_short_name,
+    companyName: row.company_name,
+    companyAddress: row.company_address,
+    isVerified: row.is_verified === 1,
+    verifiedAt: row.verified_at,
+    verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
+    status: row.status,
+    remark: row.remark,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+/**
+ * 创建共享税号
+ */
+export async function createSharedTaxNumber(data) {
+  const db = getDatabase()
+  
+  // 检查税号是否已存在
+  const existing = await db.prepare(`
+    SELECT id FROM shared_tax_numbers WHERE tax_number = ?
+  `).get(data.taxNumber)
+  
+  if (existing) {
+    throw new Error('该税号已存在于共享库中')
+  }
+  
+  const result = await db.prepare(`
+    INSERT INTO shared_tax_numbers (
+      tax_type, tax_number, country, company_short_name, company_name, company_address,
+      is_verified, verified_at, verification_data, status, remark, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    data.taxType,
+    data.taxNumber,
+    data.country || null,
+    data.companyShortName || null,
+    data.companyName || null,
+    data.companyAddress || null,
+    data.isVerified ? 1 : 0,
+    data.verifiedAt || null,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
+    data.status || 'active',
+    data.remark || null,
+    data.createdBy || null
+  )
+  
+  return { id: result.id }
+}
+
+/**
+ * 更新共享税号
+ */
+export async function updateSharedTaxNumber(id, data) {
+  const db = getDatabase()
+  
+  // 如果修改了税号，检查是否与其他记录冲突
+  if (data.taxNumber) {
+    const existing = await db.prepare(`
+      SELECT id FROM shared_tax_numbers WHERE tax_number = ? AND id != ?
+    `).get(data.taxNumber, id)
+    
+    if (existing) {
+      throw new Error('该税号已存在于共享库中')
+    }
+  }
+  
+  await db.prepare(`
+    UPDATE shared_tax_numbers SET
+      tax_type = COALESCE(?, tax_type),
+      tax_number = COALESCE(?, tax_number),
+      country = COALESCE(?, country),
+      company_short_name = COALESCE(?, company_short_name),
+      company_name = COALESCE(?, company_name),
+      company_address = COALESCE(?, company_address),
+      is_verified = COALESCE(?, is_verified),
+      verified_at = COALESCE(?, verified_at),
+      verification_data = COALESCE(?, verification_data),
+      status = COALESCE(?, status),
+      remark = COALESCE(?, remark),
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    data.taxType,
+    data.taxNumber,
+    data.country,
+    data.companyShortName,
+    data.companyName,
+    data.companyAddress,
+    data.isVerified !== undefined ? (data.isVerified ? 1 : 0) : null,
+    data.verifiedAt,
+    data.verificationData ? JSON.stringify(data.verificationData) : null,
+    data.status,
+    data.remark,
+    id
+  )
+  
+  return { id }
+}
+
+/**
+ * 删除共享税号
+ */
+export async function deleteSharedTaxNumber(id) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM shared_tax_numbers WHERE id = ?').run(id)
+  return { success: true }
 }
 
 // ==================== 销售机会管理 ====================
@@ -801,10 +1366,10 @@ export async function getOpportunityStats() {
       SUM(CASE WHEN stage = 'qualification' THEN 1 ELSE 0 END) as qualification,
       SUM(CASE WHEN stage = 'proposal' THEN 1 ELSE 0 END) as proposal,
       SUM(CASE WHEN stage = 'negotiation' THEN 1 ELSE 0 END) as negotiation,
-      SUM(CASE WHEN stage = 'closed_won' THEN 1 ELSE 0 END) as closed_won,
-      SUM(CASE WHEN stage = 'closed_lost' THEN 1 ELSE 0 END) as closed_lost,
-      COALESCE(SUM(CASE WHEN stage NOT IN ('closed_won', 'closed_lost') THEN expected_amount ELSE 0 END), 0) as pipeline_value,
-      COALESCE(SUM(CASE WHEN stage = 'closed_won' THEN expected_amount ELSE 0 END), 0) as won_value
+      SUM(CASE WHEN stage IN ('closed_won', 'won') THEN 1 ELSE 0 END) as closed_won,
+      SUM(CASE WHEN stage IN ('closed_lost', 'lost') THEN 1 ELSE 0 END) as closed_lost,
+      COALESCE(SUM(CASE WHEN stage NOT IN ('closed_won', 'closed_lost', 'won', 'lost') THEN expected_amount ELSE 0 END), 0) as pipeline_value,
+      COALESCE(SUM(CASE WHEN stage IN ('closed_won', 'won') THEN expected_amount ELSE 0 END), 0) as won_value
     FROM sales_opportunities
   `).get()
   
@@ -846,7 +1411,7 @@ export async function createOpportunity(data) {
       stage, expected_amount, probability, expected_close_date,
       source, description, assigned_to, assigned_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     data.opportunityName,
@@ -901,7 +1466,7 @@ export async function updateOpportunity(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE sales_opportunities SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -924,7 +1489,7 @@ export async function updateOpportunityStage(id, stage, lostReason = '') {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE sales_opportunities 
-    SET stage = ?, lost_reason = ?, updated_at = datetime('now', 'localtime')
+    SET stage = ?, lost_reason = ?, updated_at = NOW()
     WHERE id = ?
   `).run(stage, stage === 'closed_lost' ? lostReason : '', id)
   return result.changes > 0
@@ -1035,7 +1600,7 @@ export async function createQuotation(data) {
       subtotal, discount, tax_amount, total_amount, currency,
       terms, notes, items, status, created_by, created_by_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     quoteNumber,
@@ -1051,7 +1616,7 @@ export async function createQuotation(data) {
     data.discount || 0,
     data.taxAmount || 0,
     data.totalAmount || 0,
-    data.currency || 'CNY',
+    data.currency || 'EUR',
     data.terms || '',
     data.notes || '',
     data.items ? JSON.stringify(data.items) : '[]',
@@ -1071,6 +1636,9 @@ export async function updateQuotation(id, data) {
   const fields = []
   const values = []
   
+  // 日期字段列表（空字符串需要转为 null）
+  const dateFields = ['quoteDate', 'validUntil']
+  
   const fieldMap = {
     subject: 'subject',
     quoteDate: 'quote_date',
@@ -1088,7 +1656,12 @@ export async function updateQuotation(id, data) {
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
     if (data[jsField] !== undefined) {
       fields.push(`${dbField} = ?`)
-      values.push(data[jsField])
+      // 日期字段空字符串转为 null，PostgreSQL 不接受空字符串
+      let value = data[jsField]
+      if (dateFields.includes(jsField) && value === '') {
+        value = null
+      }
+      values.push(value)
     }
   })
   
@@ -1099,7 +1672,7 @@ export async function updateQuotation(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE quotations SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1113,6 +1686,112 @@ export async function deleteQuotation(id) {
   const db = getDatabase()
   const result = await db.prepare('DELETE FROM quotations WHERE id = ?').run(id)
   return result.changes > 0
+}
+
+/**
+ * 为新客户自动创建报价单
+ * @param {Object} options - 报价选项
+ * @param {string} options.customerId - 客户ID
+ * @param {string} options.customerName - 客户名称
+ * @param {string} options.productId - 产品ID
+ * @param {Array<number>} options.selectedFeeItemIds - 选中的费用项ID列表
+ * @param {Object} options.user - 创建人信息
+ * @returns {Promise<Object>} - 报价单信息
+ */
+export async function createQuotationForCustomer({ customerId, customerName, productId, selectedFeeItemIds, user }) {
+  const db = getDatabase()
+  const id = generateId()
+  const quoteNumber = await generateQuoteNumber()
+  
+  // 获取产品信息
+  const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(productId)
+  if (!product) {
+    throw new Error('产品不存在')
+  }
+  
+  // 获取选中的费用项
+  let feeItems = []
+  if (selectedFeeItemIds && selectedFeeItemIds.length > 0) {
+    const placeholders = selectedFeeItemIds.map(() => '?').join(',')
+    feeItems = await db.prepare(`
+      SELECT * FROM product_fee_items 
+      WHERE product_id = ? AND id IN (${placeholders})
+      ORDER BY sort_order, id
+    `).all(productId, ...selectedFeeItemIds)
+  }
+  
+  // 构建报价明细
+  const items = feeItems.map(item => {
+    const price = parseFloat(item.standard_price) || 0
+    return {
+      name: item.fee_name,
+      nameEn: item.fee_name_en || '',
+      description: item.description || '',
+      quantity: 1,
+      unit: item.unit || '',
+      price: price,
+      amount: price,
+      productId: productId,
+      feeItemId: item.id
+    }
+  })
+  
+  // 计算总金额
+  const subtotal = items.reduce((sum, item) => sum + parseFloat(item.amount) || 0, 0)
+  const totalAmount = subtotal
+  
+  // 设置报价日期和有效期（30天）
+  const quoteDate = new Date().toISOString().split('T')[0]
+  const validUntilDate = new Date()
+  validUntilDate.setDate(validUntilDate.getDate() + 30)
+  const validUntil = validUntilDate.toISOString().split('T')[0]
+  
+  // 报价主题
+  const subject = `${customerName} - ${product.product_name || '服务报价'}`
+  
+  await db.prepare(`
+    INSERT INTO quotations (
+      id, quote_number, customer_id, customer_name, opportunity_id,
+      contact_id, contact_name, subject, quote_date, valid_until,
+      subtotal, discount, tax_amount, total_amount, currency,
+      terms, notes, items, status, created_by, created_by_name,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+  `).run(
+    id,
+    quoteNumber,
+    customerId,
+    customerName,
+    null,  // opportunityId
+    null,  // contactId
+    '',    // contactName
+    subject,
+    quoteDate,
+    validUntil,
+    subtotal,
+    0,     // discount
+    0,     // taxAmount
+    totalAmount,
+    'EUR',
+    '',    // terms
+    '自动生成的客户报价单',  // notes
+    JSON.stringify(items),
+    'draft',
+    user?.id || null,
+    user?.name || '系统'
+  )
+  
+  return { 
+    id, 
+    quoteNumber,
+    subject,
+    quoteDate,
+    validUntil,
+    totalAmount,
+    items,
+    customerId,
+    customerName
+  }
 }
 
 // ==================== 合同管理 ====================
@@ -1215,7 +1894,7 @@ export async function createContract(data) {
       start_date, end_date, sign_date, terms, notes, status,
       created_by, created_by_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     contractNumber,
@@ -1226,7 +1905,7 @@ export async function createContract(data) {
     data.opportunityId || null,
     data.contractType || 'service',
     data.contractAmount || 0,
-    data.currency || 'CNY',
+    data.currency || 'EUR',
     data.startDate || null,
     data.endDate || null,
     data.signDate || null,
@@ -1270,7 +1949,7 @@ export async function updateContract(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE contracts SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1284,6 +1963,283 @@ export async function deleteContract(id) {
   const db = getDatabase()
   const result = await db.prepare('DELETE FROM contracts WHERE id = ?').run(id)
   return result.changes > 0
+}
+
+// ==================== 合同签署管理 ====================
+
+/**
+ * 为销售机会自动生成合同
+ * @param {Object} opportunityData - 销售机会数据
+ * @param {Object} user - 操作用户
+ */
+export async function generateContractForOpportunity(opportunityData, user) {
+  const db = getDatabase()
+  const id = generateId()
+  const contractNumber = await generateContractNumber()
+  
+  // 生成合同名称
+  const contractName = `${opportunityData.customerName || '客户'} - 服务合同`
+  
+  await db.prepare(`
+    INSERT INTO contracts (
+      id, contract_number, contract_name, customer_id, customer_name,
+      opportunity_id, contract_type, contract_amount, currency,
+      status, sign_status, auto_generated,
+      created_by, created_by_name,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+  `).run(
+    id,
+    contractNumber,
+    contractName,
+    opportunityData.customerId || null,
+    opportunityData.customerName || '',
+    opportunityData.opportunityId,
+    'service',
+    opportunityData.expectedValue || 0,
+    'EUR',
+    'draft',
+    'pending_sign',  // 待签署状态
+    true,            // 自动生成标记
+    user?.id || null,
+    user?.name || '系统'
+  )
+  
+  // 记录签署历史
+  await addContractSignHistory(id, 'generate', '自动生成合同', user?.id, user?.name, null, 'pending_sign', null, `从销售机会 ${opportunityData.opportunityName} 自动生成`)
+  
+  return { id, contractNumber }
+}
+
+/**
+ * 上传已签署合同
+ * @param {string} contractId - 合同ID
+ * @param {Object} fileData - 文件数据
+ * @param {Object} user - 签署人
+ */
+export async function uploadSignedContract(contractId, fileData, user) {
+  const db = getDatabase()
+  
+  const contract = await getContractById(contractId)
+  if (!contract) {
+    throw new Error('合同不存在')
+  }
+  
+  const oldStatus = contract.signStatus
+  
+  await db.prepare(`
+    UPDATE contracts SET
+      signed_file_path = ?,
+      signed_file_name = ?,
+      signed_at = NOW(),
+      signed_by = ?,
+      signed_by_name = ?,
+      sign_status = 'signed',
+      status = 'active',
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    fileData.filePath,
+    fileData.fileName,
+    user?.id || null,
+    user?.name || '系统',
+    contractId
+  )
+  
+  // 记录签署历史
+  await addContractSignHistory(
+    contractId, 
+    'sign', 
+    '上传已签署合同', 
+    user?.id, 
+    user?.name, 
+    oldStatus, 
+    'signed', 
+    fileData.filePath,
+    `签署人: ${user?.name || '系统'}`
+  )
+  
+  return true
+}
+
+/**
+ * 更新合同签署状态
+ */
+export async function updateContractSignStatus(contractId, signStatus, user, remark = '') {
+  const db = getDatabase()
+  
+  const contract = await getContractById(contractId)
+  if (!contract) {
+    throw new Error('合同不存在')
+  }
+  
+  const oldStatus = contract.signStatus
+  
+  await db.prepare(`
+    UPDATE contracts SET sign_status = ?, updated_at = NOW() WHERE id = ?
+  `).run(signStatus, contractId)
+  
+  // 记录历史
+  const actionMap = {
+    'pending_sign': 'send',
+    'signed': 'sign',
+    'rejected': 'reject',
+    'unsigned': 'reset'
+  }
+  const actionNameMap = {
+    'pending_sign': '发送待签署',
+    'signed': '完成签署',
+    'rejected': '拒绝签署',
+    'unsigned': '重置状态'
+  }
+  
+  await addContractSignHistory(
+    contractId,
+    actionMap[signStatus] || 'update',
+    actionNameMap[signStatus] || '更新签署状态',
+    user?.id,
+    user?.name,
+    oldStatus,
+    signStatus,
+    null,
+    remark
+  )
+  
+  return true
+}
+
+/**
+ * 添加合同签署历史记录
+ */
+async function addContractSignHistory(contractId, action, actionName, operatorId, operatorName, oldStatus, newStatus, filePath, remark) {
+  const db = getDatabase()
+  
+  await db.prepare(`
+    INSERT INTO contract_sign_history (
+      contract_id, action, action_name, operator_id, operator_name,
+      old_status, new_status, file_path, remark
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    contractId,
+    action,
+    actionName,
+    operatorId || null,
+    operatorName || '系统',
+    oldStatus || null,
+    newStatus,
+    filePath || null,
+    remark || null
+  )
+}
+
+/**
+ * 获取合同签署历史
+ */
+export async function getContractSignHistory(contractId) {
+  const db = getDatabase()
+  const history = await db.prepare(`
+    SELECT * FROM contract_sign_history 
+    WHERE contract_id = ? 
+    ORDER BY created_at DESC
+  `).all(contractId)
+  
+  return history.map(h => ({
+    id: h.id,
+    contractId: h.contract_id,
+    action: h.action,
+    actionName: h.action_name,
+    operatorId: h.operator_id,
+    operatorName: h.operator_name,
+    oldStatus: h.old_status,
+    newStatus: h.new_status,
+    filePath: h.file_path,
+    remark: h.remark,
+    createTime: h.created_at
+  }))
+}
+
+/**
+ * 根据销售机会ID获取合同
+ */
+export async function getContractByOpportunityId(opportunityId) {
+  const db = getDatabase()
+  const contract = await db.prepare('SELECT * FROM contracts WHERE opportunity_id = ?').get(opportunityId)
+  return contract ? convertContractToCamelCase(contract) : null
+}
+
+/**
+ * 获取客户的待签署合同
+ */
+export async function getPendingSignContracts(customerId) {
+  const db = getDatabase()
+  const contracts = await db.prepare(`
+    SELECT * FROM contracts 
+    WHERE customer_id = ? AND sign_status = 'pending_sign'
+    ORDER BY created_at DESC
+  `).all(customerId)
+  
+  return contracts.map(convertContractToCamelCase)
+}
+
+/**
+ * 检查销售机会是否可以成交（合同已签署）
+ */
+export async function canOpportunityClose(opportunityId) {
+  const db = getDatabase()
+  
+  // 获取销售机会
+  const opportunity = await db.prepare('SELECT * FROM sales_opportunities WHERE id = ?').get(opportunityId)
+  if (!opportunity) {
+    return { canClose: false, reason: '销售机会不存在' }
+  }
+  
+  // 检查是否需要合同
+  if (opportunity.require_contract === false) {
+    return { canClose: true, reason: '该机会无需合同' }
+  }
+  
+  // 检查是否有关联合同
+  const contract = await getContractByOpportunityId(opportunityId)
+  if (!contract) {
+    return { 
+      canClose: false, 
+      reason: '尚未生成合同，请先生成合同',
+      needGenerateContract: true 
+    }
+  }
+  
+  // 检查合同签署状态
+  if (contract.signStatus !== 'signed') {
+    const statusText = {
+      'unsigned': '合同尚未发起签署',
+      'pending_sign': '合同待签署，请上传已签署的合同文件',
+      'rejected': '合同已被拒签，请重新处理'
+    }
+    return { 
+      canClose: false, 
+      reason: statusText[contract.signStatus] || '合同未签署',
+      contract,
+      needSign: contract.signStatus === 'pending_sign'
+    }
+  }
+  
+  return { 
+    canClose: true, 
+    reason: '合同已签署，可以成交',
+    contract 
+  }
+}
+
+/**
+ * 更新销售机会的合同关联
+ */
+export async function updateOpportunityContract(opportunityId, contractId, contractNumber) {
+  const db = getDatabase()
+  await db.prepare(`
+    UPDATE sales_opportunities 
+    SET contract_id = ?, contract_number = ?, updated_at = NOW()
+    WHERE id = ?
+  `).run(contractId, contractNumber, opportunityId)
 }
 
 // ==================== 客户反馈/投诉管理 ====================
@@ -1437,7 +2393,7 @@ export async function createFeedback(data) {
       feedback_type, subject, content, priority, source,
       bill_id, bill_number, assigned_to, assigned_name, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), datetime('now', 'localtime'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     feedbackNumber,
@@ -1489,7 +2445,7 @@ export async function updateFeedback(id, data) {
   
   if (fields.length === 0) return false
   
-  fields.push('updated_at = datetime("now", "localtime")')
+  fields.push("updated_at = NOW()")
   values.push(id)
   
   const result = await db.prepare(`UPDATE customer_feedbacks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1503,7 +2459,7 @@ export async function resolveFeedback(id, resolution) {
   const db = getDatabase()
   const result = await db.prepare(`
     UPDATE customer_feedbacks 
-    SET status = 'resolved', resolution = ?, resolved_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
+    SET status = 'resolved', resolution = ?, resolved_at = NOW(), updated_at = NOW()
     WHERE id = ?
   `).run(resolution, id)
   return result.changes > 0
@@ -1679,8 +2635,10 @@ export function convertCustomerToCamelCase(row) {
     customerCode: row.customer_code,
     customerName: row.customer_name,
     companyName: row.company_name,
+    companyNameEn: row.company_name_en,
     customerType: row.customer_type,
     customerLevel: row.customer_level,
+    customerRegion: row.customer_region || 'china',
     countryCode: row.country_code,
     province: row.province,
     city: row.city,
@@ -1690,6 +2648,10 @@ export function convertCustomerToCamelCase(row) {
     contactPhone: row.contact_phone,
     contactEmail: row.contact_email,
     taxNumber: row.tax_number,
+    legalPerson: row.legal_person,
+    registeredCapital: row.registered_capital,
+    establishmentDate: row.establishment_date,
+    businessScope: row.business_scope,
     bankName: row.bank_name,
     bankAccount: row.bank_account,
     creditLimit: row.credit_limit,
@@ -1710,6 +2672,7 @@ export function convertContactToCamelCase(row) {
     id: row.id,
     customerId: row.customer_id,
     contactName: row.contact_name,
+    contactType: row.contact_type || 'other',
     position: row.position,
     department: row.department,
     phone: row.phone,
@@ -1821,6 +2784,17 @@ export function convertContractToCamelCase(row) {
     terms: row.terms,
     notes: row.notes,
     status: row.status,
+    // 签署相关字段
+    signStatus: row.sign_status || 'unsigned',
+    signedFilePath: row.signed_file_path,
+    signedFileName: row.signed_file_name,
+    signedAt: row.signed_at,
+    signedBy: row.signed_by,
+    signedByName: row.signed_by_name,
+    contractFilePath: row.contract_file_path,
+    templateId: row.template_id,
+    autoGenerated: row.auto_generated,
+    // 基础字段
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createTime: row.created_at,
@@ -1853,6 +2827,626 @@ export function convertFeedbackToCamelCase(row) {
   }
 }
 
+// ==================== 客户门户账户管理 ====================
+
+/**
+ * 客户门户账户状态常量
+ */
+export const ACCOUNT_STATUS = {
+  ACTIVE: 'active',       // 正常
+  INACTIVE: 'inactive',   // 禁用
+  LOCKED: 'locked'        // 锁定
+}
+
+/**
+ * API 权限常量
+ */
+export const API_PERMISSIONS = {
+  ORDER_CREATE: 'order:create',     // 创建订单
+  ORDER_READ: 'order:read',         // 查询订单
+  ORDER_UPDATE: 'order:update',     // 更新订单
+  INVOICE_READ: 'invoice:read',     // 查询账单
+  BALANCE_READ: 'balance:read',     // 查询余额
+  WEBHOOK_MANAGE: 'webhook:manage'  // 管理Webhook
+}
+
+/**
+ * 获取客户门户账户列表
+ */
+export async function getCustomerAccounts(params = {}) {
+  const db = getDatabase()
+  const { customerId, status, keyword, page = 1, pageSize = 20 } = params
+  
+  let sql = `
+    SELECT ca.*, c.customer_name, c.customer_code
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE 1=1
+  `
+  const conditions = []
+  
+  if (customerId) {
+    sql += ` AND ca.customer_id = ?`
+    conditions.push(customerId)
+  }
+  if (status) {
+    sql += ` AND ca.status = ?`
+    conditions.push(status)
+  }
+  if (keyword) {
+    sql += ` AND (ca.username LIKE ? OR ca.email LIKE ? OR c.customer_name LIKE ?)`
+    conditions.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`)
+  }
+  
+  // 计数
+  const countSql = sql.replace('SELECT ca.*, c.customer_name, c.customer_code', 'SELECT COUNT(*) as total')
+  const countResult = await db.prepare(countSql).get(...conditions)
+  
+  // 分页
+  sql += ` ORDER BY ca.created_at DESC LIMIT ? OFFSET ?`
+  conditions.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(sql).all(...conditions)
+  
+  return {
+    list: rows.map(convertAccountToCamelCase),
+    total: countResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 根据ID获取客户账户
+ */
+export async function getCustomerAccountById(id) {
+  const db = getDatabase()
+  const row = await db.prepare(`
+    SELECT ca.*, c.customer_name, c.customer_code
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE ca.id = ?
+  `).get(id)
+  
+  return row ? convertAccountToCamelCase(row) : null
+}
+
+/**
+ * 根据用户名获取客户账户（用于登录验证）
+ */
+export async function getCustomerAccountByUsername(username) {
+  const db = getDatabase()
+  const row = await db.prepare(`
+    SELECT ca.*, c.customer_name, c.customer_code, c.id as customer_id
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE ca.username = ?
+  `).get(username)
+  
+  return row ? convertAccountToCamelCase(row) : null
+}
+
+/**
+ * 创建客户门户账户
+ */
+export async function createCustomerAccount(data) {
+  const db = getDatabase()
+  const { customerId, username, password, email, phone, createdBy } = data
+  
+  // 检查用户名是否已存在
+  const existing = await db.prepare('SELECT id FROM customer_accounts WHERE username = ?').get(username)
+  if (existing) {
+    throw new Error('用户名已存在')
+  }
+  
+  // 检查客户是否已有账户
+  const existingCustomer = await db.prepare('SELECT id FROM customer_accounts WHERE customer_id = ?').get(customerId)
+  if (existingCustomer) {
+    throw new Error('该客户已有门户账户')
+  }
+  
+  // 密码加密
+  const passwordHash = await bcrypt.hash(password, 10)
+  
+  const result = await db.prepare(`
+    INSERT INTO customer_accounts (customer_id, username, password_hash, email, phone, status, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'active', ?, NOW(), NOW())
+  `).run(customerId, username, passwordHash, email || null, phone || null, createdBy || null)
+  
+  return { id: result.lastInsertRowid }
+}
+
+/**
+ * 更新客户门户账户
+ */
+export async function updateCustomerAccount(id, data) {
+  const db = getDatabase()
+  const { email, phone, status } = data
+  
+  const updates = ['updated_at = NOW()']
+  const values = []
+  
+  if (email !== undefined) {
+    updates.push('email = ?')
+    values.push(email)
+  }
+  if (phone !== undefined) {
+    updates.push('phone = ?')
+    values.push(phone)
+  }
+  if (status !== undefined) {
+    updates.push('status = ?')
+    values.push(status)
+    // 如果重新激活，清除锁定状态
+    if (status === 'active') {
+      updates.push('login_attempts = 0')
+      updates.push('locked_until = NULL')
+    }
+  }
+  
+  values.push(id)
+  
+  await db.prepare(`UPDATE customer_accounts SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+  return true
+}
+
+/**
+ * 重置客户账户密码
+ */
+export async function resetCustomerAccountPassword(id, newPassword) {
+  const db = getDatabase()
+  const passwordHash = await bcrypt.hash(newPassword, 10)
+  
+  await db.prepare(`
+    UPDATE customer_accounts 
+    SET password_hash = ?, password_changed_at = NOW(), login_attempts = 0, locked_until = NULL, updated_at = NOW()
+    WHERE id = ?
+  `).run(passwordHash, id)
+  
+  return true
+}
+
+/**
+ * 删除客户门户账户
+ */
+export async function deleteCustomerAccount(id) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_accounts WHERE id = ?').run(id)
+  return true
+}
+
+/**
+ * 验证客户登录
+ */
+export async function verifyCustomerLogin(username, password) {
+  const db = getDatabase()
+  console.log('🔍 查询账户:', username)
+  
+  const account = await db.prepare(`
+    SELECT ca.*, c.customer_name, c.customer_code
+    FROM customer_accounts ca
+    LEFT JOIN customers c ON ca.customer_id = c.id
+    WHERE ca.username = ?
+  `).get(username)
+  
+  console.log('🔍 查询结果:', account ? { id: account.id, username: account.username, hasPasswordHash: !!account.password_hash, status: account.status } : null)
+  
+  if (!account) {
+    return { success: false, error: '账户不存在' }
+  }
+  
+  // 检查账户状态
+  if (account.status === 'inactive') {
+    return { success: false, error: '账户已禁用，请联系管理员' }
+  }
+  
+  if (account.status === 'locked') {
+    if (account.locked_until && new Date(account.locked_until) > new Date()) {
+      return { success: false, error: '账户已锁定，请稍后再试' }
+    }
+    // 锁定时间已过，解除锁定
+    await db.prepare(`UPDATE customer_accounts SET status = 'active', login_attempts = 0, locked_until = NULL WHERE id = ?`).run(account.id)
+  }
+  
+  // 验证密码
+  const isValid = await bcrypt.compare(password, account.password_hash)
+  
+  if (!isValid) {
+    // 增加失败次数
+    const attempts = (account.login_attempts || 0) + 1
+    if (attempts >= 5) {
+      // 锁定账户30分钟
+      const lockedUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      await db.prepare(`UPDATE customer_accounts SET login_attempts = ?, locked_until = ?, status = 'locked' WHERE id = ?`).run(attempts, lockedUntil, account.id)
+      return { success: false, error: '密码错误次数过多，账户已锁定30分钟' }
+    } else {
+      await db.prepare(`UPDATE customer_accounts SET login_attempts = ? WHERE id = ?`).run(attempts, account.id)
+      return { success: false, error: `密码错误，还有 ${5 - attempts} 次机会` }
+    }
+  }
+  
+  // 登录成功，清除失败计数
+  await db.prepare(`
+    UPDATE customer_accounts 
+    SET login_attempts = 0, locked_until = NULL, last_login_at = NOW()
+    WHERE id = ?
+  `).run(account.id)
+  
+  return { 
+    success: true, 
+    account: convertAccountToCamelCase(account)
+  }
+}
+
+/**
+ * 记录登录IP
+ */
+export async function updateLoginInfo(accountId, ip) {
+  const db = getDatabase()
+  await db.prepare(`
+    UPDATE customer_accounts SET last_login_at = NOW(), last_login_ip = ? WHERE id = ?
+  `).run(ip, accountId)
+}
+
+// ==================== API 密钥管理 ====================
+
+/**
+ * 生成 API Key
+ */
+function generateApiKey() {
+  const prefix = 'ak_live_'
+  const random = crypto.randomBytes(24).toString('hex')
+  return prefix + random
+}
+
+/**
+ * 生成 API Secret
+ */
+function generateApiSecret() {
+  const prefix = 'sk_live_'
+  const random = crypto.randomBytes(32).toString('hex')
+  return prefix + random
+}
+
+/**
+ * 生成 Webhook Secret
+ */
+function generateWebhookSecret() {
+  return 'whsec_' + crypto.randomBytes(24).toString('hex')
+}
+
+/**
+ * 获取客户的 API 密钥列表
+ */
+export async function getCustomerApiKeys(customerId) {
+  const db = getDatabase()
+  const rows = await db.prepare(`
+    SELECT * FROM customer_api_keys 
+    WHERE customer_id = ?
+    ORDER BY created_at DESC
+  `).all(customerId)
+  
+  return rows.map(convertApiKeyToCamelCase)
+}
+
+/**
+ * 根据 API Key 获取密钥信息（用于认证）
+ */
+export async function getApiKeyByKey(apiKey) {
+  const db = getDatabase()
+  const row = await db.prepare(`
+    SELECT ak.*, c.customer_name, c.customer_code
+    FROM customer_api_keys ak
+    LEFT JOIN customers c ON ak.customer_id = c.id
+    WHERE ak.api_key = ?
+  `).get(apiKey)
+  
+  return row ? convertApiKeyToCamelCase(row) : null
+}
+
+/**
+ * 创建 API 密钥
+ */
+export async function createApiKey(data) {
+  const db = getDatabase()
+  const { customerId, keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl, createdBy } = data
+  
+  const apiKey = generateApiKey()
+  const apiSecret = generateApiSecret()
+  const apiSecretHash = await bcrypt.hash(apiSecret, 10)
+  const webhookSecret = webhookUrl ? generateWebhookSecret() : null
+  
+  const result = await db.prepare(`
+    INSERT INTO customer_api_keys (
+      customer_id, key_name, api_key, api_secret_hash, permissions, 
+      ip_whitelist, rate_limit, expires_at, webhook_url, webhook_secret, created_by, created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+  `).run(
+    customerId,
+    keyName,
+    apiKey,
+    apiSecretHash,
+    JSON.stringify(permissions || ['order:read']),
+    ipWhitelist ? `{${ipWhitelist.join(',')}}` : null,
+    rateLimit || 100,
+    expiresAt || null,
+    webhookUrl || null,
+    webhookSecret,
+    createdBy || null
+  )
+  
+  // 返回密钥信息（Secret 只在创建时返回一次）
+  return {
+    id: result.lastInsertRowid,
+    apiKey,
+    apiSecret,  // 只在创建时返回，之后不可查看
+    webhookSecret  // 只在创建时返回
+  }
+}
+
+/**
+ * 更新 API 密钥
+ */
+export async function updateApiKey(id, data) {
+  const db = getDatabase()
+  const { keyName, permissions, ipWhitelist, rateLimit, expiresAt, webhookUrl, isActive } = data
+  
+  const updates = ['updated_at = NOW()']
+  const values = []
+  
+  if (keyName !== undefined) {
+    updates.push('key_name = ?')
+    values.push(keyName)
+  }
+  if (permissions !== undefined) {
+    updates.push('permissions = ?')
+    values.push(JSON.stringify(permissions))
+  }
+  if (ipWhitelist !== undefined) {
+    updates.push('ip_whitelist = ?')
+    values.push(ipWhitelist && ipWhitelist.length > 0 ? `{${ipWhitelist.join(',')}}` : null)
+  }
+  if (rateLimit !== undefined) {
+    updates.push('rate_limit = ?')
+    values.push(rateLimit)
+  }
+  if (expiresAt !== undefined) {
+    updates.push('expires_at = ?')
+    values.push(expiresAt)
+  }
+  if (webhookUrl !== undefined) {
+    updates.push('webhook_url = ?')
+    values.push(webhookUrl)
+    // 如果设置了新的 webhook_url，生成新的 webhook_secret
+    if (webhookUrl) {
+      const webhookSecret = generateWebhookSecret()
+      updates.push('webhook_secret = ?')
+      values.push(webhookSecret)
+    }
+  }
+  if (isActive !== undefined) {
+    updates.push('is_active = ?')
+    values.push(isActive)
+  }
+  
+  values.push(id)
+  
+  await db.prepare(`UPDATE customer_api_keys SET ${updates.join(', ')} WHERE id = ?`).run(...values)
+  return true
+}
+
+/**
+ * 删除 API 密钥
+ */
+export async function deleteApiKey(id) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_api_keys WHERE id = ?').run(id)
+  return true
+}
+
+/**
+ * 验证 API 密钥
+ */
+export async function verifyApiKey(apiKey, apiSecret) {
+  const db = getDatabase()
+  const keyInfo = await db.prepare(`
+    SELECT ak.*, c.customer_name, c.customer_code
+    FROM customer_api_keys ak
+    LEFT JOIN customers c ON ak.customer_id = c.id
+    WHERE ak.api_key = ?
+  `).get(apiKey)
+  
+  if (!keyInfo) {
+    return { valid: false, error: 'API Key 无效', errorCode: '401001' }
+  }
+  
+  if (!keyInfo.is_active) {
+    return { valid: false, error: '密钥已禁用', errorCode: '401003' }
+  }
+  
+  if (keyInfo.expires_at && new Date(keyInfo.expires_at) < new Date()) {
+    return { valid: false, error: '密钥已过期', errorCode: '401004' }
+  }
+  
+  // 验证 Secret
+  const isSecretValid = await bcrypt.compare(apiSecret, keyInfo.api_secret_hash)
+  if (!isSecretValid) {
+    return { valid: false, error: 'API Secret 错误', errorCode: '401002' }
+  }
+  
+  return { 
+    valid: true, 
+    keyInfo: convertApiKeyToCamelCase(keyInfo)
+  }
+}
+
+/**
+ * 更新 API 密钥使用信息
+ */
+export async function updateApiKeyUsage(apiKeyId, ip) {
+  const db = getDatabase()
+  await db.prepare(`
+    UPDATE customer_api_keys 
+    SET last_used_at = NOW(), last_used_ip = ?, usage_count = usage_count + 1 
+    WHERE id = ?
+  `).run(ip, apiKeyId)
+}
+
+/**
+ * 记录 API 调用日志
+ */
+export async function logApiCall(data) {
+  const db = getDatabase()
+  const { 
+    apiKeyId, customerId, apiKey, endpoint, method, 
+    requestIp, requestHeaders, requestBody, 
+    responseStatus, responseBody, errorMessage, durationMs 
+  } = data
+  
+  await db.prepare(`
+    INSERT INTO api_call_logs (
+      api_key_id, customer_id, api_key, endpoint, method, 
+      request_ip, request_headers, request_body, 
+      response_status, response_body, error_message, duration_ms, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+  `).run(
+    apiKeyId || null,
+    customerId || null,
+    apiKey || null,
+    endpoint,
+    method,
+    requestIp || null,
+    requestHeaders ? JSON.stringify(requestHeaders) : null,
+    requestBody ? JSON.stringify(requestBody) : null,
+    responseStatus || null,
+    responseBody ? JSON.stringify(responseBody) : null,
+    errorMessage || null,
+    durationMs || null
+  )
+}
+
+/**
+ * 获取 API 调用日志
+ */
+export async function getApiCallLogs(params = {}) {
+  const db = getDatabase()
+  const { customerId, apiKeyId, endpoint, status, startDate, endDate, page = 1, pageSize = 50 } = params
+  
+  let sql = `SELECT * FROM api_call_logs WHERE 1=1`
+  const conditions = []
+  
+  if (customerId) {
+    sql += ` AND customer_id = ?`
+    conditions.push(customerId)
+  }
+  if (apiKeyId) {
+    sql += ` AND api_key_id = ?`
+    conditions.push(apiKeyId)
+  }
+  if (endpoint) {
+    sql += ` AND endpoint LIKE ?`
+    conditions.push(`%${endpoint}%`)
+  }
+  if (status) {
+    sql += ` AND response_status = ?`
+    conditions.push(status)
+  }
+  if (startDate) {
+    sql += ` AND created_at >= ?`
+    conditions.push(startDate)
+  }
+  if (endDate) {
+    sql += ` AND created_at <= ?`
+    conditions.push(endDate)
+  }
+  
+  // 计数
+  const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const countResult = await db.prepare(countSql).get(...conditions)
+  
+  // 分页
+  sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+  conditions.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(sql).all(...conditions)
+  
+  return {
+    list: rows.map(convertApiLogToCamelCase),
+    total: countResult?.total || 0,
+    page,
+    pageSize
+  }
+}
+
+// ==================== 数据转换函数 ====================
+
+function convertAccountToCamelCase(row) {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    customerCode: row.customer_code,
+    username: row.username,
+    email: row.email,
+    phone: row.phone,
+    avatarUrl: row.avatar_url,
+    status: row.status,
+    loginAttempts: row.login_attempts,
+    lockedUntil: row.locked_until,
+    lastLoginAt: row.last_login_at,
+    lastLoginIp: row.last_login_ip,
+    passwordChangedAt: row.password_changed_at,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function convertApiKeyToCamelCase(row) {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    customerCode: row.customer_code,
+    keyName: row.key_name,
+    apiKey: row.api_key,
+    permissions: typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions,
+    ipWhitelist: row.ip_whitelist,
+    rateLimit: row.rate_limit,
+    isActive: row.is_active,
+    lastUsedAt: row.last_used_at,
+    lastUsedIp: row.last_used_ip,
+    usageCount: row.usage_count,
+    expiresAt: row.expires_at,
+    webhookUrl: row.webhook_url,
+    webhookSecret: row.webhook_secret,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function convertApiLogToCamelCase(row) {
+  return {
+    id: row.id,
+    apiKeyId: row.api_key_id,
+    customerId: row.customer_id,
+    apiKey: row.api_key,
+    endpoint: row.endpoint,
+    method: row.method,
+    requestIp: row.request_ip,
+    requestHeaders: row.request_headers ? JSON.parse(row.request_headers) : null,
+    requestBody: row.request_body ? JSON.parse(row.request_body) : null,
+    responseStatus: row.response_status,
+    responseBody: row.response_body ? JSON.parse(row.response_body) : null,
+    errorMessage: row.error_message,
+    durationMs: row.duration_ms,
+    createdAt: row.created_at
+  }
+}
+
 export default {
   // 常量
   CUSTOMER_TYPE,
@@ -1862,15 +3456,19 @@ export default {
   OPPORTUNITY_STAGE,
   QUOTATION_STATUS,
   CONTRACT_STATUS,
+  CONTRACT_SIGN_STATUS,
   FEEDBACK_TYPE,
   FEEDBACK_STATUS,
   FEEDBACK_PRIORITY,
+  ACCOUNT_STATUS,
+  API_PERMISSIONS,
   
   // 客户管理
   getCustomers,
   getCustomerStats,
   getCustomerById,
   getCustomerByCode,
+  generateCustomerCode,
   createCustomer,
   updateCustomer,
   deleteCustomer,
@@ -1894,6 +3492,25 @@ export default {
   getCustomerOrderStats,
   getCustomerOrders,
   
+  // 客户地址
+  getCustomerAddresses,
+  createCustomerAddress,
+  updateCustomerAddress,
+  deleteCustomerAddress,
+  
+  // 客户税号
+  getCustomerTaxNumbers,
+  createCustomerTaxNumber,
+  updateCustomerTaxNumber,
+  deleteCustomerTaxNumber,
+  
+  // 共享税号（公司级税号库）
+  getSharedTaxNumbers,
+  getSharedTaxNumberById,
+  createSharedTaxNumber,
+  updateSharedTaxNumber,
+  deleteSharedTaxNumber,
+  
   // 销售机会
   getOpportunities,
   getOpportunityStats,
@@ -1909,14 +3526,24 @@ export default {
   createQuotation,
   updateQuotation,
   deleteQuotation,
-  
+  createQuotationForCustomer,
+
   // 合同管理
   getContracts,
   getContractById,
   createContract,
   updateContract,
   deleteContract,
-  
+  // 合同签署管理
+  generateContractForOpportunity,
+  uploadSignedContract,
+  updateContractSignStatus,
+  getContractSignHistory,
+  getContractByOpportunityId,
+  getPendingSignContracts,
+  canOpportunityClose,
+  updateOpportunityContract,
+
   // 客户反馈
   getFeedbacks,
   getFeedbackStats,
@@ -1931,13 +3558,88 @@ export default {
   getSalesFunnel,
   getCustomerActivityRanking,
   
-  // 转换函数
-  convertCustomerToCamelCase,
-  convertContactToCamelCase,
-  convertFollowUpToCamelCase,
-  convertOpportunityToCamelCase,
-  convertQuotationToCamelCase,
-  convertContractToCamelCase,
-  convertFeedbackToCamelCase
+  // 客户门户账户管理
+  getCustomerAccounts,
+  getCustomerAccountById,
+  getCustomerAccountByUsername,
+  createCustomerAccount,
+  updateCustomerAccount,
+  resetCustomerAccountPassword,
+  deleteCustomerAccount,
+  verifyCustomerLogin,
+  updateLoginInfo,
+  
+  // API 密钥管理
+  getCustomerApiKeys,
+  getApiKeyByKey,
+  createApiKey,
+  updateApiKey,
+  deleteApiKey,
+  verifyApiKey,
+  updateApiKeyUsage,
+  logApiCall,
+  getApiCallLogs
+}
+
+// ==================== 最后里程费率集成 ====================
+
+/**
+ * 获取最后里程费率用于报价单
+ * @param {Object} params - 查询参数
+ * @param {number} params.carrierId - 承运商ID
+ * @param {string} params.zoneCode - Zone编码
+ * @param {number} params.weight - 重量
+ * @returns {Object} 费率信息
+ */
+export async function getLastMileRateForQuotation(params) {
+  const db = getDatabase()
+  const { carrierId, zoneCode, weight } = params
+  
+  // 获取当前有效的费率卡
+  const today = new Date().toISOString().split('T')[0]
+  const rateCard = await db.prepare(`
+    SELECT r.*, c.carrier_name, c.carrier_code 
+    FROM unified_rate_cards r
+    LEFT JOIN last_mile_carriers c ON r.carrier_id = c.id
+    WHERE r.carrier_id = ? 
+    AND r.status = 'active'
+    AND r.valid_from <= ?
+    AND (r.valid_until IS NULL OR r.valid_until >= ?)
+    ORDER BY r.is_default DESC, r.created_at DESC
+    LIMIT 1
+  `).get(carrierId, today, today)
+  
+  if (!rateCard) {
+    return null
+  }
+  
+  // 查找匹配的费率
+  const tier = await db.prepare(`
+    SELECT * FROM rate_card_tiers
+    WHERE rate_card_id = ?
+    AND zone_code = ?
+    AND weight_from <= ?
+    AND weight_to >= ?
+    ORDER BY weight_from
+    LIMIT 1
+  `).get(rateCard.id, zoneCode, weight, weight)
+  
+  if (!tier) {
+    return null
+  }
+  
+  return {
+    carrierId: rateCard.carrier_id,
+    carrierCode: rateCard.carrier_code,
+    carrierName: rateCard.carrier_name,
+    rateCardId: rateCard.id,
+    rateCardName: rateCard.rate_card_name,
+    currency: rateCard.currency,
+    zoneCode: tier.zone_code,
+    weightRange: `${tier.weight_from}-${tier.weight_to}`,
+    purchasePrice: tier.purchase_price ? parseFloat(tier.purchase_price) : null,
+    salesPrice: tier.sales_price ? parseFloat(tier.sales_price) : null,
+    priceUnit: tier.price_unit
+  }
 }
 

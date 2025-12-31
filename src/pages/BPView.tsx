@@ -11,6 +11,8 @@ import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../compo
 import { getBillsList, type BillOfLading } from '../utils/api'
 import { scheduleBills } from '../data/mockOrders'
 import { useColumnSettings } from '../hooks/useColumnSettings'
+import { copyToClipboard } from '../components/Toast'
+import { formatDate, formatDateTimeShort } from '../utils/dateFormat'
 
 export default function BPView() {
   const navigate = useNavigate()
@@ -41,7 +43,7 @@ export default function BPView() {
           type: 'schedule',
           search: searchValue || undefined,
           page: 1,
-          pageSize: 1000,
+          pageSize: 100,  // 优化：减少初始加载数据量，提升加载速度
         })
         
         if (response.errCode === 200 && response.data) {
@@ -68,80 +70,82 @@ export default function BPView() {
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1)
   }
-  
-  const handleCopy = (text: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    navigator.clipboard.writeText(text).then(() => {
-      alert('已复制到剪贴板')
-    }).catch(() => {
-      alert('复制失败')
-    })
-  }
 
   const columns: Column<BillOfLading>[] = [
     {
-      key: 'billNumber',
-      label: '序号',
+      key: 'orderNumber',
+      label: '订单号',
       sorter: true,
-      filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.billNumber}
+            {record.orderNumber || '-'}
           </span>
-          <button
-            onClick={(e) => handleCopy(item.billNumber, e)}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            title="复制序号"
+          {record.orderNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="复制订单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'billNumber',
+      label: '提单号',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          <span
+            className="text-gray-700 hover:underline cursor-pointer text-xs"
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/bookings/bill/${record.id}`)
+            }}
           >
-            <Copy className="w-3 h-3" />
-          </button>
+            {record.billNumber}
+          </span>
+          {record.billNumber && (
+            <button
+              onClick={(e) => copyToClipboard(record.billNumber, e)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+              title="复制提单号"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          )}
         </div>
       ),
     },
     {
       key: 'containerNumber',
-      label: '提单号',
+      label: '集装箱号',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
           <span
             className="text-primary-600 hover:underline cursor-pointer text-xs"
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/bookings/bill/${item.id}`)
+              navigate(`/bookings/bill/${record.id}`)
             }}
           >
-            {item.containerNumber}
+            {record.containerNumber}
           </span>
-          <button
-            onClick={(e) => handleCopy(item.containerNumber || '', e)}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            title="复制提单号"
-          >
-            <Copy className="w-3 h-3" />
-          </button>
-        </div>
-      ),
-    },
-    {
-      key: 'actualContainerNo',
-      label: '集装箱号',
-      sorter: true,
-      filterable: true,
-      render: (item: BillOfLading) => (
-        <div className="flex items-center gap-1">
-          <span className="text-xs">{item.actualContainerNo || '-'}</span>
-          {item.actualContainerNo && (
+          {record.containerNumber && (
             <button
-              onClick={(e) => handleCopy(item.actualContainerNo || '', e)}
+              onClick={(e) => copyToClipboard(record.containerNumber || '', e)}
               className="text-gray-400 hover:text-gray-600 transition-colors"
               title="复制集装箱号"
             >
@@ -152,14 +156,33 @@ export default function BPView() {
       ),
     },
     {
+      key: 'customerName',
+      label: '关联客户',
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="max-w-[120px]">
+          <span 
+            className="text-xs text-gray-900 truncate block" 
+            title={record.customerName || '-'}
+          >
+            {record.customerName || '-'}
+          </span>
+          {record.customerCode && (
+            <span className="text-[10px] text-gray-500">{record.customerCode}</span>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'vessel',
       label: '航班号/船名航次',
       sorter: true,
       filterable: true,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1.5">
           <Ship className="w-3 h-3 text-gray-400" />
-          <span className="text-xs">{item.vessel}</span>
+          <span className="text-xs">{record.vessel}</span>
         </div>
       ),
     },
@@ -171,13 +194,13 @@ export default function BPView() {
         const dateB = b.eta ? new Date(b.eta).getTime() : 0
         return dateA - dateB
       },
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <span>{item.eta}</span>
-          {item.ata && (
+          <span>{formatDateTimeShort(record.eta)}</span>
+          {record.ata && (
             <>
               <span className="mx-0.5 text-gray-400">/</span>
-              <span className="text-green-600">{item.ata}</span>
+              <span className="text-green-600">{formatDateTimeShort(record.ata)}</span>
             </>
           )}
         </div>
@@ -187,10 +210,10 @@ export default function BPView() {
       key: 'pieces',
       label: '件数 / 毛重',
       sorter: (a, b) => a.pieces - b.pieces,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.pieces} 件</div>
-          <div className="text-green-600">{item.weight} KGS</div>
+          <div className="text-gray-900">{record.pieces} 件</div>
+          <div className="text-green-600">{record.weight} KGS</div>
         </div>
       ),
     },
@@ -205,27 +228,27 @@ export default function BPView() {
         if (value === '已查验') return record.inspection !== '-'
         return record.inspection === value
       },
-      render: (item: BillOfLading) => (
-        <span className={`text-xs ${item.inspection !== '-' ? 'text-orange-600' : 'text-gray-400'}`}>
-          {item.inspection}
+      render: (_value, record: BillOfLading) => (
+        <span className={`text-xs ${record.inspection !== '-' ? 'text-orange-600' : 'text-gray-400'}`}>
+          {record.inspection}
         </span>
       ),
     },
     {
       key: 'customsStats',
       label: '报关统计',
-      render: (item: BillOfLading) => (
-        <span className="text-xs">{item.customsStats}</span>
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs">{record.customsStats}</span>
       ),
     },
     {
       key: 'customsInfo',
       label: '报关信息',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            setSelectedContainer(item)
+            setSelectedContainer(record)
             setCustomsInfoModalVisible(true)
           }}
           className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded transition-colors"
@@ -238,11 +261,11 @@ export default function BPView() {
     {
       key: 'remarks',
       label: '备注',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            setSelectedBill(item)
+            setSelectedBill(record)
             setRemarkModalVisible(true)
           }}
           className="p-1 text-gray-400 hover:text-primary-600 hover:bg-gray-100 rounded transition-colors"
@@ -255,10 +278,10 @@ export default function BPView() {
     {
       key: 'creator',
       label: '创建者 / 时间',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="text-xs">
-          <div className="text-gray-900">{item.creator}</div>
-          <div className="text-[10px] text-gray-500">{item.createTime}</div>
+          <div className="text-gray-900">{record.creator}</div>
+          <div className="text-[10px] text-gray-500">{formatDate(record.createTime)}</div>
         </div>
       ),
     },
@@ -266,16 +289,16 @@ export default function BPView() {
       key: 'deliveryStatus',
       label: '派送状态',
       filters: [
-        { text: '未派送', value: '未派送' },
+        { text: '待派送', value: '待派送' },
         { text: '派送中', value: '派送中' },
         { text: '订单异常', value: '订单异常' },
         { text: '已送达', value: '已送达' },
       ],
-      onFilter: (value, record) => (record.deliveryStatus || '未派送') === value,
-      render: (item: BillOfLading) => {
-        const status = item.deliveryStatus || '未派送'
+      onFilter: (value, record) => (record.deliveryStatus || '待派送') === value,
+      render: (_value, record: BillOfLading) => {
+        const status = record.deliveryStatus || '待派送'
         const statusStyles: Record<string, string> = {
-          '未派送': 'bg-gray-400',
+          '待派送': 'bg-gray-400',
           '派送中': 'bg-orange-500',
           '已送达': 'bg-green-500',
           '订单异常': 'bg-red-500',
@@ -297,21 +320,21 @@ export default function BPView() {
         { text: '已到港', value: '已到港' },
       ],
       onFilter: (value, record) => record.status === value,
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${item.status === '已到港' ? 'bg-green-500' : 'bg-red-500'}`} />
-          <span className="text-xs">{item.status}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${record.status === '已到港' ? 'bg-green-500' : 'bg-red-500'}`} />
+          <span className="text-xs">{record.status}</span>
         </div>
       ),
     },
     {
       key: 'actions',
       label: '操作',
-      render: (item: BillOfLading) => (
+      render: (_value, record: BillOfLading) => (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            navigate(`/bookings/bill/${item.id}`)
+            navigate(`/bookings/bill/${record.id}`)
           }}
           className="px-2 py-1 text-xs text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded transition-colors"
         >
@@ -385,11 +408,11 @@ export default function BPView() {
             data={bills}
             loading={loading}
             searchValue={searchValue}
-            searchableColumns={['billNumber', 'containerNumber', 'vessel']}
+            searchableColumns={['orderNumber', 'billNumber', 'containerNumber', 'vessel']}
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{
-              pageSize: 10,
+              pageSize: 20,
               showSizeChanger: true,
               showTotal: (total) => `共 ${total} 条记录`,
             }}

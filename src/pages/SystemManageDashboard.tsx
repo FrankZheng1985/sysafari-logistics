@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { 
   Settings, Users, Shield, Image, Database, FileText,
-  ToggleLeft, ArrowRight, Activity, Server, Lock, Key
+  ToggleLeft, ArrowRight, Activity, Server, Lock, Key, Link2
 } from 'lucide-react'
 
 interface SystemCard {
@@ -56,11 +56,19 @@ const systemModules: SystemCard[] = [
   },
   {
     path: '/system/tariff-rates',
-    label: '税率管理',
+    label: 'HS Code数据库',
     description: '配置和管理各类税率信息',
     icon: FileText,
     color: 'text-teal-600',
     bgColor: 'bg-teal-50 hover:bg-teal-100',
+  },
+  {
+    path: '/system/api-integrations',
+    label: 'API对接管理',
+    description: '管理已对接的第三方API服务和基础设施',
+    icon: Link2,
+    color: 'text-indigo-600',
+    bgColor: 'bg-indigo-50 hover:bg-indigo-100',
   },
 ]
 

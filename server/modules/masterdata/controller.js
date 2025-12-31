@@ -35,9 +35,10 @@ export async function getCountries(req, res) {
 export async function getCountryContinents(req, res) {
   try {
     const db = getDatabase()
-    const continents = await db.prepare(
+    const rows = await db.prepare(
       "SELECT DISTINCT continent FROM countries WHERE continent IS NOT NULL AND continent != '' ORDER BY continent"
-    ).all().map(r => r.continent)
+    ).all()
+    const continents = rows.map(r => r.continent)
     
     return success(res, continents)
   } catch (error) {
@@ -132,6 +133,144 @@ export async function deleteCountry(req, res) {
   }
 }
 
+// ==================== 城市相关 ====================
+
+/**
+ * 获取城市列表
+ */
+export async function getCities(req, res) {
+  try {
+    const { countryCode, parentId, level, status, search, page, pageSize } = req.query
+    const result = await model.getCities({
+      countryCode,
+      parentId: parentId !== undefined ? parseInt(parentId) : undefined,
+      level: level ? parseInt(level) : undefined,
+      status,
+      search,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 500
+    })
+    
+    return success(res, result.list)
+  } catch (error) {
+    console.error('获取城市列表失败:', error)
+    return serverError(res, '获取城市列表失败')
+  }
+}
+
+/**
+ * 根据国家获取城市列表（简化版）
+ */
+export async function getCitiesByCountry(req, res) {
+  try {
+    const { countryCode } = req.params
+    const { search } = req.query
+    
+    const cities = await model.getCitiesByCountry(countryCode, search || '')
+    return success(res, cities)
+  } catch (error) {
+    console.error('获取国家城市列表失败:', error)
+    return serverError(res, '获取国家城市列表失败')
+  }
+}
+
+/**
+ * 获取城市详情
+ */
+export async function getCityById(req, res) {
+  try {
+    const { id } = req.params
+    const city = await model.getCityById(id)
+    
+    if (!city) {
+      return notFound(res, '城市不存在')
+    }
+    
+    return success(res, city)
+  } catch (error) {
+    console.error('获取城市详情失败:', error)
+    return serverError(res, '获取城市详情失败')
+  }
+}
+
+/**
+ * 创建城市
+ */
+export async function createCity(req, res) {
+  try {
+    const { countryCode, cityNameCn } = req.body
+    
+    if (!countryCode || !cityNameCn) {
+      return badRequest(res, '国家代码和城市名称为必填项')
+    }
+    
+    const result = await model.createCity(req.body)
+    return success(res, result, '创建成功')
+  } catch (error) {
+    console.error('创建城市失败:', error)
+    return serverError(res, '创建城市失败')
+  }
+}
+
+/**
+ * 批量创建城市
+ */
+export async function createCitiesBatch(req, res) {
+  try {
+    const { cities } = req.body
+    
+    if (!cities || !Array.isArray(cities) || cities.length === 0) {
+      return badRequest(res, '请提供城市数据数组')
+    }
+    
+    const results = await model.createCitiesBatch(cities)
+    return success(res, { created: results.length, cities: results }, '批量创建成功')
+  } catch (error) {
+    console.error('批量创建城市失败:', error)
+    return serverError(res, '批量创建城市失败')
+  }
+}
+
+/**
+ * 更新城市
+ */
+export async function updateCity(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getCityById(id)
+    if (!existing) {
+      return notFound(res, '城市不存在')
+    }
+    
+    await model.updateCity(id, req.body)
+    return success(res, null, '更新成功')
+  } catch (error) {
+    console.error('更新城市失败:', error)
+    return serverError(res, '更新城市失败')
+  }
+}
+
+/**
+ * 删除城市
+ */
+export async function deleteCity(req, res) {
+  try {
+    const { id } = req.params
+    
+    const existing = await model.getCityById(id)
+    if (!existing) {
+      return notFound(res, '城市不存在')
+    }
+    
+    await model.deleteCity(id)
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除城市失败:', error)
+    return serverError(res, '删除城市失败')
+  }
+}
+
 // ==================== 起运港相关 ====================
 
 export async function getPortsOfLoading(req, res) {
@@ -157,9 +296,10 @@ export async function getPortsOfLoading(req, res) {
 export async function getPortOfLoadingCountries(req, res) {
   try {
     const db = getDatabase()
-    const countries = await db.prepare(
+    const rows = await db.prepare(
       'SELECT DISTINCT country, country_code FROM ports_of_loading WHERE country IS NOT NULL ORDER BY country'
-    ).all().map(r => ({ country: r.country, countryCode: r.country_code }))
+    ).all()
+    const countries = rows.map(r => ({ country: r.country, countryCode: r.country_code }))
     
     return success(res, countries)
   } catch (error) {
@@ -258,7 +398,7 @@ export async function updatePortOfLoading(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE ports_of_loading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -311,9 +451,10 @@ export async function getDestinationPorts(req, res) {
 export async function getDestinationPortCountries(req, res) {
   try {
     const db = getDatabase()
-    const countries = await db.prepare(
+    const rows = await db.prepare(
       'SELECT DISTINCT country, country_code FROM destination_ports WHERE country IS NOT NULL ORDER BY country'
-    ).all().map(r => ({ country: r.country, countryCode: r.country_code }))
+    ).all()
+    const countries = rows.map(r => ({ country: r.country, countryCode: r.country_code }))
     
     return success(res, countries)
   } catch (error) {
@@ -414,7 +555,7 @@ export async function updateDestinationPort(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE destination_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -562,7 +703,7 @@ export async function updateAirPort(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE air_ports SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -587,6 +728,25 @@ export async function deleteAirPort(req, res) {
   } catch (error) {
     console.error('删除机场失败:', error)
     return serverError(res, '删除机场失败')
+  }
+}
+
+/**
+ * 获取机场国家列表
+ * @description 获取所有机场所属国家的去重列表
+ */
+export async function getAirPortCountries(req, res) {
+  try {
+    const db = getDatabase()
+    const countries = await db.prepare(
+      'SELECT DISTINCT country, country_code FROM air_ports WHERE country IS NOT NULL AND country != \'\' ORDER BY country'
+    ).all()
+    
+    const result = countries.map(r => ({ country: r.country, countryCode: r.country_code }))
+    return success(res, result)
+  } catch (error) {
+    console.error('获取机场国家列表失败:', error)
+    return serverError(res, '获取机场国家列表失败')
   }
 }
 
@@ -683,7 +843,7 @@ export async function updateShippingCompany(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE shipping_companies SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -807,7 +967,7 @@ export async function updateContainerCode(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE container_codes SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -957,7 +1117,7 @@ export async function updateVatRate(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE vat_rates SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1076,7 +1236,7 @@ export async function updateTransportMethod(req, res) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE transport_methods SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1109,12 +1269,78 @@ export async function deleteTransportMethod(req, res) {
 export async function getServiceFeeCategories(req, res) {
   try {
     const db = getDatabase()
-    const { status = 'active' } = req.query
+    const { status, tree } = req.query
     
     let query = 'SELECT * FROM service_fee_categories WHERE 1=1'
     const params = []
     
-    if (status) {
+    // 只有明确指定status时才过滤，否则返回全部
+    if (status && status !== 'all') {
+      query += ' AND status = ?'
+      params.push(status)
+    }
+    
+    query += ' ORDER BY COALESCE(parent_id, 0), sort_order, name'
+    
+    const list = await db.prepare(query).all(...params)
+    const mappedList = list.map(r => ({
+      id: String(r.id),
+      name: r.name,
+      nameEn: r.name_en,
+      code: r.code,
+      description: r.description,
+      sortOrder: r.sort_order,
+      status: r.status,
+      parentId: r.parent_id ? String(r.parent_id) : null,
+      level: r.level || 1,
+      createTime: r.created_at
+    }))
+    
+    // 如果请求树形结构，则构建树
+    if (tree === 'true') {
+      const treeData = buildCategoryTree(mappedList)
+      return success(res, treeData)
+    }
+    
+    return success(res, mappedList)
+  } catch (error) {
+    console.error('获取服务费类别列表失败:', error)
+    return serverError(res, '获取服务费类别列表失败')
+  }
+}
+
+// 构建分类树形结构
+function buildCategoryTree(list) {
+  const map = {}
+  const roots = []
+  
+  // 先建立 id -> item 的映射
+  list.forEach(item => {
+    map[item.id] = { ...item, children: [] }
+  })
+  
+  // 构建树
+  list.forEach(item => {
+    if (item.parentId && map[item.parentId]) {
+      map[item.parentId].children.push(map[item.id])
+    } else {
+      roots.push(map[item.id])
+    }
+  })
+  
+  return roots
+}
+
+// 获取顶级分类列表（用于选择父级）
+export async function getTopLevelCategories(req, res) {
+  try {
+    const db = getDatabase()
+    const { status = 'active' } = req.query
+    
+    let query = 'SELECT * FROM service_fee_categories WHERE (parent_id IS NULL OR parent_id = 0)'
+    const params = []
+    
+    if (status && status !== 'all') {
       query += ' AND status = ?'
       params.push(status)
     }
@@ -1125,20 +1351,23 @@ export async function getServiceFeeCategories(req, res) {
     return success(res, list.map(r => ({
       id: String(r.id),
       name: r.name,
+      nameEn: r.name_en,
       code: r.code,
       description: r.description,
       sortOrder: r.sort_order,
-      status: r.status
+      status: r.status,
+      parentId: null,
+      level: 1
     })))
   } catch (error) {
-    console.error('获取服务费类别列表失败:', error)
-    return serverError(res, '获取服务费类别列表失败')
+    console.error('获取顶级分类列表失败:', error)
+    return serverError(res, '获取顶级分类列表失败')
   }
 }
 
 export async function createServiceFeeCategory(req, res) {
   try {
-    const { name, code } = req.body
+    const { name, code, parentId } = req.body
     
     if (!name || !code) {
       return badRequest(res, '名称和代码为必填项')
@@ -1151,18 +1380,39 @@ export async function createServiceFeeCategory(req, res) {
       return conflict(res, '代码已存在')
     }
     
+    // 确定层级：如果有父级则为父级层级+1，否则为1
+    let level = 1
+    let sortOrder = req.body.sortOrder || 0
+    
+    if (parentId) {
+      const parent = await db.prepare('SELECT level FROM service_fee_categories WHERE id = ?').get(parentId)
+      if (parent) {
+        level = (parent.level || 1) + 1
+      }
+      
+      // 子分类自动计算排序：查询该父级下已有子分类的最大排序值 + 1
+      const maxSortResult = await db.prepare(
+        'SELECT COALESCE(MAX(sort_order), 0) as max_sort FROM service_fee_categories WHERE parent_id = ?'
+      ).get(parentId)
+      sortOrder = (maxSortResult?.max_sort || 0) + 1
+    }
+    
     const result = await db.prepare(`
-      INSERT INTO service_fee_categories (name, code, description, sort_order, status)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
+      INSERT INTO service_fee_categories (name, name_en, code, description, sort_order, status, parent_id, level)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING id
+    `).get(
       name,
+      req.body.nameEn || '',
       code,
       req.body.description || '',
-      req.body.sortOrder || 0,
-      req.body.status || 'active'
+      sortOrder,
+      req.body.status || 'active',
+      parentId || null,
+      level
     )
     
-    return success(res, { id: result.lastInsertRowid }, '创建成功')
+    return success(res, { id: result?.id, sortOrder }, '创建成功')
   } catch (error) {
     console.error('创建服务费类别失败:', error)
     return serverError(res, '创建服务费类别失败')
@@ -1174,7 +1424,7 @@ export async function updateServiceFeeCategory(req, res) {
     const { id } = req.params
     const db = getDatabase()
     
-    const existing = await db.prepare('SELECT id FROM service_fee_categories WHERE id = ?').get(id)
+    const existing = await db.prepare('SELECT id, parent_id FROM service_fee_categories WHERE id = ?').get(id)
     if (!existing) {
       return notFound(res, '服务费类别不存在')
     }
@@ -1183,16 +1433,50 @@ export async function updateServiceFeeCategory(req, res) {
     const values = []
     
     if (req.body.name) { fields.push('name = ?'); values.push(req.body.name) }
+    if (req.body.nameEn !== undefined) { fields.push('name_en = ?'); values.push(req.body.nameEn) }
     if (req.body.code) { fields.push('code = ?'); values.push(req.body.code) }
     if (req.body.description !== undefined) { fields.push('description = ?'); values.push(req.body.description) }
     if (req.body.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(req.body.sortOrder) }
     if (req.body.status !== undefined) { fields.push('status = ?'); values.push(req.body.status) }
     
+    // 处理父级分类变更
+    if (req.body.parentId !== undefined) {
+      // 防止设置自己为父级
+      if (req.body.parentId && String(req.body.parentId) === String(id)) {
+        return badRequest(res, '不能将自己设为父级分类')
+      }
+      
+      // 防止设置子级为父级（避免循环引用）
+      if (req.body.parentId) {
+        const children = await db.prepare(
+          'SELECT id FROM service_fee_categories WHERE parent_id = ?'
+        ).all(id)
+        const childIds = children.map(c => String(c.id))
+        if (childIds.includes(String(req.body.parentId))) {
+          return badRequest(res, '不能将子级分类设为父级')
+        }
+      }
+      
+      fields.push('parent_id = ?')
+      values.push(req.body.parentId || null)
+      
+      // 更新层级
+      let level = 1
+      if (req.body.parentId) {
+        const parent = await db.prepare('SELECT level FROM service_fee_categories WHERE id = ?').get(req.body.parentId)
+        if (parent) {
+          level = (parent.level || 1) + 1
+        }
+      }
+      fields.push('level = ?')
+      values.push(level)
+    }
+    
     if (fields.length === 0) {
       return badRequest(res, '没有需要更新的字段')
     }
     
-    fields.push('updated_at = CURRENT_TIMESTAMP')
+    fields.push('updated_at = NOW()')
     values.push(id)
     
     await db.prepare(`UPDATE service_fee_categories SET ${fields.join(', ')} WHERE id = ?`).run(...values)
@@ -1207,7 +1491,18 @@ export async function updateServiceFeeCategory(req, res) {
 export async function deleteServiceFeeCategory(req, res) {
   try {
     const db = getDatabase()
-    const result = await db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(req.params.id)
+    const { id } = req.params
+    
+    // 检查是否有子分类
+    const children = await db.prepare(
+      'SELECT COUNT(*) as count FROM service_fee_categories WHERE parent_id = ?'
+    ).get(id)
+    
+    if (children && children.count > 0) {
+      return badRequest(res, `该分类下有 ${children.count} 个子分类，请先删除子分类`)
+    }
+    
+    const result = await db.prepare('DELETE FROM service_fee_categories WHERE id = ?').run(id)
     
     if (result.changes === 0) {
       return notFound(res, '服务费类别不存在')

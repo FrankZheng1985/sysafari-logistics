@@ -6,6 +6,9 @@ import {
   ChevronRight, ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import { getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface CustomerStats {
   total: number
@@ -96,11 +99,11 @@ export default function CRMDashboard() {
       }
 
       const [custData, oppData, fbData, funnelData, rankingData] = await Promise.all([
-        fetchJson('/api/customers/stats'),
-        fetchJson('/api/opportunities/stats'),
-        fetchJson('/api/feedbacks/stats'),
-        fetchJson('/api/analytics/sales-funnel'),
-        fetchJson('/api/analytics/activity-ranking?limit=5')
+        fetchJson(`${API_BASE}/api/customers/stats`),
+        fetchJson(`${API_BASE}/api/opportunities/stats`),
+        fetchJson(`${API_BASE}/api/feedbacks/stats`),
+        fetchJson(`${API_BASE}/api/analytics/sales-funnel`),
+        fetchJson(`${API_BASE}/api/analytics/activity-ranking?limit=5`)
       ])
 
       if (custData.errCode === 200) setCustomerStats(custData.data)
@@ -116,7 +119,7 @@ export default function CRMDashboard() {
   }
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(value)
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value)
   }
 
   const getStageLabel = (stage: string) => {
@@ -156,6 +159,9 @@ export default function CRMDashboard() {
     { label: '报价管理', path: '/crm/quotations' },
     { label: '合同管理', path: '/crm/contracts' },
     { label: '客户反馈', path: '/crm/feedbacks' },
+    { label: '提成规则', path: '/crm/commission/rules' },
+    { label: '提成记录', path: '/crm/commission/records' },
+    { label: '月度结算', path: '/crm/commission/settlements' },
   ]
 
   if (loading) {
@@ -384,8 +390,8 @@ export default function CRMDashboard() {
                       {index + 1}
                     </span>
                   </td>
-                  <td className="py-2 font-medium text-gray-900">{customer.customerName}</td>
-                  <td className="py-2">{getLevelBadge(customer.customerLevel)}</td>
+                  <td className="py-2 font-medium text-gray-900">{customer?.customerName || '-'}</td>
+                  <td className="py-2">{getLevelBadge(customer?.customerLevel || 'normal')}</td>
                   <td className="py-2 text-center">{customer.followUpCount}</td>
                   <td className="py-2 text-center">{customer.opportunityCount}</td>
                   <td className="py-2 text-center">{customer.contractCount}</td>
