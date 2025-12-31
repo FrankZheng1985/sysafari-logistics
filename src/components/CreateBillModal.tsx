@@ -55,6 +55,11 @@ interface EditBillData {
   // 系统导入/人工录入字段
   customsReleaseTime?: string  // 清关完成时间
   cmrUnloadingCompleteTime?: string  // 卸货日期
+  // 订单导入扩展字段
+  serviceType?: string  // 服务产品
+  cargoValue?: number  // 货柜金额
+  documentsSentDate?: string  // 资料发送日期
+  cmrSentDate?: string  // CMR发送日期
 }
 
 interface CreateBillModalProps {
@@ -127,6 +132,11 @@ export default function CreateBillModal({
     // 系统导入/人工录入字段
     customsReleaseTime: '', // 清关完成时间
     cmrUnloadingCompleteTime: '', // 卸货日期
+    // 订单导入扩展字段
+    serviceType: '', // 服务产品
+    cargoValue: '', // 货柜金额
+    documentsSentDate: '', // 资料发送日期
+    cmrSentDate: '', // CMR发送日期
   })
   const [bindResourceTab, setBindResourceTab] = useState<'general' | 'pallet'>('general')
   const [resourceFile, setResourceFile] = useState<File | null>(null)
@@ -482,6 +492,11 @@ export default function CreateBillModal({
         // 系统导入/人工录入字段
         customsReleaseTime: editData.customsReleaseTime || '',
         cmrUnloadingCompleteTime: editData.cmrUnloadingCompleteTime || '',
+        // 订单导入扩展字段
+        serviceType: editData.serviceType || '',
+        cargoValue: editData.cargoValue?.toString() || '',
+        documentsSentDate: editData.documentsSentDate || '',
+        cmrSentDate: editData.cmrSentDate || '',
       }
       setFormData(newFormData)
 
@@ -1696,6 +1711,11 @@ export default function CreateBillModal({
         t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
         // Reference List
         referenceList: JSON.stringify(referenceList),
+        // 订单导入扩展字段
+        serviceType: formData.serviceType || '',
+        cargoValue: formData.cargoValue ? parseFloat(formData.cargoValue) : null,
+        documentsSentDate: formData.documentsSentDate || '',
+        cmrSentDate: formData.cmrSentDate || '',
       }
 
       // 根据模式决定是创建还是更新
@@ -1749,6 +1769,11 @@ export default function CreateBillModal({
           containerSize: '',
           customsReleaseTime: '',
           cmrUnloadingCompleteTime: '',
+          // 订单导入扩展字段
+          serviceType: '',
+          cargoValue: '',
+          documentsSentDate: '',
+          cmrSentDate: '',
         })
         setShippingCompanySource('')
         setReferenceList([])
@@ -3386,7 +3411,7 @@ export default function CreateBillModal({
                     )}
                   </div>
 
-                  {/* 第三行：派送 */}
+                  {/* 第三行：派送 + 货柜金额 */}
                   <div className="grid grid-cols-2 gap-x-6">
                     {/* 派送 */}
                     <div>
@@ -3401,6 +3426,66 @@ export default function CreateBillModal({
                         <option value="After Bill">After Bill</option>
                         <option value="After Clearance">After Clearance</option>
                       </select>
+                    </div>
+
+                    {/* 货柜金额 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        货柜金额 (€)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.cargoValue}
+                        onChange={(e) => handleInputChange('cargoValue', e.target.value)}
+                        placeholder="请输入货柜金额"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 第四行：服务产品 */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    {/* 服务产品 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        服务产品
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.serviceType}
+                        onChange={(e) => handleInputChange('serviceType', e.target.value)}
+                        placeholder="例如：清提派超大件/税号租用"
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 第五行：资料发送日期 + CMR发送日期 */}
+                  <div className="grid grid-cols-2 gap-x-6">
+                    {/* 资料发送日期 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        资料发送日期
+                      </label>
+                      <DatePicker
+                        value={formData.documentsSentDate}
+                        onChange={(date) => handleInputChange('documentsSentDate', date)}
+                        placeholder="选择日期"
+                        className="w-full"
+                      />
+                    </div>
+
+                    {/* CMR发送日期 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        CMR发送日期
+                      </label>
+                      <DatePicker
+                        value={formData.cmrSentDate}
+                        onChange={(date) => handleInputChange('cmrSentDate', date)}
+                        placeholder="选择日期"
+                        className="w-full"
+                      />
                     </div>
                   </div>
                 </div>

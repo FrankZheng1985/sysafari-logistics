@@ -2880,6 +2880,14 @@ export default function BillDetails() {
           customerId: billDetail.customerId,
           customerName: billDetail.customerName,
           status: billDetail.status,
+          // 系统导入/人工录入字段
+          customsReleaseTime: billDetail.customsReleaseTime,
+          cmrUnloadingCompleteTime: billDetail.cmrUnloadingCompleteTime,
+          // 订单导入扩展字段
+          serviceType: billDetail.serviceType,
+          cargoValue: billDetail.cargoValue,
+          documentsSentDate: billDetail.documentsSentDate,
+          cmrSentDate: billDetail.cmrSentDate,
         } : null}
       />
     </div>
