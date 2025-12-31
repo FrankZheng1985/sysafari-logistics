@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -930,11 +931,11 @@ export default function CRMPenaltyRecords() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">事件发生日期 *</label>
-                  <input
-                    type="date"
+                  <DateTimePicker
                     value={formData.incidentDate}
-                    onChange={(e) => setFormData({...formData, incidentDate: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                    onChange={(value) => setFormData({...formData, incidentDate: value})}
+                    showTime={false}
+                    placeholder="选择事件日期"
                   />
                 </div>
                 <div>

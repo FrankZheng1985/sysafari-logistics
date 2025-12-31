@@ -23,25 +23,24 @@ export interface ExceptionRecord {
   actionLabel: string
 }
 
-// CMR 详情数据
+// CMR 详情数据（简化为3步流程）
 export interface CMRDetail {
-  // 步骤1: 预计提货
+  // 步骤1: 提货
   estimatedPickupTime?: string
   serviceProvider?: string
   pickupNote?: string
-  // 步骤2: 预计到达
+  // 步骤2: 到达
   deliveryAddress?: string
-  estimatedArrivalTime?: string
+  estimatedArrivalTime?: string  // 可选：预计到达时间
+  actualArrivalTime?: string     // 必填：实际到达时间
   arrivalNote?: string
-  // 步骤3: 送达时间
-  actualArrivalTime?: string
-  deliveryNote?: string
-  // 步骤4: 卸货完成
-  unloadingCompleteTime?: string
-  unloadingNote?: string
-  // 步骤5: 确认送达
+  // 步骤3: 确认送达
   confirmedTime?: string
   confirmNote?: string
+  // 兼容旧数据（保留字段）
+  deliveryNote?: string
+  unloadingCompleteTime?: string
+  unloadingNote?: string
   // 异常信息
   hasException?: boolean
   exceptionNote?: string
@@ -182,7 +181,20 @@ export default function CMRModal({
         const response = await fetch(`${API_BASE}/api/service-providers?status=active&pageSize=100`)
         const data = await response.json()
         if (data.errCode === 200 && data.data?.list) {
-          setServiceProviderList(data.data.list)
+          const providers = data.data.list
+          setServiceProviderList(providers)
+          
+          // 验证当前选择的服务商是否在运输类型列表中
+          // 如果 cmrDetail 中的服务商不在列表中（可能是进口代理等非运输类型），则清空
+          const currentProvider = cmrDetail?.serviceProvider
+          if (currentProvider) {
+            const isValidProvider = providers.some(
+              (p: ServiceProvider) => p.providerName === currentProvider
+            )
+            if (!isValidProvider) {
+              setServiceProvider('')
+            }
+          }
         }
       } catch (error) {
         console.error('获取服务商列表失败:', error)
@@ -191,7 +203,7 @@ export default function CMRModal({
     if (visible) {
       fetchServiceProviders()
     }
-  }, [visible])
+  }, [visible, cmrDetail?.serviceProvider])
 
   // 点击外部关闭服务商下拉框
   useEffect(() => {
@@ -212,11 +224,8 @@ export default function CMRModal({
       setPickupNote('')
       setDeliveryAddress('')
       setEstimatedArrivalTime('')
-      setArrivalNote('')
       setActualArrivalTime('')
-      setDeliveryNote('')
-      setUnloadingCompleteTime('')
-      setUnloadingNote('')
+      setArrivalNote('')
       setConfirmNote('')
       setExceptionNote('')
       setExceptionAction('followup')
@@ -233,40 +242,21 @@ export default function CMRModal({
     if (mode === 'exception_handle') return '处理订单异常'
     
     switch (step) {
-      case 'pickup': return '第一步：预计提货时间'
-      case 'delivering': return '第二步：派送中'
-      case 'arrival': return '第三步：预计到达时间'
-      case 'delivered': return '第四步：送达时间'
-      case 'unloading': return '第五步：卸货完成'
-      case 'confirm': return '第六步：确认送达'
+      case 'pickup': return '第一步：提货'
+      case 'arrival': return '第二步：到达'
+      case 'confirm': return '第三步：确认送达'
       default: return '派送'
     }
   }
 
-  // 获取步骤状态
+  // 获取步骤状态（简化为3步流程）
   const getStepStatus = (s: CMRStep) => {
-    // 用于显示的完整步骤（包含派送中）
-    const displaySteps: CMRStep[] = ['pickup', 'delivering', 'arrival', 'delivered', 'unloading', 'confirm']
-    // 实际业务步骤（不包含派送中）
-    const businessSteps: CMRStep[] = ['pickup', 'arrival', 'delivered', 'unloading', 'confirm']
+    const steps: CMRStep[] = ['pickup', 'arrival', 'confirm']
+    const stepIndex = steps.indexOf(s)
+    const currentIndex = steps.indexOf(step)
     
-    const stepIndex = displaySteps.indexOf(s)
-    const currentBusinessIndex = businessSteps.indexOf(step)
-    
-    // 派送中是 pickup 和 arrival 之间的过渡状态
-    if (s === 'delivering') {
-      // 如果当前步骤是 arrival 或更后面，派送中已完成
-      if (currentBusinessIndex >= 1) return 'completed'
-      // 如果当前步骤是 pickup，派送中显示为待处理
-      return 'pending'
-    }
-    
-    // 对于其他步骤，正常计算
-    // 将业务步骤映射到显示步骤的索引
-    const displayIndex = displaySteps.indexOf(step)
-    
-    if (stepIndex < displayIndex) return 'completed'
-    if (stepIndex === displayIndex) return 'active'
+    if (stepIndex < currentIndex) return 'completed'
+    if (stepIndex === currentIndex) return 'active'
     return 'pending'
   }
 
@@ -382,7 +372,7 @@ export default function CMRModal({
     }
   }
 
-  // 处理正常提交
+  // 处理正常提交（简化为3步流程）
   const handleSubmit = async () => {
     // 验证
     if (step === 'pickup') {
@@ -401,36 +391,22 @@ export default function CMRModal({
         alert('请填写送达地址')
         return
       }
-      if (!estimatedArrivalTime) {
-        alert('请选择预计到达时间')
+      if (!actualArrivalTime) {
+        alert('请选择实际到达时间')
         return
       }
     }
-    
-    if (step === 'delivered' && !actualArrivalTime) {
-      alert('请选择实际送达时间')
-      return
-    }
-    
-    if (step === 'unloading' && !unloadingCompleteTime) {
-      alert('请选择卸货完成时间')
-      return
-    }
 
-    // 步骤1: 预计提货 → 步骤2: 预计到达（不保存，只切换步骤）
+    // 步骤1: 提货 → 步骤2: 到达（不保存，只切换步骤）
     if (step === 'pickup') {
       setStep('arrival')
       return
     }
 
-    // 计算新状态 - 每个关键步骤都保存并关闭
+    // 计算新状态（简化为3步流程）
     let newStatus = currentStatus
     if (step === 'arrival') {
       newStatus = '派送中'  // 开始派送
-    } else if (step === 'delivered') {
-      newStatus = '派送中'  // 送达后仍是派送中，等待卸货
-    } else if (step === 'unloading') {
-      newStatus = '派送中'  // 卸货完成后仍是派送中，等待确认
     } else if (step === 'confirm') {
       newStatus = '已送达'  // 最终确认送达
     }
@@ -445,9 +421,8 @@ export default function CMRModal({
         estimatedArrivalTime,
         arrivalNote,
         actualArrivalTime,
-        deliveryNote,
-        unloadingCompleteTime,
-        unloadingNote,
+        // 兼容旧数据：将实际到达时间也设置为卸货完成时间
+        unloadingCompleteTime: step === 'confirm' ? new Date().toISOString() : cmrDetail?.unloadingCompleteTime,
         confirmedTime: step === 'confirm' ? new Date().toISOString() : cmrDetail?.confirmedTime,
         confirmNote,
         // 保留异常记录
@@ -478,8 +453,6 @@ export default function CMRModal({
     switch (step) {
       case 'pickup': return '下一步'
       case 'arrival': return '下一步'
-      case 'delivered': return '下一步'
-      case 'unloading': return '下一步'
       case 'confirm': return '完成'
       default: return '下一步'
     }
@@ -488,8 +461,8 @@ export default function CMRModal({
   if (!visible) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl min-h-[500px] max-h-[95vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <div>
@@ -513,28 +486,28 @@ export default function CMRModal({
           </button>
         </div>
 
-        {/* 步骤指示器 - 仅在正常模式显示 */}
+        {/* 步骤指示器 - 简化为3步流程 */}
         {mode === 'normal' && (
           <div className="px-4 py-2 bg-gray-50 border-b">
             <div className="flex items-center">
-              {(['pickup', 'delivering', 'arrival', 'delivered', 'unloading', 'confirm'] as CMRStep[]).map((s, index) => {
-                const stepLabels = ['提货', '派送中', '到达', '送达', '卸货', '确认']
+              {(['pickup', 'arrival', 'confirm'] as CMRStep[]).map((s, index) => {
+                const stepLabels = ['提货', '到达', '确认']
                 const status = getStepStatus(s)
-                const isLastStep = index === 5
+                const isLastStep = index === 2
                 return (
                   <div key={s} className={`flex items-center ${isLastStep ? '' : 'flex-1'}`}>
-                    <div className={`flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-medium flex-shrink-0 ${
+                    <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium flex-shrink-0 ${
                       status === 'active' ? 'bg-primary-600 text-white' :
                       status === 'completed' ? 'bg-green-500 text-white' :
                       'bg-gray-200 text-gray-500'
                     }`}>
                       {status === 'completed' ? '✓' : index + 1}
                     </div>
-                    <span className={`ml-1 text-[10px] flex-shrink-0 ${status === 'active' ? 'text-primary-600 font-medium' : 'text-gray-500'}`}>
+                    <span className={`ml-1.5 text-xs flex-shrink-0 ${status === 'active' ? 'text-primary-600 font-medium' : 'text-gray-500'}`}>
                       {stepLabels[index]}
                     </span>
                     {!isLastStep && (
-                      <div className={`flex-1 h-0.5 mx-2 min-w-[20px] ${status === 'completed' ? 'bg-green-500' : 'bg-gray-200'}`} />
+                      <div className={`flex-1 h-0.5 mx-3 min-w-[30px] ${status === 'completed' ? 'bg-green-500' : 'bg-gray-200'}`} />
                     )}
                   </div>
                 )
@@ -739,7 +712,8 @@ export default function CMRModal({
                             setShowProviderDropdown(true)
                           }}
                           onFocus={() => {
-                            setProviderSearchText(serviceProvider)
+                            // 聚焦时清空搜索文本，显示所有可用选项
+                            setProviderSearchText('')
                             setShowProviderDropdown(true)
                           }}
                           placeholder="输入或选择服务商"
@@ -806,7 +780,7 @@ export default function CMRModal({
                 </div>
               )}
 
-              {/* 步骤2: 预计到达 */}
+              {/* 步骤2: 到达 */}
               {step === 'arrival' && (
                 <div className="space-y-3">
                   <div>
@@ -867,13 +841,13 @@ export default function CMRModal({
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       <Clock className="w-3 h-3 inline mr-1" />
-                      预计到达时间 <span className="text-red-500">*</span>
+                      实际到达时间 <span className="text-red-500">*</span>
                     </label>
                     <DateTimePicker
-                      value={estimatedArrivalTime}
-                      onChange={setEstimatedArrivalTime}
-                      placeholder="请选择预计到达时间"
-                      title="预计到达时间"
+                      value={actualArrivalTime}
+                      onChange={setActualArrivalTime}
+                      placeholder="请选择实际到达时间"
+                      title="实际到达时间"
                     />
                   </div>
                   <div>
@@ -889,89 +863,7 @@ export default function CMRModal({
                 </div>
               )}
 
-              {/* 步骤3: 送达时间 */}
-              {step === 'delivered' && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      <Clock className="w-3 h-3 inline mr-1" />
-                      实际送达时间 <span className="text-red-500">*</span>
-                    </label>
-                    <DateTimePicker
-                      value={actualArrivalTime}
-                      onChange={setActualArrivalTime}
-                      placeholder="请选择实际送达时间"
-                      title="实际送达时间"
-                    />
-                  </div>
-                  {(estimatedArrivalTime || deliveryAddress) && (
-                    <div className="p-2 bg-gray-50 rounded">
-                      <p className="text-[10px] text-gray-500 mb-1">预计信息</p>
-                      {deliveryAddress && (
-                        <p className="text-xs text-gray-700 mb-0.5">
-                          <MapPin className="w-3 h-3 inline mr-1 text-gray-400" />
-                          {deliveryAddress}
-                        </p>
-                      )}
-                      {estimatedArrivalTime && (
-                        <p className="text-xs text-gray-700">
-                          <Calendar className="w-3 h-3 inline mr-1 text-gray-400" />
-                          预计: {new Date(estimatedArrivalTime).toLocaleString('zh-CN')}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>
-                    <textarea
-                      value={deliveryNote}
-                      onChange={(e) => setDeliveryNote(e.target.value)}
-                      placeholder="可选填写备注信息..."
-                      rows={2}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 步骤4: 卸货完成 */}
-              {step === 'unloading' && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      <Package className="w-3 h-3 inline mr-1" />
-                      卸货完成时间 <span className="text-red-500">*</span>
-                    </label>
-                    <DateTimePicker
-                      value={unloadingCompleteTime}
-                      onChange={setUnloadingCompleteTime}
-                      placeholder="请选择卸货完成时间"
-                      title="卸货完成时间"
-                    />
-                  </div>
-                  {actualArrivalTime && (
-                    <div className="p-2 bg-green-50 rounded">
-                      <p className="text-[10px] text-green-600 mb-0.5">已送达</p>
-                      <p className="text-xs text-green-700">
-                        <Clock className="w-3 h-3 inline mr-1" />
-                        {new Date(actualArrivalTime).toLocaleString('zh-CN')}
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>
-                    <textarea
-                      value={unloadingNote}
-                      onChange={(e) => setUnloadingNote(e.target.value)}
-                      placeholder="可选填写备注信息..."
-                      rows={2}
-                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 步骤5: 确认送达 */}
+              {/* 步骤3: 确认送达 */}
               {step === 'confirm' && (
                 <div className="space-y-3">
                   <div className="p-2 bg-blue-50 rounded">
@@ -988,7 +880,7 @@ export default function CMRModal({
                       )}
                       {estimatedPickupTime && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">预计提货：</span>
+                          <span className="text-gray-600">提货时间：</span>
                           <span className="font-medium">{new Date(estimatedPickupTime).toLocaleString('zh-CN')}</span>
                         </div>
                       )}
@@ -1000,14 +892,8 @@ export default function CMRModal({
                       )}
                       {actualArrivalTime && (
                         <div className="flex justify-between">
-                          <span className="text-gray-600">实际送达：</span>
+                          <span className="text-gray-600">到达时间：</span>
                           <span className="font-medium text-green-600">{new Date(actualArrivalTime).toLocaleString('zh-CN')}</span>
-                        </div>
-                      )}
-                      {unloadingCompleteTime && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">卸货完成：</span>
-                          <span className="font-medium">{new Date(unloadingCompleteTime).toLocaleString('zh-CN')}</span>
                         </div>
                       )}
                     </div>
@@ -1020,7 +906,7 @@ export default function CMRModal({
                       onChange={(e) => setConfirmNote(e.target.value)}
                       placeholder="可选填写最终确认备注..."
                       rows={2}
-                      className="w-full px-2 py-10 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                     />
                   </div>
                   
@@ -1099,7 +985,7 @@ export default function CMRModal({
                 {step !== 'pickup' && (
                   <button
                     onClick={() => {
-                      const steps: CMRStep[] = ['pickup', 'arrival', 'delivered', 'unloading', 'confirm']
+                      const steps: CMRStep[] = ['pickup', 'arrival', 'confirm']
                       const currentIndex = steps.indexOf(step)
                       if (currentIndex > 0) {
                         setStep(steps[currentIndex - 1])
@@ -1125,3 +1011,4 @@ export default function CMRModal({
     </div>
   )
 }
+

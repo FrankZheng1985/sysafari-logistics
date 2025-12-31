@@ -331,54 +331,6 @@ export default function FeeModal({
     setErrors({})
   }, [editingFee, visible, defaultBillId, defaultBillNumber, defaultCustomerId, defaultCustomerName, defaultFeeType])
 
-  // 当有默认订单ID时，自动获取该订单的重量/体积信息
-  useEffect(() => {
-    const fetchBillWeight = async () => {
-      if (!visible || !defaultBillId) return
-      
-      // 先从已加载的 bills 列表中查找
-      const matchedBill = bills.find(b => b.id === defaultBillId)
-      if (matchedBill) {
-        setFormData(prev => ({
-          ...prev,
-          weight: matchedBill.weight || 0,
-          volume: matchedBill.volume || 0
-        }))
-        console.log('从列表获取订单货物信息:', {
-          billId: defaultBillId,
-          weight: matchedBill.weight,
-          volume: matchedBill.volume
-        })
-        return
-      }
-      
-      // 如果列表中没有，单独获取该订单信息
-      if (bills.length > 0) {
-        try {
-          const response = await fetch(`${API_BASE}/api/bills/${defaultBillId}`)
-          const data = await response.json()
-          if (data.errCode === 200 && data.data) {
-            const bill = data.data
-            setFormData(prev => ({
-              ...prev,
-              weight: Number(bill.weight) || 0,
-              volume: Number(bill.volume) || 0
-            }))
-            console.log('单独获取订单货物信息:', {
-              billId: defaultBillId,
-              weight: bill.weight,
-              volume: bill.volume
-            })
-          }
-        } catch (error) {
-          console.error('获取订单信息失败:', error)
-        }
-      }
-    }
-    
-    fetchBillWeight()
-  }, [visible, defaultBillId, bills])
-
   const loadBills = async () => {
     try {
       const response = await fetch(`${API_BASE}/api/bills?pageSize=100`)
@@ -691,14 +643,15 @@ export default function FeeModal({
   const handleBatchSubmit = async () => {
     if (pendingFeeItems.length === 0) return
     
-    // 检查是否选择了供应商（应付费用必须）
+    // 检查必填项：应付费用必须选择供应商，应收费用必须选择客户
     if (formData.feeType === 'payable' && !formData.supplierId) {
       alert('请先选择供应商')
       return
     }
-    
-    // 检查应收费用时是否需要客户信息（可选，根据业务需求）
-    // 注：应收费用可以不关联客户，但如果有客户信息则保存
+    if (formData.feeType === 'receivable' && !formData.customerId) {
+      alert('请先选择客户')
+      return
+    }
     
     setSubmitting(true)
     let successCount = 0
@@ -713,21 +666,19 @@ export default function FeeModal({
             body: JSON.stringify({
               billId: formData.billId || null,
               billNumber: formData.billNumber || '',
-              // 修复：根据费用类型正确设置客户/供应商信息
+              // 根据费用类型传递正确的客户/供应商信息
               customerId: formData.feeType === 'receivable' ? (formData.customerId || null) : null,
               customerName: formData.feeType === 'receivable' ? (formData.customerName || '') : '',
               supplierId: formData.feeType === 'payable' ? (formData.supplierId || null) : null,
               supplierName: formData.feeType === 'payable' ? (formData.supplierName || '') : '',
-              // 修复：使用用户实际选择的费用类型
-              feeType: formData.feeType,
+              feeType: formData.feeType,  // 使用用户选择的费用类型
               category: item.category || 'other',
               feeName: item.feeName,
               amount: item.amount,
               currency: item.currency || 'EUR',
               feeDate: formData.feeDate,
               description: item.routeInfo || '',
-              // 修复：使用实际的费用来源
-              feeSource: item.source || feeSource,
+              feeSource: formData.feeType === 'receivable' ? 'product' : 'supplier_price',
               needApproval: false
             })
           })

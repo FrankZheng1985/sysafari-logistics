@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Package, Calendar, ClipboardCheck, CheckCircle } from 'lucide-react'
+import { X, Plus, Trash2, Package, ClipboardCheck, CheckCircle } from 'lucide-react'
+import DateTimePicker from './DateTimePicker'
 
 // 查验货物项
 export interface InspectionItem {
@@ -333,24 +334,14 @@ export default function InspectionModal({
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  <Calendar className="w-3 h-3 inline mr-1" />
                   预计查验时间 <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    id="estimatedTimeInput"
-                    type="datetime-local"
-                    value={estimatedTime}
-                    onChange={(e) => setEstimatedTime(e.target.value)}
-                    title="选择预计查验时间"
-                    aria-label="预计查验时间"
-                    className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                  />
-                  <Calendar 
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 cursor-pointer hover:text-primary-600 transition-colors" 
-                    onClick={() => (document.getElementById('estimatedTimeInput') as HTMLInputElement)?.showPicker?.()}
-                  />
-                </div>
+                <DateTimePicker
+                  value={estimatedTime}
+                  onChange={setEstimatedTime}
+                  title="选择预计查验时间"
+                  placeholder="请选择预计查验时间"
+                />
               </div>
               
               {/* 显示已选择的货物 */}
@@ -450,24 +441,14 @@ export default function InspectionModal({
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  <Calendar className="w-3 h-3 inline mr-1" />
                   查验放行时间 <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    id="releaseTimeInput"
-                    type="datetime-local"
-                    value={releaseTime}
-                    onChange={(e) => setReleaseTime(e.target.value)}
-                    title="选择查验放行时间"
-                    aria-label="查验放行时间"
-                    className="w-full px-2 py-1 pr-8 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                  />
-                  <Calendar 
-                    className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 cursor-pointer hover:text-primary-600 transition-colors" 
-                    onClick={() => (document.getElementById('releaseTimeInput') as HTMLInputElement)?.showPicker?.()}
-                  />
-                </div>
+                <DateTimePicker
+                  value={releaseTime}
+                  onChange={setReleaseTime}
+                  title="选择查验放行时间"
+                  placeholder="请选择查验放行时间"
+                />
               </div>
               
               {/* 显示查验结果摘要 */}

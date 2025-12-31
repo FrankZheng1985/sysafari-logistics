@@ -5,6 +5,7 @@ import {
   Filter, Clock
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
+import DateTimePicker from '../../components/DateTimePicker'
 import { getApiBaseUrl } from '../../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -590,11 +591,11 @@ export default function CarrierSettlement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   结算周期开始 <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateTimePicker
                   value={createForm.periodStart}
-                  onChange={(e) => setCreateForm(prev => ({ ...prev, periodStart: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  onChange={(value) => setCreateForm(prev => ({ ...prev, periodStart: value }))}
+                  showTime={false}
+                  placeholder="选择开始日期"
                   title="选择结算周期开始日期"
                 />
               </div>
@@ -602,11 +603,11 @@ export default function CarrierSettlement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   结算周期结束 <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
+                <DateTimePicker
                   value={createForm.periodEnd}
-                  onChange={(e) => setCreateForm(prev => ({ ...prev, periodEnd: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  onChange={(value) => setCreateForm(prev => ({ ...prev, periodEnd: value }))}
+                  showTime={false}
+                  placeholder="选择结束日期"
                   title="选择结算周期结束日期"
                 />
               </div>

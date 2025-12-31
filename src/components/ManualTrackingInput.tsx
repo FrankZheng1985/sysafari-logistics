@@ -5,8 +5,9 @@
  */
 
 import { useState } from 'react'
-import { Plus, MapPin, Clock, Camera, Loader2, Check, X, Navigation } from 'lucide-react'
+import { Plus, MapPin, Camera, Loader2, Check, X, Navigation } from 'lucide-react'
 import { addTrackingNode, type NodeTemplate } from '../utils/api'
+import DateTimePicker from './DateTimePicker'
 
 interface ManualTrackingInputProps {
   billId: string
@@ -234,14 +235,12 @@ export default function ManualTrackingInput({
         {/* 时间 */}
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
             事件时间
           </label>
-          <input
-            type="datetime-local"
+          <DateTimePicker
             value={formData.eventTime}
-            onChange={(e) => setFormData({ ...formData, eventTime: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+            onChange={(value) => setFormData({ ...formData, eventTime: value })}
+            placeholder="请选择事件时间"
           />
         </div>
         

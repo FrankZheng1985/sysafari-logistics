@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import DataTable, { Column } from '../../components/DataTable'
+import DateTimePicker from '../../components/DateTimePicker'
 import { getApiBaseUrl } from '../../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -727,22 +728,22 @@ export default function LastMileRates() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     生效日期 <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
+                  <DateTimePicker
                     value={formData.validFrom}
-                    onChange={(e) => setFormData({ ...formData, validFrom: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={(value) => setFormData({ ...formData, validFrom: value })}
+                    showTime={false}
+                    placeholder="选择生效日期"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     失效日期
                   </label>
-                  <input
-                    type="date"
+                  <DateTimePicker
                     value={formData.validUntil}
-                    onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={(value) => setFormData({ ...formData, validUntil: value })}
+                    showTime={false}
+                    placeholder="选择失效日期"
                   />
                 </div>
               </div>

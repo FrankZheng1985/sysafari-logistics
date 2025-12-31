@@ -25,6 +25,7 @@ import {
   Loader2
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import DateTimePicker from '../components/DateTimePicker'
 import { formatDate } from '../utils/dateFormat'
 
 // 报表类型
@@ -921,36 +922,33 @@ export default function FinancialStatements() {
                 {activeTab === 'balance_sheet' ? '截止日期' : '报告期间'}
               </span>
               {activeTab === 'balance_sheet' ? (
-                <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
-                  <Calendar className="w-4 h-4 text-blue-500" />
-                  <input
-                    type="date"
+                <div className="w-40">
+                  <DateTimePicker
                     value={asOfDate}
-                    onChange={(e) => setAsOfDate(e.target.value)}
-                    className="bg-transparent text-sm focus:outline-none text-gray-700 w-32"
+                    onChange={setAsOfDate}
+                    showTime={false}
+                    placeholder="选择截止日期"
                     title="截止日期"
                   />
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    <input
-                      type="date"
+                  <div className="w-40">
+                    <DateTimePicker
                       value={dateRange.startDate}
-                      onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
-                      className="bg-transparent text-sm focus:outline-none text-gray-700 w-32"
+                      onChange={(value) => setDateRange({ ...dateRange, startDate: value })}
+                      showTime={false}
+                      placeholder="开始日期"
                       title="开始日期"
                     />
                   </div>
                   <span className="text-gray-400 text-sm">至</span>
-                  <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    <input
-                      type="date"
+                  <div className="w-40">
+                    <DateTimePicker
                       value={dateRange.endDate}
-                      onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
-                      className="bg-transparent text-sm focus:outline-none text-gray-700 w-32"
+                      onChange={(value) => setDateRange({ ...dateRange, endDate: value })}
+                      showTime={false}
+                      placeholder="结束日期"
                       title="结束日期"
                     />
                   </div>

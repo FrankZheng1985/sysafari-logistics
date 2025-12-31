@@ -307,7 +307,7 @@ export async function checkCustomerOverdueCount(minCount = 2) {
           alertType: 'customer_overdue',
           alertLevel: 'danger',
           title: `客户 ${customer.company_name} 有 ${customer.overdue_count} 笔逾期`,
-          content: `客户 ${customer.company_name} 有 ${customer.overdue_count} 笔发票逾期未付，逾期总金额 ${customer.total_overdue?.toFixed(2) || 0} EUR。${customer.payment_terms ? '客户账期: ' + customer.payment_terms : ''}`,
+          content: `客户 ${customer.company_name} 有 ${customer.overdue_count} 笔发票逾期未付，逾期总金额 ${Number(customer.total_overdue || 0).toFixed(2)} EUR。${customer.payment_terms ? '客户账期: ' + customer.payment_terms : ''}`,
           relatedType: 'customer',
           relatedId: customer.id
         }

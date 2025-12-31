@@ -15,12 +15,11 @@ export const CMR_STATUS = {
   CLOSED: '异常关闭'
 }
 
+// 简化为3步流程
 export const CMR_STEPS = {
-  STEP1_PICKUP: 1,        // 预计提货时间
-  STEP2_DESTINATION: 2,   // 预计到达目的地
-  STEP3_DELIVERY: 3,      // 派送时间
-  STEP4_UNLOADING: 4,     // 卸货完成
-  STEP5_CONFIRM: 5        // 确认送达
+  STEP1_PICKUP: 1,        // 提货
+  STEP2_ARRIVAL: 2,       // 到达
+  STEP3_CONFIRM: 3        // 确认送达
 }
 
 export const EXCEPTION_STATUS = {
@@ -159,23 +158,14 @@ export async function getCMRStats() {
              AND status != '草稿'
         THEN 1 ELSE 0 END) as step2,
       SUM(CASE 
-        WHEN cmr_current_step = 3
+        WHEN cmr_current_step >= 3
              AND (is_void = 0 OR is_void IS NULL)
              AND status != '草稿'
-        THEN 1 ELSE 0 END) as step3,
-      SUM(CASE 
-        WHEN cmr_current_step = 4
-             AND (is_void = 0 OR is_void IS NULL)
-             AND status != '草稿'
-        THEN 1 ELSE 0 END) as step4,
-      SUM(CASE 
-        WHEN cmr_current_step = 5
-             AND (is_void = 0 OR is_void IS NULL)
-             AND status != '草稿'
-        THEN 1 ELSE 0 END) as step5
+        THEN 1 ELSE 0 END) as step3
     FROM bills_of_lading
   `).get()
   
+  // 简化为3步流程统计
   return {
     undelivered: Number(stats.undelivered || 0),
     delivering: Number(stats.delivering || 0),
@@ -184,9 +174,7 @@ export async function getCMRStats() {
     stepDistribution: {
       step1: Number(stats.step1 || 0),
       step2: Number(stats.step2 || 0),
-      step3: Number(stats.step3 || 0),
-      step4: Number(stats.step4 || 0),
-      step5: Number(stats.step5 || 0)
+      step3: Number(stats.step3 || 0)
     }
   }
 }
@@ -630,8 +618,16 @@ export async function getExceptionHistory(id) {
 
 // ==================== 运输供应商管理（原服务商功能，现已合并到供应商模块） ====================
 
-// 运输相关的供应商类型
-const TRANSPORT_SUPPLIER_TYPES = ['delivery', 'trucking', 'shipping', 'forwarder', 'terminal', 'depot']
+// 运输相关的供应商类型（仅包含运输/配送类型）
+const TRANSPORT_SUPPLIER_TYPES = [
+  'delivery',           // 配送
+  'trucking',           // 卡车运输
+  'overseas_trucking',  // 海外卡车运输
+  'transport',          // 运输
+  'shipping',           // 海运
+  'forwarder',          // 货代
+  'logistics'           // 物流
+]
 
 /**
  * 获取运输供应商列表（从供应商表获取运输相关类型）

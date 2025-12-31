@@ -5,7 +5,8 @@
  */
 
 import { useState, useEffect } from 'react'
-import { RefreshCw, Plus, MapPin, Clock, X, Loader2, ChevronDown, Ship, Plane, Train, Truck, CheckCircle, AlertCircle } from 'lucide-react'
+import { RefreshCw, Plus, MapPin, X, Loader2, ChevronDown, Ship, Plane, Train, Truck, CheckCircle, AlertCircle } from 'lucide-react'
+import DateTimePicker from './DateTimePicker'
 import TrackingTimeline from './TrackingTimeline'
 import { 
   getBillTracking, 
@@ -363,11 +364,10 @@ export default function TrackingPanel({
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   事件时间
                 </label>
-                <input
-                  type="datetime-local"
+                <DateTimePicker
                   value={newNode.eventTime}
-                  onChange={(e) => setNewNode({ ...newNode, eventTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  onChange={(value) => setNewNode({ ...newNode, eventTime: value })}
+                  placeholder="请选择事件时间"
                 />
               </div>
               

@@ -2,22 +2,25 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Calendar, ChevronLeft, ChevronsLeft, ChevronRight, ChevronsRight, X, Clock } from 'lucide-react'
 
 interface DateTimePickerProps {
-  value: string // YYYY-MM-DDTHH:mm 格式（datetime-local格式）
+  value: string // YYYY-MM-DD 或 YYYY-MM-DDTHH:mm 格式
   onChange: (value: string) => void
   placeholder?: string
   className?: string
   id?: string
   title?: string
+  showTime?: boolean // 是否显示时间选择，默认 true
 }
 
 export default function DateTimePicker({
   value,
   onChange,
-  placeholder = '请选择日期时间',
+  placeholder,
   className = '',
   id,
   title,
+  showTime = true,
 }: DateTimePickerProps) {
+  const defaultPlaceholder = showTime ? '请选择日期时间' : '请选择日期'
   const [isOpen, setIsOpen] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -91,15 +94,21 @@ export default function DateTimePicker({
     const year = selectedDate.getFullYear()
     const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
     const day = String(selectedDate.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day} ${selectedHour}:${selectedMinute}`
+    if (showTime) {
+      return `${year}-${month}-${day} ${selectedHour}:${selectedMinute}`
+    }
+    return `${year}-${month}-${day}`
   }
 
-  // 格式化为 datetime-local 格式
+  // 格式化为 datetime-local 或 date 格式
   const formatValue = (date: Date, hour: string, minute: string): string => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}T${hour}:${minute}`
+    if (showTime) {
+      return `${year}-${month}-${day}T${hour}:${minute}`
+    }
+    return `${year}-${month}-${day}`
   }
 
   // 获取月份的日期
@@ -229,7 +238,7 @@ export default function DateTimePicker({
         <span className="flex items-center gap-1.5 flex-1 text-left">
           <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
           <span className={`${formatDisplayDateTime() ? 'text-gray-900' : 'text-gray-400'}`}>
-            {formatDisplayDateTime() || placeholder}
+            {formatDisplayDateTime() || placeholder || defaultPlaceholder}
           </span>
         </span>
         <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -344,38 +353,40 @@ export default function DateTimePicker({
             </div>
           </div>
 
-          {/* 时间选择 */}
-          <div className="px-2 pb-2 border-t border-gray-100 pt-2">
-            <div className="flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs text-gray-600">时间:</span>
-              <div className="flex items-center gap-1">
-                <select
-                  value={selectedHour}
-                  onChange={(e) => setSelectedHour(e.target.value)}
-                  title="选择小时"
-                  aria-label="选择小时"
-                  className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                >
-                  {hours.map(h => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-                <span className="text-gray-500">:</span>
-                <select
-                  value={selectedMinute}
-                  onChange={(e) => setSelectedMinute(e.target.value)}
-                  title="选择分钟"
-                  aria-label="选择分钟"
-                  className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                >
-                  {minutes.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
+          {/* 时间选择 - 仅在 showTime 时显示 */}
+          {showTime && (
+            <div className="px-2 pb-2 border-t border-gray-100 pt-2">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs text-gray-600">时间:</span>
+                <div className="flex items-center gap-1">
+                  <select
+                    value={selectedHour}
+                    onChange={(e) => setSelectedHour(e.target.value)}
+                    title="选择小时"
+                    aria-label="选择小时"
+                    className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                  >
+                    {hours.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                  <span className="text-gray-500">:</span>
+                  <select
+                    value={selectedMinute}
+                    onChange={(e) => setSelectedMinute(e.target.value)}
+                    title="选择分钟"
+                    aria-label="选择分钟"
+                    className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                  >
+                    {minutes.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* 底部按钮 */}
           <div className="flex items-center justify-between p-2 border-t border-gray-200 bg-gray-50 rounded-b-lg gap-2">
