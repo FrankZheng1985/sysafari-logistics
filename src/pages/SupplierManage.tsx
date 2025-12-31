@@ -96,40 +96,84 @@ interface SupplierStats {
 
 // ==================== 常量定义 ====================
 
-const SUPPLIER_TYPES = [
-  // === 服务费类别父级（与服务费分类对应） ===
-  { value: 'warehouse_operation', label: '仓储操作' },
-  { value: 'transport', label: '运输' },
-  { value: 'express', label: '快递' },
-  { value: 'customs_clearance', label: '清关服务' },
-  { value: 'document', label: '单证费' },
-  { value: 'doc_swap', label: '换单费' },
-  { value: 'port', label: '港口费' },
-  { value: 'tax', label: '税务' },
-  { value: 'import_agency', label: '进口商代理' },
-  { value: 'misc_fee', label: '费用杂项' },
-  { value: 'truck_waiting', label: '卡车等待费' },
-  { value: 'inspection_fee', label: '查验费' },
-  { value: 'clearing_dispatching', label: '清提派业务' },
-  // === 传统供应商类型 ===
-  { value: 'overseas_trucking', label: '海外卡车运输' },
-  { value: 'customs_agent', label: '清关代理' },
-  { value: 'import_agent', label: '进口代理商' },
-  { value: 'doc_swap_agent', label: '换单代理' },
-  { value: 'manufacturer', label: '生产厂家' },
-  { value: 'trader', label: '贸易商' },
-  { value: 'agent', label: '代理商' },
-  { value: 'distributor', label: '分销商' },
-  { value: 'shipping', label: '船运公司' },
-  { value: 'trucking', label: '拖车公司' },
-  { value: 'delivery', label: '派送服务' },
-  { value: 'forwarder', label: '货代公司' },
-  { value: 'warehouse', label: '仓储服务' },
-  { value: 'customs', label: '报关服务' },
-  { value: 'terminal', label: '码头运营' },
-  { value: 'depot', label: '堆场服务' },
-  { value: 'other', label: '其他' },
+// 按父级分组的供应商类型
+const SUPPLIER_TYPE_GROUPS = [
+  {
+    groupKey: 'logistics',
+    groupName: '物流运输',
+    children: [
+      { value: 'transport', label: '运输' },
+      { value: 'shipping', label: '船运公司' },
+      { value: 'trucking', label: '拖车公司' },
+      { value: 'overseas_trucking', label: '海外卡车运输' },
+      { value: 'delivery', label: '派送服务' },
+      { value: 'forwarder', label: '货代公司' },
+      { value: 'express', label: '快递' },
+    ]
+  },
+  {
+    groupKey: 'warehouse',
+    groupName: '仓储服务',
+    children: [
+      { value: 'warehouse_operation', label: '仓储操作' },
+      { value: 'warehouse', label: '仓储服务' },
+      { value: 'terminal', label: '码头运营' },
+      { value: 'depot', label: '堆场服务' },
+    ]
+  },
+  {
+    groupKey: 'customs',
+    groupName: '清关服务',
+    children: [
+      { value: 'customs_clearance', label: '清关服务' },
+      { value: 'customs_agent', label: '清关代理' },
+      { value: 'customs', label: '报关服务' },
+      { value: 'import_agent', label: '进口代理商' },
+      { value: 'import_agency', label: '进口商代理' },
+      { value: 'clearing_dispatching', label: '清提派业务' },
+    ]
+  },
+  {
+    groupKey: 'document',
+    groupName: '单证服务',
+    children: [
+      { value: 'document', label: '单证费' },
+      { value: 'doc_swap', label: '换单费' },
+      { value: 'doc_swap_agent', label: '换单代理' },
+    ]
+  },
+  {
+    groupKey: 'port_tax',
+    groupName: '港口税务',
+    children: [
+      { value: 'port', label: '港口费' },
+      { value: 'tax', label: '税务' },
+    ]
+  },
+  {
+    groupKey: 'other_fees',
+    groupName: '其他费用',
+    children: [
+      { value: 'misc_fee', label: '费用杂项' },
+      { value: 'truck_waiting', label: '卡车等待费' },
+      { value: 'inspection_fee', label: '查验费' },
+    ]
+  },
+  {
+    groupKey: 'partner',
+    groupName: '商业伙伴',
+    children: [
+      { value: 'manufacturer', label: '生产厂家' },
+      { value: 'trader', label: '贸易商' },
+      { value: 'agent', label: '代理商' },
+      { value: 'distributor', label: '分销商' },
+      { value: 'other', label: '其他' },
+    ]
+  },
 ]
+
+// 扁平化的供应商类型列表（用于查找和显示）
+const SUPPLIER_TYPES = SUPPLIER_TYPE_GROUPS.flatMap(group => group.children)
 
 // 运输相关的供应商类型
 const TRANSPORT_TYPES = ['shipping', 'trucking', 'delivery', 'forwarder', 'terminal', 'depot']
@@ -376,8 +420,8 @@ export default function SupplierManage() {
     setSaving(true)
     try {
       const url = editingSupplier 
-        ? `/api/suppliers/${editingSupplier.id}`
-        : '/api/suppliers'
+        ? `${API_BASE}/api/suppliers/${editingSupplier.id}`
+        : `${API_BASE}/api/suppliers`
       
       const res = await fetch(url, {
         method: editingSupplier ? 'PUT' : 'POST',
@@ -969,30 +1013,75 @@ export default function SupplierManage() {
                       />
                     </div>
 
-                    {/* 供应商类型 - 多选 */}
+                    {/* 供应商类型 - 多选（按父级分组） */}
                     <div className="col-span-2">
                       <label className="block text-xs font-medium text-gray-700 mb-2">供应商类型（可多选）</label>
-                      <div className="grid grid-cols-4 gap-2 p-3 border border-gray-300 rounded bg-gray-50 max-h-[160px] overflow-y-auto">
-                        {SUPPLIER_TYPES.map(type => (
-                          <label key={type.value} className="flex items-center gap-1.5 cursor-pointer hover:bg-white px-2 py-1 rounded transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={formData.supplierTypes.includes(type.value)}
-                              onChange={(e) => {
-                                const newTypes = e.target.checked
-                                  ? [...formData.supplierTypes, type.value]
-                                  : formData.supplierTypes.filter(t => t !== type.value)
-                                setFormData(prev => ({
-                                  ...prev,
-                                  supplierTypes: newTypes,
-                                  supplierType: newTypes.join(',')  // 同步更新字符串形式
-                                }))
-                              }}
-                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <span className="text-xs text-gray-700">{type.label}</span>
-                          </label>
-                        ))}
+                      <div className="border border-gray-300 rounded bg-gray-50 max-h-[200px] overflow-y-auto">
+                        {SUPPLIER_TYPE_GROUPS.map(group => {
+                          // 检查该分组是否有选中的项
+                          const selectedInGroup = group.children.filter(type => formData.supplierTypes.includes(type.value))
+                          const allSelectedInGroup = selectedInGroup.length === group.children.length
+                          const someSelectedInGroup = selectedInGroup.length > 0 && !allSelectedInGroup
+                          
+                          return (
+                            <div key={group.groupKey} className="border-b border-gray-200 last:border-b-0">
+                              {/* 分组标题 */}
+                              <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 sticky top-0">
+                                <input
+                                  type="checkbox"
+                                  checked={allSelectedInGroup}
+                                  ref={(el) => {
+                                    if (el) el.indeterminate = someSelectedInGroup
+                                  }}
+                                  onChange={(e) => {
+                                    const groupValues = group.children.map(t => t.value)
+                                    let newTypes: string[]
+                                    if (e.target.checked) {
+                                      // 全选该分组
+                                      newTypes = [...new Set([...formData.supplierTypes, ...groupValues])]
+                                    } else {
+                                      // 取消该分组所有
+                                      newTypes = formData.supplierTypes.filter(t => !groupValues.includes(t))
+                                    }
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      supplierTypes: newTypes,
+                                      supplierType: newTypes.join(',')
+                                    }))
+                                  }}
+                                  className="w-3.5 h-3.5 rounded border-gray-400 text-primary-600 focus:ring-primary-500"
+                                />
+                                <span className="text-xs font-medium text-gray-700">{group.groupName}</span>
+                                {selectedInGroup.length > 0 && (
+                                  <span className="text-xs text-primary-600">({selectedInGroup.length})</span>
+                                )}
+                              </div>
+                              {/* 分组内的选项 */}
+                              <div className="grid grid-cols-3 gap-1 px-3 py-2">
+                                {group.children.map(type => (
+                                  <label key={type.value} className="flex items-center gap-1.5 cursor-pointer hover:bg-white px-2 py-1 rounded transition-colors">
+                                    <input
+                                      type="checkbox"
+                                      checked={formData.supplierTypes.includes(type.value)}
+                                      onChange={(e) => {
+                                        const newTypes = e.target.checked
+                                          ? [...formData.supplierTypes, type.value]
+                                          : formData.supplierTypes.filter(t => t !== type.value)
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          supplierTypes: newTypes,
+                                          supplierType: newTypes.join(',')
+                                        }))
+                                      }}
+                                      className="w-3.5 h-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <span className="text-xs text-gray-700">{type.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                       {formData.supplierTypes.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">

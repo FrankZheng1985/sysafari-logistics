@@ -107,7 +107,8 @@ app.use(cors({
     // 阿里云 OSS 直接访问
     /\.oss-cn-hongkong\.aliyuncs\.com$/,
     // 演示环境
-    'https://demo.xianfeng-eu.com'
+    'https://demo.xianfeng-eu.com',
+    'https://demo-api.xianfeng-eu.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
