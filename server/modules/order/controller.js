@@ -304,7 +304,8 @@ export async function getBills(req, res) {
   try {
     const {
       type, status, shipStatus, customsStatus, inspection, deliveryStatus,
-      search, page, pageSize, sortField, sortOrder, forInvoiceType, customerId
+      search, page, pageSize, sortField, sortOrder, forInvoiceType, customerId,
+      includeFeeAmount  // 是否包含费用金额统计
     } = req.query
 
     const result = await model.getBills({
@@ -320,7 +321,8 @@ export async function getBills(req, res) {
       sortField,
       sortOrder,
       forInvoiceType,  // 用于新建发票时过滤已完成财务流程的订单
-      customerId  // 按客户ID筛选
+      customerId,  // 按客户ID筛选
+      includeFeeAmount: includeFeeAmount === 'true'  // 是否包含费用金额
     })
     
     return successWithPagination(res, result.list, {

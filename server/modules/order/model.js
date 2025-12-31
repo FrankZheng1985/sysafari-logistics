@@ -31,10 +31,19 @@ export async function getBills(params = {}) {
     sortField = 'created_at',
     sortOrder = 'DESC',
     forInvoiceType,  // 用于新建发票时过滤已完成财务流程的订单：'sales' | 'purchase'
-    customerId  // 按客户ID筛选
+    customerId,  // 按客户ID筛选
+    includeFeeAmount  // 是否包含费用金额统计（用于新建发票页面）
   } = params
   
-  let query = 'SELECT * FROM bills_of_lading WHERE 1=1'
+  // 如果需要包含费用金额，使用带子查询的 SQL
+  let selectFields = 'b.*'
+  if (includeFeeAmount) {
+    selectFields = `b.*, 
+      COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND (f.fee_type = 'receivable' OR f.fee_type IS NULL)), 0) as receivable_amount,
+      COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND f.fee_type = 'payable'), 0) as payable_amount`
+  }
+  
+  let query = `SELECT ${selectFields} FROM bills_of_lading b WHERE 1=1`
   const queryParams = []
   
   // 根据 type 参数筛选（订单流转规则）
@@ -43,21 +52,21 @@ export async function getBills(params = {}) {
       case 'schedule':
         // Schedule: 进行中的订单
         // 排除已完成、已归档、已取消的状态，以及派送已送达或异常关闭的订单
-        query += ` AND is_void = 0 
-                   AND status NOT IN ('已完成', '已归档', '已取消') 
-                   AND (delivery_status IS NULL OR delivery_status NOT IN ('已送达', '异常关闭'))`
+        query += ` AND b.is_void = 0 
+                   AND b.status NOT IN ('已完成', '已归档', '已取消') 
+                   AND (b.delivery_status IS NULL OR b.delivery_status NOT IN ('已送达', '异常关闭'))`
         break
       case 'history':
         // History: 已完成的订单
         // 包含状态为已完成、已归档、已取消，或者派送状态为已送达、异常关闭的订单
-        query += ` AND is_void = 0 
-                   AND (status IN ('已完成', '已归档', '已取消') 
-                        OR delivery_status IN ('已送达', '异常关闭'))`
+        query += ` AND b.is_void = 0 
+                   AND (b.status IN ('已完成', '已归档', '已取消') 
+                        OR b.delivery_status IN ('已送达', '异常关闭'))`
         
         // 如果是为新建发票筛选，排除已经开具发票并完成收付款的订单
         if (forInvoiceType) {
           // 排除该类型发票状态为 'paid' 的订单
-          query += ` AND id NOT IN (
+          query += ` AND b.id NOT IN (
             SELECT DISTINCT bill_id FROM invoices 
             WHERE invoice_type = ? AND status = 'paid' AND bill_id IS NOT NULL
           )`
@@ -66,58 +75,58 @@ export async function getBills(params = {}) {
         break
       case 'draft':
         // Draft: 草稿订单
-        query += ' AND status = ? AND is_void = 0'
+        query += ' AND b.status = ? AND b.is_void = 0'
         queryParams.push('draft')
         break
       case 'void':
         // Void: 已作废的订单
-        query += ' AND is_void = 1'
+        query += ' AND b.is_void = 1'
         break
       default:
-        query += ' AND is_void = 0'
+        query += ' AND b.is_void = 0'
     }
   } else if (status) {
     // 兼容旧的 status 参数
     if (status === 'void') {
-      query += ' AND is_void = 1'
+      query += ' AND b.is_void = 1'
     } else if (status === 'draft') {
-      query += ' AND status = ? AND is_void = 0'
+      query += ' AND b.status = ? AND b.is_void = 0'
       queryParams.push('draft')
     } else if (status === 'active') {
-      query += ' AND status = ? AND is_void = 0'
+      query += ' AND b.status = ? AND b.is_void = 0'
       queryParams.push('active')
     }
   } else {
-    query += ' AND is_void = 0'
+    query += ' AND b.is_void = 0'
   }
   
   // 船运状态
   if (shipStatus) {
-    query += ' AND ship_status = ?'
+    query += ' AND b.ship_status = ?'
     queryParams.push(shipStatus)
   }
   
   // 清关状态
   if (customsStatus) {
-    query += ' AND customs_status = ?'
+    query += ' AND b.customs_status = ?'
     queryParams.push(customsStatus)
   }
   
   // 查验状态
   if (inspection) {
-    query += ' AND inspection = ?'
+    query += ' AND b.inspection = ?'
     queryParams.push(inspection)
   }
   
   // 派送状态（仅在没有使用 type 参数时生效）
   if (deliveryStatus && !type) {
-    query += ' AND delivery_status = ?'
+    query += ' AND b.delivery_status = ?'
     queryParams.push(deliveryStatus)
   }
   
   // 按客户ID筛选
   if (customerId) {
-    query += ' AND customer_id = ?'
+    query += ' AND b.customer_id = ?'
     queryParams.push(customerId)
   }
   
@@ -130,13 +139,13 @@ export async function getBills(params = {}) {
     if (keywords.length === 1) {
       // 单关键词：原有逻辑
       query += ` AND (
-        order_number LIKE ? OR
-        bill_number LIKE ? OR 
-        container_number LIKE ? OR 
-        customer_name LIKE ? OR
-        shipper LIKE ? OR 
-        consignee LIKE ? OR
-        vessel LIKE ?
+        b.order_number LIKE ? OR
+        b.bill_number LIKE ? OR 
+        b.container_number LIKE ? OR 
+        b.customer_name LIKE ? OR
+        b.shipper LIKE ? OR 
+        b.consignee LIKE ? OR
+        b.vessel LIKE ?
       )`
       const searchPattern = `%${search}%`
       queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
@@ -144,13 +153,13 @@ export async function getBills(params = {}) {
       // 多关键词：每个关键词都能匹配的订单（集装箱号精确匹配优先）
       // 构建 OR 条件：任意一个关键词匹配即可
       const keywordConditions = keywords.map(() => `(
-        order_number LIKE ? OR
-        bill_number LIKE ? OR 
-        container_number LIKE ? OR 
-        customer_name LIKE ? OR
-        shipper LIKE ? OR 
-        consignee LIKE ? OR
-        vessel LIKE ?
+        b.order_number LIKE ? OR
+        b.bill_number LIKE ? OR 
+        b.container_number LIKE ? OR 
+        b.customer_name LIKE ? OR
+        b.shipper LIKE ? OR 
+        b.consignee LIKE ? OR
+        b.vessel LIKE ?
       )`).join(' OR ')
       
       query += ` AND (${keywordConditions})`
@@ -163,8 +172,10 @@ export async function getBills(params = {}) {
     }
   }
   
-  // 获取总数
-  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  // 获取总数 - 构建一个简单的 COUNT 查询（不包含子查询字段）
+  // 找到 FROM 位置，只替换主查询的 SELECT 部分
+  const fromIndex = query.indexOf(' FROM bills_of_lading')
+  const countQuery = 'SELECT COUNT(*) as total' + query.substring(fromIndex)
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 排序和分页
@@ -172,13 +183,13 @@ export async function getBills(params = {}) {
   const safeSortField = allowedSortFields.includes(sortField) ? sortField : 'created_at'
   const safeSortOrder = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
   
-  query += ` ORDER BY ${safeSortField} ${safeSortOrder} LIMIT ? OFFSET ?`
+  query += ` ORDER BY b.${safeSortField} ${safeSortOrder} LIMIT ? OFFSET ?`
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
   
   return {
-    list: list.map(convertBillToCamelCase),
+    list: list.map(row => convertBillToCamelCase(row, includeFeeAmount)),
     total: totalResult?.total || 0,
     page,
     pageSize
@@ -922,7 +933,7 @@ export async function getInspectionList(type = 'pending', params = {}) {
 
 // ==================== 数据转换函数 ====================
 
-export function convertBillToCamelCase(row) {
+export function convertBillToCamelCase(row, includeFeeAmount = false) {
   if (!row) return null
   
   // 根据 order_seq 生成订单号（如果 order_number 为空）
@@ -933,7 +944,7 @@ export function convertBillToCamelCase(row) {
     orderNumber = `BP${year}${String(row.order_seq).padStart(5, '0')}`
   }
   
-  return {
+  const result = {
     id: row.id,
     orderSeq: row.order_seq,
     orderNumber,
@@ -1023,6 +1034,14 @@ export function convertBillToCamelCase(row) {
     importedByName: row.imported_by_name,
     importTime: row.import_time
   }
+  
+  // 如果包含费用金额字段，添加到结果中
+  if (includeFeeAmount) {
+    result.receivableAmount = parseFloat(row.receivable_amount) || 0  // 应收金额
+    result.payableAmount = parseFloat(row.payable_amount) || 0        // 应付金额
+  }
+  
+  return result
 }
 
 export function convertOperationLogToCamelCase(row) {

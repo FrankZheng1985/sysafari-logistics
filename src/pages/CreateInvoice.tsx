@@ -53,6 +53,9 @@ interface Bill {
   cmrEstimatedPickupTime?: string  // 提货时间
   cmrConfirmedTime?: string        // 实际送达时间
   cmrUnloadingCompleteTime?: string  // 卸货完成时间
+  // 费用金额（新建发票页面使用）
+  receivableAmount?: number     // 应收金额
+  payableAmount?: number        // 应付金额
 }
 
 interface Fee {
@@ -523,7 +526,8 @@ export default function CreateInvoice() {
       const params = new URLSearchParams({ 
         pageSize: '50',
         type: 'history', // 获取已完成的订单
-        forInvoiceType: invoiceType // 排除该类型已完成收付款的订单
+        forInvoiceType: invoiceType, // 排除该类型已完成收付款的订单
+        includeFeeAmount: 'true'  // 包含费用金额统计，用于显示应收/应付金额
       })
       if (customerId) params.append('customerId', customerId)
       if (search) params.append('search', search)
@@ -1660,9 +1664,22 @@ export default function CreateInvoice() {
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                                {bill.deliveryStatus || bill.status || '已完成'}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                {/* 显示金额 - 根据发票类型显示应收或应付金额 */}
+                                {formData.invoiceType === 'sales' && bill.receivableAmount !== undefined && bill.receivableAmount > 0 && (
+                                  <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded font-medium">
+                                    应收: €{bill.receivableAmount.toFixed(2)}
+                                  </span>
+                                )}
+                                {formData.invoiceType === 'purchase' && bill.payableAmount !== undefined && bill.payableAmount > 0 && (
+                                  <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-medium">
+                                    应付: €{bill.payableAmount.toFixed(2)}
+                                  </span>
+                                )}
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                  {bill.deliveryStatus || bill.status || '已完成'}
+                                </span>
+                              </div>
                             </div>
                             <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                               <span>客户: {bill.customerName || bill.consignee || '-'}</span>
