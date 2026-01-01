@@ -241,6 +241,21 @@ export async function updateShipperAndImporter(req, res) {
   }
 }
 
+/**
+ * 从提单同步发货方信息
+ */
+export async function syncShipperFromBL(req, res) {
+  try {
+    const { id } = req.params
+    
+    const result = await importer.syncShipperFromBL(parseInt(id))
+    return success(res, result, '已从提单同步发货方信息')
+  } catch (error) {
+    console.error('从提单同步发货方信息失败:', error)
+    return serverError(res, error.message)
+  }
+}
+
 // ==================== HS匹配 ====================
 
 /**
@@ -544,6 +559,138 @@ export async function updateItemTax(req, res) {
   } catch (error) {
     console.error('更新商品税费失败:', error)
     return serverError(res, error.message || '更新商品税费失败')
+  }
+}
+
+// ==================== 贸易条件和完税价格 ====================
+
+/**
+ * 获取 Incoterms 贸易条款列表
+ */
+export async function getIncotermsList(req, res) {
+  try {
+    const list = taxCalc.getIncotermsList()
+    return success(res, list)
+  } catch (error) {
+    console.error('获取贸易条款列表失败:', error)
+    return serverError(res, '获取贸易条款列表失败')
+  }
+}
+
+/**
+ * 更新贸易条件和运费信息
+ */
+export async function updateTradeTerms(req, res) {
+  try {
+    const { importId } = req.params
+    const { 
+      incoterm,
+      internationalFreight,
+      domesticFreightExport,
+      domesticFreightImport,
+      insuranceCost,
+      prepaidDuties,
+      freightAllocationMethod
+    } = req.body
+    
+    // 验证 Incoterm
+    const validIncoterms = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP', 'DDU']
+    if (incoterm && !validIncoterms.includes(incoterm.toUpperCase())) {
+      return badRequest(res, `无效的贸易条款，支持: ${validIncoterms.join(', ')}`)
+    }
+    
+    await taxCalc.updateTradeTerms(parseInt(importId), {
+      incoterm: incoterm?.toUpperCase(),
+      internationalFreight,
+      domesticFreightExport,
+      domesticFreightImport,
+      insuranceCost,
+      prepaidDuties,
+      freightAllocationMethod
+    })
+    
+    return success(res, null, '贸易条件已更新')
+  } catch (error) {
+    console.error('更新贸易条件失败:', error)
+    return serverError(res, error.message || '更新贸易条件失败')
+  }
+}
+
+/**
+ * 更新商品原产地
+ */
+export async function updateItemOrigin(req, res) {
+  try {
+    const { itemId } = req.params
+    const { originCountryCode, updateTariff = true } = req.body
+    
+    if (!originCountryCode) {
+      return badRequest(res, '请提供原产国代码')
+    }
+    
+    // 验证原产国代码格式（2位字母）
+    if (!/^[A-Z]{2}$/i.test(originCountryCode)) {
+      return badRequest(res, '原产国代码格式错误，应为2位字母（如 CN, US, DE）')
+    }
+    
+    const result = await taxCalc.updateItemOrigin(
+      parseInt(itemId), 
+      originCountryCode.toUpperCase(), 
+      updateTariff
+    )
+    
+    const message = result.tariffUpdated 
+      ? '原产地已更新，税率已根据原产国自动调整' 
+      : '原产地已更新'
+    
+    return success(res, result, message)
+  } catch (error) {
+    console.error('更新商品原产地失败:', error)
+    return serverError(res, error.message || '更新商品原产地失败')
+  }
+}
+
+/**
+ * 重新计算完税价格和税费
+ */
+export async function recalculateTax(req, res) {
+  try {
+    const { importId } = req.params
+    const { recalculateCustomsValue = true, updateOriginTariffs = false } = req.body
+    
+    const result = await taxCalc.calculateImportTax(parseInt(importId), {
+      recalculateCustomsValue,
+      updateOriginTariffs
+    })
+    
+    return success(res, result, '税费已重新计算')
+  } catch (error) {
+    console.error('重新计算税费失败:', error)
+    return serverError(res, error.message || '重新计算税费失败')
+  }
+}
+
+/**
+ * 根据原产地查询税率
+ */
+export async function getTariffByOrigin(req, res) {
+  try {
+    const { hsCode, originCountryCode } = req.query
+    
+    if (!hsCode) {
+      return badRequest(res, '请提供HS编码')
+    }
+    
+    const result = await taxCalc.getTariffByOrigin(hsCode, originCountryCode || 'CN')
+    
+    if (!result) {
+      return notFound(res, '未找到该HS编码的税率信息')
+    }
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('查询税率失败:', error)
+    return serverError(res, error.message || '查询税率失败')
   }
 }
 
@@ -1546,6 +1693,7 @@ export default {
   previewImport,
   deleteImport,
   updateShipperAndImporter,
+  syncShipperFromBL,
   
   // HS匹配
   runBatchMatch,
@@ -1562,6 +1710,13 @@ export default {
   markConfirmed,
   updateClearanceType,
   updateItemTax,
+  
+  // 贸易条件和完税价格
+  getIncotermsList,
+  updateTradeTerms,
+  updateItemOrigin,
+  recalculateTax,
+  getTariffByOrigin,
 
   // 数据补充
   getSupplementList,

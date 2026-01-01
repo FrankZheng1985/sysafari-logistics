@@ -1,9 +1,47 @@
 /**
  * 税费计算服务
  * 实现关税、增值税、反倾销税、反补贴税计算
+ * 支持完整的 Incoterms 2020 贸易条款和精准原产地税率匹配
  */
 
 import { getDatabase } from '../../config/database.js'
+
+// ==================== Incoterms 贸易条款定义 ====================
+
+/**
+ * Incoterms 2020 贸易条款
+ * 用于计算完税价格
+ */
+export const INCOTERMS = {
+  // E组 - 发货
+  EXW: { code: 'EXW', name: 'Ex Works', nameCn: '工厂交货', group: 'E' },
+  
+  // F组 - 主运费未付
+  FCA: { code: 'FCA', name: 'Free Carrier', nameCn: '货交承运人', group: 'F' },
+  FAS: { code: 'FAS', name: 'Free Alongside Ship', nameCn: '船边交货', group: 'F' },
+  FOB: { code: 'FOB', name: 'Free on Board', nameCn: '船上交货', group: 'F' },
+  
+  // C组 - 主运费已付
+  CFR: { code: 'CFR', name: 'Cost and Freight', nameCn: '成本加运费', group: 'C' },
+  CIF: { code: 'CIF', name: 'Cost, Insurance, Freight', nameCn: '成本、保险加运费', group: 'C' },
+  CPT: { code: 'CPT', name: 'Carriage Paid To', nameCn: '运费付至', group: 'C' },
+  CIP: { code: 'CIP', name: 'Carriage and Insurance Paid To', nameCn: '运费、保险费付至', group: 'C' },
+  
+  // D组 - 到达
+  DAP: { code: 'DAP', name: 'Delivered at Place', nameCn: '目的地交货', group: 'D' },
+  DPU: { code: 'DPU', name: 'Delivered at Place Unloaded', nameCn: '卸货地交货', group: 'D' },
+  DDP: { code: 'DDP', name: 'Delivered Duty Paid', nameCn: '完税后交货', group: 'D' },
+  
+  // 旧版（仍常用）
+  DDU: { code: 'DDU', name: 'Delivered Duty Unpaid', nameCn: '未完税交货', group: 'D' }
+}
+
+/**
+ * 获取所有 Incoterms 列表
+ */
+export function getIncotermsList() {
+  return Object.values(INCOTERMS)
+}
 
 /**
  * 规范化 HS 编码为 10 位（欧盟 TARIC 标准）
@@ -17,34 +55,345 @@ function normalizeHsCode(hsCode) {
 }
 
 /**
+ * 四舍五入到指定小数位
+ */
+function roundToDecimal(value, decimals) {
+  return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals)
+}
+
+// ==================== 完税价格计算 ====================
+
+/**
+ * 根据 Incoterm 计算完税价格（CIF价格）
+ * 
+ * 完税价格计算规则：
+ * - CIF/CIP: 完税价格 = 申报货值（已含国际运费+保险费）
+ * - CFR/CPT: 完税价格 = 申报货值 + 保险费（已含国际运费）
+ * - FOB/FCA/FAS: 完税价格 = 申报货值 + 国际运费 + 保险费
+ * - EXW: 完税价格 = 申报货值 + 出口内陆运费 + 国际运费 + 保险费
+ * - DAP/DPU/DDU: 完税价格 = 申报货值 - 进口国内陆运费（已含运费保险，需扣除进口国境内费用）
+ * - DDP: 完税价格需反算（申报价值已包含关税和增值税）
+ * 
+ * @param {Object} params - 计算参数
+ * @param {string} params.incoterm - 贸易条款代码
+ * @param {number} params.declaredValue - 申报货值
+ * @param {number} params.internationalFreight - 国际运费
+ * @param {number} params.domesticFreightExport - 出口国内陆运费
+ * @param {number} params.domesticFreightImport - 进口国内陆运费
+ * @param {number} params.insuranceCost - 保险费（如果为0，自动按货值0.3%估算）
+ * @param {number} params.dutyRate - 关税率（DDP反算用）
+ * @param {number} params.vatRate - 增值税率（DDP反算用）
+ * @returns {Object} 完税价格计算结果
+ */
+export function calculateCustomsValue(params) {
+  const {
+    incoterm = 'FOB',
+    declaredValue = 0,
+    internationalFreight = 0,
+    domesticFreightExport = 0,
+    domesticFreightImport = 0,
+    insuranceCost = 0,
+    dutyRate = 0,
+    vatRate = 19
+  } = params
+  
+  const value = parseFloat(declaredValue) || 0
+  const intlFreight = parseFloat(internationalFreight) || 0
+  const domFreightExport = parseFloat(domesticFreightExport) || 0
+  const domFreightImport = parseFloat(domesticFreightImport) || 0
+  
+  // 保险费：如果未提供，按货值0.3%估算（欧盟海关常用估算比例）
+  let insurance = parseFloat(insuranceCost) || 0
+  const isInsuranceEstimated = insurance === 0
+  if (isInsuranceEstimated) {
+    insurance = value * 0.003
+  }
+  
+  let customsValue = 0
+  let freightComponent = 0
+  let insuranceComponent = insurance
+  let calculation = ''
+  
+  switch (incoterm.toUpperCase()) {
+    case 'CIF':
+    case 'CIP':
+      // 已含国际运费和保险费
+      customsValue = value
+      freightComponent = 0
+      insuranceComponent = 0
+      calculation = `${value} (已含运费保险)`
+      break
+      
+    case 'CFR':
+    case 'CPT':
+      // 已含国际运费，需加保险费
+      customsValue = value + insurance
+      freightComponent = 0
+      insuranceComponent = insurance
+      calculation = `${value} + ${insurance} (保险)`
+      break
+      
+    case 'FOB':
+    case 'FCA':
+    case 'FAS':
+      // 需加国际运费和保险费
+      customsValue = value + intlFreight + insurance
+      freightComponent = intlFreight
+      insuranceComponent = insurance
+      calculation = `${value} + ${intlFreight} (运费) + ${insurance} (保险)`
+      break
+      
+    case 'EXW':
+      // 需加出口内陆运费、国际运费和保险费
+      customsValue = value + domFreightExport + intlFreight + insurance
+      freightComponent = domFreightExport + intlFreight
+      insuranceComponent = insurance
+      calculation = `${value} + ${domFreightExport} (内陆) + ${intlFreight} (国际) + ${insurance} (保险)`
+      break
+      
+    case 'DAP':
+    case 'DPU':
+    case 'DDU':
+      // 已含所有运费和保险，需扣除进口国内陆运费
+      customsValue = value - domFreightImport
+      freightComponent = -domFreightImport
+      insuranceComponent = 0
+      calculation = `${value} - ${domFreightImport} (进口内陆)`
+      break
+      
+    case 'DDP':
+      // DDP 反算：申报价值已包含关税和增值税
+      // 设完税价格为 X
+      // 申报价值 = X + X×关税率 + (X + X×关税率)×增值税率 + 进口内陆运费
+      // 简化：申报价值 = X × (1 + 关税率) × (1 + 增值税率) + 进口内陆运费
+      // 反推：X = (申报价值 - 进口内陆运费) / ((1 + 关税率) × (1 + 增值税率))
+      const duty = parseFloat(dutyRate) / 100 || 0
+      const vat = parseFloat(vatRate) / 100 || 0.19
+      const divisor = (1 + duty) * (1 + vat)
+      customsValue = (value - domFreightImport) / divisor
+      freightComponent = -domFreightImport
+      insuranceComponent = 0
+      calculation = `(${value} - ${domFreightImport}) / ((1 + ${duty}) × (1 + ${vat}))`
+      break
+      
+    default:
+      // 默认按 FOB 处理
+      customsValue = value + intlFreight + insurance
+      freightComponent = intlFreight
+      insuranceComponent = insurance
+      calculation = `${value} + ${intlFreight} (运费) + ${insurance} (保险) [默认FOB]`
+  }
+  
+  return {
+    customsValue: roundToDecimal(customsValue, 2),
+    declaredValue: roundToDecimal(value, 2),
+    freightComponent: roundToDecimal(freightComponent, 2),
+    insuranceComponent: roundToDecimal(insuranceComponent, 2),
+    isInsuranceEstimated,
+    incoterm: incoterm.toUpperCase(),
+    calculation
+  }
+}
+
+/**
+ * 分摊运费和保险费到每个商品
+ * 
+ * @param {Array} items - 商品列表
+ * @param {Object} params - 分摊参数
+ * @param {number} params.totalFreight - 总运费
+ * @param {number} params.totalInsurance - 总保险费
+ * @param {string} params.method - 分摊方式: 'by_value' 按货值 | 'by_weight' 按重量
+ * @returns {Array} 带分摊金额的商品列表
+ */
+export function allocateFreightAndInsurance(items, params) {
+  const {
+    totalFreight = 0,
+    totalInsurance = 0,
+    method = 'by_value'
+  } = params
+  
+  if (!items || items.length === 0) {
+    return []
+  }
+  
+  const freight = parseFloat(totalFreight) || 0
+  const insurance = parseFloat(totalInsurance) || 0
+  
+  // 计算分摊基数
+  let totalBase = 0
+  if (method === 'by_weight') {
+    totalBase = items.reduce((sum, item) => sum + (parseFloat(item.grossWeight) || parseFloat(item.netWeight) || 0), 0)
+  } else {
+    totalBase = items.reduce((sum, item) => sum + (parseFloat(item.totalValue) || 0), 0)
+  }
+  
+  if (totalBase === 0) {
+    // 如果基数为0，平均分摊
+    const avgFreight = freight / items.length
+    const avgInsurance = insurance / items.length
+    return items.map(item => ({
+      ...item,
+      freightAllocation: roundToDecimal(avgFreight, 2),
+      insuranceAllocation: roundToDecimal(avgInsurance, 2)
+    }))
+  }
+  
+  // 按比例分摊
+  return items.map(item => {
+    let itemBase
+    if (method === 'by_weight') {
+      itemBase = parseFloat(item.grossWeight) || parseFloat(item.netWeight) || 0
+    } else {
+      itemBase = parseFloat(item.totalValue) || 0
+    }
+    
+    const ratio = itemBase / totalBase
+    const freightAllocation = freight * ratio
+    const insuranceAllocation = insurance * ratio
+    
+    return {
+      ...item,
+      freightAllocation: roundToDecimal(freightAllocation, 2),
+      insuranceAllocation: roundToDecimal(insuranceAllocation, 2)
+    }
+  })
+}
+
+// ==================== 原产地税率匹配 ====================
+
+/**
+ * 根据 HS 编码和原产国精确查询税率
+ * 优先匹配特定原产国的税率（特别是反倾销税和反补贴税）
+ * 
+ * @param {string} hsCode - HS编码
+ * @param {string} originCountryCode - 原产国代码（ISO 2位）
+ * @returns {Object|null} 税率信息
+ */
+export async function getTariffByOrigin(hsCode, originCountryCode = 'CN') {
+  const db = getDatabase()
+  const normalizedHsCode = normalizeHsCode(hsCode)
+  
+  if (!normalizedHsCode) {
+    return null
+  }
+  
+  // 查询策略：
+  // 1. 首先精确匹配 HS编码 + 原产国
+  // 2. 如果没有，查找通用税率（origin_country_code 为空或 'ERGA_OMNES'）
+  // 3. 如果还是没有，尝试前缀匹配
+  
+  // 第一步：精确匹配原产国
+  let tariff = await db.prepare(`
+    SELECT 
+      id, hs_code, hs_code_10, goods_description, goods_description_cn,
+      origin_country, origin_country_code, geographical_area,
+      duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+      preferential_rate, third_country_duty,
+      measure_type, data_source
+    FROM tariff_rates 
+    WHERE hs_code = $1 
+      AND origin_country_code = $2
+      AND is_active = 1
+    ORDER BY anti_dumping_rate DESC, duty_rate DESC
+    LIMIT 1
+  `).get(normalizedHsCode, originCountryCode)
+  
+  // 第二步：查找通用税率
+  if (!tariff) {
+    tariff = await db.prepare(`
+      SELECT 
+        id, hs_code, hs_code_10, goods_description, goods_description_cn,
+        origin_country, origin_country_code, geographical_area,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        preferential_rate, third_country_duty,
+        measure_type, data_source
+      FROM tariff_rates 
+      WHERE hs_code = $1 
+        AND (origin_country_code IS NULL OR origin_country_code = '' OR origin_country_code = 'ERGA_OMNES')
+        AND is_active = 1
+      ORDER BY duty_rate DESC
+      LIMIT 1
+    `).get(normalizedHsCode)
+  }
+  
+  // 第三步：前缀匹配（8位）
+  if (!tariff) {
+    const prefix8 = normalizedHsCode.substring(0, 8)
+    tariff = await db.prepare(`
+      SELECT 
+        id, hs_code, hs_code_10, goods_description, goods_description_cn,
+        origin_country, origin_country_code, geographical_area,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        preferential_rate, third_country_duty,
+        measure_type, data_source
+      FROM tariff_rates 
+      WHERE hs_code LIKE $1
+        AND (origin_country_code = $2 OR origin_country_code IS NULL OR origin_country_code = '')
+        AND is_active = 1
+      ORDER BY 
+        CASE WHEN origin_country_code = $2 THEN 0 ELSE 1 END,
+        anti_dumping_rate DESC, duty_rate DESC
+      LIMIT 1
+    `).get(prefix8 + '%', originCountryCode)
+  }
+  
+  if (!tariff) {
+    return null
+  }
+  
+  return {
+    id: tariff.id,
+    hsCode: tariff.hs_code,
+    hsCode10: tariff.hs_code_10,
+    goodsDescription: tariff.goods_description,
+    goodsDescriptionCn: tariff.goods_description_cn,
+    originCountry: tariff.origin_country,
+    originCountryCode: tariff.origin_country_code,
+    geographicalArea: tariff.geographical_area,
+    dutyRate: parseFloat(tariff.duty_rate) || 0,
+    vatRate: parseFloat(tariff.vat_rate) || 19,
+    antiDumpingRate: parseFloat(tariff.anti_dumping_rate) || 0,
+    countervailingRate: parseFloat(tariff.countervailing_rate) || 0,
+    preferentialRate: tariff.preferential_rate,
+    thirdCountryDuty: tariff.third_country_duty,
+    measureType: tariff.measure_type,
+    dataSource: tariff.data_source
+  }
+}
+
+// ==================== 税费计算 ====================
+
+/**
  * 计算单个商品的税费
  * @param {Object} item - 商品数据
- * @param {number} item.totalValue - CIF货值
+ * @param {number} item.customsValue - 完税价格（CIF价格）
+ * @param {number} item.totalValue - 货值（兼容旧逻辑）
  * @param {number} item.dutyRate - 关税率(%)
  * @param {number} item.vatRate - 增值税率(%)
  * @param {number} item.antiDumpingRate - 反倾销税率(%)
  * @param {number} item.countervailingRate - 反补贴税率(%)
  */
 export function calculateItemTax(item) {
-  const cifValue = parseFloat(item.totalValue) || 0
+  // 优先使用完税价格，如果没有则使用货值（兼容旧数据）
+  const cifValue = parseFloat(item.customsValue) || parseFloat(item.totalValue) || 0
   const dutyRate = parseFloat(item.dutyRate) || 0
   const vatRate = parseFloat(item.vatRate) || 19 // 默认增值税率19%
   const antiDumpingRate = parseFloat(item.antiDumpingRate) || 0
   const countervailingRate = parseFloat(item.countervailingRate) || 0
   
-  // 关税 = CIF货值 × 关税率
+  // 关税 = 完税价格 × 关税率
   const dutyAmount = cifValue * (dutyRate / 100)
   
-  // 反倾销税 = CIF货值 × 反倾销税率
+  // 反倾销税 = 完税价格 × 反倾销税率
   const antiDumpingAmount = cifValue * (antiDumpingRate / 100)
   
-  // 反补贴税 = CIF货值 × 反补贴税率
+  // 反补贴税 = 完税价格 × 反补贴税率
   const countervailingAmount = cifValue * (countervailingRate / 100)
   
   // 其他税费合计（反倾销+反补贴）
   const otherTaxAmount = antiDumpingAmount + countervailingAmount
   
-  // 增值税 = (CIF货值 + 关税 + 其他税) × 增值税率
+  // 增值税 = (完税价格 + 关税 + 其他税) × 增值税率
   const vatBase = cifValue + dutyAmount + otherTaxAmount
   const vatAmount = vatBase * (vatRate / 100)
   
@@ -52,6 +401,7 @@ export function calculateItemTax(item) {
   const totalTax = dutyAmount + vatAmount + otherTaxAmount
   
   return {
+    customsValue: roundToDecimal(cifValue, 2),
     dutyAmount: roundToDecimal(dutyAmount, 2),
     vatAmount: roundToDecimal(vatAmount, 2),
     antiDumpingAmount: roundToDecimal(antiDumpingAmount, 2),
@@ -62,26 +412,86 @@ export function calculateItemTax(item) {
 }
 
 /**
- * 四舍五入到指定小数位
+ * 计算整个导入批次的税费（支持完税价格计算）
+ * 
+ * @param {number} importId - 导入批次ID
+ * @param {Object} options - 计算选项
+ * @param {boolean} options.recalculateCustomsValue - 是否重新计算完税价格
+ * @param {boolean} options.updateOriginTariffs - 是否根据原产地更新税率
  */
-function roundToDecimal(value, decimals) {
-  return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals)
-}
-
-/**
- * 计算整个导入批次的税费
- */
-export async function calculateImportTax(importId) {
+export async function calculateImportTax(importId, options = {}) {
   const db = getDatabase()
   const now = new Date().toISOString()
+  
+  const { recalculateCustomsValue = false, updateOriginTariffs = false } = options
+  
+  // 获取批次信息（包含贸易条件）
+  const batch = await db.prepare('SELECT * FROM cargo_imports WHERE id = ?').get(importId)
+  if (!batch) {
+    throw new Error('导入批次不存在')
+  }
   
   // 获取已匹配的货物明细
   const rows = await db.prepare(`
     SELECT * FROM cargo_items 
-    WHERE import_id = ? AND match_status IN ('matched', 'auto_approved', 'approved')
+    WHERE import_id = $1 AND match_status IN ('matched', 'auto_approved', 'approved')
   `).all(importId)
   
+  // 如果需要重新计算完税价格，先分摊运费和保险费
+  let itemsWithAllocation = rows.map(r => ({
+    ...r,
+    totalValue: parseFloat(r.total_value) || 0,
+    grossWeight: parseFloat(r.gross_weight) || 0,
+    netWeight: parseFloat(r.net_weight) || 0
+  }))
+  
+  if (recalculateCustomsValue && batch.incoterm) {
+    // 计算需要分摊的运费和保险费
+    const incoterm = batch.incoterm || 'FOB'
+    const intlFreight = parseFloat(batch.international_freight) || 0
+    const domFreightExport = parseFloat(batch.domestic_freight_export) || 0
+    const insurance = parseFloat(batch.insurance_cost) || 0
+    
+    // 根据 Incoterm 确定需要分摊的运费
+    let totalFreightToAllocate = 0
+    switch (incoterm.toUpperCase()) {
+      case 'EXW':
+        totalFreightToAllocate = domFreightExport + intlFreight
+        break
+      case 'FOB':
+      case 'FCA':
+      case 'FAS':
+        totalFreightToAllocate = intlFreight
+        break
+      case 'CFR':
+      case 'CPT':
+      case 'CIF':
+      case 'CIP':
+      case 'DAP':
+      case 'DPU':
+      case 'DDU':
+      case 'DDP':
+        totalFreightToAllocate = 0 // 这些条款不需要额外加运费
+        break
+      default:
+        totalFreightToAllocate = intlFreight
+    }
+    
+    // 保险费估算（如果未提供）
+    const totalValue = itemsWithAllocation.reduce((sum, item) => sum + item.totalValue, 0)
+    const insuranceToAllocate = insurance > 0 ? insurance : (totalValue * 0.003)
+    
+    // 分摊运费和保险费
+    const method = batch.freight_allocation_method || 'by_value'
+    itemsWithAllocation = allocateFreightAndInsurance(itemsWithAllocation, {
+      totalFreight: totalFreightToAllocate,
+      totalInsurance: insuranceToAllocate,
+      method
+    })
+  }
+  
   let totalValue = 0
+  let totalCustomsValue = 0
   let totalDuty = 0
   let totalVat = 0
   let totalOtherTax = 0
@@ -89,36 +499,74 @@ export async function calculateImportTax(importId) {
   
   const itemsWithTax = []
   
-  for (const row of rows) {
+  for (const row of itemsWithAllocation) {
+    // 如果需要根据原产地更新税率
+    let tariffData = null
+    if (updateOriginTariffs) {
+      const originCode = row.origin_country_code || 'CN'
+      const hsCode = row.matched_hs_code
+      if (hsCode) {
+        tariffData = await getTariffByOrigin(hsCode, originCode)
+      }
+    }
+    
+    // 计算完税价格
+    const declaredValue = parseFloat(row.total_value) || 0
+    const freightAlloc = parseFloat(row.freightAllocation) || parseFloat(row.freight_allocation) || 0
+    const insuranceAlloc = parseFloat(row.insuranceAllocation) || parseFloat(row.insurance_allocation) || 0
+    
+    // 完税价格 = 申报货值 + 分摊运费 + 分摊保险费
+    const customsValue = recalculateCustomsValue 
+      ? declaredValue + freightAlloc + insuranceAlloc
+      : (parseFloat(row.customs_value) || declaredValue)
+    
     const item = {
       id: row.id,
-      totalValue: parseFloat(row.total_value) || 0,
-      dutyRate: parseFloat(row.duty_rate) || 0,
-      vatRate: parseFloat(row.vat_rate) || 19,
-      antiDumpingRate: parseFloat(row.anti_dumping_rate) || 0,
-      countervailingRate: parseFloat(row.countervailing_rate) || 0
+      customsValue: customsValue,
+      totalValue: declaredValue,
+      dutyRate: tariffData?.dutyRate ?? parseFloat(row.duty_rate) ?? 0,
+      vatRate: tariffData?.vatRate ?? parseFloat(row.vat_rate) ?? 19,
+      antiDumpingRate: tariffData?.antiDumpingRate ?? parseFloat(row.anti_dumping_rate) ?? 0,
+      countervailingRate: tariffData?.countervailingRate ?? parseFloat(row.countervailing_rate) ?? 0
     }
     
     const taxResult = calculateItemTax(item)
     
-    // 更新货物明细的税费
+    // 更新货物明细的税费和完税价格
     await db.prepare(`
       UPDATE cargo_items SET
-        duty_amount = ?,
-        vat_amount = ?,
-        other_tax_amount = ?,
-        total_tax = ?
-      WHERE id = ?
+        customs_value = $1,
+        freight_allocation = $2,
+        insurance_allocation = $3,
+        duty_rate = $4,
+        vat_rate = $5,
+        anti_dumping_rate = $6,
+        countervailing_rate = $7,
+        duty_amount = $8,
+        vat_amount = $9,
+        other_tax_amount = $10,
+        total_tax = $11,
+        updated_at = $12
+      WHERE id = $13
     `).run(
+      customsValue,
+      freightAlloc,
+      insuranceAlloc,
+      item.dutyRate,
+      item.vatRate,
+      item.antiDumpingRate,
+      item.countervailingRate,
       taxResult.dutyAmount,
       taxResult.vatAmount,
       taxResult.otherTaxAmount,
       taxResult.totalTax,
+      now,
       item.id
     )
     
     // 累计统计
-    totalValue += item.totalValue
+    totalValue += declaredValue
+    totalCustomsValue += customsValue
     totalDuty += taxResult.dutyAmount
     totalVat += taxResult.vatAmount
     totalOtherTax += taxResult.otherTaxAmount
@@ -126,29 +574,140 @@ export async function calculateImportTax(importId) {
     
     itemsWithTax.push({
       ...row,
-      ...taxResult
+      customsValue,
+      freightAllocation: freightAlloc,
+      insuranceAllocation: insuranceAlloc,
+      ...taxResult,
+      tariffUpdated: !!tariffData
     })
   }
   
   // 更新导入批次的税费统计
   await db.prepare(`
     UPDATE cargo_imports SET
-      total_value = ?,
-      total_duty = ?,
-      total_vat = ?,
-      total_other_tax = ?,
-      updated_at = ?
-    WHERE id = ?
-  `).run(totalValue, totalDuty, totalVat, totalOtherTax, now, importId)
+      total_value = $1,
+      total_customs_value = $2,
+      total_duty = $3,
+      total_vat = $4,
+      total_other_tax = $5,
+      updated_at = $6
+    WHERE id = $7
+  `).run(totalValue, totalCustomsValue, totalDuty, totalVat, totalOtherTax, now, importId)
   
   return {
     itemCount: rows.length,
     totalValue: roundToDecimal(totalValue, 2),
+    totalCustomsValue: roundToDecimal(totalCustomsValue, 2),
     totalDuty: roundToDecimal(totalDuty, 2),
     totalVat: roundToDecimal(totalVat, 2),
     totalOtherTax: roundToDecimal(totalOtherTax, 2),
     totalTax: roundToDecimal(totalTax, 2),
     items: itemsWithTax
+  }
+}
+
+/**
+ * 更新贸易条件和运费信息
+ * 
+ * @param {number} importId - 导入批次ID
+ * @param {Object} tradeTerms - 贸易条件数据
+ */
+export async function updateTradeTerms(importId, tradeTerms) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  const {
+    incoterm,
+    internationalFreight,
+    domesticFreightExport,
+    domesticFreightImport,
+    insuranceCost,
+    prepaidDuties,
+    freightAllocationMethod
+  } = tradeTerms
+  
+  await db.prepare(`
+    UPDATE cargo_imports SET
+      incoterm = COALESCE($1, incoterm),
+      international_freight = COALESCE($2, international_freight),
+      domestic_freight_export = COALESCE($3, domestic_freight_export),
+      domestic_freight_import = COALESCE($4, domestic_freight_import),
+      insurance_cost = COALESCE($5, insurance_cost),
+      prepaid_duties = COALESCE($6, prepaid_duties),
+      freight_allocation_method = COALESCE($7, freight_allocation_method),
+      updated_at = $8
+    WHERE id = $9
+  `).run(
+    incoterm || null,
+    internationalFreight ?? null,
+    domesticFreightExport ?? null,
+    domesticFreightImport ?? null,
+    insuranceCost ?? null,
+    prepaidDuties ?? null,
+    freightAllocationMethod || null,
+    now,
+    importId
+  )
+  
+  return true
+}
+
+/**
+ * 更新商品原产地
+ * 
+ * @param {number} itemId - 商品ID
+ * @param {string} originCountryCode - 原产国代码
+ * @param {boolean} updateTariff - 是否同时更新税率
+ */
+export async function updateItemOrigin(itemId, originCountryCode, updateTariff = true) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  // 获取当前商品信息
+  const item = await db.prepare('SELECT * FROM cargo_items WHERE id = $1').get(itemId)
+  if (!item) {
+    throw new Error('商品不存在')
+  }
+  
+  let tariffData = null
+  if (updateTariff && item.matched_hs_code) {
+    tariffData = await getTariffByOrigin(item.matched_hs_code, originCountryCode)
+  }
+  
+  // 更新原产地和税率
+  if (tariffData) {
+    await db.prepare(`
+      UPDATE cargo_items SET
+        origin_country_code = $1,
+        duty_rate = $2,
+        vat_rate = $3,
+        anti_dumping_rate = $4,
+        countervailing_rate = $5,
+        updated_at = $6
+      WHERE id = $7
+    `).run(
+      originCountryCode,
+      tariffData.dutyRate,
+      tariffData.vatRate,
+      tariffData.antiDumpingRate,
+      tariffData.countervailingRate,
+      now,
+      itemId
+    )
+  } else {
+    await db.prepare(`
+      UPDATE cargo_items SET
+        origin_country_code = $1,
+        updated_at = $2
+      WHERE id = $3
+    `).run(originCountryCode, now, itemId)
+  }
+  
+  return {
+    itemId,
+    originCountryCode,
+    tariffUpdated: !!tariffData,
+    tariff: tariffData
   }
 }
 
@@ -170,13 +729,13 @@ export async function updateClearanceType(importId, clearanceType) {
 }
 
 /**
- * 获取导入批次的税费详情
+ * 获取导入批次的税费详情（包含贸易条件和完税价格）
  */
 export async function getTaxDetails(importId) {
   const db = getDatabase()
   
   // 获取批次信息
-  const batch = await db.prepare('SELECT * FROM cargo_imports WHERE id = ?').get(importId)
+  const batch = await db.prepare('SELECT * FROM cargo_imports WHERE id = $1').get(importId)
   if (!batch) {
     return null
   }
@@ -185,10 +744,14 @@ export async function getTaxDetails(importId) {
   const clearanceType = batch.clearance_type || '40'
   const isDeferred = clearanceType === '42'
   
+  // 贸易条件信息
+  const incoterm = batch.incoterm || 'FOB'
+  const incotermInfo = INCOTERMS[incoterm] || INCOTERMS.FOB
+  
   // 获取货物明细
   const rows = await db.prepare(`
     SELECT * FROM cargo_items 
-    WHERE import_id = ? AND match_status IN ('matched', 'auto_approved', 'approved')
+    WHERE import_id = $1 AND match_status IN ('matched', 'auto_approved', 'approved')
     ORDER BY item_no ASC
   `).all(importId)
   
@@ -203,12 +766,22 @@ export async function getTaxDetails(importId) {
     unitName: row.unit_name,
     unitPrice: parseFloat(row.unit_price) || 0,
     totalValue: parseFloat(row.total_value) || 0,
+    // 完税价格相关
+    customsValue: parseFloat(row.customs_value) || parseFloat(row.total_value) || 0,
+    freightAllocation: parseFloat(row.freight_allocation) || 0,
+    insuranceAllocation: parseFloat(row.insurance_allocation) || 0,
+    // 原产地
     originCountry: row.origin_country,
+    originCountryCode: row.origin_country_code || 'CN',
     material: row.material,
+    grossWeight: parseFloat(row.gross_weight) || 0,
+    netWeight: parseFloat(row.net_weight) || 0,
+    // 税率
     dutyRate: parseFloat(row.duty_rate) || 0,
     vatRate: parseFloat(row.vat_rate) || 19,
     antiDumpingRate: parseFloat(row.anti_dumping_rate) || 0,
     countervailingRate: parseFloat(row.countervailing_rate) || 0,
+    // 税额
     dutyAmount: parseFloat(row.duty_amount) || 0,
     vatAmount: parseFloat(row.vat_amount) || 0,
     otherTaxAmount: parseFloat(row.other_tax_amount) || 0,
@@ -224,6 +797,7 @@ export async function getTaxDetails(importId) {
         hsCode: key,
         itemCount: 0,
         totalValue: 0,
+        totalCustomsValue: 0,
         totalDuty: 0,
         totalVat: 0,
         totalOtherTax: 0,
@@ -232,6 +806,7 @@ export async function getTaxDetails(importId) {
     }
     byHsCode[key].itemCount++
     byHsCode[key].totalValue += item.totalValue
+    byHsCode[key].totalCustomsValue += item.customsValue
     byHsCode[key].totalDuty += item.dutyAmount
     byHsCode[key].totalVat += item.vatAmount
     byHsCode[key].totalOtherTax += item.otherTaxAmount
@@ -240,6 +815,7 @@ export async function getTaxDetails(importId) {
   
   // 根据清关类型计算实际应付税费
   const totalValue = parseFloat(batch.total_value) || 0
+  const totalCustomsValue = parseFloat(batch.total_customs_value) || totalValue
   const totalDuty = parseFloat(batch.total_duty) || 0
   const totalVat = parseFloat(batch.total_vat) || 0
   const totalOtherTax = parseFloat(batch.total_other_tax) || 0
@@ -259,6 +835,7 @@ export async function getTaxDetails(importId) {
       totalItems: batch.total_items,
       matchedItems: batch.matched_items,
       totalValue: totalValue,
+      totalCustomsValue: totalCustomsValue,
       totalDuty: totalDuty,
       totalVat: totalVat,
       totalOtherTax: totalOtherTax,
@@ -267,6 +844,16 @@ export async function getTaxDetails(importId) {
       confirmPdfPath: batch.confirm_pdf_path,
       status: batch.status,
       clearanceType: clearanceType,
+      // 贸易条件信息
+      incoterm: incoterm,
+      incotermName: incotermInfo.name,
+      incotermNameCn: incotermInfo.nameCn,
+      internationalFreight: parseFloat(batch.international_freight) || 0,
+      domesticFreightExport: parseFloat(batch.domestic_freight_export) || 0,
+      domesticFreightImport: parseFloat(batch.domestic_freight_import) || 0,
+      insuranceCost: parseFloat(batch.insurance_cost) || 0,
+      prepaidDuties: parseFloat(batch.prepaid_duties) || 0,
+      freightAllocationMethod: batch.freight_allocation_method || 'by_value',
       // 发货方信息
       shipperName: batch.shipper_name,
       shipperAddress: batch.shipper_address,
@@ -284,6 +871,7 @@ export async function getTaxDetails(importId) {
     items,
     summary: {
       totalValue: roundToDecimal(totalValue, 2),
+      totalCustomsValue: roundToDecimal(totalCustomsValue, 2),
       totalDuty: roundToDecimal(totalDuty, 2),
       totalVat: roundToDecimal(totalVat, 2),           // 计算的增值税总额
       payableVat: roundToDecimal(payableVat, 2),       // 实际应付增值税
@@ -291,6 +879,9 @@ export async function getTaxDetails(importId) {
       totalOtherTax: roundToDecimal(totalOtherTax, 2),
       // 实际应付税费 = 关税 + 应付增值税 + 其他税
       totalTax: roundToDecimal(totalDuty + payableVat + totalOtherTax, 2),
+      // 贸易条件
+      incoterm: incoterm,
+      incotermLabel: `${incoterm} - ${incotermInfo.nameCn}`,
       // 递延清关说明
       clearanceType: clearanceType,
       clearanceTypeLabel: clearanceType === '42' ? '42号递延清关' : '40号普通清关',
@@ -568,9 +1159,22 @@ export async function getDocumentStats() {
 }
 
 export default {
+  // Incoterms
+  INCOTERMS,
+  getIncotermsList,
+  // 完税价格计算
+  calculateCustomsValue,
+  allocateFreightAndInsurance,
+  // 原产地税率匹配
+  getTariffByOrigin,
+  // 税费计算
   calculateItemTax,
   calculateImportTax,
   getTaxDetails,
+  // 贸易条件更新
+  updateTradeTerms,
+  updateItemOrigin,
+  // 其他
   markCustomerConfirmed,
   updateConfirmPdfPath,
   updateCargoItemTax,

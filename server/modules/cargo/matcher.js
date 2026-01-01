@@ -17,13 +17,19 @@ const MATCH_CONFIG = {
 
 /**
  * 执行HS编码匹配
+ * @param {Object} item - 商品信息
+ * @param {string} item.customerHsCode - 客户提供的HS编码
+ * @param {string} item.productName - 商品名称
+ * @param {string} item.productNameEn - 英文名称
+ * @param {string} item.material - 材质
+ * @param {string} item.originCountry - 原产国代码（如 CN），用于查询正确的关税税率
  */
 export async function matchHsCode(item) {
-  const { customerHsCode, productName, productNameEn, material } = item
+  const { customerHsCode, productName, productNameEn, material, originCountry = 'CN' } = item
   
   // 1. 如果有客户提供的HS编码，先尝试精确匹配
   if (customerHsCode) {
-    const exactResult = await doExactMatch(customerHsCode)
+    const exactResult = await doExactMatch(customerHsCode, originCountry)
     if (exactResult) {
       return {
         matchedHsCode: exactResult.hsCode,
@@ -35,7 +41,7 @@ export async function matchHsCode(item) {
     
     // 2. 尝试前缀匹配 (8位)
     const prefix8 = customerHsCode.substring(0, 8)
-    const prefix8Match = await doPrefixMatch(prefix8)
+    const prefix8Match = await doPrefixMatch(prefix8, originCountry)
     if (prefix8Match) {
       return {
         matchedHsCode: prefix8Match.hsCode,
@@ -47,7 +53,7 @@ export async function matchHsCode(item) {
     
     // 3. 尝试前缀匹配 (6位)
     const prefix6 = customerHsCode.substring(0, 6)
-    const prefix6Match = await doPrefixMatch(prefix6)
+    const prefix6Match = await doPrefixMatch(prefix6, originCountry)
     if (prefix6Match) {
       return {
         matchedHsCode: prefix6Match.hsCode,
@@ -63,7 +69,7 @@ export async function matchHsCode(item) {
   if (historyMatch) {
     // 规范化历史记录中的 HS 编码为 10 位
     const normalizedHsCode = normalizeHsCode(historyMatch.matched_hs_code)
-    const tariffData = await doExactMatch(normalizedHsCode)
+    const tariffData = await doExactMatch(normalizedHsCode, originCountry)
     return {
       matchedHsCode: normalizedHsCode,
       matchConfidence: Math.min(MATCH_CONFIG.HISTORY_MATCH_CONFIDENCE, 70 + historyMatch.match_count * 5),
@@ -74,7 +80,7 @@ export async function matchHsCode(item) {
   
   // 5. 尝试模糊匹配 (基于商品名称)
   if (productName) {
-    const fuzzyMatch = await fuzzyMatchByName(productName)
+    const fuzzyMatch = await fuzzyMatchByName(productName, originCountry)
     if (fuzzyMatch) {
       return {
         matchedHsCode: fuzzyMatch.hsCode,
@@ -96,18 +102,53 @@ export async function matchHsCode(item) {
 
 /**
  * 精确匹配HS编码
+ * @param {string} hsCode - HS编码
+ * @param {string} originCountry - 原产国代码，用于查询特定税率（如反倾销税）
  */
-async function doExactMatch(hsCode) {
+async function doExactMatch(hsCode, originCountry = 'CN') {
   const db = getDatabase()
-  const row = await db.prepare(`
+  
+  // 首先尝试匹配特定原产国的税率（可能包含反倾销税等）
+  let row = await db.prepare(`
     SELECT 
       hs_code, goods_description, goods_description_cn, material,
       duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
-      unit_code, unit_name
+      unit_code, unit_name, origin_country_code
     FROM tariff_rates 
     WHERE hs_code = ?
+      AND origin_country_code = ?
+      AND is_active = 1
+    ORDER BY anti_dumping_rate DESC, duty_rate DESC
     LIMIT 1
-  `).get(hsCode.trim())
+  `).get(hsCode.trim(), originCountry)
+  
+  // 如果没有特定原产国的税率，查找通用税率
+  if (!row) {
+    row = await db.prepare(`
+      SELECT 
+        hs_code, goods_description, goods_description_cn, material,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        unit_code, unit_name, origin_country_code
+      FROM tariff_rates 
+      WHERE hs_code = ?
+        AND (origin_country_code IS NULL OR origin_country_code = '' OR origin_country_code = 'ERGA_OMNES')
+        AND is_active = 1
+      LIMIT 1
+    `).get(hsCode.trim())
+  }
+  
+  // 最后回退到基础查询
+  if (!row) {
+    row = await db.prepare(`
+      SELECT 
+        hs_code, goods_description, goods_description_cn, material,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        unit_code, unit_name, origin_country_code
+      FROM tariff_rates 
+      WHERE hs_code = ?
+      LIMIT 1
+    `).get(hsCode.trim())
+  }
   
   if (row) {
     return convertTariffRow(row)
@@ -117,19 +158,55 @@ async function doExactMatch(hsCode) {
 
 /**
  * 前缀匹配HS编码
+ * @param {string} prefix - HS编码前缀
+ * @param {string} originCountry - 原产国代码，用于查询特定税率
  */
-async function doPrefixMatch(prefix) {
+async function doPrefixMatch(prefix, originCountry = 'CN') {
   const db = getDatabase()
-  const row = await db.prepare(`
+  
+  // 首先尝试匹配特定原产国的税率
+  let row = await db.prepare(`
     SELECT 
       hs_code, goods_description, goods_description_cn, material,
       duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
-      unit_code, unit_name
+      unit_code, unit_name, origin_country_code
     FROM tariff_rates 
     WHERE hs_code LIKE ?
-    ORDER BY hs_code ASC
+      AND origin_country_code = ?
+      AND is_active = 1
+    ORDER BY anti_dumping_rate DESC, hs_code ASC
     LIMIT 1
-  `).get(prefix + '%')
+  `).get(prefix + '%', originCountry)
+  
+  // 如果没有特定原产国的税率，查找通用税率
+  if (!row) {
+    row = await db.prepare(`
+      SELECT 
+        hs_code, goods_description, goods_description_cn, material,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        unit_code, unit_name, origin_country_code
+      FROM tariff_rates 
+      WHERE hs_code LIKE ?
+        AND (origin_country_code IS NULL OR origin_country_code = '' OR origin_country_code = 'ERGA_OMNES')
+        AND is_active = 1
+      ORDER BY hs_code ASC
+      LIMIT 1
+    `).get(prefix + '%')
+  }
+  
+  // 最后回退到基础查询
+  if (!row) {
+    row = await db.prepare(`
+      SELECT 
+        hs_code, goods_description, goods_description_cn, material,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        unit_code, unit_name, origin_country_code
+      FROM tariff_rates 
+      WHERE hs_code LIKE ?
+      ORDER BY hs_code ASC
+      LIMIT 1
+    `).get(prefix + '%')
+  }
   
   if (row) {
     return convertTariffRow(row)
@@ -171,21 +248,39 @@ async function matchFromHistory(productName, productNameEn, material) {
 
 /**
  * 基于商品名称的模糊匹配
+ * @param {string} productName - 商品名称
+ * @param {string} originCountry - 原产国代码，用于查询特定税率
  */
-async function fuzzyMatchByName(productName) {
+async function fuzzyMatchByName(productName, originCountry = 'CN') {
   const db = getDatabase()
   
-  // 使用ILIKE进行模糊匹配
-  const row = await db.prepare(`
+  // 首先尝试匹配特定原产国的税率
+  let row = await db.prepare(`
     SELECT 
       hs_code, goods_description, goods_description_cn, material,
       duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
-      unit_code, unit_name
+      unit_code, unit_name, origin_country_code
     FROM tariff_rates 
-    WHERE goods_description_cn ILIKE ? OR goods_description ILIKE ?
+    WHERE (goods_description_cn ILIKE ? OR goods_description ILIKE ?)
+      AND origin_country_code = ?
+      AND is_active = 1
     ORDER BY LENGTH(COALESCE(goods_description_cn, '')) ASC
     LIMIT 1
-  `).get(`%${productName}%`, `%${productName}%`)
+  `).get(`%${productName}%`, `%${productName}%`, originCountry)
+  
+  // 如果没有特定原产国的税率，查找通用税率
+  if (!row) {
+    row = await db.prepare(`
+      SELECT 
+        hs_code, goods_description, goods_description_cn, material,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        unit_code, unit_name, origin_country_code
+      FROM tariff_rates 
+      WHERE goods_description_cn ILIKE ? OR goods_description ILIKE ?
+      ORDER BY LENGTH(COALESCE(goods_description_cn, '')) ASC
+      LIMIT 1
+    `).get(`%${productName}%`, `%${productName}%`)
+  }
   
   if (row) {
     return convertTariffRow(row)
@@ -218,7 +313,8 @@ function convertTariffRow(row) {
     antiDumpingRate: parseFloat(row.anti_dumping_rate) || 0,
     countervailingRate: parseFloat(row.countervailing_rate) || 0,
     unitCode: row.unit_code,
-    unitName: row.unit_name
+    unitName: row.unit_name,
+    originCountryCode: row.origin_country_code || ''
   }
 }
 
@@ -229,9 +325,9 @@ export async function batchMatchHsCodes(importId) {
   const db = getDatabase()
   const now = new Date().toISOString()
   
-  // 获取待匹配的货物
+  // 获取待匹配的货物（包含原产国信息）
   const items = await db.prepare(`
-    SELECT id, product_name, product_name_en, customer_hs_code, material
+    SELECT id, product_name, product_name_en, customer_hs_code, material, origin_country
     FROM cargo_items 
     WHERE import_id = ? AND match_status = 'pending'
   `).all(importId)
@@ -244,7 +340,8 @@ export async function batchMatchHsCodes(importId) {
       customerHsCode: item.customer_hs_code,
       productName: item.product_name,
       productNameEn: item.product_name_en,
-      material: item.material
+      material: item.material,
+      originCountry: item.origin_country || 'CN'  // 默认使用 CN（中国）作为原产国
     })
     
     let status = 'review'
@@ -308,8 +405,14 @@ export async function approveMatch(itemId, hsCode, reviewNote, reviewedBy) {
   const db = getDatabase()
   const now = new Date().toISOString()
   
-  // 获取税率信息
-  const tariffData = await doExactMatch(hsCode)
+  // 先获取商品的原产国信息
+  const itemInfo = await db.prepare(`
+    SELECT origin_country FROM cargo_items WHERE id = ?
+  `).get(itemId)
+  const originCountry = itemInfo?.origin_country || 'CN'
+  
+  // 根据原产国获取税率信息
+  const tariffData = await doExactMatch(hsCode, originCountry)
   
   // 更新货物明细
   await db.prepare(`

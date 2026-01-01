@@ -23,6 +23,14 @@ interface ImportBatch {
   status: string
 }
 
+// Incoterm 贸易条款
+interface Incoterm {
+  code: string
+  name: string
+  nameCn: string
+  group: string
+}
+
 interface TaxDetails {
   batch: {
     id: number
@@ -34,6 +42,7 @@ interface TaxDetails {
     totalItems: number
     matchedItems: number
     totalValue: number
+    totalCustomsValue: number
     totalDuty: number
     totalVat: number
     totalOtherTax: number
@@ -42,6 +51,16 @@ interface TaxDetails {
     confirmPdfPath: string
     status: string
     clearanceType: string
+    // 贸易条件信息
+    incoterm: string
+    incotermName: string
+    incotermNameCn: string
+    internationalFreight: number
+    domesticFreightExport: number
+    domesticFreightImport: number
+    insuranceCost: number
+    prepaidDuties: number
+    freightAllocationMethod: string
     // 发货方信息
     shipperName: string
     shipperAddress: string
@@ -65,6 +84,13 @@ interface TaxDetails {
     quantity: number
     unitName: string
     totalValue: number
+    customsValue: number
+    freightAllocation: number
+    insuranceAllocation: number
+    originCountry: string
+    originCountryCode: string
+    grossWeight: number
+    netWeight: number
     dutyRate: number
     vatRate: number
     antiDumpingRate: number
@@ -76,12 +102,15 @@ interface TaxDetails {
   }>
   summary: {
     totalValue: number
+    totalCustomsValue: number
     totalDuty: number
     totalVat: number
     payableVat: number
     deferredVat: number
     totalOtherTax: number
     totalTax: number
+    incoterm: string
+    incotermLabel: string
     clearanceType: string
     clearanceTypeLabel: string
     isDeferred: boolean
@@ -90,6 +119,7 @@ interface TaxDetails {
     hsCode: string
     itemCount: number
     totalValue: number
+    totalCustomsValue: number
     totalDuty: number
     totalVat: number
     totalOtherTax: number
@@ -170,6 +200,7 @@ export default function DocumentTaxCalc() {
     address: ''
   })
   const [savingShipperImporter, setSavingShipperImporter] = useState(false)
+  const [syncingShipper, setSyncingShipper] = useState(false)
   
   // 客户和税号选择
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -183,10 +214,31 @@ export default function DocumentTaxCalc() {
   
   // 风险分析相关状态
   const [showRiskAnalysis, setShowRiskAnalysis] = useState(false)
+  
+  // 贸易条件相关状态
+  const [incotermsList, setIncotermsList] = useState<Incoterm[]>([])
+  const [editingTradeTerms, setEditingTradeTerms] = useState(false)
+  const [tradeTermsForm, setTradeTermsForm] = useState({
+    incoterm: 'FOB',
+    internationalFreight: '',
+    domesticFreightExport: '',
+    domesticFreightImport: '',
+    insuranceCost: '',
+    prepaidDuties: '',
+    freightAllocationMethod: 'by_value'
+  })
+  const [savingTradeTerms, setSavingTradeTerms] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
+  
+  // 原产地编辑状态
+  const [editingOriginItemId, setEditingOriginItemId] = useState<number | null>(null)
+  const [originForm, setOriginForm] = useState({ originCountryCode: 'CN' })
+  const [savingOrigin, setSavingOrigin] = useState(false)
 
   useEffect(() => {
     loadBatches()
     loadCustomers()
+    loadIncotermsList()
   }, [])
   
   // 加载客户列表
@@ -218,6 +270,131 @@ export default function DocumentTaxCalc() {
       setLoadingTaxNumbers(false)
     }
   }
+  
+  // 加载贸易条款列表
+  const loadIncotermsList = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/incoterms`)
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setIncotermsList(data.data || [])
+      }
+    } catch (error) {
+      console.error('加载贸易条款列表失败:', error)
+    }
+  }
+  
+  // 初始化贸易条件表单
+  const initTradeTermsForm = () => {
+    if (taxDetails?.batch) {
+      setTradeTermsForm({
+        incoterm: taxDetails.batch.incoterm || 'FOB',
+        internationalFreight: String(taxDetails.batch.internationalFreight || ''),
+        domesticFreightExport: String(taxDetails.batch.domesticFreightExport || ''),
+        domesticFreightImport: String(taxDetails.batch.domesticFreightImport || ''),
+        insuranceCost: String(taxDetails.batch.insuranceCost || ''),
+        prepaidDuties: String(taxDetails.batch.prepaidDuties || ''),
+        freightAllocationMethod: taxDetails.batch.freightAllocationMethod || 'by_value'
+      })
+    }
+  }
+  
+  // 保存贸易条件
+  const handleSaveTradeTerms = async () => {
+    if (!selectedBatch) return
+    setSavingTradeTerms(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/tax-calc/${selectedBatch.id}/trade-terms`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          incoterm: tradeTermsForm.incoterm,
+          internationalFreight: tradeTermsForm.internationalFreight ? parseFloat(tradeTermsForm.internationalFreight) : null,
+          domesticFreightExport: tradeTermsForm.domesticFreightExport ? parseFloat(tradeTermsForm.domesticFreightExport) : null,
+          domesticFreightImport: tradeTermsForm.domesticFreightImport ? parseFloat(tradeTermsForm.domesticFreightImport) : null,
+          insuranceCost: tradeTermsForm.insuranceCost ? parseFloat(tradeTermsForm.insuranceCost) : null,
+          prepaidDuties: tradeTermsForm.prepaidDuties ? parseFloat(tradeTermsForm.prepaidDuties) : null,
+          freightAllocationMethod: tradeTermsForm.freightAllocationMethod
+        })
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        showToast('success', '贸易条件已更新')
+        setEditingTradeTerms(false)
+        loadTaxDetails()
+      } else {
+        showToast('error', data.errMsg || '更新失败')
+      }
+    } catch (error) {
+      console.error('保存贸易条件失败:', error)
+      showToast('error', '保存失败')
+    } finally {
+      setSavingTradeTerms(false)
+    }
+  }
+  
+  // 重新计算完税价格和税费
+  const handleRecalculate = async (updateOriginTariffs = false) => {
+    if (!selectedBatch) return
+    setRecalculating(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/tax-calc/${selectedBatch.id}/recalculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recalculateCustomsValue: true,
+          updateOriginTariffs
+        })
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        showToast('success', '税费已重新计算')
+        loadTaxDetails()
+      } else {
+        showToast('error', data.errMsg || '计算失败')
+      }
+    } catch (error) {
+      console.error('重新计算失败:', error)
+      showToast('error', '计算失败')
+    } finally {
+      setRecalculating(false)
+    }
+  }
+  
+  // 更新商品原产地
+  const handleSaveOrigin = async (itemId: number) => {
+    setSavingOrigin(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/tax-calc/item/${itemId}/origin`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originCountryCode: originForm.originCountryCode,
+          updateTariff: true
+        })
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        showToast('success', data.errMsg || '原产地已更新')
+        setEditingOriginItemId(null)
+        loadTaxDetails()
+      } else {
+        showToast('error', data.errMsg || '更新失败')
+      }
+    } catch (error) {
+      console.error('更新原产地失败:', error)
+      showToast('error', '更新失败')
+    } finally {
+      setSavingOrigin(false)
+    }
+  }
+  
+  // 判断是否需要显示特定运费字段
+  const needsInternationalFreight = ['EXW', 'FCA', 'FAS', 'FOB'].includes(tradeTermsForm.incoterm)
+  const needsDomesticFreightExport = tradeTermsForm.incoterm === 'EXW'
+  const needsDomesticFreightImport = ['DAP', 'DPU', 'DDU', 'DDP'].includes(tradeTermsForm.incoterm)
+  const needsInsurance = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CPT'].includes(tradeTermsForm.incoterm)
+  const needsPrepaidDuties = tradeTermsForm.incoterm === 'DDP'
   
   // 当选择客户时加载税号
   useEffect(() => {
@@ -587,6 +764,40 @@ export default function DocumentTaxCalc() {
       setSavingShipperImporter(false)
     }
   }
+  
+  // 从提单同步发货方信息
+  const handleSyncShipperFromBL = async () => {
+    if (!selectedBatch) return
+    
+    setSyncingShipper(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/imports/${selectedBatch.id}/sync-shipper`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        showToast('success', '已从提单同步发货方信息')
+        // 更新表单中的发货方信息
+        if (data.data) {
+          setShipperForm({
+            name: data.data.shipperName || '',
+            address: data.data.shipperAddress || '',
+            contact: data.data.shipperContact || ''
+          })
+        }
+        // 重新加载详情
+        loadTaxDetails()
+      } else {
+        showToast('error', data.msg || '同步失败')
+      }
+    } catch (error) {
+      console.error('从提单同步发货方信息失败:', error)
+      showToast('error', '同步失败')
+    } finally {
+      setSyncingShipper(false)
+    }
+  }
 
   const tabs = [
     { label: '单证概览', path: '/documents' },
@@ -791,6 +1002,240 @@ export default function DocumentTaxCalc() {
             </div>
           </div>
           
+          {/* 贸易条件设置 */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary-600" />
+                <h3 className="text-sm font-medium text-gray-900">贸易条件 (Incoterms)</h3>
+                {taxDetails.batch.incoterm && (
+                  <span className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium">
+                    {taxDetails.batch.incoterm} - {taxDetails.batch.incotermNameCn || taxDetails.batch.incotermName}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {!editingTradeTerms && (
+                  <>
+                    <button
+                      onClick={() => handleRecalculate(false)}
+                      disabled={recalculating}
+                      className="px-3 py-1.5 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors flex items-center gap-1"
+                      title="根据贸易条件重新计算完税价格"
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      {recalculating ? '计算中...' : '重算完税价格'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        initTradeTermsForm()
+                        setEditingTradeTerms(true)
+                      }}
+                      className="px-3 py-1.5 text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 rounded transition-colors flex items-center gap-1"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      编辑
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            {editingTradeTerms ? (
+              <div className="space-y-4">
+                {/* 贸易条款选择 */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">贸易条款 *</label>
+                    <select
+                      value={tradeTermsForm.incoterm}
+                      onChange={(e) => setTradeTermsForm(prev => ({ ...prev, incoterm: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      {incotermsList.length > 0 ? (
+                        incotermsList.map(term => (
+                          <option key={term.code} value={term.code}>
+                            {term.code} - {term.nameCn}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="EXW">EXW - 工厂交货</option>
+                          <option value="FCA">FCA - 货交承运人</option>
+                          <option value="FAS">FAS - 船边交货</option>
+                          <option value="FOB">FOB - 船上交货</option>
+                          <option value="CFR">CFR - 成本加运费</option>
+                          <option value="CIF">CIF - 成本、保险加运费</option>
+                          <option value="CPT">CPT - 运费付至</option>
+                          <option value="CIP">CIP - 运费、保险费付至</option>
+                          <option value="DAP">DAP - 目的地交货</option>
+                          <option value="DPU">DPU - 卸货地交货</option>
+                          <option value="DDP">DDP - 完税后交货</option>
+                          <option value="DDU">DDU - 未完税交货</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">运费分摊方式</label>
+                    <select
+                      value={tradeTermsForm.freightAllocationMethod}
+                      onChange={(e) => setTradeTermsForm(prev => ({ ...prev, freightAllocationMethod: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="by_value">按货值比例分摊</option>
+                      <option value="by_weight">按重量比例分摊</option>
+                    </select>
+                  </div>
+                </div>
+                
+                {/* 运费和保险费输入 */}
+                <div className="grid grid-cols-5 gap-4">
+                  {needsInternationalFreight && (
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">国际运费 (EUR)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={tradeTermsForm.internationalFreight}
+                        onChange={(e) => setTradeTermsForm(prev => ({ ...prev, internationalFreight: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  )}
+                  {needsDomesticFreightExport && (
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">出口内陆运费 (EUR)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={tradeTermsForm.domesticFreightExport}
+                        onChange={(e) => setTradeTermsForm(prev => ({ ...prev, domesticFreightExport: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  )}
+                  {needsDomesticFreightImport && (
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">进口内陆运费 (EUR)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={tradeTermsForm.domesticFreightImport}
+                        onChange={(e) => setTradeTermsForm(prev => ({ ...prev, domesticFreightImport: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  )}
+                  {needsInsurance && (
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        保险费 (EUR)
+                        <span className="text-gray-400 ml-1">可选</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={tradeTermsForm.insuranceCost}
+                        onChange={(e) => setTradeTermsForm(prev => ({ ...prev, insuranceCost: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="不填则按0.3%估算"
+                      />
+                    </div>
+                  )}
+                  {needsPrepaidDuties && (
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">预付关税 (EUR)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={tradeTermsForm.prepaidDuties}
+                        onChange={(e) => setTradeTermsForm(prev => ({ ...prev, prepaidDuties: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                {/* 提示信息 */}
+                <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
+                  <div className="font-medium text-gray-700 mb-1">完税价格计算说明：</div>
+                  {tradeTermsForm.incoterm === 'CIF' || tradeTermsForm.incoterm === 'CIP' ? (
+                    <p>CIF/CIP 条款下，申报价值已包含国际运费和保险费，完税价格 = 申报货值</p>
+                  ) : tradeTermsForm.incoterm === 'CFR' || tradeTermsForm.incoterm === 'CPT' ? (
+                    <p>CFR/CPT 条款下，申报价值已包含运费，完税价格 = 申报货值 + 保险费</p>
+                  ) : tradeTermsForm.incoterm === 'FOB' || tradeTermsForm.incoterm === 'FCA' || tradeTermsForm.incoterm === 'FAS' ? (
+                    <p>FOB/FCA/FAS 条款下，完税价格 = 申报货值 + 国际运费 + 保险费</p>
+                  ) : tradeTermsForm.incoterm === 'EXW' ? (
+                    <p>EXW 条款下，完税价格 = 申报货值 + 出口内陆运费 + 国际运费 + 保险费</p>
+                  ) : tradeTermsForm.incoterm === 'DDP' ? (
+                    <p>DDP 条款下，申报价值已包含所有费用和税款，需反算完税价格</p>
+                  ) : (
+                    <p>DAP/DPU/DDU 条款下，申报价值已包含运费保险，完税价格 = 申报货值 - 进口内陆运费</p>
+                  )}
+                </div>
+                
+                {/* 操作按钮 */}
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setEditingTradeTerms(false)}
+                    className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleSaveTradeTerms}
+                    disabled={savingTradeTerms}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white hover:bg-primary-700 rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <Save className="w-4 h-4" />
+                    {savingTradeTerms ? '保存中...' : '保存'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-6 gap-4 text-sm">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">贸易条款</div>
+                  <div className="font-medium text-gray-900">
+                    {taxDetails.batch.incoterm || 'FOB'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">国际运费</div>
+                  <div className="font-medium text-gray-900">
+                    €{(taxDetails.batch.internationalFreight || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">保险费</div>
+                  <div className="font-medium text-gray-900">
+                    €{(taxDetails.batch.insuranceCost || 0).toFixed(2)}
+                    {!taxDetails.batch.insuranceCost && <span className="text-xs text-gray-400 ml-1">(估算)</span>}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">货值总额</div>
+                  <div className="font-medium text-gray-900">€{taxDetails.summary.totalValue.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">完税价格总额</div>
+                  <div className="font-medium text-primary-600">€{(taxDetails.summary.totalCustomsValue || taxDetails.summary.totalValue).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">分摊方式</div>
+                  <div className="font-medium text-gray-900">
+                    {taxDetails.batch.freightAllocationMethod === 'by_weight' ? '按重量' : '按货值'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          
           {/* 清关类型选择 */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between">
@@ -839,10 +1284,17 @@ export default function DocumentTaxCalc() {
           </div>
 
           {/* 汇总卡片 */}
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-6 gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="text-xs text-gray-500 mb-1">货值总额</div>
               <div className="text-xl font-bold text-gray-900">{formatCurrency(taxDetails.summary.totalValue)}</div>
+            </div>
+            <div className="bg-white rounded-lg border border-primary-200 p-4 bg-primary-50">
+              <div className="text-xs text-primary-600 mb-1">完税价格</div>
+              <div className="text-xl font-bold text-primary-700">{formatCurrency(taxDetails.summary.totalCustomsValue || taxDetails.summary.totalValue)}</div>
+              {taxDetails.summary.totalCustomsValue !== taxDetails.summary.totalValue && (
+                <div className="text-xs text-primary-500 mt-1">含运费保险</div>
+              )}
             </div>
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="text-xs text-gray-500 mb-1">关税</div>
@@ -1075,7 +1527,9 @@ export default function DocumentTaxCalc() {
                     <th className="px-3 py-2 text-center font-medium text-gray-500">图片</th>
                     <th className="px-3 py-2 text-left font-medium text-gray-500">商品名称</th>
                     <th className="px-3 py-2 text-left font-medium text-gray-500">HS编码</th>
+                    <th className="px-3 py-2 text-center font-medium text-gray-500">原产地</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-500">货值</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-500">完税价格</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-500">关税率</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-500">关税</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-500">增值税率</th>
@@ -1093,14 +1547,14 @@ export default function DocumentTaxCalc() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={12} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={14} className="px-4 py-8 text-center text-gray-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                         加载中...
                       </td>
                     </tr>
                   ) : taxDetails.items.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={14} className="px-4 py-8 text-center text-gray-400">
                         暂无数据
                       </td>
                     </tr>
@@ -1127,7 +1581,53 @@ export default function DocumentTaxCalc() {
                           {item.productName}
                         </td>
                         <td className="px-3 py-2 font-mono">{item.matchedHsCode || '-'}</td>
+                        <td className="px-3 py-2 text-center">
+                          {editingOriginItemId === item.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={originForm.originCountryCode}
+                                onChange={(e) => setOriginForm({ originCountryCode: e.target.value.toUpperCase() })}
+                                className="w-12 px-1 py-0.5 border border-gray-300 rounded text-center text-xs uppercase"
+                                maxLength={2}
+                                placeholder="CN"
+                              />
+                              <button
+                                onClick={() => handleSaveOrigin(item.id)}
+                                disabled={savingOrigin}
+                                className="p-0.5 text-green-600 hover:bg-green-50 rounded"
+                                title="保存"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => setEditingOriginItemId(null)}
+                                className="p-0.5 text-gray-400 hover:bg-gray-50 rounded"
+                                title="取消"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditingOriginItemId(item.id)
+                                setOriginForm({ originCountryCode: item.originCountryCode || 'CN' })
+                              }}
+                              className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors"
+                              title="点击修改原产地"
+                            >
+                              {item.originCountryCode || 'CN'}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right">{formatCurrency(item.totalValue)}</td>
+                        <td className="px-3 py-2 text-right text-primary-600">
+                          {formatCurrency(item.customsValue || item.totalValue)}
+                          {item.freightAllocation > 0 && (
+                            <span className="text-[10px] text-gray-400 block">+运费{item.freightAllocation.toFixed(2)}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right">{item.dutyRate}%</td>
                         <td className="px-3 py-2 text-right text-blue-600">{formatCurrency(item.dutyAmount)}</td>
                         <td className="px-3 py-2 text-right">{item.vatRate}%</td>
@@ -1495,9 +1995,24 @@ export default function DocumentTaxCalc() {
             <div className="px-6 py-4 space-y-6">
               {/* 发货方信息 */}
               <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <User className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-900">发货方信息</span>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-gray-900">发货方信息</span>
+                  </div>
+                  <button
+                    onClick={handleSyncShipperFromBL}
+                    disabled={syncingShipper}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors disabled:opacity-50"
+                    title="从关联的提单(BL)自动同步Shipper信息"
+                  >
+                    {syncingShipper ? (
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                    从提单同步
+                  </button>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">

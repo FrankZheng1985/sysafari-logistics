@@ -2550,6 +2550,86 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_due_at ON inquiry_tasks(due_at)`)
     console.log('  ✅ 询价工作流模块表就绪')
 
+    // ==================== 税费计算精准改进 - 贸易条件字段 ====================
+    // cargo_imports 批次表添加贸易条件字段
+    const tradeTermsFields = [
+      { name: 'incoterm', type: 'TEXT', default: "'FOB'", comment: '贸易条件：EXW/FCA/FAS/FOB/CFR/CIF/CPT/CIP/DAP/DPU/DDP/DDU' },
+      { name: 'international_freight', type: 'NUMERIC', default: '0', comment: '国际运费（EUR）' },
+      { name: 'domestic_freight_export', type: 'NUMERIC', default: '0', comment: '出口国内陆运费（EUR），EXW条款使用' },
+      { name: 'domestic_freight_import', type: 'NUMERIC', default: '0', comment: '进口国内陆运费（EUR），D组条款使用' },
+      { name: 'insurance_cost', type: 'NUMERIC', default: '0', comment: '保险费（EUR）' },
+      { name: 'prepaid_duties', type: 'NUMERIC', default: '0', comment: '预付关税（EUR），DDP条款使用' },
+      { name: 'freight_allocation_method', type: 'TEXT', default: "'by_value'", comment: '运费分摊方式：by_value按货值/by_weight按重量' },
+      { name: 'total_customs_value', type: 'NUMERIC', default: '0', comment: '总完税价格（EUR）' }
+    ]
+    
+    for (const field of tradeTermsFields) {
+      try {
+        await client.query(`ALTER TABLE cargo_imports ADD COLUMN IF NOT EXISTS ${field.name} ${field.type} DEFAULT ${field.default}`)
+      } catch (e) { /* 字段可能已存在 */ }
+    }
+    
+    // cargo_items 明细表添加完税价格相关字段
+    const itemCustomsFields = [
+      { name: 'origin_country_code', type: 'TEXT', default: "'CN'", comment: '原产国代码（ISO 2位）' },
+      { name: 'customs_value', type: 'NUMERIC', default: '0', comment: '完税价格（EUR）' },
+      { name: 'freight_allocation', type: 'NUMERIC', default: '0', comment: '分摊的运费（EUR）' },
+      { name: 'insurance_allocation', type: 'NUMERIC', default: '0', comment: '分摊的保险费（EUR）' }
+    ]
+    
+    for (const field of itemCustomsFields) {
+      try {
+        await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS ${field.name} ${field.type} DEFAULT ${field.default}`)
+      } catch (e) { /* 字段可能已存在 */ }
+    }
+    
+    // 创建索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cargo_imports_incoterm ON cargo_imports(incoterm)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cargo_items_origin_code ON cargo_items(origin_country_code)`)
+    
+    // 初始化现有数据
+    try {
+      // 将现有记录的 origin_country_code 从 origin_country 字段提取
+      await client.query(`
+        UPDATE cargo_items 
+        SET origin_country_code = COALESCE(
+          CASE 
+            WHEN origin_country = '中国' OR origin_country = 'China' THEN 'CN'
+            WHEN origin_country = '越南' OR origin_country = 'Vietnam' THEN 'VN'
+            WHEN origin_country = '印度' OR origin_country = 'India' THEN 'IN'
+            WHEN origin_country = '韩国' OR origin_country = 'South Korea' THEN 'KR'
+            WHEN origin_country = '日本' OR origin_country = 'Japan' THEN 'JP'
+            WHEN origin_country = '泰国' OR origin_country = 'Thailand' THEN 'TH'
+            WHEN origin_country = '马来西亚' OR origin_country = 'Malaysia' THEN 'MY'
+            WHEN origin_country = '印度尼西亚' OR origin_country = 'Indonesia' THEN 'ID'
+            WHEN origin_country = '台湾' OR origin_country = 'Taiwan' THEN 'TW'
+            ELSE 'CN'
+          END,
+          'CN'
+        )
+        WHERE origin_country_code IS NULL OR origin_country_code = ''
+      `)
+      
+      // 初始化 customs_value 为 total_value
+      await client.query(`
+        UPDATE cargo_items 
+        SET customs_value = COALESCE(total_value, 0)
+        WHERE customs_value IS NULL OR customs_value = 0
+      `)
+      
+      // 初始化批次的 total_customs_value
+      await client.query(`
+        UPDATE cargo_imports ci
+        SET total_customs_value = COALESCE(
+          (SELECT SUM(COALESCE(customs_value, total_value, 0)) FROM cargo_items WHERE import_id = ci.id),
+          0
+        )
+        WHERE total_customs_value IS NULL OR total_customs_value = 0
+      `)
+    } catch (e) { /* 初始化数据失败不影响迁移 */ }
+    
+    console.log('  ✅ 税费计算贸易条件字段就绪')
+
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）
     try {

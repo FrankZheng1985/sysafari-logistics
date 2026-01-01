@@ -229,7 +229,7 @@ export default function DocumentMatching() {
     setEditingItem(item.id)
     setEditHsCode(item.matchedHsCode || item.customerHsCode || '')
     
-    // 加载推荐
+    // 加载推荐（传递原产国参数以获取正确的关税税率）
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/recommend`, {
         method: 'POST',
@@ -237,7 +237,8 @@ export default function DocumentMatching() {
         body: JSON.stringify({
           productName: item.productName,
           productNameEn: item.productNameEn,
-          material: item.material
+          material: item.material,
+          originCountry: item.originCountry || 'CN'
         })
       })
       const data = await res.json()
@@ -471,6 +472,7 @@ export default function DocumentMatching() {
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">行号</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">商品名称</th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-500">原产国</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">客户HS</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">匹配HS</th>
                   <th className="px-3 py-2 text-center font-medium text-gray-500">置信度</th>
@@ -482,14 +484,14 @@ export default function DocumentMatching() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                       加载中...
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
                       没有待审核项目
                     </td>
@@ -538,6 +540,13 @@ export default function DocumentMatching() {
                             </div>
                           )}
                         </div>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-flex items-center justify-center min-w-[32px] px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          item.originCountry === 'CN' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {item.originCountry || 'CN'}
+                        </span>
                       </td>
                       <td className="px-3 py-2 font-mono">{item.customerHsCode || '-'}</td>
                       <td className="px-3 py-2">
