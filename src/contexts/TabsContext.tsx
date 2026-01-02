@@ -39,6 +39,8 @@ const routeTitleMap: Record<string, string> = {
   '/bookings/labels/create-batch': '订单管理 - 批量创建标签',
   '/bookings/packages': '订单管理 - 打包',
   '/bookings/bill': '订单管理 - 提单',
+  '/bookings/bill/draft': '订单管理 - 提单草稿',
+  '/bookings/bill/void': '订单管理 - 已作废提单',
   '/bookings/declarations': '订单管理 - 报关',
   '/bookings/clearance': '订单管理 - 清关文件',
   // 单证管理
@@ -59,6 +61,9 @@ const routeTitleMap: Record<string, string> = {
   '/tms/conditions': 'TMS运输管理 - 条件管理',
   '/tms/exceptions': 'TMS运输管理 - 异常管理',
   '/cmr-manage': 'TMS运输管理 - TMS管理',
+  '/cmr-manage/delivering': 'TMS运输管理 - 运输中',
+  '/cmr-manage/exception': 'TMS运输管理 - 异常',
+  '/cmr-manage/archived': 'TMS运输管理 - 已归档',
   '/last-mile': 'TMS运输管理 - 最后里程',
   '/last-mile/carriers': 'TMS运输管理 - 承运商管理',
   '/last-mile/zones': 'TMS运输管理 - 区域管理',
@@ -66,6 +71,7 @@ const routeTitleMap: Record<string, string> = {
   '/last-mile/import': 'TMS运输管理 - 运费导入',
   '/last-mile/shipments': 'TMS运输管理 - 派送单',
   '/last-mile/quote': 'TMS运输管理 - 快速报价',
+  '/last-mile/delivery': 'TMS运输管理 - 派送管理',
   // CRM客户管理
   '/crm': 'CRM客户管理 - CRM概览',
   '/crm/customers': 'CRM客户管理 - 客户管理',
@@ -77,6 +83,7 @@ const routeTitleMap: Record<string, string> = {
   '/crm/commission/records': 'CRM客户管理 - 佣金记录',
   '/crm/commission/penalties': 'CRM客户管理 - 罚款记录',
   '/crm/commission/settlements': 'CRM客户管理 - 佣金结算',
+  '/crm/business-info': 'CRM客户管理 - 经营信息',
   // 供应商管理
   '/suppliers': '供应商管理 - 供应商概览',
   '/suppliers/list': '供应商管理 - 供应商列表',
@@ -95,6 +102,7 @@ const routeTitleMap: Record<string, string> = {
   '/finance/statements': '财务管理 - 财务报表',
   '/finance/bank-accounts': '财务管理 - 银行账户',
   '/finance/carrier-settlement': '财务管理 - 承运商结算',
+  '/finance/fee-approvals': '财务管理 - 费用审批',
   // 合同管理
   '/contracts': '合同管理',
   '/contracts/config': '合同管理 - 合同模板配置',
@@ -104,6 +112,9 @@ const routeTitleMap: Record<string, string> = {
   '/tools/tariff-calculator': '工具 - 关税计算',
   '/tools/shared-tax': '工具 - 共享税号库',
   '/tools/product-pricing': '工具 - 产品定价',
+  // 帮助中心
+  '/help': '帮助中心',
+  '/help/videos': '帮助中心 - 视频管理',
   // 系统管理
   '/system': '系统管理',
   '/system/info-center': '系统管理 - 信息中心',
@@ -113,10 +124,17 @@ const routeTitleMap: Record<string, string> = {
   '/system/user-manage/permissions': '系统管理 - 角色权限',
   '/system/user-binding': '系统管理 - 用户绑定',
   '/system/security-settings': '系统管理 - 安全设置',
+  '/system/security-settings/logs': '系统管理 - 安全日志',
   '/system/security-center': '系统管理 - 安全管理中心',
   '/system/activity-logs': '系统管理 - 活动日志',
   '/system/logo-manage': '系统管理 - Logo 管理',
   '/system/basic-data': '系统管理 - 基础数据管理',
+  '/system/basic-data/container': '系统管理 - 箱型管理',
+  '/system/basic-data/port': '系统管理 - 港口管理',
+  '/system/basic-data/destination': '系统管理 - 目的地管理',
+  '/system/basic-data/country': '系统管理 - 国家管理',
+  '/system/basic-data/fee-category': '系统管理 - 费用类目',
+  '/system/basic-data/transport-method': '系统管理 - 运输方式',
   '/system/tariff-rates': '系统管理 - HS Code数据库',
   '/system/approvals': '系统管理 - 审批工作台',
   '/system/approval-center': '系统管理 - 审批中心',
@@ -137,27 +155,31 @@ export function getRouteTitle(path: string): string {
   
   // 处理详情页面
   if (pathParts[1] === 'bookings' && pathParts[2] === 'bill' && pathParts[3]) {
-    return '提单详情'
+    return '订单管理 - 提单详情'
   }
   if (pathParts[1] === 'cmr-manage' && pathParts[2]) {
-    return 'CMR详情'
+    return 'TMS运输管理 - CMR详情'
   }
   if (pathParts[1] === 'inspection' && pathParts[2]) {
-    return '查验详情'
+    return '查验管理 - 查验详情'
   }
   if (pathParts[1] === 'crm' && pathParts[2] === 'customers' && pathParts[3]) {
-    return '客户详情'
+    if (pathParts[4] === 'edit') return 'CRM客户管理 - 编辑客户'
+    return 'CRM客户管理 - 客户详情'
+  }
+  if (pathParts[1] === 'crm' && pathParts[2] === 'bill' && pathParts[3]) {
+    return 'CRM客户管理 - 订单详情'
   }
   if (pathParts[1] === 'finance' && pathParts[2] === 'invoices' && pathParts[3]) {
-    if (pathParts[4] === 'edit') return '编辑发票'
-    if (pathParts[4] === 'payment') return '登记付款'
-    return '发票详情'
+    if (pathParts[4] === 'edit') return '财务管理 - 编辑发票'
+    if (pathParts[4] === 'payment') return '财务管理 - 登记付款'
+    return '财务管理 - 发票详情'
   }
   if (pathParts[1] === 'finance' && pathParts[2] === 'bill-details' && pathParts[3]) {
-    return '订单详情'
+    return '财务管理 - 订单详情'
   }
   if (pathParts[1] === 'contracts' && pathParts[2] === 'preview' && pathParts[3]) {
-    return '合同预览'
+    return '合同管理 - 合同预览'
   }
   
   return '页面'
