@@ -161,7 +161,7 @@ export default function CRMQuotations() {
    
   useEffect(() => {
     if (activeView === 'quotations') {
-      loadData()
+    loadData()
     } else {
       loadInquiries()
       loadTaskStats()
@@ -936,44 +936,44 @@ export default function CRMQuotations() {
       {/* 报价单视图 */}
       {activeView === 'quotations' && (
         <>
-          {/* 工具栏 */}
-          <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="搜索报价单号、客户..."
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && loadData()}
-                  className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                />
-              </div>
-
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                title="筛选报价状态"
-              >
-                <option value="">全部状态</option>
-                <option value="draft">草稿</option>
-                <option value="sent">已发送</option>
-                <option value="accepted">已接受</option>
-                <option value="rejected">已拒绝</option>
-                <option value="expired">已过期</option>
-              </select>
-            </div>
-
-            <button
-              onClick={() => handleOpenModal()}
-              className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700"
-            >
-              <Plus className="w-4 h-4" />
-              新建报价
-            </button>
+      {/* 工具栏 */}
+      <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜索报价单号、客户..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadData()}
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            />
           </div>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选报价状态"
+          >
+            <option value="">全部状态</option>
+            <option value="draft">草稿</option>
+            <option value="sent">已发送</option>
+            <option value="accepted">已接受</option>
+            <option value="rejected">已拒绝</option>
+            <option value="expired">已过期</option>
+          </select>
+        </div>
+
+        <button
+          onClick={() => handleOpenModal()}
+          className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700"
+        >
+          <Plus className="w-4 h-4" />
+          新建报价
+        </button>
+      </div>
         </>
       )}
 
@@ -1084,49 +1084,49 @@ export default function CRMQuotations() {
       {/* 报价单数据表格 */}
       {activeView === 'quotations' && (
         <>
-          <DataTable
-            columns={columns}
-            data={quotations}
-            loading={loading}
-            rowKey="id"
-          />
+      <DataTable
+        columns={columns}
+        data={quotations}
+        loading={loading}
+        rowKey="id"
+      />
 
-          {/* 分页 */}
-          {total > pageSize && (
-            <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
-              <div className="text-xs text-gray-500">
-                共 {total} 条记录
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  上一页
-                </button>
-                <button
-                  onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  下一页
-                </button>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value))
-                    setPage(1)
-                  }}
-                  className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                  title="每页显示条数"
-                >
-                  <option value={20}>20 条/页</option>
-                  <option value={50}>50 条/页</option>
-                  <option value={100}>100 条/页</option>
-                </select>
-              </div>
-            </div>
+      {/* 分页 */}
+      {total > pageSize && (
+        <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
+          <div className="text-xs text-gray-500">
+            共 {total} 条记录
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+            >
+              上一页
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
+              disabled={page >= Math.ceil(total / pageSize)}
+              className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+            >
+              下一页
+            </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
+          </div>
+        </div>
           )}
         </>
       )}

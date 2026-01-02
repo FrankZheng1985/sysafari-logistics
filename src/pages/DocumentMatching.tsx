@@ -452,6 +452,7 @@ export default function DocumentMatching() {
     { label: 'HS匹配审核', path: '/documents/matching' },
     { label: '税费计算', path: '/documents/tax-calc' },
     { label: '数据补充', path: '/documents/supplement' },
+    { label: '匹配记录库', path: '/documents/match-records' },
   ]
 
   const totalPages = Math.ceil(total / pageSize)

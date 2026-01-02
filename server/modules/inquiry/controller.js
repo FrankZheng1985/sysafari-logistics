@@ -345,6 +345,26 @@ export async function geocodeAddress(req, res) {
   }
 }
 
+/**
+ * 地址自动补全
+ */
+export async function autosuggestAddress(req, res) {
+  try {
+    const { query, limit = 5 } = req.query
+    
+    if (!query || query.length < 2) {
+      return success(res, [])
+    }
+    
+    const results = await hereService.autosuggestAddress(query, parseInt(limit))
+    
+    return success(res, results)
+  } catch (error) {
+    console.error('地址自动补全失败:', error)
+    return serverError(res, '地址自动补全失败')
+  }
+}
+
 // ==================== ERP内部接口（报价管理） ====================
 
 /**
@@ -569,6 +589,7 @@ export default {
   
   // 地理编码
   geocodeAddress,
+  autosuggestAddress,
   batchGetCitiesByPostalCodes,
   
   // ERP内部

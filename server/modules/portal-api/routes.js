@@ -21,6 +21,9 @@ router.get('/truck-types/recommend', inquiryController.recommendTruckType)
 // 地理编码（公开接口）
 router.get('/geocode', inquiryController.geocodeAddress)
 
+// 地址自动补全（公开接口）
+router.get('/addresses/autosuggest', inquiryController.autosuggestAddress)
+
 // ==================== 受保护接口（需要认证） ====================
 
 // 应用认证中间件到所有后续路由

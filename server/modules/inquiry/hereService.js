@@ -11,6 +11,7 @@ import fetch from 'node-fetch'
 const HERE_API_KEY = process.env.HERE_API_KEY || ''
 const HERE_ROUTING_URL = 'https://router.hereapi.com/v8/routes'
 const HERE_GEOCODING_URL = 'https://geocode.search.hereapi.com/v1/geocode'
+const HERE_AUTOSUGGEST_URL = 'https://autosuggest.search.hereapi.com/v1/autosuggest'
 
 // 欧洲国家通行费率（EUR/km，估算值）
 const TOLL_RATES = {
@@ -30,6 +31,44 @@ const TOLL_RATES = {
 
 // 燃油附加费率（根据距离）
 const FUEL_SURCHARGE_RATE = 0.15 // EUR/km
+
+/**
+ * 地址自动补全 - 返回多个匹配地址建议
+ * @param {string} query - 搜索关键词
+ * @param {number} limit - 返回结果数量限制
+ */
+export async function autosuggestAddress(query, limit = 5) {
+  if (!HERE_API_KEY) {
+    console.warn('HERE API Key 未配置，使用模拟数据')
+    return mockAutosuggest(query, limit)
+  }
+  
+  try {
+    const url = `${HERE_AUTOSUGGEST_URL}?q=${encodeURIComponent(query)}&apiKey=${HERE_API_KEY}&limit=${limit}&in=countryCode:DEU,FRA,NLD,BEL,ITA,ESP,POL,AUT,CHE,CZE,GBR&lang=en`
+    const response = await fetch(url)
+    const data = await response.json()
+    
+    if (data.items && data.items.length > 0) {
+      return data.items
+        .filter(item => item.address)
+        .map(item => ({
+          title: item.title,
+          address: item.address.label,
+          city: item.address.city,
+          country: item.address.countryName,
+          countryCode: item.address.countryCode,
+          postalCode: item.address.postalCode,
+          lat: item.position?.lat,
+          lng: item.position?.lng
+        }))
+    }
+    
+    return []
+  } catch (error) {
+    console.error('地址自动补全失败:', error)
+    return []
+  }
+}
 
 /**
  * 地理编码 - 将地址转换为坐标
@@ -256,6 +295,44 @@ export function calculateTransportCost(routeData, truckType) {
 // ==================== 模拟数据（用于测试和API未配置时） ====================
 
 /**
+ * 模拟地址自动补全
+ */
+function mockAutosuggest(query, limit = 5) {
+  const lowerQuery = query.toLowerCase()
+  const mockLocations = [
+    { title: 'Hamburg, Germany', address: 'Hamburg, Germany', city: 'Hamburg', country: 'Germany', countryCode: 'DE', postalCode: '20095', lat: 53.5511, lng: 9.9937 },
+    { title: 'Hamburg Port, Germany', address: 'Am Sandtorkai, 20457 Hamburg, Germany', city: 'Hamburg', country: 'Germany', countryCode: 'DE', postalCode: '20457', lat: 53.5433, lng: 9.9875 },
+    { title: 'Rotterdam, Netherlands', address: 'Rotterdam, Netherlands', city: 'Rotterdam', country: 'Netherlands', countryCode: 'NL', postalCode: '3011', lat: 51.9244, lng: 4.4777 },
+    { title: 'Amsterdam, Netherlands', address: 'Amsterdam, Netherlands', city: 'Amsterdam', country: 'Netherlands', countryCode: 'NL', postalCode: '1012', lat: 52.3676, lng: 4.9041 },
+    { title: 'Berlin, Germany', address: 'Berlin, Germany', city: 'Berlin', country: 'Germany', countryCode: 'DE', postalCode: '10115', lat: 52.5200, lng: 13.4050 },
+    { title: 'Munich, Germany', address: 'Munich, Germany', city: 'Munich', country: 'Germany', countryCode: 'DE', postalCode: '80331', lat: 48.1351, lng: 11.5820 },
+    { title: 'Frankfurt, Germany', address: 'Frankfurt am Main, Germany', city: 'Frankfurt', country: 'Germany', countryCode: 'DE', postalCode: '60311', lat: 50.1109, lng: 8.6821 },
+    { title: 'Paris, France', address: 'Paris, France', city: 'Paris', country: 'France', countryCode: 'FR', postalCode: '75001', lat: 48.8566, lng: 2.3522 },
+    { title: 'Brussels, Belgium', address: 'Brussels, Belgium', city: 'Brussels', country: 'Belgium', countryCode: 'BE', postalCode: '1000', lat: 50.8503, lng: 4.3517 },
+    { title: 'Vienna, Austria', address: 'Vienna, Austria', city: 'Vienna', country: 'Austria', countryCode: 'AT', postalCode: '1010', lat: 48.2082, lng: 16.3738 },
+    { title: 'Milan, Italy', address: 'Milan, Italy', city: 'Milan', country: 'Italy', countryCode: 'IT', postalCode: '20121', lat: 45.4642, lng: 9.1900 },
+    { title: 'Warsaw, Poland', address: 'Warsaw, Poland', city: 'Warsaw', country: 'Poland', countryCode: 'PL', postalCode: '00-001', lat: 52.2297, lng: 21.0122 },
+    { title: 'Prague, Czech Republic', address: 'Prague, Czech Republic', city: 'Prague', country: 'Czech Republic', countryCode: 'CZ', postalCode: '110 00', lat: 50.0755, lng: 14.4378 },
+    { title: 'Antwerp, Belgium', address: 'Antwerp, Belgium', city: 'Antwerp', country: 'Belgium', countryCode: 'BE', postalCode: '2000', lat: 51.2194, lng: 4.4025 },
+    { title: 'Düsseldorf, Germany', address: 'Düsseldorf, Germany', city: 'Düsseldorf', country: 'Germany', countryCode: 'DE', postalCode: '40213', lat: 51.2277, lng: 6.7735 },
+    { title: 'Cologne, Germany', address: 'Cologne, Germany', city: 'Cologne', country: 'Germany', countryCode: 'DE', postalCode: '50667', lat: 50.9375, lng: 6.9603 },
+    { title: 'Stuttgart, Germany', address: 'Stuttgart, Germany', city: 'Stuttgart', country: 'Germany', countryCode: 'DE', postalCode: '70173', lat: 48.7758, lng: 9.1829 },
+    { title: 'Hannover, Germany', address: 'Hannover, Germany', city: 'Hannover', country: 'Germany', countryCode: 'DE', postalCode: '30159', lat: 52.3759, lng: 9.7320 },
+    { title: 'Leipzig, Germany', address: 'Leipzig, Germany', city: 'Leipzig', country: 'Germany', countryCode: 'DE', postalCode: '04109', lat: 51.3397, lng: 12.3731 },
+    { title: 'Dresden, Germany', address: 'Dresden, Germany', city: 'Dresden', country: 'Germany', countryCode: 'DE', postalCode: '01067', lat: 51.0504, lng: 13.7373 },
+  ]
+  
+  // 过滤匹配的结果
+  const matches = mockLocations.filter(loc => 
+    loc.title.toLowerCase().includes(lowerQuery) ||
+    loc.city.toLowerCase().includes(lowerQuery) ||
+    loc.address.toLowerCase().includes(lowerQuery)
+  )
+  
+  return matches.slice(0, limit)
+}
+
+/**
  * 模拟地理编码
  */
 function mockGeocode(address) {
@@ -456,6 +533,7 @@ export async function batchGetCities(postalCodes) {
 }
 
 export default {
+  autosuggestAddress,
   geocodeAddress,
   calculateTruckRoute,
   calculateTransportCost,
