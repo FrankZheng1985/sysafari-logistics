@@ -24,6 +24,26 @@ router.get('/geocode', inquiryController.geocodeAddress)
 // 地址自动补全（公开接口）
 router.get('/addresses/autosuggest', inquiryController.autosuggestAddress)
 
+// ==================== 基础数据接口（公开） ====================
+
+// 获取起运港列表
+router.get('/base-data/ports-of-loading', controller.getPortsOfLoading)
+
+// 获取目的港列表
+router.get('/base-data/destination-ports', controller.getDestinationPorts)
+
+// 获取机场列表
+router.get('/base-data/air-ports', controller.getAirPorts)
+
+// 获取国家列表
+router.get('/base-data/countries', controller.getCountries)
+
+// 获取城市列表
+router.get('/base-data/cities', controller.getCities)
+
+// 获取常用位置列表（汇总）
+router.get('/base-data/locations', controller.getLocations)
+
 // ==================== 受保护接口（需要认证） ====================
 
 // 应用认证中间件到所有后续路由

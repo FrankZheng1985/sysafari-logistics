@@ -652,6 +652,92 @@ export function authMiddleware(req, res, next) {
   }
 }
 
+// ==================== 基础数据接口 ====================
+
+/**
+ * 获取起运港列表
+ */
+export async function getPortsOfLoading(req, res) {
+  try {
+    const { country, search } = req.query
+    const ports = await model.getPortsOfLoading(country, search)
+    return success(res, ports)
+  } catch (error) {
+    console.error('获取起运港列表失败:', error)
+    return serverError(res, '获取起运港列表失败')
+  }
+}
+
+/**
+ * 获取目的港列表
+ */
+export async function getDestinationPorts(req, res) {
+  try {
+    const { country, search } = req.query
+    const ports = await model.getDestinationPorts(country, search)
+    return success(res, ports)
+  } catch (error) {
+    console.error('获取目的港列表失败:', error)
+    return serverError(res, '获取目的港列表失败')
+  }
+}
+
+/**
+ * 获取机场列表
+ */
+export async function getAirPorts(req, res) {
+  try {
+    const { country, search } = req.query
+    const ports = await model.getAirPorts(country, search)
+    return success(res, ports)
+  } catch (error) {
+    console.error('获取机场列表失败:', error)
+    return serverError(res, '获取机场列表失败')
+  }
+}
+
+/**
+ * 获取国家列表
+ */
+export async function getCountries(req, res) {
+  try {
+    const { region, search } = req.query
+    const countries = await model.getCountries(region, search)
+    return success(res, countries)
+  } catch (error) {
+    console.error('获取国家列表失败:', error)
+    return serverError(res, '获取国家列表失败')
+  }
+}
+
+/**
+ * 获取城市列表
+ */
+export async function getCities(req, res) {
+  try {
+    const { countryCode, search, level } = req.query
+    const cities = await model.getCities(countryCode, search, level)
+    return success(res, cities)
+  } catch (error) {
+    console.error('获取城市列表失败:', error)
+    return serverError(res, '获取城市列表失败')
+  }
+}
+
+/**
+ * 获取常用地址/位置（起运地和目的地汇总）
+ */
+export async function getLocations(req, res) {
+  try {
+    const { type, search } = req.query // type: origin | destination | all
+    const locations = await model.getLocations(type, search)
+    return success(res, locations)
+  } catch (error) {
+    console.error('获取位置列表失败:', error)
+    return serverError(res, '获取位置列表失败')
+  }
+}
+
 export default {
   // 认证
   login,
@@ -685,6 +771,14 @@ export default {
   updateMyApiKey,
   deleteMyApiKey,
   getMyApiLogs,
+  
+  // 基础数据
+  getPortsOfLoading,
+  getDestinationPorts,
+  getAirPorts,
+  getCountries,
+  getCities,
+  getLocations,
   
   // 中间件
   authMiddleware

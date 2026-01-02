@@ -828,6 +828,320 @@ function convertInquiryToCamelCase(row) {
   }
 }
 
+// ==================== 基础数据查询 ====================
+
+/**
+ * 获取起运港列表
+ */
+export async function getPortsOfLoading(country, search) {
+  const db = getDatabase()
+  let sql = `
+    SELECT id, port_code, port_name_cn, port_name_en, country, country_code, 
+           city, description, status
+    FROM ports_of_loading
+    WHERE status = 'active'
+  `
+  const params = []
+  let paramIndex = 1
+  
+  if (country) {
+    sql += ` AND (country = $${paramIndex} OR country_code = $${paramIndex})`
+    params.push(country)
+    paramIndex++
+  }
+  
+  if (search) {
+    sql += ` AND (port_name_cn ILIKE $${paramIndex} OR port_name_en ILIKE $${paramIndex} OR port_code ILIKE $${paramIndex})`
+    params.push(`%${search}%`)
+    paramIndex++
+  }
+  
+  sql += ` ORDER BY port_name_cn LIMIT 100`
+  
+  const result = await db.query(sql, params)
+  return result.rows.map(row => ({
+    id: row.id,
+    code: row.port_code,
+    nameCn: row.port_name_cn,
+    nameEn: row.port_name_en,
+    country: row.country,
+    countryCode: row.country_code,
+    city: row.city,
+    label: `${row.port_name_cn} (${row.port_code})`
+  }))
+}
+
+/**
+ * 获取目的港列表
+ */
+export async function getDestinationPorts(country, search) {
+  const db = getDatabase()
+  let sql = `
+    SELECT id, port_code, port_name_cn, port_name_en, country, country_code, 
+           city, description, status
+    FROM destination_ports
+    WHERE status = 'active'
+  `
+  const params = []
+  let paramIndex = 1
+  
+  if (country) {
+    sql += ` AND (country = $${paramIndex} OR country_code = $${paramIndex})`
+    params.push(country)
+    paramIndex++
+  }
+  
+  if (search) {
+    sql += ` AND (port_name_cn ILIKE $${paramIndex} OR port_name_en ILIKE $${paramIndex} OR port_code ILIKE $${paramIndex})`
+    params.push(`%${search}%`)
+    paramIndex++
+  }
+  
+  sql += ` ORDER BY port_name_cn LIMIT 100`
+  
+  const result = await db.query(sql, params)
+  return result.rows.map(row => ({
+    id: row.id,
+    code: row.port_code,
+    nameCn: row.port_name_cn,
+    nameEn: row.port_name_en,
+    country: row.country,
+    countryCode: row.country_code,
+    city: row.city,
+    label: `${row.port_name_cn} (${row.port_code})`
+  }))
+}
+
+/**
+ * 获取机场列表
+ */
+export async function getAirPorts(country, search) {
+  const db = getDatabase()
+  let sql = `
+    SELECT id, port_code, port_name_cn, port_name_en, country, country_code, 
+           city, description, status
+    FROM air_ports
+    WHERE status = 'active'
+  `
+  const params = []
+  let paramIndex = 1
+  
+  if (country) {
+    sql += ` AND (country = $${paramIndex} OR country_code = $${paramIndex})`
+    params.push(country)
+    paramIndex++
+  }
+  
+  if (search) {
+    sql += ` AND (port_name_cn ILIKE $${paramIndex} OR port_name_en ILIKE $${paramIndex} OR port_code ILIKE $${paramIndex} OR city ILIKE $${paramIndex})`
+    params.push(`%${search}%`)
+    paramIndex++
+  }
+  
+  sql += ` ORDER BY port_name_cn LIMIT 100`
+  
+  const result = await db.query(sql, params)
+  return result.rows.map(row => ({
+    id: row.id,
+    code: row.port_code,
+    nameCn: row.port_name_cn,
+    nameEn: row.port_name_en,
+    country: row.country,
+    countryCode: row.country_code,
+    city: row.city,
+    label: `${row.port_name_cn} (${row.port_code})`
+  }))
+}
+
+/**
+ * 获取国家列表
+ */
+export async function getCountries(region, search) {
+  const db = getDatabase()
+  let sql = `
+    SELECT id, country_code, country_name_cn, country_name_en, region, currency, timezone, status
+    FROM countries
+    WHERE status = 'active'
+  `
+  const params = []
+  let paramIndex = 1
+  
+  if (region) {
+    sql += ` AND region = $${paramIndex}`
+    params.push(region)
+    paramIndex++
+  }
+  
+  if (search) {
+    sql += ` AND (country_name_cn ILIKE $${paramIndex} OR country_name_en ILIKE $${paramIndex} OR country_code ILIKE $${paramIndex})`
+    params.push(`%${search}%`)
+    paramIndex++
+  }
+  
+  sql += ` ORDER BY country_name_cn LIMIT 100`
+  
+  const result = await db.query(sql, params)
+  return result.rows.map(row => ({
+    id: row.id,
+    code: row.country_code,
+    nameCn: row.country_name_cn,
+    nameEn: row.country_name_en,
+    region: row.region,
+    currency: row.currency,
+    timezone: row.timezone,
+    label: `${row.country_name_cn} (${row.country_code})`
+  }))
+}
+
+/**
+ * 获取城市列表
+ */
+export async function getCities(countryCode, search, level) {
+  const db = getDatabase()
+  let sql = `
+    SELECT id, city_code, city_name_cn, city_name_en, country_code, parent_id, level, postal_code, status
+    FROM cities
+    WHERE status = 'active'
+  `
+  const params = []
+  let paramIndex = 1
+  
+  if (countryCode) {
+    sql += ` AND country_code = $${paramIndex}`
+    params.push(countryCode)
+    paramIndex++
+  }
+  
+  if (level) {
+    sql += ` AND level = $${paramIndex}`
+    params.push(level)
+    paramIndex++
+  }
+  
+  if (search) {
+    sql += ` AND (city_name_cn ILIKE $${paramIndex} OR city_name_en ILIKE $${paramIndex} OR city_code ILIKE $${paramIndex} OR postal_code ILIKE $${paramIndex})`
+    params.push(`%${search}%`)
+    paramIndex++
+  }
+  
+  sql += ` ORDER BY city_name_cn LIMIT 100`
+  
+  const result = await db.query(sql, params)
+  return result.rows.map(row => ({
+    id: row.id,
+    code: row.city_code,
+    nameCn: row.city_name_cn,
+    nameEn: row.city_name_en,
+    countryCode: row.country_code,
+    parentId: row.parent_id,
+    level: row.level,
+    postalCode: row.postal_code,
+    label: row.city_name_cn
+  }))
+}
+
+/**
+ * 获取常用位置列表（汇总起运港、目的港和城市）
+ */
+export async function getLocations(type, search) {
+  const db = getDatabase()
+  const locations = []
+  
+  // 搜索条件
+  const searchCondition = search ? `%${search}%` : null
+  
+  // 根据类型获取不同数据
+  if (type === 'origin' || type === 'all') {
+    // 起运港
+    let sql = `
+      SELECT 'port_of_loading' as type, id, port_code as code, port_name_cn as name_cn, 
+             port_name_en as name_en, country, country_code, city
+      FROM ports_of_loading
+      WHERE status = 'active'
+    `
+    const params = []
+    if (searchCondition) {
+      sql += ` AND (port_name_cn ILIKE $1 OR port_name_en ILIKE $1 OR port_code ILIKE $1 OR city ILIKE $1)`
+      params.push(searchCondition)
+    }
+    sql += ` ORDER BY port_name_cn LIMIT 30`
+    
+    const result = await db.query(sql, params)
+    locations.push(...result.rows.map(row => ({
+      type: 'port',
+      subType: 'loading',
+      id: row.id,
+      code: row.code,
+      nameCn: row.name_cn,
+      nameEn: row.name_en,
+      country: row.country,
+      countryCode: row.country_code,
+      city: row.city,
+      label: `${row.name_cn} (${row.code})`
+    })))
+  }
+  
+  if (type === 'destination' || type === 'all') {
+    // 目的港
+    let sql = `
+      SELECT 'destination_port' as type, id, port_code as code, port_name_cn as name_cn, 
+             port_name_en as name_en, country, country_code, city
+      FROM destination_ports
+      WHERE status = 'active'
+    `
+    const params = []
+    if (searchCondition) {
+      sql += ` AND (port_name_cn ILIKE $1 OR port_name_en ILIKE $1 OR port_code ILIKE $1 OR city ILIKE $1)`
+      params.push(searchCondition)
+    }
+    sql += ` ORDER BY port_name_cn LIMIT 30`
+    
+    const result = await db.query(sql, params)
+    locations.push(...result.rows.map(row => ({
+      type: 'port',
+      subType: 'destination',
+      id: row.id,
+      code: row.code,
+      nameCn: row.name_cn,
+      nameEn: row.name_en,
+      country: row.country,
+      countryCode: row.country_code,
+      city: row.city,
+      label: `${row.name_cn} (${row.code})`
+    })))
+    
+    // 欧洲城市（主要是德国、法国、荷兰、比利时、意大利、西班牙等）
+    let citySql = `
+      SELECT 'city' as type, id, city_code as code, city_name_cn as name_cn, 
+             city_name_en as name_en, country_code, postal_code
+      FROM cities
+      WHERE status = 'active' 
+        AND country_code IN ('DE', 'FR', 'NL', 'BE', 'IT', 'ES', 'PL', 'AT', 'CH', 'CZ', 'GB')
+    `
+    const cityParams = []
+    if (searchCondition) {
+      citySql += ` AND (city_name_cn ILIKE $1 OR city_name_en ILIKE $1 OR city_code ILIKE $1 OR postal_code ILIKE $1)`
+      cityParams.push(searchCondition)
+    }
+    citySql += ` ORDER BY city_name_cn LIMIT 30`
+    
+    const cityResult = await db.query(citySql, cityParams)
+    locations.push(...cityResult.rows.map(row => ({
+      type: 'city',
+      subType: 'european',
+      id: row.id,
+      code: row.code,
+      nameCn: row.name_cn,
+      nameEn: row.name_en,
+      countryCode: row.country_code,
+      postalCode: row.postal_code,
+      label: `${row.name_cn}${row.postal_code ? ' (' + row.postal_code + ')' : ''}`
+    })))
+  }
+  
+  return locations
+}
+
 export default {
   // 订单查询
   getCustomerOrders,
@@ -847,6 +1161,14 @@ export default {
   // 客户询价
   getCustomerInquiries,
   getCustomerInquiryById,
-  getCustomerInquiryStats
+  getCustomerInquiryStats,
+  
+  // 基础数据
+  getPortsOfLoading,
+  getDestinationPorts,
+  getAirPorts,
+  getCountries,
+  getCities,
+  getLocations
 }
 
