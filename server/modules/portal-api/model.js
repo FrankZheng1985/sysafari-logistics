@@ -1053,7 +1053,7 @@ export async function getLocations(type, search) {
       sql += ` AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ? OR city ILIKE ?)`
       params.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
-    sql += ` ORDER BY port_name_cn LIMIT 50`
+    sql += ` ORDER BY port_name_cn LIMIT 200`
     
     const rows = await db.prepare(sql).all(...params)
     locations.push(...rows.map(row => ({
@@ -1083,7 +1083,7 @@ export async function getLocations(type, search) {
       sql += ` AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ? OR city ILIKE ?)`
       params.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
-    sql += ` ORDER BY port_name_cn LIMIT 50`
+    sql += ` ORDER BY port_name_cn LIMIT 200`
     
     const rows = await db.prepare(sql).all(...params)
     locations.push(...rows.map(row => ({
@@ -1112,7 +1112,7 @@ export async function getLocations(type, search) {
       citySql += ` AND (city_name_cn ILIKE ? OR city_name_en ILIKE ? OR city_code ILIKE ? OR postal_code ILIKE ?)`
       cityParams.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
-    citySql += ` ORDER BY city_name_cn LIMIT 100`
+    citySql += ` ORDER BY city_name_cn LIMIT 300`
     
     const cityRows = await db.prepare(citySql).all(...cityParams)
     locations.push(...cityRows.map(row => ({
