@@ -166,12 +166,36 @@ export async function calculateTruckRoute(params) {
       url += `&truck[axleCount]=${truck.axleCount}`
     }
     
-    // 返回详细信息
-    url += `&return=summary,polyline,actions,turnByTurnActions`
+    // 允许渡轮路线（对于岛屿目的地很重要）
+    // 不设置 avoid[features]=ferry，默认允许渡轮
+    
+    // 返回详细信息，包括渡轮段信息
+    url += `&return=summary,polyline,actions,turnByTurnActions,typicalDuration`
     url += `&apiKey=${HERE_API_KEY}`
+    
+    console.log('[HERE API] 请求路线:', {
+      origin: `${originCoords.lat},${originCoords.lng}`,
+      destination: `${destCoords.lat},${destCoords.lng}`,
+      originAddress: originCoords.address,
+      destAddress: destCoords.address
+    })
     
     const response = await fetch(url)
     const data = await response.json()
+    
+    // 记录 API 返回的路段数量
+    if (data.routes && data.routes.length > 0) {
+      const route = data.routes[0]
+      console.log('[HERE API] 返回路线信息:', {
+        sectionsCount: route.sections?.length || 0,
+        sections: route.sections?.map((s, i) => ({
+          index: i,
+          transport: s.transport?.mode,
+          distance: s.summary?.length,
+          duration: s.summary?.duration
+        }))
+      })
+    }
     
     if (data.routes && data.routes.length > 0) {
       return parseHereRouteResponse(data.routes[0], originCoords, destCoords, waypointCoords, truck)
@@ -186,20 +210,52 @@ export async function calculateTruckRoute(params) {
 
 /**
  * 解析 HERE API 返回的路线数据
+ * 注意：需要累加所有 sections 的距离和时间（特别是涉及渡轮的路线）
  */
 function parseHereRouteResponse(route, origin, destination, waypoints, truck) {
-  const section = route.sections[0]
-  const summary = section.summary
+  const sections = route.sections
   
-  // 计算总距离和时间
-  const totalDistance = summary.length / 1000 // 转换为公里
-  const totalDuration = summary.duration / 60 // 转换为分钟
+  // 累加所有 sections 的距离和时间
+  let totalLength = 0      // 总距离（米）
+  let totalDurationSec = 0 // 总时间（秒）
+  let roadDistance = 0     // 陆路距离（米）
+  let ferryDistance = 0    // 渡轮距离（米）
+  let hasFerry = false     // 是否包含渡轮
+  const polylines = []     // 收集所有路段的 polyline
   
-  // 估算通行费（基于距离和国家）
-  const estimatedTolls = estimateTolls(totalDistance, origin.country, destination.country)
+  for (const section of sections) {
+    const summary = section.summary
+    totalLength += summary.length || 0
+    totalDurationSec += summary.duration || 0
+    
+    // 检测渡轮段
+    if (section.transport && section.transport.mode === 'ferry') {
+      hasFerry = true
+      ferryDistance += summary.length || 0
+    } else {
+      roadDistance += summary.length || 0
+    }
+    
+    if (section.polyline) {
+      polylines.push(section.polyline)
+    }
+  }
   
-  // 估算燃油附加费
-  const fuelSurcharge = totalDistance * FUEL_SURCHARGE_RATE
+  // 转换单位
+  const totalDistance = totalLength / 1000       // 公里
+  const totalDuration = totalDurationSec / 60    // 分钟
+  const roadDistanceKm = roadDistance / 1000     // 陆路公里
+  const ferryDistanceKm = ferryDistance / 1000   // 渡轮公里
+  
+  // 估算通行费（仅基于陆路距离）
+  const estimatedTolls = estimateTolls(roadDistanceKm, origin.country, destination.country)
+  
+  // 估算燃油附加费（仅基于陆路距离）
+  const fuelSurcharge = roadDistanceKm * FUEL_SURCHARGE_RATE
+  
+  // 渡轮费用估算（如果有渡轮段）
+  // 巴塞罗那到 Mallorca 渡轮大约 80-150 EUR/卡车
+  const ferryEstimate = hasFerry ? estimateFerryFee(ferryDistanceKm, truck) : 0
   
   return {
     origin: {
@@ -223,15 +279,45 @@ function parseHereRouteResponse(route, origin, destination, waypoints, truck) {
       distance: Math.round(totalDistance),
       duration: Math.round(totalDuration),
       durationFormatted: formatDuration(totalDuration),
-      polyline: section.polyline
+      polyline: polylines[0] || '', // 使用第一段的 polyline 用于地图显示
+      segments: sections.length,    // 路段数量
+      roadDistance: Math.round(roadDistanceKm),   // 陆路距离
+      ferryDistance: Math.round(ferryDistanceKm), // 渡轮距离
+      hasFerry: hasFerry            // 是否包含渡轮
     },
     costs: {
       tolls: Math.round(estimatedTolls * 100) / 100,
       fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+      ferryFee: Math.round(ferryEstimate * 100) / 100,
       currency: 'EUR'
     },
     truck: truck
   }
+}
+
+/**
+ * 估算渡轮费用
+ * 基于渡轮距离和卡车类型
+ */
+function estimateFerryFee(ferryDistanceKm, truck) {
+  // 基础费率：约 0.8 EUR/km（渡轮比陆路贵很多）
+  // 巴塞罗那-Mallorca 约 200km，费用约 100-200 EUR
+  const baseFerryRate = 0.8
+  
+  // 根据卡车重量调整费率
+  let weightMultiplier = 1
+  if (truck.grossWeight) {
+    if (truck.grossWeight > 30000) {
+      weightMultiplier = 1.5  // 重型卡车
+    } else if (truck.grossWeight > 12000) {
+      weightMultiplier = 1.2  // 中型卡车
+    }
+  }
+  
+  // 最低渡轮费用 80 EUR
+  const ferryFee = Math.max(80, ferryDistanceKm * baseFerryRate * weightMultiplier)
+  
+  return ferryFee
 }
 
 /**
@@ -264,27 +350,33 @@ function formatDuration(minutes) {
  * 计算运输费用
  */
 export function calculateTransportCost(routeData, truckType) {
-  const { distance } = routeData.route
-  const { tolls, fuelSurcharge } = routeData.costs
+  const { distance, roadDistance, ferryDistance, hasFerry } = routeData.route
+  const { tolls, fuelSurcharge, ferryFee } = routeData.costs
   
-  // 基础运费 = 距离 × 费率
-  const baseCost = distance * truckType.baseRatePerKm
+  // 基础运费 = 陆路距离 × 费率（渡轮段单独计算）
+  const effectiveDistance = roadDistance || distance
+  const baseCost = effectiveDistance * truckType.baseRatePerKm
   
   // 应用最低收费
   const transportCost = Math.max(baseCost, truckType.minCharge)
   
-  // 总费用 = 运费 + 通行费 + 燃油附加费
-  const totalCost = transportCost + tolls + fuelSurcharge
+  // 总费用 = 运费 + 通行费 + 燃油附加费 + 渡轮费
+  const totalFerryFee = ferryFee || 0
+  const totalCost = transportCost + tolls + fuelSurcharge + totalFerryFee
   
   return {
     baseCost: Math.round(baseCost * 100) / 100,
     transportCost: Math.round(transportCost * 100) / 100,
     tolls: Math.round(tolls * 100) / 100,
     fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+    ferryFee: Math.round(totalFerryFee * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
     currency: 'EUR',
     breakdown: {
       distance,
+      roadDistance: roadDistance || distance,
+      ferryDistance: ferryDistance || 0,
+      hasFerry: hasFerry || false,
       ratePerKm: truckType.baseRatePerKm,
       minCharge: truckType.minCharge,
       truckType: truckType.name
