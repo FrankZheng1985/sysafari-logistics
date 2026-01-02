@@ -842,24 +842,22 @@ export async function getPortsOfLoading(country, search) {
     WHERE status = 'active'
   `
   const params = []
-  let paramIndex = 1
   
   if (country) {
-    sql += ` AND (country = $${paramIndex} OR country_code = $${paramIndex})`
-    params.push(country)
-    paramIndex++
+    sql += ` AND (country = ? OR country_code = ?)`
+    params.push(country, country)
   }
   
   if (search) {
-    sql += ` AND (port_name_cn ILIKE $${paramIndex} OR port_name_en ILIKE $${paramIndex} OR port_code ILIKE $${paramIndex})`
-    params.push(`%${search}%`)
-    paramIndex++
+    sql += ` AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ?)`
+    const searchPattern = `%${search}%`
+    params.push(searchPattern, searchPattern, searchPattern)
   }
   
   sql += ` ORDER BY port_name_cn LIMIT 100`
   
-  const result = await db.query(sql, params)
-  return result.rows.map(row => ({
+  const rows = await db.prepare(sql).all(...params)
+  return rows.map(row => ({
     id: row.id,
     code: row.port_code,
     nameCn: row.port_name_cn,
@@ -883,24 +881,22 @@ export async function getDestinationPorts(country, search) {
     WHERE status = 'active'
   `
   const params = []
-  let paramIndex = 1
   
   if (country) {
-    sql += ` AND (country = $${paramIndex} OR country_code = $${paramIndex})`
-    params.push(country)
-    paramIndex++
+    sql += ` AND (country = ? OR country_code = ?)`
+    params.push(country, country)
   }
   
   if (search) {
-    sql += ` AND (port_name_cn ILIKE $${paramIndex} OR port_name_en ILIKE $${paramIndex} OR port_code ILIKE $${paramIndex})`
-    params.push(`%${search}%`)
-    paramIndex++
+    sql += ` AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ?)`
+    const searchPattern = `%${search}%`
+    params.push(searchPattern, searchPattern, searchPattern)
   }
   
   sql += ` ORDER BY port_name_cn LIMIT 100`
   
-  const result = await db.query(sql, params)
-  return result.rows.map(row => ({
+  const rows = await db.prepare(sql).all(...params)
+  return rows.map(row => ({
     id: row.id,
     code: row.port_code,
     nameCn: row.port_name_cn,
@@ -924,24 +920,22 @@ export async function getAirPorts(country, search) {
     WHERE status = 'active'
   `
   const params = []
-  let paramIndex = 1
   
   if (country) {
-    sql += ` AND (country = $${paramIndex} OR country_code = $${paramIndex})`
-    params.push(country)
-    paramIndex++
+    sql += ` AND (country = ? OR country_code = ?)`
+    params.push(country, country)
   }
   
   if (search) {
-    sql += ` AND (port_name_cn ILIKE $${paramIndex} OR port_name_en ILIKE $${paramIndex} OR port_code ILIKE $${paramIndex} OR city ILIKE $${paramIndex})`
-    params.push(`%${search}%`)
-    paramIndex++
+    sql += ` AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ? OR city ILIKE ?)`
+    const searchPattern = `%${search}%`
+    params.push(searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   sql += ` ORDER BY port_name_cn LIMIT 100`
   
-  const result = await db.query(sql, params)
-  return result.rows.map(row => ({
+  const rows = await db.prepare(sql).all(...params)
+  return rows.map(row => ({
     id: row.id,
     code: row.port_code,
     nameCn: row.port_name_cn,
@@ -964,24 +958,22 @@ export async function getCountries(region, search) {
     WHERE status = 'active'
   `
   const params = []
-  let paramIndex = 1
   
   if (region) {
-    sql += ` AND region = $${paramIndex}`
+    sql += ` AND region = ?`
     params.push(region)
-    paramIndex++
   }
   
   if (search) {
-    sql += ` AND (country_name_cn ILIKE $${paramIndex} OR country_name_en ILIKE $${paramIndex} OR country_code ILIKE $${paramIndex})`
-    params.push(`%${search}%`)
-    paramIndex++
+    sql += ` AND (country_name_cn ILIKE ? OR country_name_en ILIKE ? OR country_code ILIKE ?)`
+    const searchPattern = `%${search}%`
+    params.push(searchPattern, searchPattern, searchPattern)
   }
   
   sql += ` ORDER BY country_name_cn LIMIT 100`
   
-  const result = await db.query(sql, params)
-  return result.rows.map(row => ({
+  const rows = await db.prepare(sql).all(...params)
+  return rows.map(row => ({
     id: row.id,
     code: row.country_code,
     nameCn: row.country_name_cn,
@@ -1004,30 +996,27 @@ export async function getCities(countryCode, search, level) {
     WHERE status = 'active'
   `
   const params = []
-  let paramIndex = 1
   
   if (countryCode) {
-    sql += ` AND country_code = $${paramIndex}`
+    sql += ` AND country_code = ?`
     params.push(countryCode)
-    paramIndex++
   }
   
   if (level) {
-    sql += ` AND level = $${paramIndex}`
+    sql += ` AND level = ?`
     params.push(level)
-    paramIndex++
   }
   
   if (search) {
-    sql += ` AND (city_name_cn ILIKE $${paramIndex} OR city_name_en ILIKE $${paramIndex} OR city_code ILIKE $${paramIndex} OR postal_code ILIKE $${paramIndex})`
-    params.push(`%${search}%`)
-    paramIndex++
+    sql += ` AND (city_name_cn ILIKE ? OR city_name_en ILIKE ? OR city_code ILIKE ? OR postal_code ILIKE ?)`
+    const searchPattern = `%${search}%`
+    params.push(searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   sql += ` ORDER BY city_name_cn LIMIT 100`
   
-  const result = await db.query(sql, params)
-  return result.rows.map(row => ({
+  const rows = await db.prepare(sql).all(...params)
+  return rows.map(row => ({
     id: row.id,
     code: row.city_code,
     nameCn: row.city_name_cn,
@@ -1048,7 +1037,7 @@ export async function getLocations(type, search) {
   const locations = []
   
   // 搜索条件
-  const searchCondition = search ? `%${search}%` : null
+  const searchPattern = search ? `%${search}%` : null
   
   // 根据类型获取不同数据
   if (type === 'origin' || type === 'all') {
@@ -1060,14 +1049,14 @@ export async function getLocations(type, search) {
       WHERE status = 'active'
     `
     const params = []
-    if (searchCondition) {
-      sql += ` AND (port_name_cn ILIKE $1 OR port_name_en ILIKE $1 OR port_code ILIKE $1 OR city ILIKE $1)`
-      params.push(searchCondition)
+    if (searchPattern) {
+      sql += ` AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ? OR city ILIKE ?)`
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
     sql += ` ORDER BY port_name_cn LIMIT 30`
     
-    const result = await db.query(sql, params)
-    locations.push(...result.rows.map(row => ({
+    const rows = await db.prepare(sql).all(...params)
+    locations.push(...rows.map(row => ({
       type: 'port',
       subType: 'loading',
       id: row.id,
@@ -1090,14 +1079,14 @@ export async function getLocations(type, search) {
       WHERE status = 'active'
     `
     const params = []
-    if (searchCondition) {
-      sql += ` AND (port_name_cn ILIKE $1 OR port_name_en ILIKE $1 OR port_code ILIKE $1 OR city ILIKE $1)`
-      params.push(searchCondition)
+    if (searchPattern) {
+      sql += ` AND (port_name_cn ILIKE ? OR port_name_en ILIKE ? OR port_code ILIKE ? OR city ILIKE ?)`
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
     sql += ` ORDER BY port_name_cn LIMIT 30`
     
-    const result = await db.query(sql, params)
-    locations.push(...result.rows.map(row => ({
+    const rows = await db.prepare(sql).all(...params)
+    locations.push(...rows.map(row => ({
       type: 'port',
       subType: 'destination',
       id: row.id,
@@ -1119,14 +1108,14 @@ export async function getLocations(type, search) {
         AND country_code IN ('DE', 'FR', 'NL', 'BE', 'IT', 'ES', 'PL', 'AT', 'CH', 'CZ', 'GB')
     `
     const cityParams = []
-    if (searchCondition) {
-      citySql += ` AND (city_name_cn ILIKE $1 OR city_name_en ILIKE $1 OR city_code ILIKE $1 OR postal_code ILIKE $1)`
-      cityParams.push(searchCondition)
+    if (searchPattern) {
+      citySql += ` AND (city_name_cn ILIKE ? OR city_name_en ILIKE ? OR city_code ILIKE ? OR postal_code ILIKE ?)`
+      cityParams.push(searchPattern, searchPattern, searchPattern, searchPattern)
     }
     citySql += ` ORDER BY city_name_cn LIMIT 30`
     
-    const cityResult = await db.query(citySql, cityParams)
-    locations.push(...cityResult.rows.map(row => ({
+    const cityRows = await db.prepare(citySql).all(...cityParams)
+    locations.push(...cityRows.map(row => ({
       type: 'city',
       subType: 'european',
       id: row.id,
