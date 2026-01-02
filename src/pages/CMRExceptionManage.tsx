@@ -44,7 +44,6 @@ export default function CMRExceptionManage() {
     { label: 'TMS概览', path: '/tms' },
     { label: 'TMS管理', path: '/cmr-manage' },
     { label: '异常管理', path: '/tms/exceptions' },
-    { label: '运输供应商', path: '/supplier-manage?type=transport' },
   ]
 
   useEffect(() => {

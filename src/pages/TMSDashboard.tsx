@@ -57,7 +57,6 @@ export default function TMSDashboard() {
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
     { label: 'TMS管理', path: '/cmr-manage' },
-    { label: '运输供应商', path: '/supplier-manage?type=transport' },
     { label: '运费管理', path: '/tms/pricing' },
     { label: '条件管理', path: '/tms/conditions' },
   ]
@@ -310,7 +309,7 @@ export default function TMSDashboard() {
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
             <Users className="w-4 h-4 text-gray-500" />
-            运输供应商
+            服务供应商
           </h3>
           {serviceProviders.length > 0 ? (
             <div className="space-y-2">
@@ -321,7 +320,7 @@ export default function TMSDashboard() {
                 </div>
               ))}
               <button
-                onClick={() => navigate('/supplier-manage?type=transport')}
+                onClick={() => navigate('/suppliers/list')}
                 className="w-full text-xs text-primary-600 hover:text-primary-700 text-center mt-2"
               >
                 查看全部供应商
@@ -329,9 +328,9 @@ export default function TMSDashboard() {
             </div>
           ) : (
             <div className="text-center py-4">
-              <div className="text-gray-400 text-sm mb-2">暂无运输供应商</div>
+              <div className="text-gray-400 text-sm mb-2">暂无服务供应商</div>
               <button
-                onClick={() => navigate('/supplier-manage?type=transport')}
+                onClick={() => navigate('/suppliers/list')}
                 className="text-xs text-primary-600 hover:text-primary-700"
               >
                 添加供应商

@@ -129,7 +129,6 @@ export default function TMSConditions() {
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
     { label: 'TMS管理', path: '/cmr-manage' },
-    { label: '运输供应商', path: '/supplier-manage?type=transport' },
     { label: '运费管理', path: '/tms/pricing' },
     { label: '条件管理', path: '/tms/conditions' },
   ]

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, Edit, Trash2, Check, X, 
   Building2, Phone, Mail, User, Star, RefreshCw,
@@ -175,9 +175,6 @@ const SUPPLIER_TYPE_GROUPS = [
 // 扁平化的供应商类型列表（用于查找和显示）
 const SUPPLIER_TYPES = SUPPLIER_TYPE_GROUPS.flatMap(group => group.children)
 
-// 运输相关的供应商类型
-const TRANSPORT_TYPES = ['shipping', 'trucking', 'delivery', 'forwarder', 'terminal', 'depot']
-
 const SUPPLIER_STATUS = [
   { value: 'active', label: '启用', color: 'bg-green-100 text-green-700' },
   { value: 'inactive', label: '停用', color: 'bg-gray-100 text-gray-500' },
@@ -237,11 +234,6 @@ const initialFormData: SupplierFormData = {
 
 export default function SupplierManage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  
-  // 获取URL参数，判断是否为运输供应商视图
-  const viewType = searchParams.get('type') // 'transport' 表示只显示运输供应商
-  const isTransportView = viewType === 'transport'
   
   // 列表状态
   const [loading, setLoading] = useState(true)
@@ -275,22 +267,12 @@ export default function SupplierManage() {
   // 选中行
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
-  // 根据视图类型显示不同的 tabs
-  const tmsTabs = [
-    { label: 'TMS概览', path: '/tms' },
-    { label: 'TMS管理', path: '/cmr-manage' },
-    { label: '运输供应商', path: '/supplier-manage?type=transport' },
-    { label: '运费管理', path: '/tms/pricing' },
-    { label: '条件管理', path: '/tms/conditions' },
-  ]
-
-  const supplierTabs = [
+  // 供应商模块 tabs
+  const tabs = [
     { label: '供应商概览', path: '/suppliers' },
     { label: '供应商列表', path: '/suppliers/list' },
   ]
-
-  const tabs = isTransportView ? tmsTabs : supplierTabs
-  const pageActiveTab = isTransportView ? '/supplier-manage?type=transport' : '/suppliers/list'
+  const pageActiveTab = '/suppliers/list'
 
   // ==================== 数据获取 ====================
 
@@ -298,7 +280,7 @@ export default function SupplierManage() {
     fetchSuppliers()
     fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, filterType, filterStatus, filterLevel, isTransportView])
+  }, [page, pageSize, filterType, filterStatus, filterLevel])
 
   const fetchSuppliers = async () => {
     setLoading(true)
@@ -311,11 +293,6 @@ export default function SupplierManage() {
         ...(filterStatus && { status: filterStatus }),
         ...(filterLevel && { level: filterLevel }),
       })
-      
-      // 运输供应商视图时，添加类型过滤
-      if (isTransportView && !filterType) {
-        params.set('types', TRANSPORT_TYPES.join(','))
-      }
       
       const res = await fetch(`${API_BASE}/api/suppliers?${params}`)
       const data = await res.json()
@@ -765,7 +742,7 @@ export default function SupplierManage() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title={isTransportView ? "TMS运输管理" : "供应商管理"}
+        title="供应商管理"
         icon={<Building2 className="w-6 h-6 text-primary-600" />}
         tabs={tabs}
         activeTab={pageActiveTab}
