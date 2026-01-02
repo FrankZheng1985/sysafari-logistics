@@ -7,6 +7,43 @@ import { getDatabase, generateId } from '../../config/database.js'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { translateText } from '../../utils/translate.js'
+import { pinyin } from 'pinyin-pro'
+
+/**
+ * 获取名称的拼音首字母（大写）
+ * 支持中文和英文混合
+ * @param {string} name - 客户名称
+ * @returns {string} - 拼音首字母（大写），如"傲翼" -> "AY"
+ */
+function getNameInitials(name) {
+  if (!name || typeof name !== 'string') {
+    return 'XX' // 默认值
+  }
+  
+  // 去除空格和特殊字符，只保留中文和英文字母
+  const cleanName = name.replace(/[^\u4e00-\u9fa5a-zA-Z]/g, '')
+  
+  if (!cleanName) {
+    return 'XX'
+  }
+  
+  let initials = ''
+  
+  for (const char of cleanName) {
+    // 检查是否是中文字符
+    if (/[\u4e00-\u9fa5]/.test(char)) {
+      // 获取中文拼音首字母
+      const py = pinyin(char, { pattern: 'first', toneType: 'none' })
+      initials += py.toUpperCase()
+    } else if (/[a-zA-Z]/.test(char)) {
+      // 英文字母直接取大写
+      initials += char.toUpperCase()
+    }
+  }
+  
+  // 限制首字母长度（最多4个字符，避免过长）
+  return initials.slice(0, 4) || 'XX'
+}
 
 // ==================== 常量定义 ====================
 
@@ -224,15 +261,27 @@ export async function getCustomerByCode(code) {
 
 /**
  * 生成客户编码
- * 格式：C + 年月日 + 3位序号（如：C20241216001）
+ * 新格式：简称拼音首字母 + 年月(YYMM) + 4位序号
+ * 示例：傲翼 + 2024年1月 -> AY24010001
+ * @param {string} customerName - 客户名称（用于提取拼音首字母）
+ * @returns {Promise<string>} - 生成的客户编码
  */
-export async function generateCustomerCode() {
+export async function generateCustomerCode(customerName) {
   const db = getDatabase()
   const today = new Date()
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
-  const prefix = `C${dateStr}`
   
-  // 查询今天已有的最大序号
+  // 获取年月：YYMM格式（2位年+2位月）
+  const year = today.getFullYear().toString().slice(-2) // 后2位年份
+  const month = (today.getMonth() + 1).toString().padStart(2, '0') // 2位月份
+  const yearMonth = `${year}${month}` // 如: 2401
+  
+  // 获取客户名称的拼音首字母
+  const initials = getNameInitials(customerName)
+  
+  // 前缀：首字母 + 年月
+  const prefix = `${initials}${yearMonth}`
+  
+  // 查询该前缀下已有的最大序号
   const result = await db.prepare(`
     SELECT customer_code FROM customers 
     WHERE customer_code LIKE ? 
@@ -242,13 +291,15 @@ export async function generateCustomerCode() {
   
   let seq = 1
   if (result && result.customer_code) {
-    const lastSeq = parseInt(result.customer_code.slice(-3), 10)
+    // 提取最后4位序号
+    const lastSeq = parseInt(result.customer_code.slice(-4), 10)
     if (!isNaN(lastSeq)) {
       seq = lastSeq + 1
     }
   }
   
-  return `${prefix}${seq.toString().padStart(3, '0')}`
+  // 返回完整编码：首字母 + 年月 + 4位序号
+  return `${prefix}${seq.toString().padStart(4, '0')}`
 }
 
 /**
@@ -259,7 +310,8 @@ export async function createCustomer(data) {
   const id = generateId()
   
   // 自动生成客户编码（如果没有提供）
-  const customerCode = data.customerCode || await generateCustomerCode()
+  // 新格式：简称拼音首字母 + 年月(YYMM) + 4位序号
+  const customerCode = data.customerCode || await generateCustomerCode(data.customerName)
   
   // 自动翻译公司中文全称为英文（如果有中文名称且没有提供英文名称）
   let companyNameEn = data.companyNameEn || ''
