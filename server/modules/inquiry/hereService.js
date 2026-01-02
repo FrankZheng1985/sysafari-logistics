@@ -39,8 +39,8 @@ const FUEL_SURCHARGE_RATE = 0.15 // EUR/km
  */
 export async function autosuggestAddress(query, limit = 5) {
   if (!HERE_API_KEY) {
-    console.warn('HERE API Key 未配置，使用模拟数据')
-    return mockAutosuggest(query, limit)
+    console.error('HERE API Key 未配置')
+    throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
   }
   
   try {
@@ -66,7 +66,7 @@ export async function autosuggestAddress(query, limit = 5) {
     return []
   } catch (error) {
     console.error('地址自动补全失败:', error)
-    return []
+    throw error
   }
 }
 
@@ -75,8 +75,8 @@ export async function autosuggestAddress(query, limit = 5) {
  */
 export async function geocodeAddress(address) {
   if (!HERE_API_KEY) {
-    console.warn('HERE API Key 未配置，使用模拟数据')
-    return mockGeocode(address)
+    console.error('HERE API Key 未配置')
+    throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
   }
   
   try {
@@ -99,7 +99,7 @@ export async function geocodeAddress(address) {
     return null
   } catch (error) {
     console.error('地理编码失败:', error)
-    return null
+    throw error
   }
 }
 
@@ -113,6 +113,11 @@ export async function geocodeAddress(address) {
  */
 export async function calculateTruckRoute(params) {
   const { origin, destination, waypoints = [], truck = {} } = params
+  
+  if (!HERE_API_KEY) {
+    console.error('HERE API Key 未配置')
+    throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
+  }
   
   // 处理地址到坐标的转换
   let originCoords = origin.lat ? origin : await geocodeAddress(origin.address)
@@ -129,11 +134,6 @@ export async function calculateTruckRoute(params) {
     if (coords) {
       waypointCoords.push(coords)
     }
-  }
-  
-  if (!HERE_API_KEY) {
-    console.warn('HERE API Key 未配置，使用模拟路线数据')
-    return mockRouteCalculation(originCoords, destCoords, waypointCoords, truck)
   }
   
   try {
@@ -179,8 +179,7 @@ export async function calculateTruckRoute(params) {
     throw new Error('未找到可用路线')
   } catch (error) {
     console.error('HERE API 调用失败:', error)
-    // 失败时返回模拟数据
-    return mockRouteCalculation(originCoords, destCoords, waypointCoords, truck)
+    throw error
   }
 }
 
@@ -292,160 +291,6 @@ export function calculateTransportCost(routeData, truckType) {
   }
 }
 
-// ==================== 模拟数据（用于测试和API未配置时） ====================
-
-/**
- * 模拟地址自动补全
- */
-function mockAutosuggest(query, limit = 5) {
-  const lowerQuery = query.toLowerCase()
-  const mockLocations = [
-    { title: 'Hamburg, Germany', address: 'Hamburg, Germany', city: 'Hamburg', country: 'Germany', countryCode: 'DE', postalCode: '20095', lat: 53.5511, lng: 9.9937 },
-    { title: 'Hamburg Port, Germany', address: 'Am Sandtorkai, 20457 Hamburg, Germany', city: 'Hamburg', country: 'Germany', countryCode: 'DE', postalCode: '20457', lat: 53.5433, lng: 9.9875 },
-    { title: 'Rotterdam, Netherlands', address: 'Rotterdam, Netherlands', city: 'Rotterdam', country: 'Netherlands', countryCode: 'NL', postalCode: '3011', lat: 51.9244, lng: 4.4777 },
-    { title: 'Amsterdam, Netherlands', address: 'Amsterdam, Netherlands', city: 'Amsterdam', country: 'Netherlands', countryCode: 'NL', postalCode: '1012', lat: 52.3676, lng: 4.9041 },
-    { title: 'Berlin, Germany', address: 'Berlin, Germany', city: 'Berlin', country: 'Germany', countryCode: 'DE', postalCode: '10115', lat: 52.5200, lng: 13.4050 },
-    { title: 'Munich, Germany', address: 'Munich, Germany', city: 'Munich', country: 'Germany', countryCode: 'DE', postalCode: '80331', lat: 48.1351, lng: 11.5820 },
-    { title: 'Frankfurt, Germany', address: 'Frankfurt am Main, Germany', city: 'Frankfurt', country: 'Germany', countryCode: 'DE', postalCode: '60311', lat: 50.1109, lng: 8.6821 },
-    { title: 'Paris, France', address: 'Paris, France', city: 'Paris', country: 'France', countryCode: 'FR', postalCode: '75001', lat: 48.8566, lng: 2.3522 },
-    { title: 'Brussels, Belgium', address: 'Brussels, Belgium', city: 'Brussels', country: 'Belgium', countryCode: 'BE', postalCode: '1000', lat: 50.8503, lng: 4.3517 },
-    { title: 'Vienna, Austria', address: 'Vienna, Austria', city: 'Vienna', country: 'Austria', countryCode: 'AT', postalCode: '1010', lat: 48.2082, lng: 16.3738 },
-    { title: 'Milan, Italy', address: 'Milan, Italy', city: 'Milan', country: 'Italy', countryCode: 'IT', postalCode: '20121', lat: 45.4642, lng: 9.1900 },
-    { title: 'Warsaw, Poland', address: 'Warsaw, Poland', city: 'Warsaw', country: 'Poland', countryCode: 'PL', postalCode: '00-001', lat: 52.2297, lng: 21.0122 },
-    { title: 'Prague, Czech Republic', address: 'Prague, Czech Republic', city: 'Prague', country: 'Czech Republic', countryCode: 'CZ', postalCode: '110 00', lat: 50.0755, lng: 14.4378 },
-    { title: 'Antwerp, Belgium', address: 'Antwerp, Belgium', city: 'Antwerp', country: 'Belgium', countryCode: 'BE', postalCode: '2000', lat: 51.2194, lng: 4.4025 },
-    { title: 'Düsseldorf, Germany', address: 'Düsseldorf, Germany', city: 'Düsseldorf', country: 'Germany', countryCode: 'DE', postalCode: '40213', lat: 51.2277, lng: 6.7735 },
-    { title: 'Cologne, Germany', address: 'Cologne, Germany', city: 'Cologne', country: 'Germany', countryCode: 'DE', postalCode: '50667', lat: 50.9375, lng: 6.9603 },
-    { title: 'Stuttgart, Germany', address: 'Stuttgart, Germany', city: 'Stuttgart', country: 'Germany', countryCode: 'DE', postalCode: '70173', lat: 48.7758, lng: 9.1829 },
-    { title: 'Hannover, Germany', address: 'Hannover, Germany', city: 'Hannover', country: 'Germany', countryCode: 'DE', postalCode: '30159', lat: 52.3759, lng: 9.7320 },
-    { title: 'Leipzig, Germany', address: 'Leipzig, Germany', city: 'Leipzig', country: 'Germany', countryCode: 'DE', postalCode: '04109', lat: 51.3397, lng: 12.3731 },
-    { title: 'Dresden, Germany', address: 'Dresden, Germany', city: 'Dresden', country: 'Germany', countryCode: 'DE', postalCode: '01067', lat: 51.0504, lng: 13.7373 },
-  ]
-  
-  // 过滤匹配的结果
-  const matches = mockLocations.filter(loc => 
-    loc.title.toLowerCase().includes(lowerQuery) ||
-    loc.city.toLowerCase().includes(lowerQuery) ||
-    loc.address.toLowerCase().includes(lowerQuery)
-  )
-  
-  return matches.slice(0, limit)
-}
-
-/**
- * 模拟地理编码
- */
-function mockGeocode(address) {
-  // 一些常见的欧洲城市坐标
-  const mockLocations = {
-    'hamburg': { lat: 53.5511, lng: 9.9937, country: 'DE', city: 'Hamburg' },
-    'rotterdam': { lat: 51.9244, lng: 4.4777, country: 'NL', city: 'Rotterdam' },
-    'antwerp': { lat: 51.2194, lng: 4.4025, country: 'BE', city: 'Antwerp' },
-    'paris': { lat: 48.8566, lng: 2.3522, country: 'FR', city: 'Paris' },
-    'berlin': { lat: 52.5200, lng: 13.4050, country: 'DE', city: 'Berlin' },
-    'munich': { lat: 48.1351, lng: 11.5820, country: 'DE', city: 'Munich' },
-    'frankfurt': { lat: 50.1109, lng: 8.6821, country: 'DE', city: 'Frankfurt' },
-    'amsterdam': { lat: 52.3676, lng: 4.9041, country: 'NL', city: 'Amsterdam' },
-    'brussels': { lat: 50.8503, lng: 4.3517, country: 'BE', city: 'Brussels' },
-    'milan': { lat: 45.4642, lng: 9.1900, country: 'IT', city: 'Milan' },
-    'vienna': { lat: 48.2082, lng: 16.3738, country: 'AT', city: 'Vienna' },
-    'warsaw': { lat: 52.2297, lng: 21.0122, country: 'PL', city: 'Warsaw' },
-    'prague': { lat: 50.0755, lng: 14.4378, country: 'CZ', city: 'Prague' }
-  }
-  
-  const lowerAddress = address.toLowerCase()
-  
-  for (const [key, location] of Object.entries(mockLocations)) {
-    if (lowerAddress.includes(key)) {
-      return {
-        ...location,
-        address: address,
-        postalCode: '00000'
-      }
-    }
-  }
-  
-  // 默认返回汉堡港（假设从港口出发）
-  return {
-    lat: 53.5511,
-    lng: 9.9937,
-    address: address,
-    country: 'DE',
-    city: 'Hamburg',
-    postalCode: '20457'
-  }
-}
-
-/**
- * 模拟路线计算
- */
-function mockRouteCalculation(origin, destination, waypoints, truck) {
-  // 使用 Haversine 公式计算直线距离，然后乘以1.3作为道路距离估算
-  const directDistance = haversineDistance(
-    origin.lat, origin.lng,
-    destination.lat, destination.lng
-  )
-  
-  // 加上途经点的额外距离
-  let waypointDistance = 0
-  let prevPoint = origin
-  for (const wp of waypoints) {
-    waypointDistance += haversineDistance(
-      prevPoint.lat, prevPoint.lng,
-      wp.lat, wp.lng
-    )
-    prevPoint = wp
-  }
-  waypointDistance += haversineDistance(
-    prevPoint.lat, prevPoint.lng,
-    destination.lat, destination.lng
-  )
-  
-  const totalDirectDistance = waypoints.length > 0 ? waypointDistance : directDistance
-  const roadDistance = Math.round(totalDirectDistance * 1.3) // 道路距离约为直线距离的1.3倍
-  
-  // 估算时间（平均速度70km/h）
-  const duration = Math.round((roadDistance / 70) * 60)
-  
-  // 估算通行费
-  const estimatedTolls = estimateTolls(roadDistance, origin.country, destination.country)
-  
-  // 燃油附加费
-  const fuelSurcharge = roadDistance * FUEL_SURCHARGE_RATE
-  
-  return {
-    origin: {
-      lat: origin.lat,
-      lng: origin.lng,
-      address: origin.address,
-      country: origin.country || 'DE'
-    },
-    destination: {
-      lat: destination.lat,
-      lng: destination.lng,
-      address: destination.address,
-      country: destination.country || 'DE'
-    },
-    waypoints: waypoints.map(wp => ({
-      lat: wp.lat,
-      lng: wp.lng,
-      address: wp.address
-    })),
-    route: {
-      distance: roadDistance,
-      duration: duration,
-      durationFormatted: formatDuration(duration),
-      polyline: null // 模拟数据没有路线
-    },
-    costs: {
-      tolls: Math.round(estimatedTolls * 100) / 100,
-      fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
-      currency: 'EUR'
-    },
-    truck: truck,
-    isMockData: true
-  }
-}
 
 /**
  * Haversine 公式计算两点间距离（公里）
