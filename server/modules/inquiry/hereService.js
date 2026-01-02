@@ -44,7 +44,8 @@ export async function autosuggestAddress(query, limit = 5) {
   }
   
   try {
-    const url = `${HERE_AUTOSUGGEST_URL}?q=${encodeURIComponent(query)}&apiKey=${HERE_API_KEY}&limit=${limit}&in=countryCode:DEU,FRA,NLD,BEL,ITA,ESP,POL,AUT,CHE,CZE,GBR&lang=en`
+    // 添加 at 参数（欧洲中心点：德国法兰克福）作为搜索中心，提高搜索准确性
+    const url = `${HERE_AUTOSUGGEST_URL}?q=${encodeURIComponent(query)}&apiKey=${HERE_API_KEY}&limit=${limit}&at=50.1109,8.6821&in=countryCode:DEU,FRA,NLD,BEL,ITA,ESP,POL,AUT,CHE,CZE,GBR&lang=en`
     const response = await fetch(url)
     const data = await response.json()
     
