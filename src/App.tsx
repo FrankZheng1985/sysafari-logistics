@@ -53,6 +53,7 @@ import CRMCommissionRules from './pages/CRMCommissionRules'
 import CRMCommissionRecords from './pages/CRMCommissionRecords'
 import CRMPenaltyRecords from './pages/CRMPenaltyRecords'
 import CRMCommissionSettlements from './pages/CRMCommissionSettlements'
+import BusinessInfoManage from './pages/BusinessInfoManage'
 // 合同模板模块
 import ContractTemplateConfig from './pages/ContractTemplateConfig'
 import CustomsContracts from './pages/CustomsContracts'
@@ -231,6 +232,7 @@ function AppRoutes() {
         <Route path="/crm/commission/records" element={<CRMCommissionRecords />} />
         <Route path="/crm/commission/penalties" element={<CRMPenaltyRecords />} />
         <Route path="/crm/commission/settlements" element={<CRMCommissionSettlements />} />
+        <Route path="/crm/business-info" element={<BusinessInfoManage />} />
         {/* 合同管理 */}
         <Route path="/contracts" element={<CustomsContracts />} />
         <Route path="/contracts/config" element={<ContractTemplateConfig />} />

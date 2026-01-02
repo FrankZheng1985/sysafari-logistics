@@ -15,6 +15,7 @@
  *   - crm/        客户管理
  */
 
+import 'dotenv/config'  // 加载环境变量
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
@@ -58,6 +59,7 @@ import dataImportRoutes from './modules/data-import/routes.js'
 import helpVideoRoutes from './modules/help-video/routes.js'
 import portalApiRoutes from './modules/portal-api/routes.js'
 import openApiRoutes from './modules/open-api/routes.js'
+import businessInfoRoutes from './modules/business-info/routes.js'
 import { initSocketServer } from './modules/chat/socket.js'
 
 // 供应商模块初始化
@@ -227,6 +229,9 @@ app.use('/api/portal', portalApiRoutes)
 
 // 开放 API 模块（供客户 ERP/WMS 系统对接）
 app.use('/open-api', openApiRoutes)
+
+// 工商信息管理模块
+app.use('/api/business-info', businessInfoRoutes)
 
 // ==================== 错误处理 ====================
 

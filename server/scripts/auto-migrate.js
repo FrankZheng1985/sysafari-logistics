@@ -2631,6 +2631,62 @@ export async function runMigrations() {
     
     console.log('  ✅ 税费计算贸易条件字段就绪')
 
+    // ==================== 创建工商信息表 ====================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS business_info (
+        id VARCHAR(32) PRIMARY KEY,
+        credit_code VARCHAR(50) UNIQUE,
+        company_name TEXT NOT NULL,
+        company_name_en TEXT,
+        legal_person TEXT,
+        registered_capital TEXT,
+        paid_capital TEXT,
+        establishment_date DATE,
+        business_scope TEXT,
+        address TEXT,
+        province VARCHAR(50),
+        city VARCHAR(50),
+        district VARCHAR(50),
+        company_type TEXT,
+        operating_status TEXT,
+        industry TEXT,
+        registration_authority TEXT,
+        approval_date DATE,
+        business_term_start DATE,
+        business_term_end DATE,
+        former_names TEXT,
+        phone TEXT,
+        email TEXT,
+        website TEXT,
+        source VARCHAR(20) DEFAULT 'qichacha',
+        source_id VARCHAR(100),
+        raw_data JSONB,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+    
+    // 创建索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_credit_code ON business_info(credit_code)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_company_name ON business_info(company_name)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_source ON business_info(source)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_operating_status ON business_info(operating_status)`)
+    
+    // 为 customers 表添加 business_info_id 关联字段
+    const biColCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'customers' AND column_name = 'business_info_id'
+    `)
+    if (biColCheck.rows.length === 0) {
+      await client.query(`ALTER TABLE customers ADD COLUMN business_info_id VARCHAR(32)`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_business_info ON customers(business_info_id)`)
+      console.log('  ✅ customers.business_info_id 字段已添加')
+    }
+    
+    console.log('  ✅ 工商信息管理表就绪')
+
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）
     try {

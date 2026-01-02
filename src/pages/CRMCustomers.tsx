@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, Eye, Edit, Trash2, 
   Phone, Mail, MapPin, X, Upload, Loader2,
   ChevronLeft, ChevronRight, Check, Building2, Globe, User, FileText,
-  Package, DollarSign
+  Package, DollarSign, Database, RefreshCw
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -25,12 +25,21 @@ interface Customer {
   contactPhone: string
   contactEmail: string
   countryCode: string
+  province?: string
   city: string
   address: string
   status: string
   assignedName: string
   lastFollowUpTime: string | null
   createTime: string
+  // 工商信息字段
+  taxNumber?: string
+  legalPerson?: string
+  registeredCapital?: string
+  establishmentDate?: string
+  businessScope?: string
+  businessInfoId?: string
+  notes?: string
 }
 
 interface CustomerFormData {
@@ -61,6 +70,30 @@ interface ContactInfo {
   mobile: string
   email: string
   position: string
+}
+
+// 工商信息接口
+interface BusinessInfo {
+  id?: string
+  creditCode: string
+  companyName: string
+  companyNameEn?: string
+  legalPerson: string
+  registeredCapital: string
+  paidCapital?: string
+  establishmentDate: string
+  businessScope: string
+  address: string
+  province?: string
+  city?: string
+  district?: string
+  companyType?: string
+  operatingStatus?: string
+  industry?: string
+  phone?: string
+  email?: string
+  source?: string
+  usageCount?: number
 }
 
 // 产品接口
@@ -145,7 +178,18 @@ export default function CRMCustomers() {
   // 多联系人
   const [contacts, setContacts] = useState<ContactInfo[]>([])
   
-  // OCR状态
+  // 工商信息搜索状态
+  const [businessSearchKeyword, setBusinessSearchKeyword] = useState('')
+  const [businessSearchResults, setBusinessSearchResults] = useState<BusinessInfo[]>([])
+  const [businessSearching, setBusinessSearching] = useState(false)
+  const [showBusinessResults, setShowBusinessResults] = useState(false)
+  const [businessInfoError, setBusinessInfoError] = useState<string | null>(null)
+  const [selectedBusinessInfo, setSelectedBusinessInfo] = useState<BusinessInfo | null>(null)
+  const [loadingBusinessDetail, setLoadingBusinessDetail] = useState(false)
+  const businessSearchRef = useRef<HTMLDivElement>(null)
+  
+  // 兼容旧版：保留 OCR 状态（作为备选方案）
+  const [showOcrMode, setShowOcrMode] = useState(false)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrError, setOcrError] = useState<string | null>(null)
   const [licenseImage, setLicenseImage] = useState<string | null>(null)
@@ -163,6 +207,7 @@ export default function CRMCustomers() {
   const tabs = [
     { path: '/crm', label: '概览' },
     { path: '/crm/customers', label: '客户管理' },
+    { path: '/crm/business-info', label: '工商信息库' },
     { path: '/crm/opportunities', label: '销售机会' },
     { path: '/crm/quotations', label: '报价管理' },
     { path: '/crm/contracts', label: '合同管理' },
@@ -299,6 +344,13 @@ export default function CRMCustomers() {
     setContacts([])
     setLicenseImage(null)
     setOcrError(null)
+    // 重置工商信息搜索状态
+    setBusinessSearchKeyword('')
+    setBusinessSearchResults([])
+    setShowBusinessResults(false)
+    setBusinessInfoError(null)
+    setSelectedBusinessInfo(null)
+    setShowOcrMode(false)
     // 重置产品和费用项状态
     setSelectedProductId('')
     setProductFeeItems([])
@@ -308,7 +360,136 @@ export default function CRMCustomers() {
     setShowModal(true)
   }
 
-  // 处理营业执照上传
+  // 搜索工商信息
+  const searchBusinessInfo = useCallback(async (keyword: string) => {
+    if (!keyword || keyword.trim().length < 2) {
+      setBusinessSearchResults([])
+      return
+    }
+    
+    setBusinessSearching(true)
+    setBusinessInfoError(null)
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/business-info/search?keyword=${encodeURIComponent(keyword)}&pageSize=10`)
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        setBusinessSearchResults(data.data?.list || [])
+        setShowBusinessResults(true)
+        if (data.msg && data.msg.includes('未配置')) {
+          setBusinessInfoError('企查查API未配置，仅显示本地数据')
+        }
+      } else {
+        setBusinessInfoError(data.msg || '搜索失败')
+        setBusinessSearchResults([])
+      }
+    } catch (error) {
+      console.error('搜索工商信息失败:', error)
+      setBusinessInfoError('搜索服务暂时不可用')
+      setBusinessSearchResults([])
+    } finally {
+      setBusinessSearching(false)
+    }
+  }, [])
+  
+  // 获取工商信息详情
+  const getBusinessDetail = async (identifier: string) => {
+    setLoadingBusinessDetail(true)
+    setBusinessInfoError(null)
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/business-info/detail?identifier=${encodeURIComponent(identifier)}`)
+      const data = await response.json()
+      
+      if (data.errCode === 200 && data.data) {
+        return data.data as BusinessInfo
+      } else {
+        setBusinessInfoError(data.msg || '获取详情失败')
+        return null
+      }
+    } catch (error) {
+      console.error('获取工商信息详情失败:', error)
+      setBusinessInfoError('获取详情服务暂时不可用')
+      return null
+    } finally {
+      setLoadingBusinessDetail(false)
+    }
+  }
+  
+  // 选择工商信息并填充表单
+  const handleSelectBusinessInfo = async (item: BusinessInfo) => {
+    // 如果没有完整信息（如经营范围），则获取详情
+    let businessInfo = item
+    if (!item.businessScope && item.companyName) {
+      const detail = await getBusinessDetail(item.creditCode || item.companyName)
+      if (detail) {
+        businessInfo = detail
+      }
+    }
+    
+    setSelectedBusinessInfo(businessInfo)
+    setShowBusinessResults(false)
+    setBusinessSearchKeyword(businessInfo.companyName)
+    
+    // 填充表单
+    setFormData(prev => ({
+      ...prev,
+      companyName: businessInfo.companyName || prev.companyName,
+      customerName: businessInfo.companyName || prev.customerName,
+      taxNumber: businessInfo.creditCode || prev.taxNumber,
+      legalPerson: businessInfo.legalPerson || prev.legalPerson,
+      registeredCapital: businessInfo.registeredCapital || prev.registeredCapital,
+      establishmentDate: businessInfo.establishmentDate || prev.establishmentDate,
+      businessScope: businessInfo.businessScope || prev.businessScope,
+      address: businessInfo.address || prev.address,
+      province: businessInfo.province || prev.province,
+      city: businessInfo.city || prev.city
+    }))
+    
+    // 如果识别出法人信息，自动添加到联系人
+    if (businessInfo.legalPerson) {
+      setContacts(prev => {
+        const hasLegal = prev.some(c => c.contactType === 'legal')
+        if (!hasLegal) {
+          return [...prev, {
+            contactType: 'legal',
+            contactName: businessInfo.legalPerson,
+            phone: businessInfo.phone || '',
+            mobile: '',
+            email: businessInfo.email || '',
+            position: '法定代表人'
+          }]
+        }
+        return prev
+      })
+    }
+  }
+  
+  // 防抖处理工商信息搜索
+  const debouncedBusinessSearch = useDebounce(businessSearchKeyword, 500)
+  
+  useEffect(() => {
+    if (debouncedBusinessSearch && formData.customerRegion === 'china') {
+      searchBusinessInfo(debouncedBusinessSearch)
+    } else {
+      setBusinessSearchResults([])
+      setShowBusinessResults(false)
+    }
+  }, [debouncedBusinessSearch, formData.customerRegion, searchBusinessInfo])
+  
+  // 点击外部关闭搜索结果
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (businessSearchRef.current && !businessSearchRef.current.contains(e.target as Node)) {
+        setShowBusinessResults(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // 处理营业执照上传（保留作为备选方案）
   const handleLicenseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -816,9 +997,136 @@ export default function CRMCustomers() {
   // 步骤2：填写公司信息
   const renderStep2 = () => (
     <div className="space-y-4">
-      {/* 中国客户：营业执照上传 */}
+      {/* 中国客户：工商信息查询 */}
       {formData.customerRegion === 'china' && (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">工商信息查询</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOcrMode(!showOcrMode)}
+              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            >
+              <Upload className="w-3 h-3" />
+              {showOcrMode ? '切换到搜索模式' : '上传营业执照'}
+            </button>
+          </div>
+          
+          {!showOcrMode ? (
+            // 工商信息搜索模式
+            <div ref={businessSearchRef} className="relative">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={businessSearchKeyword}
+                  onChange={(e) => {
+                    setBusinessSearchKeyword(e.target.value)
+                    setSelectedBusinessInfo(null)
+                  }}
+                  onFocus={() => businessSearchResults.length > 0 && setShowBusinessResults(true)}
+                  placeholder="输入公司名称或统一社会信用代码搜索..."
+                  className="w-full px-4 py-2.5 pl-10 pr-10 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                {businessSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+                )}
+                {!businessSearching && selectedBusinessInfo && (
+                  <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
+                )}
+              </div>
+              
+              {/* 搜索结果下拉列表 */}
+              {showBusinessResults && businessSearchResults.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 max-h-64 overflow-y-auto">
+                  {businessSearchResults.map((item, index) => (
+                    <div
+                      key={item.creditCode || index}
+                      onClick={() => handleSelectBusinessInfo(item)}
+                      className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-gray-800 truncate">{item.companyName}</div>
+                          <div className="text-xs text-gray-500 mt-1 space-x-2">
+                            {item.creditCode && <span>信用代码: {item.creditCode}</span>}
+                            {item.legalPerson && <span>法人: {item.legalPerson}</span>}
+                          </div>
+                          {item.operatingStatus && (
+                            <span className={`inline-block mt-1 text-xs px-1.5 py-0.5 rounded ${
+                              item.operatingStatus === '存续' || item.operatingStatus === '在业' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {item.operatingStatus}
+                            </span>
+                          )}
+                        </div>
+                        {item.source === 'local' || item.id ? (
+                          <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                            <Database className="w-3 h-3" /> 本地
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* 无结果提示 */}
+              {showBusinessResults && businessSearchResults.length === 0 && businessSearchKeyword.length >= 2 && !businessSearching && (
+                <div className="absolute z-50 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 p-4 text-center">
+                  <p className="text-sm text-gray-500">未找到相关企业</p>
+                  <p className="text-xs text-gray-400 mt-1">可手动填写或尝试其他关键词</p>
+                </div>
+              )}
+              
+              {/* 选中的工商信息预览 */}
+              {selectedBusinessInfo && (
+                <div className="mt-3 p-3 bg-white rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-green-700 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> 已选择企业
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBusinessInfo(null)
+                        setBusinessSearchKeyword('')
+                      }}
+                      className="text-xs text-gray-500 hover:text-red-500"
+                    >
+                      清除
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                    <div><span className="text-gray-400">公司:</span> {selectedBusinessInfo.companyName}</div>
+                    <div><span className="text-gray-400">信用代码:</span> {selectedBusinessInfo.creditCode || '-'}</div>
+                    <div><span className="text-gray-400">法人:</span> {selectedBusinessInfo.legalPerson || '-'}</div>
+                    <div><span className="text-gray-400">状态:</span> {selectedBusinessInfo.operatingStatus || '-'}</div>
+                  </div>
+                </div>
+              )}
+              
+              {loadingBusinessDetail && (
+                <div className="mt-3 flex items-center justify-center gap-2 text-blue-600">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">获取详细信息...</span>
+                </div>
+              )}
+              
+              {businessInfoError && (
+                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3" /> {businessInfoError}
+                </p>
+              )}
+            </div>
+          ) : (
+            // OCR上传模式（保留作为备选）
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-white">
           <div className="text-center">
             {licenseImage ? (
               <div className="space-y-3">
@@ -854,6 +1162,8 @@ export default function CRMCustomers() {
               <p className="text-xs text-red-500 mt-2">{ocrError}</p>
             )}
           </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -130,6 +130,7 @@ const menuItems: MenuItem[] = [
     children: [
       { path: '/crm', label: 'CRM概览', icon: ClipboardList },
       { path: '/crm/customers', label: '客户管理', icon: Users },
+      { path: '/crm/business-info', label: '工商信息库', icon: Database },
       { path: '/crm/opportunities', label: '商机管理', icon: TrendingUp },
       { path: '/crm/quotations', label: '报价管理', icon: FileText },
       { path: '/crm/contracts', label: '合同管理', icon: FileCheck },
