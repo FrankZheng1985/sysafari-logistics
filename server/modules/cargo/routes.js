@@ -72,11 +72,23 @@ router.post('/documents/imports/:id/sync-shipper', controller.syncShipperFromBL)
 // 执行批量匹配
 router.post('/documents/matching/run', controller.runBatchMatch)
 
-// 获取待审核列表
+// 获取待审核列表（未匹配）
 router.get('/documents/matching/review', controller.getReviewItems)
+
+// 获取已匹配列表
+router.get('/documents/matching/matched', controller.getMatchedItems)
+
+// 获取匹配统计
+router.get('/documents/matching/stats', controller.getMatchingStats)
 
 // 批量审核
 router.post('/documents/matching/batch', controller.batchReview)
+
+// 批量更新整个提单的原产地
+router.put('/documents/matching/batch-origin', controller.updateBatchOrigin)
+
+// 更新单个商品的材质和用途
+router.put('/documents/matching/item/:itemId/detail', controller.updateItemDetail)
 
 // 获取HS推荐
 router.post('/documents/matching/recommend', controller.getRecommendations)

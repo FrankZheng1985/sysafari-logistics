@@ -2557,6 +2557,7 @@ export async function runMigrations() {
       { name: 'international_freight', type: 'NUMERIC', default: '0', comment: '国际运费（EUR）' },
       { name: 'domestic_freight_export', type: 'NUMERIC', default: '0', comment: '出口国内陆运费（EUR），EXW条款使用' },
       { name: 'domestic_freight_import', type: 'NUMERIC', default: '0', comment: '进口国内陆运费（EUR），D组条款使用' },
+      { name: 'unloading_cost', type: 'NUMERIC', default: '0', comment: '卸货费（EUR），DPU条款专用' },
       { name: 'insurance_cost', type: 'NUMERIC', default: '0', comment: '保险费（EUR）' },
       { name: 'prepaid_duties', type: 'NUMERIC', default: '0', comment: '预付关税（EUR），DDP条款使用' },
       { name: 'freight_allocation_method', type: 'TEXT', default: "'by_value'", comment: '运费分摊方式：by_value按货值/by_weight按重量' },

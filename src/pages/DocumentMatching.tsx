@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   FileCheck, CheckCircle, XCircle, RefreshCw, Search,
-  ChevronDown, AlertTriangle, Edit2, Check, X, TrendingUp, TrendingDown
+  ChevronDown, AlertTriangle, Edit2, Check, X,
+  Save, MapPin, Package, FileText, Globe
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
@@ -35,7 +36,15 @@ interface ReviewItem {
   totalValue: number
   originCountry: string
   material: string
+  materialEn: string
+  usageScenario: string
   matchStatus: string
+  dutyRate: number
+  vatRate: number
+  antiDumpingRate: number
+  countervailingRate: number
+  reviewedAt: string
+  reviewedBy: string
 }
 
 interface Recommendation {
@@ -84,6 +93,23 @@ export default function DocumentMatching() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const pageSize = 20
+
+  // 批次筛选：未匹配批次 / 已匹配批次
+  const [batchFilter, setBatchFilter] = useState<'unmatched' | 'matched'>('unmatched')
+
+  // 整个提单的原产地设置弹窗
+  const [showOriginModal, setShowOriginModal] = useState(false)
+  const [batchOriginCountry, setBatchOriginCountry] = useState('')
+  const [savingOrigin, setSavingOrigin] = useState(false)
+
+  // 编辑单个商品的材质和用途
+  const [editingDetail, setEditingDetail] = useState<ReviewItem | null>(null)
+  const [detailForm, setDetailForm] = useState({
+    material: '',
+    materialEn: '',
+    usageScenario: ''
+  })
+  const [savingDetail, setSavingDetail] = useState(false)
 
   // 价格异常检测
   const [priceAnomalies, setPriceAnomalies] = useState<Map<number, PriceAnomalyItem>>(new Map())
@@ -286,6 +312,93 @@ export default function DocumentMatching() {
     setEditHsCode(hsCode)
   }
 
+  // 打开设置整个提单原产地的弹窗
+  const handleOpenOriginModal = () => {
+    // 获取当前批次商品的原产地（如果有的话）
+    const existingOrigin = items.find(i => i.originCountry)?.originCountry || ''
+    setBatchOriginCountry(existingOrigin)
+    setShowOriginModal(true)
+  }
+
+  // 保存整个提单的原产地
+  const handleSaveBatchOrigin = async () => {
+    if (!selectedBatch) return
+    if (!batchOriginCountry.trim()) {
+      alert('请输入原产地国家代码')
+      return
+    }
+    
+    // 验证国家代码格式（2位字母）
+    if (!/^[A-Z]{2}$/i.test(batchOriginCountry.trim())) {
+      alert('原产国代码格式错误，应为2位字母（如 CN, US, DE）')
+      return
+    }
+    
+    setSavingOrigin(true)
+    try {
+      // 批量更新所有商品的原产地
+      const itemIds = items.map(i => i.id)
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/batch-origin`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          importId: selectedBatch.id,
+          originCountry: batchOriginCountry.trim().toUpperCase()
+        })
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setShowOriginModal(false)
+        loadReviewItems()
+        alert(data.errMsg || '原产地已更新')
+      } else {
+        alert(data.msg || '更新失败')
+      }
+    } catch (error) {
+      console.error('更新原产地失败:', error)
+      alert('更新失败')
+    } finally {
+      setSavingOrigin(false)
+    }
+  }
+
+  // 打开编辑商品材质/用途弹窗
+  const handleEditDetail = (item: ReviewItem) => {
+    setEditingDetail(item)
+    setDetailForm({
+      material: item.material || '',
+      materialEn: item.materialEn || '',
+      usageScenario: item.usageScenario || ''
+    })
+  }
+
+  // 保存商品材质/用途
+  const handleSaveDetail = async () => {
+    if (!editingDetail) return
+    
+    setSavingDetail(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/item/${editingDetail.id}/detail`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(detailForm)
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setEditingDetail(null)
+        loadReviewItems()
+        alert(data.errMsg || '保存成功')
+      } else {
+        alert(data.msg || '保存失败')
+      }
+    } catch (error) {
+      console.error('保存失败:', error)
+      alert('保存失败')
+    } finally {
+      setSavingDetail(false)
+    }
+  }
+
   const toggleSelectAll = () => {
     if (selectedItems.length === items.length) {
       setSelectedItems([])
@@ -326,6 +439,13 @@ export default function DocumentMatching() {
     return labels[source] || source || '-'
   }
 
+  // 获取未匹配的批次（还有待审核商品的批次）
+  const unmatchedBatches = batches.filter(b => b.pendingItems > 0 || b.matchedItems < b.totalItems)
+  // 获取已匹配的批次（所有商品都已匹配）
+  const matchedBatches = batches.filter(b => b.pendingItems === 0 && b.matchedItems >= b.totalItems)
+
+  const filteredBatches = batchFilter === 'unmatched' ? unmatchedBatches : matchedBatches
+
   const tabs = [
     { label: '单证概览', path: '/documents' },
     { label: '货物导入', path: '/documents/import' },
@@ -335,6 +455,11 @@ export default function DocumentMatching() {
   ]
 
   const totalPages = Math.ceil(total / pageSize)
+
+  // 检查当前批次是否缺少原产地
+  const hasMissingOrigin = items.some(i => !i.originCountry)
+  // 获取当前批次的原产地（所有商品应该一样）
+  const currentBatchOrigin = items.find(i => i.originCountry)?.originCountry || ''
 
   return (
     <div className="p-4 space-y-4">
@@ -348,9 +473,40 @@ export default function DocumentMatching() {
 
       {/* 批次选择 */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
+        {/* 批次筛选 Tab */}
+        <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => { setBatchFilter('unmatched'); setSelectedBatch(null) }}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                batchFilter === 'unmatched' 
+                  ? 'bg-white text-amber-700 shadow-sm font-medium' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              未匹配批次 ({unmatchedBatches.length})
+            </button>
+            <button
+              onClick={() => { setBatchFilter('matched'); setSelectedBatch(null) }}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                batchFilter === 'matched' 
+                  ? 'bg-white text-green-700 shadow-sm font-medium' 
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              已匹配批次 ({matchedBatches.length})
+            </button>
+          </div>
+        </div>
+        
         <div className="flex items-center gap-4">
           <div className="flex-1">
-            <label className="block text-xs text-gray-500 mb-1">选择导入批次</label>
+            <label className="block text-xs text-gray-500 mb-1">
+              选择导入批次
+              {batchFilter === 'unmatched' && unmatchedBatches.length > 0 && (
+                <span className="text-amber-600 ml-2">（显示有待匹配商品的批次）</span>
+              )}
+            </label>
             <div className="relative">
               <select
                 value={selectedBatch?.id || ''}
@@ -363,9 +519,11 @@ export default function DocumentMatching() {
                 title="选择导入批次"
               >
                 <option value="">请选择批次</option>
-                {batches.map(batch => (
+                {filteredBatches.map(batch => (
                   <option key={batch.id} value={batch.id}>
-                    {batch.importNo} - {batch.containerNo || '无柜号'} ({batch.totalItems}件)
+                    {batch.importNo} - {batch.containerNo || '无柜号'} 
+                    ({batch.matchedItems}/{batch.totalItems}件已匹配)
+                    {batch.pendingItems > 0 ? ` [待审核${batch.pendingItems}]` : ' ✓'}
                   </option>
                 ))}
               </select>
@@ -404,15 +562,61 @@ export default function DocumentMatching() {
         </div>
       </div>
 
+      {/* 原产地设置提示 */}
+      {selectedBatch && hasMissingOrigin && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-start gap-3">
+            <Globe className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-sm font-medium text-amber-800">
+                请设置该提单货物的原产地
+              </h4>
+              <p className="text-xs text-amber-700 mt-1">
+                原产地会影响关税税率计算，特别是反倾销税和反补贴税。一个提单的货物通常来自同一原产国。
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleOpenOriginModal}
+            className="px-4 py-2 bg-amber-600 text-white rounded text-sm hover:bg-amber-700 flex items-center gap-2"
+          >
+            <MapPin className="w-4 h-4" />
+            设置原产地
+          </button>
+        </div>
+      )}
+
+      {/* 已设置原产地显示 */}
+      {selectedBatch && !hasMissingOrigin && currentBatchOrigin && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-green-600" />
+            <span className="text-sm text-green-800">
+              该提单原产地：
+              <span className="font-medium ml-1 px-2 py-0.5 bg-green-100 rounded">
+                {currentBatchOrigin}
+              </span>
+            </span>
+          </div>
+          <button
+            onClick={handleOpenOriginModal}
+            className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
+          >
+            <Edit2 className="w-3 h-3" />
+            修改
+          </button>
+        </div>
+      )}
+
       {/* 价格异常提示 */}
       {selectedBatch && anomalyCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
           <div>
-            <h4 className="text-sm font-medium text-amber-800">
+            <h4 className="text-sm font-medium text-red-800">
               发现 {anomalyCount} 个价格异常商品
             </h4>
-            <p className="text-xs text-amber-700 mt-1">
+            <p className="text-xs text-red-700 mt-1">
               以下商品的申报价格与历史记录差异超过±5%，请仔细核对后再审核通过
             </p>
           </div>
@@ -472,7 +676,8 @@ export default function DocumentMatching() {
                   </th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">行号</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">商品名称</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">原产国</th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-500">原产地</th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-500">材质</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">客户HS</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">匹配HS</th>
                   <th className="px-3 py-2 text-center font-medium text-gray-500">置信度</th>
@@ -484,14 +689,14 @@ export default function DocumentMatching() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                       加载中...
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
                       没有待审核项目
                     </td>
@@ -500,8 +705,9 @@ export default function DocumentMatching() {
                   items.map(item => {
                     const anomaly = priceAnomalies.get(item.id)
                     const hasAnomaly = anomaly?.hasAnomaly || false
+                    const missingMaterial = !item.material
                     return (
-                    <tr key={item.id} className={`border-b hover:bg-gray-50 ${hasAnomaly ? 'bg-amber-50' : ''}`}>
+                    <tr key={item.id} className={`border-b hover:bg-gray-50 ${hasAnomaly ? 'bg-red-50' : ''}`}>
                       <td className="px-3 py-2">
                         <input
                           type="checkbox"
@@ -521,16 +727,16 @@ export default function DocumentMatching() {
                                 className="flex-shrink-0 cursor-help" 
                                 title={anomaly?.message || '价格异常'}
                               >
-                                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                <AlertTriangle className="w-4 h-4 text-red-500" />
                               </span>
                             )}
                           </div>
-                          {item.material && (
-                            <div className="text-gray-400 text-[10px] truncate">{item.material}</div>
+                          {item.usageScenario && (
+                            <div className="text-gray-400 text-[10px] truncate">用途: {item.usageScenario}</div>
                           )}
                           {/* 价格异常详情 */}
                           {hasAnomaly && anomaly && (
-                            <div className="text-[10px] text-amber-600 mt-0.5">
+                            <div className="text-[10px] text-red-600 mt-0.5">
                               {anomaly.anomalyReasons?.map((r, i) => (
                                 <span key={i} className="mr-2">{r}</span>
                               ))}
@@ -545,8 +751,20 @@ export default function DocumentMatching() {
                         <span className={`inline-flex items-center justify-center min-w-[32px] px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           item.originCountry === 'CN' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {item.originCountry || 'CN'}
+                          {item.originCountry || '-'}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {item.material ? (
+                          <span className="text-gray-600 text-[10px] truncate max-w-[60px] inline-block" title={item.material}>
+                            {item.material.length > 8 ? item.material.slice(0, 8) + '...' : item.material}
+                          </span>
+                        ) : (
+                          <span className="text-amber-500 text-[10px] flex items-center justify-center gap-0.5">
+                            <AlertTriangle className="w-3 h-3" />
+                            待填
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 font-mono">{item.customerHsCode || '-'}</td>
                       <td className="px-3 py-2">
@@ -590,13 +808,24 @@ export default function DocumentMatching() {
                               </button>
                             </>
                           ) : (
-                            <button
-                              onClick={() => handleEditHs(item)}
-                              className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
-                              title="编辑HS"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
+                            <>
+                              {/* 编辑材质/用途按钮 */}
+                              <button
+                                onClick={() => handleEditDetail(item)}
+                                className={`p-1 hover:bg-amber-100 rounded ${missingMaterial ? 'text-amber-500' : 'text-gray-400'} hover:text-amber-600`}
+                                title="编辑材质/用途"
+                              >
+                                <Package className="w-4 h-4" />
+                              </button>
+                              {/* 编辑HS编码按钮 */}
+                              <button
+                                onClick={() => handleEditHs(item)}
+                                className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
+                                title="编辑HS编码"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -666,17 +895,213 @@ export default function DocumentMatching() {
         </div>
       )}
 
+      {/* 设置整个提单原产地弹窗 */}
+      {showOriginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Globe className="w-5 h-5 text-primary-600" />
+                <h3 className="text-lg font-medium text-gray-900">设置提单原产地</h3>
+              </div>
+              <button
+                onClick={() => setShowOriginModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                title="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  原产国代码
+                  <span className="text-red-500 ml-1">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={batchOriginCountry}
+                  onChange={(e) => setBatchOriginCountry(e.target.value.toUpperCase())}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg font-medium uppercase focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-center"
+                  placeholder="CN"
+                  maxLength={2}
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  请输入2位国家代码，例如：CN (中国), US (美国), DE (德国), JP (日本)
+                </p>
+              </div>
+              
+              <div className="bg-blue-50 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-blue-600 mt-0.5" />
+                  <div className="text-xs text-blue-700">
+                    <p className="font-medium mb-1">原产地影响关税计算</p>
+                    <ul className="space-y-0.5 text-blue-600">
+                      <li>• 不同原产国可能有不同的关税税率</li>
+                      <li>• 某些原产国商品可能需要缴纳反倾销税或反补贴税</li>
+                      <li>• 设置后将应用到该提单的所有 {items.length} 件商品</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+              <button
+                onClick={() => setShowOriginModal(false)}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveBatchOrigin}
+                disabled={savingOrigin || !batchOriginCountry.trim()}
+                className="px-4 py-2 text-sm text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingOrigin ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    保存中...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    保存并应用
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑商品材质/用途弹窗 */}
+      {editingDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">编辑材质和用途</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  行号 {editingDetail.itemNo}: {editingDetail.productName}
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingDetail(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                title="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="px-6 py-4 space-y-4">
+              {/* 材质 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <Package className="w-4 h-4 inline mr-1" />
+                    材质（中文）
+                  </label>
+                  <input
+                    type="text"
+                    value={detailForm.material}
+                    onChange={(e) => setDetailForm({ ...detailForm, material: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="如：塑料、金属、木材"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    材质（英文）
+                  </label>
+                  <input
+                    type="text"
+                    value={detailForm.materialEn}
+                    onChange={(e) => setDetailForm({ ...detailForm, materialEn: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="e.g. Plastic, Metal"
+                  />
+                </div>
+              </div>
+
+              {/* 用途 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <FileText className="w-4 h-4 inline mr-1" />
+                  用途/使用场景
+                </label>
+                <input
+                  type="text"
+                  value={detailForm.usageScenario}
+                  onChange={(e) => setDetailForm({ ...detailForm, usageScenario: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="如：家用、工业用、装饰用"
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
+                <strong>提示：</strong>材质和用途信息有助于更准确地匹配HS编码
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+              <button
+                onClick={() => setEditingDetail(null)}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveDetail}
+                disabled={savingDetail}
+                className="px-4 py-2 text-sm text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingDetail ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    保存中...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    保存
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 无批次提示 */}
       {!selectedBatch && !loading && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
           <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-          <p className="text-amber-700">请先选择一个导入批次进行HS匹配审核</p>
-          <button
-            onClick={() => navigate('/documents/import')}
-            className="mt-3 px-4 py-2 bg-amber-600 text-white rounded text-sm hover:bg-amber-700"
-          >
-            去导入货物
-          </button>
+          <p className="text-amber-700">
+            {filteredBatches.length === 0 
+              ? (batchFilter === 'unmatched' ? '没有待匹配的批次' : '没有已匹配的批次')
+              : '请先选择一个导入批次进行HS匹配审核'
+            }
+          </p>
+          {batchFilter === 'unmatched' && filteredBatches.length === 0 && matchedBatches.length > 0 && (
+            <button
+              onClick={() => setBatchFilter('matched')}
+              className="mt-3 px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+            >
+              查看已匹配批次
+            </button>
+          )}
+          {filteredBatches.length === 0 && unmatchedBatches.length === 0 && matchedBatches.length === 0 && (
+            <button
+              onClick={() => navigate('/documents/import')}
+              className="mt-3 px-4 py-2 bg-amber-600 text-white rounded text-sm hover:bg-amber-700"
+            >
+              去导入货物
+            </button>
+          )}
         </div>
       )}
     </div>

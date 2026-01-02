@@ -78,14 +78,18 @@ export async function matchHsCode(item) {
     }
   }
   
-  // 5. 尝试模糊匹配 (基于商品名称)
+  // 5. 尝试模糊匹配 (基于商品名称和材质)
   if (productName) {
-    const fuzzyMatch = await fuzzyMatchByName(productName, originCountry)
+    const fuzzyMatch = await fuzzyMatchByName(productName, originCountry, material)
     if (fuzzyMatch) {
+      // 如果匹配时使用了材质信息，提高置信度
+      const confidence = material && fuzzyMatch.material 
+        ? Math.min(MATCH_CONFIG.FUZZY_MATCH_CONFIDENCE + 10, 65)  // 材质匹配提高置信度
+        : MATCH_CONFIG.FUZZY_MATCH_CONFIDENCE
       return {
         matchedHsCode: fuzzyMatch.hsCode,
-        matchConfidence: MATCH_CONFIG.FUZZY_MATCH_CONFIDENCE,
-        matchSource: 'fuzzy',
+        matchConfidence: confidence,
+        matchSource: material ? 'fuzzy_material' : 'fuzzy',
         tariffData: fuzzyMatch
       }
     }
@@ -247,13 +251,68 @@ async function matchFromHistory(productName, productNameEn, material) {
 }
 
 /**
- * 基于商品名称的模糊匹配
+ * 基于商品名称和材质的模糊匹配
  * @param {string} productName - 商品名称
  * @param {string} originCountry - 原产国代码，用于查询特定税率
+ * @param {string} material - 材质信息
  */
-async function fuzzyMatchByName(productName, originCountry = 'CN') {
+async function fuzzyMatchByName(productName, originCountry = 'CN', material = null) {
   const db = getDatabase()
   
+  // 如果有材质信息，优先基于材质匹配
+  if (material) {
+    // 1. 首先尝试 商品名+材质+原产国 匹配
+    let row = await db.prepare(`
+      SELECT 
+        hs_code, goods_description, goods_description_cn, material,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        unit_code, unit_name, origin_country_code
+      FROM tariff_rates 
+      WHERE (goods_description_cn ILIKE ? OR goods_description ILIKE ?)
+        AND (material ILIKE ? OR goods_description ILIKE ? OR goods_description_cn ILIKE ?)
+        AND origin_country_code = ?
+        AND is_active = 1
+      ORDER BY 
+        CASE WHEN material ILIKE ? THEN 0 ELSE 1 END,
+        LENGTH(COALESCE(goods_description_cn, '')) ASC
+      LIMIT 1
+    `).get(
+      `%${productName}%`, `%${productName}%`,
+      `%${material}%`, `%${material}%`, `%${material}%`,
+      originCountry,
+      `%${material}%`
+    )
+    
+    if (row) {
+      return convertTariffRow(row)
+    }
+    
+    // 2. 尝试 商品名+材质（无原产国限制）
+    row = await db.prepare(`
+      SELECT 
+        hs_code, goods_description, goods_description_cn, material,
+        duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
+        unit_code, unit_name, origin_country_code
+      FROM tariff_rates 
+      WHERE (goods_description_cn ILIKE ? OR goods_description ILIKE ?)
+        AND (material ILIKE ? OR goods_description ILIKE ? OR goods_description_cn ILIKE ?)
+        AND is_active = 1
+      ORDER BY 
+        CASE WHEN material ILIKE ? THEN 0 ELSE 1 END,
+        LENGTH(COALESCE(goods_description_cn, '')) ASC
+      LIMIT 1
+    `).get(
+      `%${productName}%`, `%${productName}%`,
+      `%${material}%`, `%${material}%`, `%${material}%`,
+      `%${material}%`
+    )
+    
+    if (row) {
+      return convertTariffRow(row)
+    }
+  }
+  
+  // 3. 如果没有材质或材质匹配失败，回退到原逻辑
   // 首先尝试匹配特定原产国的税率
   let row = await db.prepare(`
     SELECT 
@@ -535,37 +594,209 @@ export async function getReviewItems(importId, params = {}) {
   const countResult = await db.prepare(`
     SELECT COUNT(*) as total 
     FROM cargo_items 
-    WHERE import_id = ? AND match_status IN ('review', 'no_match')
+    WHERE import_id = ? AND match_status IN ('review', 'no_match', 'pending')
   `).get(importId)
   
   const rows = await db.prepare(`
     SELECT * FROM cargo_items 
-    WHERE import_id = ? AND match_status IN ('review', 'no_match')
+    WHERE import_id = ? AND match_status IN ('review', 'no_match', 'pending')
     ORDER BY match_confidence DESC, item_no ASC
     LIMIT ? OFFSET ?
   `).all(importId, pageSize, offset)
   
   return {
-    list: (rows || []).map(row => ({
-      id: row.id,
-      importId: row.import_id,
-      itemNo: row.item_no,
-      productName: row.product_name,
-      productNameEn: row.product_name_en,
-      customerHsCode: row.customer_hs_code,
-      matchedHsCode: row.matched_hs_code,
-      matchConfidence: parseFloat(row.match_confidence) || 0,
-      matchSource: row.match_source,
-      quantity: parseFloat(row.quantity) || 0,
-      unitName: row.unit_name,
-      totalValue: parseFloat(row.total_value) || 0,
-      originCountry: row.origin_country,
-      material: row.material,
-      matchStatus: row.match_status
-    })),
+    list: (rows || []).map(row => convertCargoItemRow(row)),
     total: parseInt(countResult?.total) || 0,
     page,
     pageSize
+  }
+}
+
+/**
+ * 获取已匹配列表（包括自动通过和人工审核通过的）
+ */
+export async function getMatchedItems(importId, params = {}) {
+  const db = getDatabase()
+  const { page = 1, pageSize = 20 } = params
+  
+  const offset = (page - 1) * pageSize
+  
+  // 获取总数
+  const countResult = await db.prepare(`
+    SELECT COUNT(*) as total 
+    FROM cargo_items 
+    WHERE import_id = ? AND match_status IN ('approved', 'auto_approved')
+  `).get(importId)
+  
+  const rows = await db.prepare(`
+    SELECT * FROM cargo_items 
+    WHERE import_id = ? AND match_status IN ('approved', 'auto_approved')
+    ORDER BY item_no ASC
+    LIMIT ? OFFSET ?
+  `).all(importId, pageSize, offset)
+  
+  return {
+    list: (rows || []).map(row => convertCargoItemRow(row)),
+    total: parseInt(countResult?.total) || 0,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 转换货物明细行数据
+ */
+function convertCargoItemRow(row) {
+  return {
+    id: row.id,
+    importId: row.import_id,
+    itemNo: row.item_no,
+    productName: row.product_name,
+    productNameEn: row.product_name_en,
+    customerHsCode: row.customer_hs_code,
+    matchedHsCode: row.matched_hs_code,
+    matchConfidence: parseFloat(row.match_confidence) || 0,
+    matchSource: row.match_source,
+    quantity: parseFloat(row.quantity) || 0,
+    unitName: row.unit_name,
+    unitPrice: parseFloat(row.unit_price) || 0,
+    totalValue: parseFloat(row.total_value) || 0,
+    originCountry: row.origin_country,
+    material: row.material,
+    materialEn: row.material_en,
+    usageScenario: row.usage_scenario,
+    matchStatus: row.match_status,
+    dutyRate: parseFloat(row.duty_rate) || 0,
+    vatRate: parseFloat(row.vat_rate) || 19,
+    antiDumpingRate: parseFloat(row.anti_dumping_rate) || 0,
+    countervailingRate: parseFloat(row.countervailing_rate) || 0,
+    reviewedAt: row.reviewed_at,
+    reviewedBy: row.reviewed_by
+  }
+}
+
+/**
+ * 更新货物明细信息（原产地、材质、用途等）
+ */
+export async function updateCargoItemDetail(itemId, data) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  const { 
+    originCountry, 
+    material, 
+    materialEn, 
+    usageScenario,
+    productName,
+    productNameEn,
+    updateTariff = true
+  } = data
+  
+  // 构建更新语句
+  const updates = []
+  const values = []
+  
+  if (originCountry !== undefined) {
+    updates.push('origin_country = ?')
+    values.push(originCountry)
+  }
+  if (material !== undefined) {
+    updates.push('material = ?')
+    values.push(material)
+  }
+  if (materialEn !== undefined) {
+    updates.push('material_en = ?')
+    values.push(materialEn)
+  }
+  if (usageScenario !== undefined) {
+    updates.push('usage_scenario = ?')
+    values.push(usageScenario)
+  }
+  if (productName !== undefined) {
+    updates.push('product_name = ?')
+    values.push(productName)
+  }
+  if (productNameEn !== undefined) {
+    updates.push('product_name_en = ?')
+    values.push(productNameEn)
+  }
+  
+  if (updates.length === 0) {
+    return { success: false, message: '没有需要更新的字段' }
+  }
+  
+  updates.push('updated_at = ?')
+  values.push(now)
+  values.push(itemId)
+  
+  await db.prepare(
+    `UPDATE cargo_items SET ${updates.join(', ')} WHERE id = ?`
+  ).run(...values)
+  
+  // 如果更新了原产地且需要更新税率
+  let tariffUpdated = false
+  if (originCountry && updateTariff) {
+    // 获取当前商品的HS编码
+    const item = await db.prepare(
+      'SELECT matched_hs_code, customer_hs_code FROM cargo_items WHERE id = ?'
+    ).get(itemId)
+    
+    const hsCode = item?.matched_hs_code || item?.customer_hs_code
+    if (hsCode) {
+      // 根据新原产地获取税率
+      const tariffData = await doExactMatch(hsCode, originCountry)
+      if (tariffData) {
+        await db.prepare(`
+          UPDATE cargo_items SET
+            duty_rate = ?,
+            vat_rate = ?,
+            anti_dumping_rate = ?,
+            countervailing_rate = ?
+          WHERE id = ?
+        `).run(
+          tariffData.dutyRate,
+          tariffData.vatRate,
+          tariffData.antiDumpingRate,
+          tariffData.countervailingRate,
+          itemId
+        )
+        tariffUpdated = true
+      }
+    }
+  }
+  
+  return { 
+    success: true, 
+    tariffUpdated,
+    message: tariffUpdated ? '商品信息和税率已更新' : '商品信息已更新'
+  }
+}
+
+/**
+ * 获取导入批次的匹配统计
+ */
+export async function getMatchingStats(importId) {
+  const db = getDatabase()
+  
+  const stats = await db.prepare(`
+    SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN match_status IN ('approved', 'auto_approved') THEN 1 ELSE 0 END) as matched,
+      SUM(CASE WHEN match_status IN ('review', 'no_match', 'pending') THEN 1 ELSE 0 END) as unmatched,
+      SUM(CASE WHEN origin_country IS NULL OR origin_country = '' THEN 1 ELSE 0 END) as missingOrigin,
+      SUM(CASE WHEN material IS NULL OR material = '' THEN 1 ELSE 0 END) as missingMaterial,
+      SUM(CASE WHEN usage_scenario IS NULL OR usage_scenario = '' THEN 1 ELSE 0 END) as missingUsage
+    FROM cargo_items 
+    WHERE import_id = ?
+  `).get(importId)
+  
+  return {
+    total: parseInt(stats?.total) || 0,
+    matched: parseInt(stats?.matched) || 0,
+    unmatched: parseInt(stats?.unmatched) || 0,
+    missingOrigin: parseInt(stats?.missingOrigin) || 0,
+    missingMaterial: parseInt(stats?.missingMaterial) || 0,
+    missingUsage: parseInt(stats?.missingUsage) || 0
   }
 }
 
@@ -576,5 +807,8 @@ export default {
   approveMatch,
   batchApprove,
   updateMatchHistory,
-  getReviewItems
+  getReviewItems,
+  getMatchedItems,
+  updateCargoItemDetail,
+  getMatchingStats
 }

@@ -277,7 +277,7 @@ export async function runBatchMatch(req, res) {
 }
 
 /**
- * 获取待审核列表
+ * 获取待审核列表（未匹配）
  */
 export async function getReviewItems(req, res) {
   try {
@@ -298,6 +298,78 @@ export async function getReviewItems(req, res) {
   } catch (error) {
     console.error('获取待审核列表失败:', error)
     return serverError(res, '获取待审核列表失败')
+  }
+}
+
+/**
+ * 获取已匹配列表
+ */
+export async function getMatchedItems(req, res) {
+  try {
+    const { importId, page, pageSize } = req.query
+    if (!importId) {
+      return badRequest(res, '缺少importId参数')
+    }
+
+    const result = await matcher.getMatchedItems(parseInt(importId), {
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取已匹配列表失败:', error)
+    return serverError(res, '获取已匹配列表失败')
+  }
+}
+
+/**
+ * 获取匹配统计
+ */
+export async function getMatchingStats(req, res) {
+  try {
+    const { importId } = req.query
+    if (!importId) {
+      return badRequest(res, '缺少importId参数')
+    }
+
+    const stats = await matcher.getMatchingStats(parseInt(importId))
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取匹配统计失败:', error)
+    return serverError(res, '获取匹配统计失败')
+  }
+}
+
+/**
+ * 更新货物明细信息（原产地、材质、用途）
+ */
+export async function updateCargoItemDetail(req, res) {
+  try {
+    const { itemId } = req.params
+    const { originCountry, material, materialEn, usageScenario, productName, productNameEn, updateTariff } = req.body
+    
+    const result = await matcher.updateCargoItemDetail(parseInt(itemId), {
+      originCountry,
+      material,
+      materialEn,
+      usageScenario,
+      productName,
+      productNameEn,
+      updateTariff: updateTariff !== false
+    })
+    
+    if (!result.success) {
+      return badRequest(res, result.message)
+    }
+    
+    return success(res, result, result.message)
+  } catch (error) {
+    console.error('更新货物信息失败:', error)
+    return serverError(res, '更新货物信息失败')
   }
 }
 
@@ -651,6 +723,93 @@ export async function updateItemOrigin(req, res) {
 }
 
 /**
+ * 批量更新整个提单的原产地
+ */
+export async function updateBatchOrigin(req, res) {
+  try {
+    const { importId, originCountry } = req.body
+    
+    if (!importId) {
+      return badRequest(res, '请提供导入批次ID')
+    }
+    
+    if (!originCountry) {
+      return badRequest(res, '请输入原产地国家代码')
+    }
+    
+    // 验证原产国代码格式（2位字母）
+    if (!/^[A-Z]{2}$/i.test(originCountry)) {
+      return badRequest(res, '原产国代码格式错误，应为2位字母（如 CN, US, DE）')
+    }
+    
+    const { getDatabase } = await import('../../config/database.js')
+    const db = getDatabase()
+    
+    // 更新该批次所有商品的原产地
+    const updateStmt = db.prepare(`
+      UPDATE cargo_items 
+      SET origin_country = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE import_id = ?
+    `)
+    
+    const result = updateStmt.run(originCountry.toUpperCase(), parseInt(importId))
+    
+    return success(res, {
+      updatedCount: result.changes,
+      originCountry: originCountry.toUpperCase()
+    }, `已将 ${result.changes} 件商品的原产地设置为 ${originCountry.toUpperCase()}`)
+  } catch (error) {
+    console.error('批量更新原产地失败:', error)
+    return serverError(res, error.message || '批量更新原产地失败')
+  }
+}
+
+/**
+ * 更新单个商品的材质和用途
+ */
+export async function updateItemDetail(req, res) {
+  try {
+    const { itemId } = req.params
+    const { material, materialEn, usageScenario } = req.body
+    
+    if (!itemId) {
+      return badRequest(res, '请提供商品ID')
+    }
+    
+    const { getDatabase } = await import('../../config/database.js')
+    const db = getDatabase()
+    
+    // 更新商品材质和用途
+    const updateStmt = db.prepare(`
+      UPDATE cargo_items 
+      SET material = ?, material_en = ?, usage_scenario = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `)
+    
+    const result = updateStmt.run(
+      material || null, 
+      materialEn || null, 
+      usageScenario || null, 
+      parseInt(itemId)
+    )
+    
+    if (result.changes === 0) {
+      return notFound(res, '商品不存在')
+    }
+    
+    return success(res, {
+      itemId: parseInt(itemId),
+      material,
+      materialEn,
+      usageScenario
+    }, '商品材质和用途已更新')
+  } catch (error) {
+    console.error('更新商品材质用途失败:', error)
+    return serverError(res, error.message || '更新商品材质用途失败')
+  }
+}
+
+/**
  * 重新计算完税价格和税费
  */
 export async function recalculateTax(req, res) {
@@ -671,17 +830,18 @@ export async function recalculateTax(req, res) {
 }
 
 /**
- * 根据原产地查询税率
+ * 根据原产地和材质查询税率
  */
 export async function getTariffByOrigin(req, res) {
   try {
-    const { hsCode, originCountryCode } = req.query
+    const { hsCode, originCountryCode, material } = req.query
     
     if (!hsCode) {
       return badRequest(res, '请提供HS编码')
     }
     
-    const result = await taxCalc.getTariffByOrigin(hsCode, originCountryCode || 'CN')
+    // 支持材质参数用于更精确的税率匹配
+    const result = await taxCalc.getTariffByOrigin(hsCode, originCountryCode || 'CN', material || null)
     
     if (!result) {
       return notFound(res, '未找到该HS编码的税率信息')
@@ -1698,6 +1858,9 @@ export default {
   // HS匹配
   runBatchMatch,
   getReviewItems,
+  getMatchedItems,
+  getMatchingStats,
+  updateCargoItemDetail,
   batchReview,
   getRecommendations,
   searchTariff,
@@ -1715,6 +1878,8 @@ export default {
   getIncotermsList,
   updateTradeTerms,
   updateItemOrigin,
+  updateBatchOrigin,
+  updateItemDetail,
   recalculateTax,
   getTariffByOrigin,
 
