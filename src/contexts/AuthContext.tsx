@@ -322,6 +322,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (state.token) {
       return state.token
     }
+    
+    // 如果 state.token 还没初始化，尝试从 localStorage 直接读取
+    // 这解决了页面刷新后 state 还没初始化完成就调用 API 的问题
+    const testModeData = localStorage.getItem(TEST_MODE_KEY)
+    if (testModeData) {
+      try {
+        const data = JSON.parse(testModeData)
+        if (data.token) {
+          return data.token
+        }
+      } catch {
+        // 解析失败，继续尝试 Auth0
+      }
+    }
+    
     // 否则尝试获取 Auth0 token
     try {
       const token = await getAccessTokenSilently()
