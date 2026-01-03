@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Receipt, Truck, Building2, Shield, Package, FileText, Settings, ArrowDownCircle, ArrowUpCircle, Plus, Check, Search, AlertCircle, Edit3 } from 'lucide-react'
+import { X, Receipt, Truck, Building2, Shield, Package, FileText, Settings, ArrowDownCircle, ArrowUpCircle, Plus, Check, Search, AlertCircle, Edit3, ChevronRight } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 import DatePicker from './DatePicker'
 
 const API_BASE = getApiBaseUrl()
 
 // 费用来源类型
-type FeeSourceType = 'product' | 'supplier_price' | 'manual'
+type FeeSourceType = 'product' | 'supplier_price' | 'quotation' | 'manual'
 
 interface FeeModalProps {
   visible: boolean
@@ -93,6 +93,34 @@ interface Bill {
   customerId: string
   weight: number  // 货物重量（KG）
   volume: number  // 货物体积（CBM）
+}
+
+// 报价单费用项
+interface QuotationFeeItem {
+  id: string
+  name: string
+  nameEn?: string
+  description?: string
+  quantity: number
+  unit: string
+  price: number
+  amount: number
+  feeCategory: string
+}
+
+// 客户已确认的报价单
+interface CustomerQuotation {
+  id: string
+  quoteNumber: string
+  customerName: string
+  subject: string
+  quoteDate: string
+  validUntil?: string
+  totalAmount: number
+  currency: string
+  status: string
+  createdByName?: string
+  items: QuotationFeeItem[]
 }
 
 // 默认费用分类（API 加载前的备用）
@@ -268,6 +296,17 @@ export default function FeeModal({
     feeItem: ProductFeeItem
   }>>([])
   
+  // 报价单相关状态
+  const [customerQuotations, setCustomerQuotations] = useState<CustomerQuotation[]>([])
+  const [showQuotationSelect, setShowQuotationSelect] = useState(false)
+  const [quotationSearch, setQuotationSearch] = useState('')
+  const [selectedQuotationFees, setSelectedQuotationFees] = useState<Array<{
+    quotationId: string
+    quoteNumber: string
+    feeItem: QuotationFeeItem
+  }>>([])
+  const [loadingQuotations, setLoadingQuotations] = useState(false)
+  
   // 供应商搜索防抖
   const supplierSearchRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -419,6 +458,11 @@ export default function FeeModal({
     })
     setShowBillDropdown(false)
     setBillSearch('')
+    
+    // 加载该客户的已确认报价单（用于应收费用选择）
+    if (bill.customerId) {
+      loadCustomerQuotations(bill.customerId)
+    }
   }
 
   const handleSupplierSelect = (supplier: Supplier) => {
@@ -442,6 +486,30 @@ export default function FeeModal({
       }
     } catch (error) {
       console.error('加载产品列表失败:', error)
+    }
+  }
+
+  // 加载客户已确认的报价单
+  const loadCustomerQuotations = async (customerId: string) => {
+    if (!customerId) {
+      setCustomerQuotations([])
+      return
+    }
+    
+    setLoadingQuotations(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/crm/customers/${customerId}/confirmed-quotations`)
+      const data = await response.json()
+      if (data.errCode === 200 && Array.isArray(data.data)) {
+        setCustomerQuotations(data.data)
+      } else {
+        setCustomerQuotations([])
+      }
+    } catch (error) {
+      console.error('加载客户报价单失败:', error)
+      setCustomerQuotations([])
+    } finally {
+      setLoadingQuotations(false)
     }
   }
 
@@ -1053,9 +1121,9 @@ export default function FeeModal({
               费用来源 <span className="text-red-500">*</span>
             </label>
             
-            {/* 应收费用：产品库 + 手动录入 */}
+            {/* 应收费用：产品库 + 报价单 + 手动录入 */}
             {formData.feeType === 'receivable' && (
-              <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="grid grid-cols-3 gap-2 mb-3">
                 {/* 产品库选项 */}
                 <button
                   type="button"
@@ -1073,6 +1141,32 @@ export default function FeeModal({
                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                   <Package className="w-4 h-4" />
                   <span className="font-medium text-xs">产品库</span>
+                </button>
+                
+                {/* 报价单选项 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (formData.customerId) {
+                      setFeeSource('quotation')
+                      setIsManualEntry(false)
+                      setShowQuotationSelect(true)
+                    }
+                  }}
+                  disabled={!formData.customerId}
+                  className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                    feeSource === 'quotation'
+                      ? 'bg-purple-50 text-purple-600 border-purple-500 ring-1 ring-purple-500'
+                      : !formData.customerId
+                        ? 'border-gray-200 text-gray-300 bg-gray-50 cursor-not-allowed'
+                        : 'border-gray-200 text-gray-600 hover:bg-purple-50'
+                  }`}
+                >
+                  {formData.customerId && customerQuotations.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+                  )}
+                  <FileText className="w-4 h-4" />
+                  <span className="font-medium text-xs">报价单</span>
                 </button>
                 
                 {/* 手动录入选项 */}
@@ -1150,6 +1244,19 @@ export default function FeeModal({
                   从产品库选择标准费用项，价格自动填充
                 </span>
               )}
+              {formData.feeType === 'receivable' && feeSource === 'quotation' && (
+                <span className="flex items-center gap-1">
+                  <FileText className="w-3 h-3 text-purple-500" />
+                  {formData.customerId 
+                    ? customerQuotations.length > 0 
+                      ? `该客户有 ${customerQuotations.length} 份已确认报价单可选`
+                      : loadingQuotations 
+                        ? '正在加载报价单...'
+                        : '该客户暂无已确认报价单'
+                    : '请先选择关联订单'
+                  }
+                </span>
+              )}
               {formData.feeType === 'payable' && feeSource === 'supplier_price' && (
                 <span className="flex items-center gap-1">
                   <Receipt className="w-3 h-3 text-orange-500" />
@@ -1172,17 +1279,36 @@ export default function FeeModal({
             {/* 快捷选择按钮 */}
             <div className="flex flex-wrap gap-2">
               {formData.feeType === 'receivable' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFeeSource('product')
-                    setShowProductSelect(true)
-                  }}
-                  className="px-3 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 flex items-center gap-1"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  从产品库选择
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFeeSource('product')
+                      setShowProductSelect(true)
+                    }}
+                    className="px-3 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    从产品库选择
+                  </button>
+                  {formData.customerId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFeeSource('quotation')
+                        setShowQuotationSelect(true)
+                      }}
+                      className={`px-3 py-1.5 text-xs border rounded-lg flex items-center gap-1 ${
+                        customerQuotations.length > 0
+                          ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                          : 'bg-gray-50 text-gray-400 border-gray-200'
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      从报价单选择 {customerQuotations.length > 0 ? `(${customerQuotations.length})` : '(暂无)'}
+                    </button>
+                  )}
+                </>
               )}
               {formData.feeType === 'payable' && formData.supplierId && (
                 <button
@@ -1801,6 +1927,69 @@ export default function FeeModal({
             setSelectedProductFees([])
             setProductSearch('')
             setShowProductSelect(false)
+          }}
+        />
+      )}
+
+      {/* 报价单费用选择弹窗 */}
+      {showQuotationSelect && (
+        <QuotationFeeSelectModal
+          quotations={customerQuotations}
+          quotationSearch={quotationSearch}
+          setQuotationSearch={setQuotationSearch}
+          selectedQuotationFees={selectedQuotationFees}
+          setSelectedQuotationFees={setSelectedQuotationFees}
+          feeCategories={feeCategories}
+          weight={formData.weight}
+          volume={formData.volume}
+          hasBillSelected={!!formData.billId}
+          onClose={() => {
+            setShowQuotationSelect(false)
+            setQuotationSearch('')
+            setSelectedQuotationFees([])
+          }}
+          onBatchAdd={(items) => {
+            // 获取原有金额（编辑模式下或用户已输入金额时）
+            const originalAmount = formData.amount ? parseFloat(formData.amount) : 0
+            const hasOriginalAmount = originalAmount > 0
+            
+            // 将选中的报价单费用项添加到待提交列表
+            const newItems = items.map((item, index) => {
+              // 计算金额：如果是按KG或CBM计费，且有关联订单的重量/体积，自动计算
+              let calculatedAmount = item.feeItem.amount || item.feeItem.price * item.feeItem.quantity || 0
+              const unit = item.feeItem.unit || ''
+              
+              if (isQuantityBasedUnit(unit)) {
+                calculatedAmount = calculateAmountByUnit(item.feeItem.price || 0, unit, formData.weight, formData.volume)
+              }
+              
+              return {
+                id: `pending-quotation-${item.feeItem.id}-${Date.now()}`,
+                feeName: item.feeItem.name,
+                feeNameEn: item.feeItem.nameEn,
+                category: item.feeItem.feeCategory || 'other',
+                // 编辑模式或有原有金额时：第一个费用项使用原有金额，其他使用计算后的金额
+                amount: (hasOriginalAmount && index === 0) ? originalAmount : calculatedAmount,
+                currency: 'EUR',
+                source: 'quotation' as FeeSourceType,
+                sourceId: item.feeItem.id,
+                routeInfo: `报价单: ${item.quoteNumber}`
+              }
+            })
+            
+            // 过滤掉已添加的
+            const existingSourceIds = pendingFeeItems.filter(p => p.source === 'quotation').map(p => p.sourceId)
+            const filteredNewItems = newItems.filter(item => !existingSourceIds.includes(item.sourceId))
+            
+            if (filteredNewItems.length === 0) {
+              alert('所选费用项已添加')
+              return
+            }
+            
+            setPendingFeeItems(prev => [...prev, ...filteredNewItems])
+            setSelectedQuotationFees([])
+            setQuotationSearch('')
+            setShowQuotationSelect(false)
           }}
         />
       )}
@@ -2517,6 +2706,356 @@ function ProductFeeSelectModal({
             >
               <Plus className="w-4 h-4" />
               添加 {selectedProductFees.length > 0 ? `(${selectedProductFees.length})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 报价单费用项多选弹窗组件
+function QuotationFeeSelectModal({
+  quotations,
+  quotationSearch,
+  setQuotationSearch,
+  selectedQuotationFees,
+  setSelectedQuotationFees,
+  feeCategories,
+  weight,
+  volume,
+  hasBillSelected,
+  onClose,
+  onBatchAdd
+}: {
+  quotations: CustomerQuotation[]
+  quotationSearch: string
+  setQuotationSearch: (value: string) => void
+  selectedQuotationFees: Array<{ quotationId: string; quoteNumber: string; feeItem: QuotationFeeItem }>
+  setSelectedQuotationFees: (value: Array<{ quotationId: string; quoteNumber: string; feeItem: QuotationFeeItem }>) => void
+  feeCategories: FeeCategory[]
+  weight: number
+  volume: number
+  hasBillSelected: boolean
+  onClose: () => void
+  onBatchAdd: (items: Array<{ quotationId: string; quoteNumber: string; feeItem: QuotationFeeItem }>) => void
+}) {
+  const [expandedQuotations, setExpandedQuotations] = useState<string[]>([])
+  const [feeItemSearch, setFeeItemSearch] = useState('')
+
+  // 检查费用项是否匹配搜索词
+  const feeItemMatchesSearch = (item: QuotationFeeItem, search: string): boolean => {
+    return (
+      item.name?.toLowerCase().includes(search) ||
+      item.nameEn?.toLowerCase().includes(search) ||
+      item.description?.toLowerCase().includes(search)
+    )
+  }
+
+  // 检查报价单是否匹配搜索词
+  const quotationMatchesSearch = (quotation: CustomerQuotation, search: string): boolean => {
+    return (
+      quotation.quoteNumber?.toLowerCase().includes(search) ||
+      quotation.subject?.toLowerCase().includes(search) ||
+      quotation.customerName?.toLowerCase().includes(search)
+    )
+  }
+
+  // 过滤报价单
+  const searchLower = (quotationSearch + feeItemSearch).toLowerCase()
+  const filteredQuotations = quotations.filter(quotation => {
+    if (!searchLower) return true
+    
+    // 如果匹配报价单名称/编号
+    if (quotationMatchesSearch(quotation, searchLower)) return true
+    
+    // 如果有费用项搜索词，检查费用项
+    if (feeItemSearch) {
+      return quotation.items?.some(item => feeItemMatchesSearch(item, feeItemSearch.toLowerCase()))
+    }
+    
+    return true
+  })
+
+  // 切换报价单展开状态
+  const toggleQuotation = (quotationId: string) => {
+    setExpandedQuotations(prev =>
+      prev.includes(quotationId)
+        ? prev.filter(id => id !== quotationId)
+        : [...prev, quotationId]
+    )
+  }
+
+  // 切换费用项选中状态
+  const toggleFeeItem = (quotationId: string, quoteNumber: string, item: QuotationFeeItem) => {
+    setSelectedQuotationFees(prev => {
+      const exists = prev.some(f => f.quotationId === quotationId && f.feeItem.id === item.id)
+      if (exists) {
+        return prev.filter(f => !(f.quotationId === quotationId && f.feeItem.id === item.id))
+      }
+      return [...prev, { quotationId, quoteNumber, feeItem: item }]
+    })
+  }
+
+  // 选择/取消选择报价单下所有费用项
+  const selectAllFromQuotation = (quotationId: string, quoteNumber: string) => {
+    const quotation = quotations.find(q => q.id === quotationId)
+    if (!quotation?.items?.length) return
+
+    const feeItems = quotation.items
+    const allSelected = feeItems.every(item =>
+      selectedQuotationFees.some(f => f.quotationId === quotationId && f.feeItem.id === item.id)
+    )
+
+    if (allSelected) {
+      // 取消选择该报价单下所有费用项
+      setSelectedQuotationFees(prev =>
+        prev.filter(f => f.quotationId !== quotationId)
+      )
+    } else {
+      // 选择该报价单下所有费用项
+      const newItems = feeItems
+        .filter(item => !selectedQuotationFees.some(f => f.quotationId === quotationId && f.feeItem.id === item.id))
+        .map(item => ({ quotationId, quoteNumber, feeItem: item }))
+      setSelectedQuotationFees(prev => [...prev, ...newItems])
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+      <div className="bg-white rounded-xl shadow-xl w-[700px] max-h-[85vh] flex flex-col">
+        {/* 头部 */}
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-purple-500" />
+            <span className="font-medium text-gray-900">从报价单选择费用项</span>
+            <span className="text-xs text-gray-500 ml-2">
+              {quotations.length} 份报价单
+            </span>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* 搜索区 */}
+        <div className="px-4 py-3 border-b border-gray-100 flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜索报价单编号、主题..."
+              value={quotationSearch}
+              onChange={(e) => setQuotationSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜索费用项..."
+              value={feeItemSearch}
+              onChange={(e) => setFeeItemSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+        </div>
+
+        {/* 报价单列表 */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {filteredQuotations.length > 0 ? (
+            <div className="space-y-2">
+              {filteredQuotations.map(quotation => {
+                const isExpanded = expandedQuotations.includes(quotation.id)
+                const selectedCount = selectedQuotationFees.filter(f => f.quotationId === quotation.id).length
+                const hasItems = quotation.items && quotation.items.length > 0
+
+                // 过滤费用项
+                const feeItems = feeItemSearch
+                  ? (quotation.items || []).filter(item => feeItemMatchesSearch(item, feeItemSearch.toLowerCase()))
+                  : (quotation.items || [])
+
+                return (
+                  <div key={quotation.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                    {/* 报价单头部 */}
+                    <div
+                      className={`px-4 py-3 flex items-center justify-between cursor-pointer transition-colors ${
+                        isExpanded ? 'bg-purple-50' : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => toggleQuotation(quotation.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <ChevronRight
+                          className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                        />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-gray-900">{quotation.quoteNumber}</span>
+                            <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded">已确认</span>
+                            {selectedCount > 0 && (
+                              <span className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                                已选 {selectedCount}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                            <span>{quotation.subject || '无主题'}</span>
+                            <span>|</span>
+                            <span>{quotation.quoteDate}</span>
+                            <span>|</span>
+                            <span className="text-purple-600 font-medium">
+                              {quotation.currency} {quotation.totalAmount?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {quotation.items?.length || 0} 项费用
+                      </div>
+                    </div>
+
+                    {/* 费用项列表 */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/50">
+                        {feeItems.length > 0 ? (
+                          <>
+                            {/* 全选按钮 */}
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-gray-500">
+                                共 {feeItems.length} 项费用
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  selectAllFromQuotation(quotation.id, quotation.quoteNumber)
+                                }}
+                                className="text-xs text-purple-600 hover:text-purple-700"
+                              >
+                                {selectedCount === feeItems.length && feeItems.length > 0 ? '取消全选' : '全选'}
+                              </button>
+                            </div>
+
+                            {/* 费用项 */}
+                            <div className="space-y-1">
+                              {feeItems.map(item => {
+                                const isSelected = selectedQuotationFees.some(
+                                  f => f.quotationId === quotation.id && f.feeItem.id === item.id
+                                )
+
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className={`flex items-start gap-3 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
+                                      isSelected
+                                        ? 'border-purple-400 bg-purple-50'
+                                        : 'border-gray-100 hover:border-purple-300 hover:bg-purple-50/50'
+                                    }`}
+                                    onClick={() => toggleFeeItem(quotation.id, quotation.quoteNumber, item)}
+                                  >
+                                    {/* 复选框 */}
+                                    <div className={`flex-shrink-0 w-5 h-5 mt-0.5 rounded border-2 flex items-center justify-center ${
+                                      isSelected ? 'bg-purple-500 border-purple-500' : 'border-gray-300'
+                                    }`}>
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                                    </div>
+
+                                    {/* 内容 */}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium text-sm text-gray-900">{item.name}</span>
+                                          {item.unit && (
+                                            <span className={`px-1.5 py-0.5 text-xs rounded ${
+                                              isQtyBasedUnit(item.unit)
+                                                ? 'bg-blue-100 text-blue-700'
+                                                : 'bg-gray-100 text-gray-600'
+                                            }`}>
+                                              /{item.unit}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="text-sm font-medium text-purple-600">
+                                            EUR {item.amount?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                          </span>
+                                          {item.quantity > 1 && (
+                                            <div className="text-xs text-gray-500">
+                                              {item.price?.toLocaleString('de-DE', { minimumFractionDigits: 2 })} × {item.quantity}
+                                            </div>
+                                          )}
+                                          {/* 如果是按量计费且有订单信息，显示预估金额 */}
+                                          {isQtyBasedUnit(item.unit) && hasBillSelected && (weight > 0 || volume > 0) && (
+                                            <div className="text-xs text-blue-600">
+                                              ≈ EUR {calcAmountByUnit(item.price || 0, item.unit, weight, volume).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {item.nameEn && (
+                                        <div className="text-xs text-gray-500">{item.nameEn}</div>
+                                      )}
+                                      {item.description && (
+                                        <div className="text-xs text-gray-400 mt-1">{item.description}</div>
+                                      )}
+                                      {item.feeCategory && (
+                                        <div className="mt-1 text-xs text-gray-500">
+                                          分类: {feeCategories.find(c => c.value === item.feeCategory)?.label || item.feeCategory}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-center py-4 text-xs text-gray-400">暂无费用项</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-400">
+              <FileText className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              <p className="text-sm">{quotationSearch || feeItemSearch ? '未找到匹配的报价单' : '该客户暂无已确认报价单'}</p>
+            </div>
+          )}
+        </div>
+
+        {/* 底部操作栏 */}
+        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+          <div className="text-xs text-gray-500">
+            {selectedQuotationFees.length > 0
+              ? `已选择 ${selectedQuotationFees.length} 项，合计 ${
+                  selectedQuotationFees
+                    .reduce((sum, f) => sum + (f.feeItem.amount || 0), 0)
+                    .toLocaleString('de-DE', { minimumFractionDigits: 2 })
+                } EUR`
+              : '点击展开报价单，选择费用项，可多选'
+            }
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => onBatchAdd(selectedQuotationFees)}
+              disabled={selectedQuotationFees.length === 0}
+              className={`px-4 py-1.5 text-sm font-medium text-white rounded-lg flex items-center gap-1.5 ${
+                selectedQuotationFees.length > 0
+                  ? 'bg-purple-500 hover:bg-purple-600'
+                  : 'bg-gray-300 cursor-not-allowed'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              添加 {selectedQuotationFees.length > 0 ? `(${selectedQuotationFees.length})` : ''}
             </button>
           </div>
         </div>

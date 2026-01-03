@@ -149,6 +149,7 @@ export default function CRMQuotations() {
   })
   const [translatingIndex, setTranslatingIndex] = useState<number | null>(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
+  const [isComposing, setIsComposing] = useState(false) // 跟踪输入法状态
   
   // 客户询价状态
   const [inquiries, setInquiries] = useState<CustomerInquiry[]>([])
@@ -1248,7 +1249,7 @@ export default function CRMQuotations() {
                     value={formData.subject}
                     onChange={(e) => setFormData({...formData, subject: e.target.value})}
                     className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    placeholder="请输入报价主题"
+                    placeholder="输入报价件数-产品品名"
                   />
                 </div>
               </div>
@@ -1344,16 +1345,42 @@ export default function CRMQuotations() {
                         type="text"
                         value={item.name}
                         onChange={(e) => handleItemChange(index, 'name', e.target.value)}
+                        onCompositionStart={() => setIsComposing(true)}
+                        onCompositionEnd={(e) => {
+                          setIsComposing(false)
+                          // 输入法确认后，更新值并触发翻译
+                          const value = (e.target as HTMLInputElement).value
+                          if (value.trim()) {
+                            handleItemChange(index, 'name', value)
+                            // 清空旧的英文名称并重新翻译
+                            handleItemChange(index, 'nameEn', '')
+                            setTimeout(() => handleTranslateItem(index), 100)
+                          }
+                        }}
+                        onBlur={() => {
+                          // 只在非输入法状态下触发翻译
+                          if (!isComposing && item.name.trim() && !item.nameEn) {
+                            handleTranslateItem(index)
+                          }
+                        }}
                         className="col-span-3 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="中文名称"
                       />
-                      <input
-                        type="text"
-                        value={item.nameEn || ''}
-                        onChange={(e) => handleItemChange(index, 'nameEn', e.target.value)}
-                        className="col-span-2 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                        placeholder="英文名称"
-                      />
+                      <div className="col-span-2 relative">
+                        <input
+                          type="text"
+                          value={item.nameEn || ''}
+                          readOnly
+                          className="w-full px-3 py-2 text-sm border rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                          placeholder="英文名称"
+                          title="自动翻译，不可编辑"
+                        />
+                        {translatingIndex === index && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                            <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
+                          </div>
+                        )}
+                      </div>
                       <input
                         type="text"
                         inputMode="decimal"

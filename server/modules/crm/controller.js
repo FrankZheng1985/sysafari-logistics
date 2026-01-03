@@ -1291,6 +1291,27 @@ export async function generateQuotationPdf(req, res) {
   }
 }
 
+// ==================== 报价费用项选择（用于新增费用） ====================
+
+/**
+ * 获取客户已确认的报价单（用于新增费用时选择）
+ */
+export async function getCustomerConfirmedQuotations(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    if (!customerId) {
+      return badRequest(res, '请指定客户ID')
+    }
+    
+    const quotations = await model.getCustomerConfirmedQuotations(customerId)
+    return success(res, quotations)
+  } catch (error) {
+    console.error('获取客户已确认报价单失败:', error)
+    return serverError(res, '获取客户已确认报价单失败')
+  }
+}
+
 // ==================== 合同管理 ====================
 
 /**

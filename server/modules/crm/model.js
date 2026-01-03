@@ -1850,6 +1850,61 @@ export async function createQuotationForCustomer({ customerId, customerName, pro
   }
 }
 
+// ==================== 报价费用项选择（用于新增费用） ====================
+
+/**
+ * 获取客户已确认的报价单列表（用于新增费用时选择）
+ * @param {string} customerId - 客户ID
+ * @returns {Promise<Array>} - 报价单列表（只返回已确认的报价单）
+ */
+export async function getCustomerConfirmedQuotations(customerId) {
+  const db = getDatabase()
+  
+  // 获取该客户所有已确认（accepted）或已发送（sent）的报价单
+  const quotations = await db.prepare(`
+    SELECT id, quote_number, customer_name, subject, quote_date, valid_until,
+           total_amount, currency, items, status, created_by_name
+    FROM quotations 
+    WHERE customer_id = ? AND status IN ('accepted', 'sent')
+    ORDER BY quote_date DESC
+  `).all(customerId)
+  
+  return (quotations || []).map(q => {
+    // 解析 items JSON
+    let items = []
+    try {
+      items = q.items ? JSON.parse(q.items) : []
+    } catch (e) {
+      items = []
+    }
+    
+    return {
+      id: q.id,
+      quoteNumber: q.quote_number,
+      customerName: q.customer_name,
+      subject: q.subject,
+      quoteDate: q.quote_date,
+      validUntil: q.valid_until,
+      totalAmount: parseFloat(q.total_amount) || 0,
+      currency: q.currency || 'EUR',
+      status: q.status,
+      createdByName: q.created_by_name,
+      // 费用明细项
+      items: items.map((item, index) => ({
+        id: `${q.id}-item-${index}`,
+        name: item.name || item.feeName || '',
+        nameEn: item.nameEn || item.feeNameEn || '',
+        description: item.description || '',
+        quantity: item.quantity || 1,
+        unit: item.unit || '',
+        price: parseFloat(item.price) || 0,
+        amount: parseFloat(item.amount) || 0,
+        feeCategory: item.feeCategory || item.category || 'other'
+      }))
+    }
+  })
+}
+
 // ==================== 合同管理 ====================
 
 /**
