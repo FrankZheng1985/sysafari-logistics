@@ -95,11 +95,11 @@ deploy_env() {
     
     echo -e "${YELLOW}[3/4] 上传到 OSS (${bucket})...${NC}"
     
-    # 上传静态资源（长期缓存）
+    # 上传静态资源（长期缓存，强制上传新文件）
     ossutil cp -r dist/assets/ oss://${bucket}/assets/ \
-        --update \
         --acl public-read \
-        --meta "Cache-Control:public, max-age=31536000, immutable"
+        --meta "Cache-Control:public, max-age=31536000, immutable" \
+        --force
     
     # 上传其他文件
     for file in dist/*.js dist/*.css dist/*.ico dist/*.svg dist/*.png dist/*.jpg dist/*.jpeg dist/*.gif; do
@@ -112,10 +112,11 @@ deploy_env() {
         fi
     done
     
-    # 单独处理 index.html（不缓存）
+    # 单独处理 index.html（不缓存，强制覆盖）
     ossutil cp dist/index.html oss://${bucket}/index.html \
         --acl public-read \
-        --meta "Cache-Control:no-cache, no-store, must-revalidate"
+        --meta "Cache-Control:no-cache, no-store, must-revalidate" \
+        --force
     
     echo -e "${GREEN}✓ OSS 上传完成${NC}"
     
