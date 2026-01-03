@@ -70,6 +70,7 @@ interface SalesUser {
   id: number
   name: string
   role: string
+  roleName?: string
 }
 
 interface ContactInfo {
@@ -274,14 +275,15 @@ export default function CRMCustomers() {
     }
   }
 
-  // 加载业务员列表（可以作为客户负责人的角色：跟单员、操作经理、单证员等）
+  // 加载业务员列表（可以作为客户负责人的角色：跟单员、操作经理、业务经理、单证员等）
   const loadSalesUsers = async () => {
     try {
       const response = await fetch(`${API_BASE}/api/users?pageSize=100&status=active`)
       const data = await response.json()
       if (data.errCode === 200) {
         // 过滤出可以作为客户负责人的角色
-        const assignableRoles = ['operator', 'czjl', 'doc_clerk', 'doc_officer', 'manager']
+        // operator=跟单员, czjl=操作经理, manager=业务经理, do=单证员, finance=财务助理
+        const assignableRoles = ['operator', 'czjl', 'manager', 'do', 'finance']
         const filteredUsers = (data.data.list || []).filter(
           (u: { role: string }) => assignableRoles.includes(u.role)
         )
@@ -1315,7 +1317,9 @@ export default function CRMCustomers() {
           >
             <option value="">暂不指定</option>
             {salesUsers.map(user => (
-              <option key={user.id} value={user.id}>{user.name}</option>
+              <option key={user.id} value={user.id}>
+                {user.name} {user.roleName ? `(${user.roleName})` : ''}
+              </option>
             ))}
           </select>
           <p className="text-[10px] text-gray-400 mt-1">
