@@ -44,6 +44,17 @@ router.get('/base-data/cities', controller.getCities)
 // 获取常用位置列表（汇总）
 router.get('/base-data/locations', controller.getLocations)
 
+// ==================== HS Code / 关税查询（公开接口） ====================
+
+// 搜索 HS Code 税率
+router.get('/tariff-rates/search', controller.searchTariffRates)
+
+// 精确查询 HS Code 税率
+router.get('/tariff-rates/query', controller.queryTariffRate)
+
+// 获取国家增值税率
+router.get('/vat-rates/:countryCode', controller.getCountryVatRate)
+
 // ==================== 受保护接口（需要认证） ====================
 
 // 应用认证中间件到所有后续路由
