@@ -61,6 +61,15 @@ interface CustomerFormData {
   city: string
   address: string
   notes: string
+  assignedTo?: number | null
+  assignedName?: string
+}
+
+// 业务员/操作员用户接口
+interface SalesUser {
+  id: number
+  name: string
+  role: string
 }
 
 interface ContactInfo {
@@ -201,6 +210,9 @@ export default function CRMCustomers() {
   const [selectedFeeItemIds, setSelectedFeeItemIds] = useState<number[]>([])
   const [loadingFeeItems, setLoadingFeeItems] = useState(false)
   
+  // 业务员列表
+  const [salesUsers, setSalesUsers] = useState<SalesUser[]>([])
+  
   // 提交状态
   const [submitting, setSubmitting] = useState(false)
 
@@ -262,6 +274,19 @@ export default function CRMCustomers() {
     }
   }
 
+  // 加载业务员列表（操作员角色）
+  const loadSalesUsers = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/users?role=operator&pageSize=100`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setSalesUsers(data.data.list || [])
+      }
+    } catch (error) {
+      console.error('加载业务员列表失败:', error)
+    }
+  }
+
   // 加载产品费用项
   const loadProductFeeItems = async (productId: string) => {
     setLoadingFeeItems(true)
@@ -296,26 +321,37 @@ export default function CRMCustomers() {
   const handleOpenModal = (customer?: Customer) => {
     if (customer) {
       setEditingCustomer(customer)
-      setFormData({
-        customerRegion: (customer.customerRegion as 'china' | 'overseas') || 'china',
-        customerType: customer.customerType,
-        customerLevel: customer.customerLevel,
-        customerName: customer.customerName,
-        companyName: customer.companyName || '',
-        taxNumber: customer.taxNumber || '',
-        legalPerson: customer.legalPerson || '',
-        registeredCapital: customer.registeredCapital || '',
-        establishmentDate: customer.establishmentDate || '',
-        businessScope: customer.businessScope || '',
-        contactPerson: customer.contactPerson || '',
-        contactPhone: customer.contactPhone || '',
-        contactEmail: customer.contactEmail || '',
-        countryCode: customer.countryCode || '',
-        province: customer.province || '',
-        city: customer.city || '',
-        address: customer.address || '',
-        notes: customer.notes || ''
-      })
+      // 获取客户详情以获取分配信息
+      fetch(`${API_BASE}/api/customers/${customer.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.errCode === 200 && data.data) {
+            const c = data.data
+            setFormData({
+              customerRegion: (c.customerRegion as 'china' | 'overseas') || 'china',
+              customerType: c.customerType,
+              customerLevel: c.customerLevel,
+              customerName: c.customerName,
+              companyName: c.companyName || '',
+              taxNumber: c.taxNumber || '',
+              legalPerson: c.legalPerson || '',
+              registeredCapital: c.registeredCapital || '',
+              establishmentDate: c.establishmentDate || '',
+              businessScope: c.businessScope || '',
+              contactPerson: c.contactPerson || '',
+              contactPhone: c.contactPhone || '',
+              contactEmail: c.contactEmail || '',
+              countryCode: c.countryCode || '',
+              province: c.province || '',
+              city: c.city || '',
+              address: c.address || '',
+              notes: c.notes || '',
+              assignedTo: c.assignedTo || null,
+              assignedName: c.assignedName || ''
+            })
+          }
+        })
+        .catch(err => console.error('获取客户详情失败:', err))
       setCurrentStep(2) // 编辑模式直接跳到第二步
     } else {
       setEditingCustomer(null)
@@ -337,7 +373,9 @@ export default function CRMCustomers() {
         province: '',
         city: '',
         address: '',
-        notes: ''
+        notes: '',
+        assignedTo: null,
+        assignedName: ''
       })
       setCurrentStep(1)
     }
@@ -355,8 +393,9 @@ export default function CRMCustomers() {
     setSelectedProductId('')
     setProductFeeItems([])
     setSelectedFeeItemIds([])
-    // 加载产品列表
+    // 加载产品列表和业务员列表
     loadProducts()
+    loadSalesUsers()
     setShowModal(true)
   }
 
@@ -1247,6 +1286,38 @@ export default function CRMCustomers() {
           />
               </div>
       )}
+
+      {/* 负责业务员 */}
+      <div className="border-t pt-4">
+        <h4 className="text-xs font-medium text-gray-700 mb-3 flex items-center gap-2">
+          <User className="w-4 h-4" />
+          负责业务员
+        </h4>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">选择负责的业务员（跟单员）</label>
+          <select
+            value={formData.assignedTo || ''}
+            onChange={(e) => {
+              const userId = e.target.value ? parseInt(e.target.value) : null
+              const user = salesUsers.find(u => u.id === userId)
+              setFormData({
+                ...formData, 
+                assignedTo: userId,
+                assignedName: user?.name || ''
+              })
+            }}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+          >
+            <option value="">暂不指定</option>
+            {salesUsers.map(user => (
+              <option key={user.id} value={user.id}>{user.name}</option>
+            ))}
+          </select>
+          <p className="text-[10px] text-gray-400 mt-1">
+            指定业务员后，该客户的询价将自动分配给对应人员处理
+          </p>
+        </div>
+      </div>
 
               {/* 地址信息 */}
               <div className="border-t pt-4">

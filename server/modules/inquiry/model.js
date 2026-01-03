@@ -75,30 +75,34 @@ export async function generateInquiryNumber() {
 
 /**
  * 获取客户的负责跟单员
- * 优先查找 customers 表的 sales_id，否则返回 null
+ * 从 customers 表的 assigned_to 字段获取，否则返回 null
  */
 export async function getCustomerAssignee(customerId) {
   const db = getDatabase()
   
   // 从客户表查找负责的跟单员/业务员
+  // 注意：客户表使用 assigned_to 和 assigned_name 字段存储负责人
   const customer = await db.prepare(`
-    SELECT c.sales_id, c.sales_name, u.supervisor_id, s.name as supervisor_name,
+    SELECT c.assigned_to, c.assigned_name, u.supervisor_id, s.name as supervisor_name,
            ss.supervisor_id as super_supervisor_id, ss2.name as super_supervisor_name
     FROM customers c
-    LEFT JOIN users u ON c.sales_id = u.id
+    LEFT JOIN users u ON c.assigned_to = u.id
     LEFT JOIN users s ON u.supervisor_id = s.id
     LEFT JOIN users ss ON s.supervisor_id = ss.id
     LEFT JOIN users ss2 ON ss.supervisor_id = ss2.id
     WHERE c.id = $1
   `).get(customerId)
   
-  if (!customer || !customer.sales_id) {
+  if (!customer || !customer.assigned_to) {
+    console.log(`[询价分配] 客户 ${customerId} 没有设置负责业务员`)
     return null
   }
   
+  console.log(`[询价分配] 客户 ${customerId} 的负责人: ${customer.assigned_name} (ID: ${customer.assigned_to})`)
+  
   return {
-    assigneeId: customer.sales_id,
-    assigneeName: customer.sales_name,
+    assigneeId: customer.assigned_to,
+    assigneeName: customer.assigned_name,
     supervisorId: customer.supervisor_id || null,
     supervisorName: customer.supervisor_name || null,
     superSupervisorId: customer.super_supervisor_id || null,
