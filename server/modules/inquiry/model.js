@@ -326,8 +326,13 @@ export async function getInquiries(params = {}) {
   }
   
   if (status) {
-    query += ` AND status = $${paramIndex++}`
-    queryParams.push(status)
+    // 'unquoted' 表示待报价（pending 或 processing）
+    if (status === 'unquoted') {
+      query += ` AND status IN ('pending', 'processing')`
+    } else {
+      query += ` AND status = $${paramIndex++}`
+      queryParams.push(status)
+    }
   }
   
   if (inquiryType) {

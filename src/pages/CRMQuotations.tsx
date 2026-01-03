@@ -158,7 +158,7 @@ export default function CRMQuotations() {
   const [inquiryTotal, setInquiryTotal] = useState(0)
   const [inquiryPage, setInquiryPage] = useState(1)
   const [inquiryLoading, setInquiryLoading] = useState(false)
-  const [inquiryFilterStatus, setInquiryFilterStatus] = useState<string>('')
+  const [inquiryFilterStatus, setInquiryFilterStatus] = useState<string>('unquoted') // 默认只显示待报价的询价
   const [selectedInquiry, setSelectedInquiry] = useState<CustomerInquiry | null>(null)
   const [showInquiryDetail, setShowInquiryDetail] = useState(false)
   const [taskStats, setTaskStats] = useState({ pendingCount: 0, processingCount: 0, overdueCount: 0, todayCompleted: 0 })
@@ -1116,6 +1116,7 @@ export default function CRMQuotations() {
                 className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 title="筛选询价状态"
               >
+                <option value="unquoted">待报价</option>
                 <option value="">全部状态</option>
                 <option value="pending">待处理</option>
                 <option value="processing">处理中</option>
