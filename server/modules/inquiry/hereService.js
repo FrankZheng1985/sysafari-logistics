@@ -279,11 +279,12 @@ function parseHereRouteResponse(route, origin, destination, waypoints, truck) {
       distance: Math.round(totalDistance),
       duration: Math.round(totalDuration),
       durationFormatted: formatDuration(totalDuration),
-      polyline: polylines[0] || '', // 使用第一段的 polyline 用于地图显示
-      segments: sections.length,    // 路段数量
+      polyline: polylines.join('|'), // 合并所有路段的 polyline，用 | 分隔
+      polylines: polylines,          // 保留原始数组供前端使用
+      segments: sections.length,     // 路段数量
       roadDistance: Math.round(roadDistanceKm),   // 陆路距离
       ferryDistance: Math.round(ferryDistanceKm), // 渡轮距离
-      hasFerry: hasFerry            // 是否包含渡轮
+      hasFerry: hasFerry             // 是否包含渡轮
     },
     costs: {
       tolls: Math.round(estimatedTolls * 100) / 100,

@@ -10,7 +10,7 @@
  * 5. 实时计算成本/利润/销售价
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
   X, 
   MapPin, 
@@ -27,6 +27,29 @@ import {
 import HereMapDisplay from './HereMapDisplay'
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
+
+/**
+ * 销售价取整函数
+ * 规则：
+ * - 1-49 取整到 50
+ * - 51-99 取整到 100
+ * - 50 和 100 的整数不变
+ */
+function roundSalesPrice(value: number): number {
+  const lastTwoDigits = Math.round(value) % 100
+  const base = Math.floor(value / 100) * 100
+  
+  if (lastTwoDigits === 0 || lastTwoDigits === 50) {
+    return Math.round(value)
+  }
+  
+  if (lastTwoDigits >= 1 && lastTwoDigits <= 49) {
+    return base + 50
+  }
+  
+  // lastTwoDigits >= 51 && lastTwoDigits <= 99
+  return base + 100
+}
 
 // 费用项接口
 interface CostItem {
@@ -93,6 +116,9 @@ interface TransportQuoteCalculatorProps {
     profitSettings: {
       type: 'fixed' | 'percent'
       value: number
+      roundingProfit?: number  // 取整产生的利润
+      totalProfit?: number     // 总利润（设定+取整）
+      roundedSalesPrice?: number  // 取整后的销售价
     }
   }) => void
   // 询价数据
@@ -123,6 +149,10 @@ export default function TransportQuoteCalculator({
   const [profitType, setProfitType] = useState<'fixed' | 'percent'>('percent')
   const [profitValue, setProfitValue] = useState<number>(15) // 默认15%利润
   
+  // 用于防止重复加载的ref
+  const loadedRef = useRef(false)
+  const prevTransportDataRef = useRef<string>('')
+  
   // 计算选中的成本总额
   const totalCost = useMemo(() => {
     const selectedItems = [...costItems, ...supplierPrices].filter(item => item.selected)
@@ -137,17 +167,57 @@ export default function TransportQuoteCalculator({
     return profitValue
   }, [totalCost, profitType, profitValue])
   
-  // 计算销售价总额
-  const totalSalesPrice = useMemo(() => {
+  // 计算销售价总额（未取整）
+  const rawSalesPrice = useMemo(() => {
     return totalCost + profitAmount
   }, [totalCost, profitAmount])
   
-  // 加载数据
+  // 取整后的销售价
+  const roundedSalesPrice = useMemo(() => {
+    return roundSalesPrice(rawSalesPrice)
+  }, [rawSalesPrice])
+  
+  // 取整产生的额外利润
+  const roundingProfit = useMemo(() => {
+    return roundedSalesPrice - rawSalesPrice
+  }, [roundedSalesPrice, rawSalesPrice])
+  
+  // 总利润（设定利润 + 取整利润）
+  const totalProfit = useMemo(() => {
+    return profitAmount + roundingProfit
+  }, [profitAmount, roundingProfit])
+  
+  // 加载数据 - 使用稳定的序列化字符串作为依赖
+  const transportDataKey = useMemo(() => {
+    if (!transportData) return ''
+    return JSON.stringify({
+      origin: transportData.origin,
+      destination: transportData.destination
+    })
+  }, [transportData?.origin, transportData?.destination])
+  
   useEffect(() => {
-    if (visible && transportData) {
-      loadData()
+    // 只有在 visible 且数据变化时才加载
+    if (visible && transportData && transportDataKey) {
+      // 检查是否需要重新加载（数据发生变化或首次加载）
+      if (transportDataKey !== prevTransportDataRef.current) {
+        prevTransportDataRef.current = transportDataKey
+        loadedRef.current = false
+      }
+      
+      // 防止重复加载
+      if (!loadedRef.current) {
+        loadedRef.current = true
+        loadData()
+      }
     }
-  }, [visible, transportData])
+    
+    // 组件关闭时重置加载状态
+    if (!visible) {
+      loadedRef.current = false
+      prevTransportDataRef.current = ''
+    }
+  }, [visible, transportDataKey])
   
   // 加载路线和费用数据
   const loadData = async () => {
@@ -167,7 +237,7 @@ export default function TransportQuoteCalculator({
           })
         }),
         // 调用供应商报价匹配API
-        fetch(`${API_BASE}/api/supplier/prices/match?destination=${encodeURIComponent(transportData.destination)}`)
+        fetch(`${API_BASE}/api/prices/match?destination=${encodeURIComponent(transportData.destination)}`)
       ])
       
       const routeData = await routeResponse.json()
@@ -235,11 +305,14 @@ export default function TransportQuoteCalculator({
       return
     }
     
-    // 计算每个费用项的销售价（按比例分配利润）
+    // 使用取整后的总利润（包含设定利润+取整利润）
+    const totalProfitToDistribute = totalProfit
+    
+    // 计算每个费用项的销售价（按比例分配总利润）
     const items = selectedItems.map(item => {
       const itemCost = item.costPrice * item.quantity
       const itemProfitRatio = totalCost > 0 ? itemCost / totalCost : 1 / selectedItems.length
-      const itemProfit = profitAmount * itemProfitRatio
+      const itemProfit = totalProfitToDistribute * itemProfitRatio
       const itemSalesPrice = (itemCost + itemProfit) / item.quantity
       
       return {
@@ -251,7 +324,7 @@ export default function TransportQuoteCalculator({
         quantity: item.quantity,
         unit: item.unit,
         costPrice: item.costPrice,
-        price: Math.round(itemSalesPrice * 100) / 100,  // 销售价
+        price: Math.round(itemSalesPrice * 100) / 100,  // 销售价（含分摊的利润）
         amount: Math.round((itemCost + itemProfit) * 100) / 100
       }
     })
@@ -261,7 +334,10 @@ export default function TransportQuoteCalculator({
       route: route!,
       profitSettings: {
         type: profitType,
-        value: profitValue
+        value: profitValue,
+        roundingProfit: roundingProfit,  // 记录取整产生的利润
+        totalProfit: totalProfitToDistribute,  // 记录总利润
+        roundedSalesPrice: roundedSalesPrice  // 记录取整后的销售价
       }
     })
   }
@@ -322,7 +398,7 @@ export default function TransportQuoteCalculator({
                       duration={route.duration}
                       durationFormatted={route.durationFormatted}
                       hasFerry={route.hasFerry}
-                      height={250}
+                      height={500}
                     />
                   </div>
                 )}
@@ -541,17 +617,30 @@ export default function TransportQuoteCalculator({
                       </div>
                       <div className="flex justify-between py-1">
                         <span className="text-gray-600">
-                          利润金额:
+                          设定利润:
                           {profitType === 'percent' && (
                             <span className="text-gray-400 ml-1">({profitValue}%)</span>
                           )}
                         </span>
                         <span className="font-medium text-amber-600">+€{profitAmount.toFixed(2)}</span>
                       </div>
+                      {roundingProfit > 0 && (
+                        <div className="flex justify-between py-1">
+                          <span className="text-gray-600">
+                            取整利润:
+                            <span className="text-gray-400 ml-1 text-xs">(1-49→50, 51-99→100)</span>
+                          </span>
+                          <span className="font-medium text-green-600">+€{roundingProfit.toFixed(2)}</span>
+                        </div>
+                      )}
                       <div className="border-t pt-2 mt-2">
+                        <div className="flex justify-between py-1">
+                          <span className="text-gray-600">总利润:</span>
+                          <span className="font-bold text-amber-600">€{totalProfit.toFixed(2)}</span>
+                        </div>
                         <div className="flex justify-between">
                           <span className="font-medium text-gray-700">销售价合计:</span>
-                          <span className="text-xl font-bold text-blue-600">€{totalSalesPrice.toFixed(2)}</span>
+                          <span className="text-xl font-bold text-blue-600">€{roundedSalesPrice.toFixed(0)}</span>
                         </div>
                       </div>
                     </div>

@@ -3,7 +3,7 @@
  * 用于显示运输路线地图
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { MapPin, Navigation, AlertCircle, Loader2 } from 'lucide-react'
 
 // HERE Maps API Key（从环境变量获取）
@@ -157,9 +157,16 @@ export default function HereMapDisplay({
 }: HereMapDisplayProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
+  const mapInitializedRef = useRef(false)
   const [isLoaded, setIsLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  
+  // 稳定化依赖项 - 只在坐标真正变化时才触发重新初始化
+  const locationKey = useMemo(() => {
+    if (!origin || !destination) return ''
+    return `${origin.lat},${origin.lng}-${destination.lat},${destination.lng}`
+  }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng])
   
   useEffect(() => {
     // 检查 HERE SDK 是否加载
@@ -210,6 +217,22 @@ export default function HereMapDisplay({
       return
     }
     
+    // 防止重复初始化 - 如果已初始化且位置相同则跳过
+    if (mapInitializedRef.current && mapInstanceRef.current) {
+      setIsLoading(false)
+      return
+    }
+    
+    // 如果已有地图实例，先销毁
+    if (mapInstanceRef.current) {
+      try {
+        mapInstanceRef.current.dispose()
+      } catch (e) {
+        console.warn('销毁旧地图实例失败:', e)
+      }
+      mapInstanceRef.current = null
+    }
+    
     try {
       const H = window.H
       
@@ -236,6 +259,7 @@ export default function HereMapDisplay({
       )
       
       mapInstanceRef.current = map
+      mapInitializedRef.current = true
       
       // 添加地图交互
       const behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map))
@@ -301,25 +325,37 @@ export default function HereMapDisplay({
       // 如果有 polyline，绘制路线
       if (polyline) {
         try {
-          const routePoints = decodeFlexiblePolyline(polyline)
+          // 支持多段 polyline（用 | 分隔）
+          const polylineSegments = polyline.split('|').filter(p => p.length > 0)
+          let hasDrawnRoute = false
           
-          if (routePoints.length > 0) {
-            const lineString = new H.geo.LineString()
-            routePoints.forEach(point => {
-              lineString.pushPoint({ lat: point.lat, lng: point.lng })
-            })
+          for (const segment of polylineSegments) {
+            const routePoints = decodeFlexiblePolyline(segment)
             
-            const routeLine = new H.map.Polyline(lineString, {
-              style: {
-                strokeColor: '#2563eb',
-                lineWidth: 4
-              }
-            })
-            group.addObject(routeLine)
+            if (routePoints.length > 0) {
+              const lineString = new H.geo.LineString()
+              routePoints.forEach(point => {
+                lineString.pushPoint({ lat: point.lat, lng: point.lng })
+              })
+              
+              const routeLine = new H.map.Polyline(lineString, {
+                style: {
+                  strokeColor: '#2563eb',
+                  lineWidth: 5
+                }
+              })
+              group.addObject(routeLine)
+              hasDrawnRoute = true
+            }
+          }
+          
+          // 如果没有成功绘制任何路线，绘制虚线连接
+          if (!hasDrawnRoute) {
+            throw new Error('无法解码 polyline')
           }
         } catch (err) {
           console.error('解码 polyline 失败:', err)
-          // 绘制直线连接
+          // 绘制虚线连接
           const lineString = new H.geo.LineString()
           lineString.pushPoint({ lat: origin.lat, lng: origin.lng })
           waypoints.forEach(wp => {
@@ -339,7 +375,7 @@ export default function HereMapDisplay({
           group.addObject(routeLine)
         }
       } else {
-        // 没有 polyline，绘制直线
+        // 没有 polyline，绘制虚线
         const lineString = new H.geo.LineString()
         lineString.pushPoint({ lat: origin.lat, lng: origin.lng })
         waypoints.forEach(wp => {
@@ -367,18 +403,46 @@ export default function HereMapDisplay({
         bounds: group.getBoundingBox()
       })
       
+      // 延迟触发 resize 以确保地图瓦片正确渲染
+      // 这对于在模态框中显示的地图尤为重要
+      setTimeout(() => {
+        if (mapInstanceRef.current && mapRef.current) {
+          mapInstanceRef.current.getViewPort().resize()
+          // 再次设置视图边界，确保所有内容可见
+          const bounds = group.getBoundingBox()
+          if (bounds) {
+            mapInstanceRef.current.getViewModel().setLookAtData({ bounds })
+          }
+        }
+      }, 100)
+      
+      // 再次延迟，确保动画完成后地图完全渲染
+      setTimeout(() => {
+        if (mapInstanceRef.current && mapRef.current) {
+          mapInstanceRef.current.getViewPort().resize()
+        }
+      }, 300)
+      
       setIsLoading(false)
       
       // 清理函数
       return () => {
-        map.dispose()
+        mapInitializedRef.current = false
+        if (mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.dispose()
+          } catch (e) {
+            console.warn('清理地图实例失败:', e)
+          }
+          mapInstanceRef.current = null
+        }
       }
     } catch (err: any) {
       console.error('初始化地图失败:', err)
       setError(err.message || '初始化地图失败')
       setIsLoading(false)
     }
-  }, [isLoaded, origin, destination, waypoints, polyline])
+  }, [isLoaded, locationKey, polyline])
   
   // 窗口大小变化时重新调整地图
   useEffect(() => {
