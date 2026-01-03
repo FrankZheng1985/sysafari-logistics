@@ -27,7 +27,7 @@ interface HereMapDisplayProps {
   origin?: Location
   destination?: Location
   waypoints?: Location[]
-  polyline?: string
+  polyline?: string | string[]  // 支持单个字符串或字符串数组
   height?: number | string
   showInfo?: boolean
   distance?: number
@@ -325,8 +325,16 @@ export default function HereMapDisplay({
       // 如果有 polyline，绘制路线
       if (polyline) {
         try {
-          // 支持多段 polyline（用 | 分隔）
-          const polylineSegments = polyline.split('|').filter(p => p.length > 0)
+          // 将 polyline 转为数组（支持字符串或数组格式）
+          let polylineSegments: string[] = []
+          if (Array.isArray(polyline)) {
+            // 如果是数组，直接使用
+            polylineSegments = polyline.filter(p => p && p.length > 0)
+          } else if (typeof polyline === 'string') {
+            // 如果是字符串，用 | 分隔（兼容旧格式）
+            polylineSegments = polyline.split('|').filter(p => p.length > 0)
+          }
+          
           let hasDrawnRoute = false
           
           for (const segment of polylineSegments) {

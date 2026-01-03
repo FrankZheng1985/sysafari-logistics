@@ -94,7 +94,7 @@ interface RouteInfo {
   duration: number
   durationFormatted?: string
   hasFerry?: boolean
-  polyline?: string
+  polyline?: string[]  // 修改为数组类型
 }
 
 // 组件属性接口
