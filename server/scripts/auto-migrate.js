@@ -2687,6 +2687,19 @@ export async function runMigrations() {
     
     console.log('  ✅ 工商信息管理表就绪')
 
+    // ==================== 客户跟单员字段迁移 ====================
+    // 添加 assigned_operator 和 assigned_operator_name 字段
+    const operatorColCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'customers' AND column_name = 'assigned_operator'
+    `)
+    if (operatorColCheck.rows.length === 0) {
+      await client.query(`ALTER TABLE customers ADD COLUMN assigned_operator INTEGER`)
+      await client.query(`ALTER TABLE customers ADD COLUMN assigned_operator_name TEXT`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_assigned_operator ON customers(assigned_operator)`)
+      console.log('  ✅ customers.assigned_operator 字段已添加 (跟单员分配)')
+    }
+
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）
     try {

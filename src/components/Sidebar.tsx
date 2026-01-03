@@ -31,7 +31,7 @@ import {
   FilePlus,
   Link2
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import { loadMenuSettingsAsync } from '../utils/menuSettings'
 import { getApiBaseUrl } from '../utils/api'
@@ -157,6 +157,7 @@ const menuItems: MenuItem[] = [
       { path: '/finance/fees', label: '费用管理', icon: CreditCard },
       { path: '/finance/reports', label: '报表分析', icon: TrendingUp },
       { path: '/finance/statements', label: '财务报表', icon: FileText },
+      { path: '/finance/commission', label: '提成管理', icon: TrendingUp },
     ],
   },
   {
@@ -165,7 +166,6 @@ const menuItems: MenuItem[] = [
     icon: Settings,
     children: [
       { path: '/tools/product-pricing', label: '产品定价', icon: FileText },
-      { path: '/tools/tariff-calculator', label: '关税计算', icon: FileText },
       { path: '/tools/shared-tax', label: '共享税号库', icon: FileText },
     ],
   },
@@ -187,12 +187,45 @@ const menuItems: MenuItem[] = [
   },
 ]
 
+// 自动收起延迟时间（毫秒）
+const AUTO_COLLAPSE_DELAY = 15000
+
 export default function Sidebar() {
   const navigate = useNavigate()
   const { hasAnyPermission, isAdmin, isManager } = useAuth()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['/bookings', '/documents', '/tools', '/system', '/crm', '/tms', '/suppliers', '/inspection', '/finance'])
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({})
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  
+  // 存储每个父级菜单的自动收起定时器
+  const collapseTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
+  
+  // 清理定时器
+  const clearCollapseTimer = useCallback((parentPath: string) => {
+    if (collapseTimersRef.current[parentPath]) {
+      clearTimeout(collapseTimersRef.current[parentPath])
+      delete collapseTimersRef.current[parentPath]
+    }
+  }, [])
+  
+  // 设置自动收起定时器
+  const setAutoCollapseTimer = useCallback((parentPath: string) => {
+    // 先清除已有的定时器
+    clearCollapseTimer(parentPath)
+    
+    // 设置新的定时器，15秒后自动收起
+    collapseTimersRef.current[parentPath] = setTimeout(() => {
+      setExpandedItems(prev => prev.filter(p => p !== parentPath))
+      delete collapseTimersRef.current[parentPath]
+    }, AUTO_COLLAPSE_DELAY)
+  }, [clearCollapseTimer])
+  
+  // 组件卸载时清理所有定时器
+  useEffect(() => {
+    return () => {
+      Object.values(collapseTimersRef.current).forEach(timer => clearTimeout(timer))
+    }
+  }, [])
 
   // 检查用户是否有权限访问某个菜单
   const canAccessMenu = (path: string): boolean => {
@@ -316,7 +349,13 @@ export default function Sidebar() {
     }
   }
 
-  const renderMenuItem = (item: MenuItem, level = 0) => {
+  // 处理子菜单点击，设置自动收起定时器
+  const handleChildClick = (parentPath: string) => {
+    // 点击子菜单后，设置15秒后自动收起父级菜单
+    setAutoCollapseTimer(parentPath)
+  }
+
+  const renderMenuItem = (item: MenuItem, level = 0, parentPath?: string) => {
     const hasChildren = item.children && item.children.length > 0
     const expanded = isExpanded(item.path)
 
@@ -358,13 +397,14 @@ export default function Sidebar() {
                     }
                     return true
                   })
-                  .map((child) => renderMenuItem(child, level + 1))}
+                  .map((child) => renderMenuItem(child, level + 1, item.path))}
               </div>
             )}
           </>
         ) : (
           <NavLink
             to={item.path}
+            onClick={() => parentPath && handleChildClick(parentPath)}
             className={({ isActive }) =>
               clsx(
                 'flex items-center gap-1 px-2 py-1 text-xs transition-colors rounded mx-1',

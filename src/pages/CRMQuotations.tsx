@@ -883,10 +883,7 @@ export default function CRMQuotations() {
     { label: '销售机会', path: '/crm/opportunities' },
     { label: '报价管理', path: '/crm/quotations' },
     { label: '合同管理', path: '/crm/contracts' },
-    { label: '客户反馈', path: '/crm/feedbacks' },
-    { label: '提成规则', path: '/crm/commission/rules' },
-    { label: '提成记录', path: '/crm/commission/records' },
-    { label: '月度结算', path: '/crm/commission/settlements' },
+    { label: '客户反馈', path: '/crm/feedbacks' }
   ]
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -109,7 +109,6 @@ const routeTitleMap: Record<string, string> = {
   // 工具
   '/tools': '工具',
   '/tools/inquiry': '工具 - 服务费配置',
-  '/tools/tariff-calculator': '工具 - 关税计算',
   '/tools/shared-tax': '工具 - 共享税号库',
   '/tools/product-pricing': '工具 - 产品定价',
   // 帮助中心

@@ -171,16 +171,10 @@ export default function CRMCommissionSettlements() {
   })
 
   const tabs = [
-    { label: '仪表盘', path: '/crm' },
-    { label: '客户管理', path: '/crm/customers' },
-    { label: '销售机会', path: '/crm/opportunities' },
-    { label: '报价管理', path: '/crm/quotations' },
-    { label: '合同管理', path: '/crm/contracts' },
-    { label: '客户反馈', path: '/crm/feedbacks' },
-    { label: '提成规则', path: '/crm/commission/rules' },
-    { label: '提成记录', path: '/crm/commission/records' },
-    { label: '惩罚记录', path: '/crm/commission/penalties' },
-    { label: '月度结算', path: '/crm/commission/settlements' }
+    { label: '提成规则', path: '/finance/commission/rules' },
+    { label: '提成记录', path: '/finance/commission/records' },
+    { label: '惩罚记录', path: '/finance/commission/penalties' },
+    { label: '月度结算', path: '/finance/commission/settlements' }
   ]
 
   useEffect(() => {
@@ -643,9 +637,9 @@ export default function CRMCommissionSettlements() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title="CRM客户关系管理"
+        title="提成管理"
         tabs={tabs}
-        activeTab="/crm/commission/settlements"
+        activeTab="/finance/commission/settlements"
         onTabChange={(path) => navigate(path)}
       />
 

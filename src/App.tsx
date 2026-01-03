@@ -30,7 +30,7 @@ import LastMileQuickQuote from './pages/LastMile/LastMileQuickQuote'
 import LastMileShipments from './pages/LastMile/LastMileShipments'
 import LastMileRateImport from './pages/LastMile/LastMileRateImport'
 import Inquiry from './pages/Inquiry'
-import TariffCalculator from './pages/TariffCalculator'
+// TariffCalculator 已移至客户门户系统
 import MenuSettings from './pages/MenuSettings'
 import UserManage from './pages/UserManage'
 import RolePermissions from './pages/RolePermissions'
@@ -215,12 +215,12 @@ function AppRoutes() {
         <Route path="/suppliers/import" element={<SupplierPriceImport />} />
         <Route path="/tools" element={<ToolsDashboard />} />
         <Route path="/tools/inquiry" element={<Inquiry />} />
-        <Route path="/tools/tariff-calculator" element={<TariffCalculator />} />
         <Route path="/tools/shared-tax" element={<SharedTaxManage />} />
         <Route path="/tools/product-pricing" element={<ProductPricing />} />
         {/* CRM 客户关系管理 */}
         <Route path="/crm" element={<CRMDashboard />} />
         <Route path="/crm/customers" element={<CRMCustomers />} />
+        <Route path="/crm/customers/new" element={<CRMCustomerEdit />} />
         <Route path="/crm/customers/:id/edit" element={<CRMCustomerEdit />} />
         <Route path="/crm/customers/:id" element={<CRMCustomerDetail />} />
         <Route path="/crm/bill/:id" element={<CRMBillDetails />} />
@@ -266,6 +266,12 @@ function AppRoutes() {
         <Route path="/finance/statements" element={<FinancialStatements />} />
         <Route path="/finance/bank-accounts" element={<BankAccounts />} />
         <Route path="/finance/fee-approvals" element={<FeeItemApprovals />} />
+        {/* 提成管理（财务模块下） */}
+        <Route path="/finance/commission" element={<CRMCommissionRules />} />
+        <Route path="/finance/commission/rules" element={<CRMCommissionRules />} />
+        <Route path="/finance/commission/records" element={<CRMCommissionRecords />} />
+        <Route path="/finance/commission/penalties" element={<CRMPenaltyRecords />} />
+        <Route path="/finance/commission/settlements" element={<CRMCommissionSettlements />} />
       </Routes>
     </Layout>
   )

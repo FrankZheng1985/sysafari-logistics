@@ -332,9 +332,9 @@ export async function createCustomer(data) {
       contact_person, contact_phone, contact_email, tax_number,
       legal_person, registered_capital, establishment_date, business_scope,
       bank_name, bank_account, credit_limit, payment_terms,
-      assigned_to, assigned_name, tags, notes, status,
+      assigned_to, assigned_name, assigned_operator, assigned_operator_name, tags, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     customerCode,
@@ -363,6 +363,8 @@ export async function createCustomer(data) {
     data.paymentTerms || '',
     data.assignedTo || null,
     data.assignedName || '',
+    data.assignedOperator || null,
+    data.assignedOperatorName || '',
     data.tags ? JSON.stringify(data.tags) : '[]',
     data.notes || '',
     data.status || 'active'
@@ -421,6 +423,8 @@ export async function updateCustomer(id, data) {
     paymentTerms: 'payment_terms',
     assignedTo: 'assigned_to',
     assignedName: 'assigned_name',
+    assignedOperator: 'assigned_operator',
+    assignedOperatorName: 'assigned_operator_name',
     notes: 'notes',
     status: 'status'
   }
@@ -2710,6 +2714,8 @@ export function convertCustomerToCamelCase(row) {
     paymentTerms: row.payment_terms,
     assignedTo: row.assigned_to,
     assignedName: row.assigned_name,
+    assignedOperator: row.assigned_operator,
+    assignedOperatorName: row.assigned_operator_name,
     tags,
     notes: row.notes,
     status: row.status,
