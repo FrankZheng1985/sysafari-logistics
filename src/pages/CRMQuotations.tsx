@@ -140,6 +140,8 @@ export default function CRMQuotations() {
     subject: '',
     quoteDate: new Date().toISOString().split('T')[0],
     validUntil: '',
+    validityValue: 30,
+    validityUnit: 'day' as 'day' | 'week' | 'month' | 'year',
     currency: 'EUR',
     terms: '',
     notes: '',
@@ -331,11 +333,28 @@ export default function CRMQuotations() {
       return
     }
 
+    // 检查是否已有手动添加的项目（非产品项目）
+    const hasManualItems = formData.items.some(item => 
+      item.name.trim() && !item.productId && !item.feeItemId
+    )
+    
+    if (hasManualItems) {
+      if (!confirm('导入产品会清除当前手动添加的项目，是否继续？')) {
+        return
+      }
+    }
+
     const newItems: QuotationItem[] = []
+    let detectedCurrency: string | null = null
     
     for (const productId of selectedProducts) {
       const feeItems = await loadProductFeeItems(productId)
       feeItems.forEach(feeItem => {
+        // 记录第一个费用项的币种
+        if (!detectedCurrency && feeItem.currency) {
+          detectedCurrency = feeItem.currency
+        }
+        
         newItems.push({
           name: feeItem.feeName,
           nameEn: feeItem.feeNameEn || '',
@@ -351,11 +370,13 @@ export default function CRMQuotations() {
     }
 
     if (newItems.length > 0) {
-      // 合并到现有项目（移除空白项）
-      const existingItems = formData.items.filter(item => item.name.trim())
+      // 只保留从产品导入的项目（有 productId 的），清除手动项目
+      const existingProductItems = formData.items.filter(item => item.productId || item.feeItemId)
       setFormData(prev => ({
         ...prev,
-        items: [...existingItems, ...newItems]
+        items: [...existingProductItems, ...newItems],
+        // 使用检测到的币种，如果没有则保持原币种
+        currency: detectedCurrency || prev.currency
       }))
     }
 
@@ -395,6 +416,31 @@ export default function CRMQuotations() {
 
   const handleOpenModal = (item?: Quotation) => {
     if (item) {
+      // 计算有效期值和单位
+      let validityValue = 30
+      let validityUnit: 'day' | 'week' | 'month' | 'year' = 'day'
+      
+      if (item.validUntil && item.quoteDate) {
+        const startDate = new Date(item.quoteDate)
+        const endDate = new Date(item.validUntil)
+        const daysDiff = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+        
+        // 智能判断最合适的单位
+        if (daysDiff % 365 === 0 && daysDiff >= 365) {
+          validityValue = daysDiff / 365
+          validityUnit = 'year'
+        } else if (daysDiff % 30 === 0 && daysDiff >= 30) {
+          validityValue = daysDiff / 30
+          validityUnit = 'month'
+        } else if (daysDiff % 7 === 0 && daysDiff >= 7) {
+          validityValue = daysDiff / 7
+          validityUnit = 'week'
+        } else {
+          validityValue = daysDiff
+          validityUnit = 'day'
+        }
+      }
+      
       setEditingItem(item)
       setFormData({
         customerId: item.customerId || '',
@@ -402,6 +448,8 @@ export default function CRMQuotations() {
         subject: item.subject || '',
         quoteDate: item.quoteDate || new Date().toISOString().split('T')[0],
         validUntil: item.validUntil || '',
+        validityValue,
+        validityUnit,
         currency: item.currency || 'EUR',
         terms: '',
         notes: '',
@@ -415,6 +463,8 @@ export default function CRMQuotations() {
         subject: '',
         quoteDate: new Date().toISOString().split('T')[0],
         validUntil: '',
+        validityValue: 30,
+        validityUnit: 'day',
         currency: 'EUR',
         terms: '',
         notes: '',
@@ -486,10 +536,29 @@ export default function CRMQuotations() {
 
     const { subtotal, totalAmount } = calculateTotals()
 
+    // 计算有效期截止日期
+    const quoteDate = new Date(formData.quoteDate)
+    let validUntil = new Date(quoteDate)
+    
+    switch (formData.validityUnit) {
+      case 'day':
+        validUntil.setDate(validUntil.getDate() + formData.validityValue)
+        break
+      case 'week':
+        validUntil.setDate(validUntil.getDate() + formData.validityValue * 7)
+        break
+      case 'month':
+        validUntil.setMonth(validUntil.getMonth() + formData.validityValue)
+        break
+      case 'year':
+        validUntil.setFullYear(validUntil.getFullYear() + formData.validityValue)
+        break
+    }
+
     try {
       const url = editingItem 
-        ? `/api/quotations/${editingItem.id}`
-        : '/api/quotations'
+        ? `${API_BASE}/api/quotations/${editingItem.id}`
+        : `${API_BASE}/api/quotations`
       const method = editingItem ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
@@ -497,6 +566,7 @@ export default function CRMQuotations() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          validUntil: validUntil.toISOString().split('T')[0],
           subtotal,
           totalAmount,
           items: formData.items.filter(item => item.name)
@@ -1162,7 +1232,7 @@ export default function CRMQuotations() {
                         customerName: customer?.customerName || ''
                       })
                     }}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                     title="选择客户"
                   >
                     <option value="">请选择客户</option>
@@ -1177,13 +1247,13 @@ export default function CRMQuotations() {
                     type="text"
                     value={formData.subject}
                     onChange={(e) => setFormData({...formData, subject: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                     placeholder="请输入报价主题"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">报价日期</label>
                   <DatePicker
@@ -1193,20 +1263,42 @@ export default function CRMQuotations() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">有效期至</label>
-                  <DatePicker
-                    value={formData.validUntil}
-                    onChange={(value) => setFormData({...formData, validUntil: value})}
-                    placeholder="选择有效期"
+                  <label className="block text-xs text-gray-600 mb-1">有效期</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.validityValue}
+                    onChange={(e) => setFormData({...formData, validityValue: parseInt(e.target.value) || 1})}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    placeholder="数量"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">币种</label>
+                  <label className="block text-xs text-gray-600 mb-1">单位</label>
+                  <select
+                    value={formData.validityUnit}
+                    onChange={(e) => setFormData({...formData, validityUnit: e.target.value as 'day' | 'week' | 'month' | 'year'})}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="day">天</option>
+                    <option value="week">周</option>
+                    <option value="month">月</option>
+                    <option value="year">年</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    币种
+                    {formData.items.some(item => item.productId || item.feeItemId) && (
+                      <span className="ml-1 text-[10px] text-amber-600">(由产品决定)</span>
+                    )}
+                  </label>
                   <select
                     value={formData.currency}
                     onChange={(e) => setFormData({...formData, currency: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    title="选择币种"
+                    disabled={formData.items.some(item => item.productId || item.feeItemId)}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    title={formData.items.some(item => item.productId || item.feeItemId) ? "已导入产品，币种由产品决定" : "选择币种"}
                   >
                     <option value="CNY">人民币 (CNY)</option>
                     <option value="USD">美元 (USD)</option>
@@ -1236,8 +1328,8 @@ export default function CRMQuotations() {
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <div className="grid grid-cols-12 gap-2 text-[10px] text-gray-500 font-medium">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-12 gap-3 text-[10px] text-gray-500 font-medium">
                     <div className="col-span-3">项目名称（中文）</div>
                     <div className="col-span-2">英文名称</div>
                     <div className="col-span-2 text-center">数量</div>
@@ -1247,36 +1339,21 @@ export default function CRMQuotations() {
                   </div>
 
                   {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                    <div key={index} className="grid grid-cols-12 gap-3 items-center">
                       <input
                         type="text"
                         value={item.name}
                         onChange={(e) => handleItemChange(index, 'name', e.target.value)}
-                        className="col-span-3 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        className="col-span-3 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="中文名称"
                       />
-                      <div className="col-span-2 flex gap-1">
-                        <input
-                          type="text"
-                          value={item.nameEn || ''}
-                          onChange={(e) => handleItemChange(index, 'nameEn', e.target.value)}
-                          className="flex-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                          placeholder="英文名称"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleTranslateItem(index)}
-                          disabled={translatingIndex === index || !item.name.trim()}
-                          className="px-1.5 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
-                          title="翻译"
-                        >
-                          {translatingIndex === index ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Languages className="w-3 h-3" />
-                          )}
-                        </button>
-                      </div>
+                      <input
+                        type="text"
+                        value={item.nameEn || ''}
+                        onChange={(e) => handleItemChange(index, 'nameEn', e.target.value)}
+                        className="col-span-2 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        placeholder="英文名称"
+                      />
                       <input
                         type="text"
                         inputMode="decimal"
@@ -1285,7 +1362,7 @@ export default function CRMQuotations() {
                           const val = e.target.value.replace(/[^0-9.]/g, '')
                           handleItemChange(index, 'quantity', parseFloat(val) || 0)
                         }}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-center"
+                        className="col-span-2 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-center"
                         placeholder="数量"
                       />
                       <input
@@ -1296,10 +1373,10 @@ export default function CRMQuotations() {
                           const val = e.target.value.replace(/[^0-9.]/g, '')
                           handleItemChange(index, 'price', parseFloat(val) || 0)
                         }}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        className="col-span-2 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="单价"
                       />
-                      <div className="col-span-2 text-xs text-gray-700 font-medium">
+                      <div className="col-span-2 text-sm text-gray-700 font-medium">
                         {formatCurrency(item.quantity * item.price, formData.currency)}
                       </div>
                       <button
@@ -1568,6 +1645,8 @@ export default function CRMQuotations() {
                       subject: `${getInquiryTypeLabel(selectedInquiry.inquiryType)} - ${selectedInquiry.inquiryNumber}`,
                       quoteDate: new Date().toISOString().split('T')[0],
                       validUntil: '',
+                      validityValue: 30,
+                      validityUnit: 'day',
                       currency: 'EUR',
                       terms: '',
                       notes: `关联询价：${selectedInquiry.inquiryNumber}`,
