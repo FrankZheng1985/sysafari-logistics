@@ -409,34 +409,49 @@ export default function HereMapDisplay({
       
       // 自适应视图以显示所有标记
       const bounds = group.getBoundingBox()
-      if (bounds) {
-        // 使用 lookAt 方法，带 padding 和缩放限制
-        // 计算一个合适的缩放级别，确保不会太低
-        const mapWidth = mapRef.current?.clientWidth || 800
-        const mapHeight = mapRef.current?.clientHeight || 500
+      
+      // 计算合适的缩放级别的辅助函数
+      const calculateOptimalZoom = (bounds: any): number => {
+        if (!bounds) return 6
         
-        // 设置视图边界，同时保持一定的边距
-        map.getViewModel().setLookAtData({
-          bounds: bounds,
-          padding: { top: 50, left: 50, bottom: 50, right: 50 }
-        })
+        // 获取边界的跨度
+        const latSpan = Math.abs(bounds.getTop() - bounds.getBottom())
+        const lngSpan = Math.abs(bounds.getRight() - bounds.getLeft())
         
-        // 立即检查并调整缩放级别
-        const initialZoom = map.getZoom()
-        console.log('初始缩放级别:', initialZoom)
+        // 根据跨度计算缩放级别
+        // 较大的跨度需要更低的缩放级别
+        const maxSpan = Math.max(latSpan, lngSpan)
         
-        // 如果缩放级别太低，设置一个最小值
-        if (initialZoom < 4) {
-          map.setZoom(4)
-          console.log('调整缩放级别到: 4')
-        } else if (initialZoom > 14) {
-          map.setZoom(14)
-          console.log('调整缩放级别到: 14')
-        }
+        let zoom = 6 // 默认缩放级别
+        if (maxSpan < 0.5) zoom = 12
+        else if (maxSpan < 1) zoom = 10
+        else if (maxSpan < 2) zoom = 9
+        else if (maxSpan < 5) zoom = 8
+        else if (maxSpan < 10) zoom = 7
+        else if (maxSpan < 20) zoom = 6
+        else if (maxSpan < 40) zoom = 5
+        else zoom = 4
+        
+        return zoom
       }
       
       // 立即触发 resize 以确保地图容器尺寸正确
       map.getViewPort().resize()
+      
+      if (bounds) {
+        // 计算最佳缩放级别
+        const optimalZoom = calculateOptimalZoom(bounds)
+        console.log('计算的最佳缩放级别:', optimalZoom)
+        
+        // 获取边界中心
+        const center = bounds.getCenter()
+        
+        // 直接设置中心和缩放级别，而不是使用 setLookAtData
+        map.setCenter(center)
+        map.setZoom(optimalZoom)
+        
+        console.log('初始设置 - 中心:', center, '缩放:', optimalZoom)
+      }
       
       // 延迟触发 resize 以确保地图瓦片正确渲染
       // 这对于在模态框中显示的地图尤为重要
@@ -445,23 +460,16 @@ export default function HereMapDisplay({
           try {
             mapInstanceRef.current.getViewPort().resize()
             
-            // 再次设置视图边界，确保所有内容可见
-            const currentBounds = group.getBoundingBox()
-            if (currentBounds) {
-              mapInstanceRef.current.getViewModel().setLookAtData({ 
-                bounds: currentBounds,
-                padding: { top: 50, left: 50, bottom: 50, right: 50 }
-              })
-            }
-            
-            // 再次检查缩放级别
             const currentZoom = mapInstanceRef.current.getZoom()
             console.log('100ms后缩放级别:', currentZoom)
+            
+            // 如果缩放级别太低，强制设置
             if (currentZoom < 4) {
-              mapInstanceRef.current.setZoom(4)
+              mapInstanceRef.current.setZoom(6)
+              console.log('强制调整缩放级别到: 6')
             }
           } catch (e) {
-            console.warn('重设地图视图失败:', e)
+            console.warn('100ms调整失败:', e)
           }
         }
       }, 100)
@@ -472,33 +480,36 @@ export default function HereMapDisplay({
           try {
             mapInstanceRef.current.getViewPort().resize()
             
-            // 强制设置一个合理的缩放级别
             const finalZoom = mapInstanceRef.current.getZoom()
             console.log('300ms后缩放级别:', finalZoom)
-            if (finalZoom < 4) {
-              mapInstanceRef.current.setZoom(4)
-            }
             
-            // 确保地图中心在边界内
-            const finalBounds = group.getBoundingBox()
-            if (finalBounds) {
-              const center = finalBounds.getCenter()
-              mapInstanceRef.current.setCenter(center)
+            // 如果缩放级别太低，再次强制设置
+            if (finalZoom < 4) {
+              // 重新计算并设置
+              const currentBounds = group.getBoundingBox()
+              if (currentBounds) {
+                const center = currentBounds.getCenter()
+                const optimalZoom = calculateOptimalZoom(currentBounds)
+                mapInstanceRef.current.setCenter(center)
+                mapInstanceRef.current.setZoom(Math.max(optimalZoom, 5))
+                console.log('300ms强制设置 - 缩放:', Math.max(optimalZoom, 5))
+              }
             }
           } catch (e) {
-            console.warn('最终调整地图视图失败:', e)
+            console.warn('300ms调整失败:', e)
           }
         }
       }, 300)
       
-      // 第三次延迟，确保所有渲染完成
+      // 第三次延迟，最终确认
       setTimeout(() => {
         if (mapInstanceRef.current && mapRef.current) {
           try {
             mapInstanceRef.current.getViewPort().resize()
-            console.log('500ms后最终缩放级别:', mapInstanceRef.current.getZoom())
+            const finalZoom = mapInstanceRef.current.getZoom()
+            console.log('500ms最终缩放级别:', finalZoom)
           } catch (e) {
-            console.warn('500ms后调整失败:', e)
+            console.warn('500ms调整失败:', e)
           }
         }
       }, 500)
