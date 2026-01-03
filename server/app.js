@@ -60,6 +60,7 @@ import helpVideoRoutes from './modules/help-video/routes.js'
 import portalApiRoutes from './modules/portal-api/routes.js'
 import openApiRoutes from './modules/open-api/routes.js'
 import businessInfoRoutes from './modules/business-info/routes.js'
+import inquiryRoutes from './modules/inquiry/routes.js'
 import { initSocketServer } from './modules/chat/socket.js'
 
 // 供应商模块初始化
@@ -232,6 +233,9 @@ app.use('/open-api', openApiRoutes)
 
 // 工商信息管理模块
 app.use('/api/business-info', businessInfoRoutes)
+
+// 客户询价模块
+app.use('/api/inquiry', inquiryRoutes)
 
 // ==================== 错误处理 ====================
 

@@ -21,18 +21,17 @@ NC='\033[0m'
 
 # 基础配置
 PROJECT_DIR="/Users/fengzheng/sysafari-logistics"
-OSS_ENDPOINT="oss-cn-hongkong.aliyuncs.com"
+OSS_ENDPOINT="oss-cn-shenzhen.aliyuncs.com"  # OSS Bucket 实际在深圳区域
 
-# 环境配置
-declare -A CONFIGS
+# 环境配置 (兼容 bash 3.x)
 # 生产环境
-CONFIGS[prod_bucket]="sysafari-logistics"
-CONFIGS[prod_domain]="erp.xianfeng-eu.com"
-CONFIGS[prod_api]="https://api.xianfeng-eu.com"
-# 演示环境（使用独立的演示 API）
-CONFIGS[demo_bucket]="sysafari-logistics-demo"
-CONFIGS[demo_domain]="demo.xianfeng-eu.com"
-CONFIGS[demo_api]="https://demo-api.xianfeng-eu.com"
+PROD_BUCKET="sysafari-logistics"
+PROD_DOMAIN="erp.xianfeng-eu.com"
+PROD_API="https://api.xianfeng-eu.com"
+# 演示环境
+DEMO_BUCKET="sysafari-logistics-demo"
+DEMO_DOMAIN="demo.xianfeng-eu.com"
+DEMO_API="https://demo-api.xianfeng-eu.com"
 
 # 获取部署环境
 ENV="${1:-prod}"
@@ -55,9 +54,20 @@ show_help() {
 # 部署函数
 deploy_env() {
     local env=$1
-    local bucket="${CONFIGS[${env}_bucket]}"
-    local domain="${CONFIGS[${env}_domain]}"
-    local api="${CONFIGS[${env}_api]}"
+    local bucket=""
+    local domain=""
+    local api=""
+    
+    # 根据环境设置变量
+    if [ "$env" = "prod" ]; then
+        bucket="$PROD_BUCKET"
+        domain="$PROD_DOMAIN"
+        api="$PROD_API"
+    elif [ "$env" = "demo" ]; then
+        bucket="$DEMO_BUCKET"
+        domain="$DEMO_DOMAIN"
+        api="$DEMO_API"
+    fi
     
     echo ""
     echo -e "${BLUE}============================================${NC}"
@@ -92,10 +102,10 @@ deploy_env() {
         --meta "Cache-Control:public, max-age=31536000, immutable"
     
     # 上传其他文件
-    for file in dist/*.{js,css,ico,svg,png,jpg,jpeg,gif} 2>/dev/null; do
-        if [ -f "$file" ]; then
+    for file in dist/*.js dist/*.css dist/*.ico dist/*.svg dist/*.png dist/*.jpg dist/*.jpeg dist/*.gif; do
+        if [ -f "$file" ] 2>/dev/null; then
             filename=$(basename "$file")
-            ossutil cp "$file" oss://${bucket}/${filename} \
+            ossutil cp "$file" "oss://${bucket}/${filename}" \
                 --acl public-read \
                 --meta "Cache-Control:public, max-age=31536000, immutable" \
                 2>/dev/null || true
@@ -178,4 +188,3 @@ if [ "$ENV" = "demo" ] || [ "$ENV" = "all" ]; then
     echo "  演示环境: https://demo.xianfeng-eu.com"
 fi
 echo ""
-
