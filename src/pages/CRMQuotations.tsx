@@ -8,7 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
-import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+import { getApiBaseUrl } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE = getApiBaseUrl()
@@ -115,7 +115,7 @@ interface InquiryTask {
 
 export default function CRMQuotations() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, getAccessToken } = useAuth()
   
   // 视图切换：quotations / inquiries
   const [activeView, setActiveView] = useState<'quotations' | 'inquiries'>('quotations')
@@ -214,8 +214,9 @@ export default function CRMQuotations() {
       })
       if (inquiryFilterStatus) params.append('status', inquiryFilterStatus)
 
+      const token = await getAccessToken()
       const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`, {
-        headers: getAuthHeaders()
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
       const data = await response.json()
       
@@ -233,8 +234,9 @@ export default function CRMQuotations() {
   // 加载任务统计
   const loadTaskStats = async () => {
     try {
+      const token = await getAccessToken()
       const response = await fetch(`${API_BASE}/api/inquiry/tasks/stats`, {
-        headers: getAuthHeaders()
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
       const data = await response.json()
       if (data.errCode === 200) {
@@ -248,9 +250,10 @@ export default function CRMQuotations() {
   // 开始处理询价
   const handleStartProcessing = async (inquiry: CustomerInquiry) => {
     try {
+      const token = await getAccessToken()
       const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries/${inquiry.id}/start`, {
         method: 'POST',
-        headers: getAuthHeaders()
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
       const data = await response.json()
       if (data.errCode === 200) {
