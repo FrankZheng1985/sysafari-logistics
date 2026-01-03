@@ -154,10 +154,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     // 创建 Socket 连接
     const socketUrl = getSocketUrl()
     const newSocket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
+      // 先用 polling 建立连接，然后自动升级到 websocket（官方推荐，更稳定）
+      transports: ['polling', 'websocket'],
+      upgrade: true,  // 允许从 polling 升级到 websocket
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: import.meta.env.DEV ? 3 : 10,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
+      timeout: 10000,
+      autoConnect: true,
     })
 
     // 连接成功
@@ -178,9 +183,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setIsConnected(false)
     })
 
-    // 连接错误
+    // 连接错误 - 开发环境静默处理，避免控制台噪音
     newSocket.on('connect_error', (error) => {
-      console.error('[Socket] 连接错误:', error)
+      if (import.meta.env.PROD) {
+        console.error('[Socket] 连接错误:', error.message)
+      }
       setIsConnected(false)
     })
 

@@ -286,7 +286,7 @@ function App() {
   return (
     <ToastProvider>
       <AuthProvider>
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             {/* 登录页面 */}
             <Route path="/login" element={<Login />} />
