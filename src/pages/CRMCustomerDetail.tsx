@@ -618,8 +618,12 @@ export default function CRMCustomerDetail() {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">负责人</span>
+              <span className="text-gray-500">负责销售员</span>
               <span className="text-gray-900">{customer.assignedName || '-'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">负责跟单员</span>
+              <span className="text-gray-900">{(customer as any).assignedOperatorName || '-'}</span>
             </div>
           </div>
         </div>

@@ -282,13 +282,134 @@ export const COMMON_DUTY_RATES = {
     }
   },
 
-  // ==================== 第39章：塑料制品 ====================
+  // ==================== 第39章：塑料及其制品 ====================
+  '3901': {
+    rate: 6.5,
+    description: 'Polymers of ethylene, in primary forms',
+    descriptionCn: '初级形状的乙烯聚合物',
+    subCodes: {
+      '39011000': { rate: 6.5, description: 'Polyethylene with specific gravity < 0.94', descriptionCn: '比重<0.94的聚乙烯' },
+      '39012000': { rate: 6.5, description: 'Polyethylene with specific gravity >= 0.94', descriptionCn: '比重>=0.94的聚乙烯' },
+      '39013000': { rate: 6.5, description: 'Ethylene-vinyl acetate copolymers', descriptionCn: '乙烯-醋酸乙烯酯共聚物' }
+    }
+  },
+  '3902': {
+    rate: 6.5,
+    description: 'Polymers of propylene or olefins, in primary forms',
+    descriptionCn: '初级形状的丙烯或烯烃聚合物',
+    subCodes: {
+      '39021000': { rate: 6.5, description: 'Polypropylene', descriptionCn: '聚丙烯' },
+      '39022000': { rate: 6.5, description: 'Polyisobutylene', descriptionCn: '聚异丁烯' }
+    }
+  },
+  '3903': {
+    rate: 6.5,
+    description: 'Polymers of styrene, in primary forms',
+    descriptionCn: '初级形状的苯乙烯聚合物',
+    subCodes: {
+      '39031100': { rate: 6.5, description: 'Expandable polystyrene', descriptionCn: '可发性聚苯乙烯' },
+      '39031900': { rate: 6.5, description: 'Other polystyrene', descriptionCn: '其他聚苯乙烯' }
+    }
+  },
+  '3904': {
+    rate: 6.5,
+    description: 'Polymers of vinyl chloride, in primary forms',
+    descriptionCn: '初级形状的氯乙烯聚合物',
+    subCodes: {
+      '39041000': { rate: 6.5, description: 'Polyvinyl chloride (PVC)', descriptionCn: '聚氯乙烯' },
+      '39042100': { rate: 6.5, description: 'Non-plasticised PVC', descriptionCn: '未增塑聚氯乙烯' },
+      '39042200': { rate: 6.5, description: 'Plasticised PVC', descriptionCn: '增塑聚氯乙烯' }
+    }
+  },
+  '3907': {
+    rate: 6.5,
+    description: 'Polyacetals, polyethers, polyesters, in primary forms',
+    descriptionCn: '初级形状的聚缩醛、聚醚、聚酯',
+    subCodes: {
+      '39072100': { rate: 6.5, description: 'Methylpolysiloxanes', descriptionCn: '甲基聚硅氧烷' },
+      '39076100': { rate: 6.5, description: 'Poly(ethylene terephthalate) PET', descriptionCn: '聚对苯二甲酸乙二醇酯(PET)' },
+      '39076900': { rate: 6.5, description: 'Other polyesters', descriptionCn: '其他聚酯' }
+    }
+  },
+  '3920': {
+    rate: 6.5,
+    description: 'Other plates, sheets, film, foil of plastics, non-cellular',
+    descriptionCn: '非泡沫塑料板、片、膜、箔',
+    subCodes: {
+      '39201000': { rate: 6.5, description: 'Of polymers of ethylene', descriptionCn: '乙烯聚合物制' },
+      '39201010': { rate: 6.5, description: 'Of polymers of ethylene, thickness <= 0.125mm', descriptionCn: '乙烯聚合物制，厚度<=0.125mm' },
+      '39201020': { rate: 6.5, description: 'Of polymers of ethylene, thickness > 0.125mm', descriptionCn: '乙烯聚合物制，厚度>0.125mm' },
+      '39201080': { rate: 6.5, description: 'Other of polymers of ethylene', descriptionCn: '其他乙烯聚合物制' },
+      '39201089': { rate: 6.5, description: 'Other of polymers of ethylene (not laminated)', descriptionCn: '其他乙烯聚合物制（非层压）' },
+      '39201090': { rate: 6.5, description: 'Other of polymers of ethylene', descriptionCn: '其他乙烯聚合物制' },
+      '39202000': { rate: 6.5, description: 'Of polymers of propylene', descriptionCn: '丙烯聚合物制' },
+      '39202010': { rate: 6.5, description: 'Of polymers of propylene, biaxially oriented', descriptionCn: '丙烯聚合物制，双向拉伸' },
+      '39202090': { rate: 6.5, description: 'Other of polymers of propylene', descriptionCn: '其他丙烯聚合物制' },
+      '39203000': { rate: 6.5, description: 'Of polymers of styrene', descriptionCn: '苯乙烯聚合物制' },
+      '39204300': { rate: 6.5, description: 'Of PVC, plasticised, >= 6% plasticiser', descriptionCn: '聚氯乙烯制，增塑剂>=6%' },
+      '39204900': { rate: 6.5, description: 'Of PVC, other', descriptionCn: '其他聚氯乙烯制' },
+      '39205100': { rate: 6.5, description: 'Of PMMA', descriptionCn: '聚甲基丙烯酸甲酯制' },
+      '39205900': { rate: 6.5, description: 'Of other acrylic polymers', descriptionCn: '其他丙烯酸聚合物制' },
+      '39206100': { rate: 6.5, description: 'Of polycarbonates', descriptionCn: '聚碳酸酯制' },
+      '39206200': { rate: 6.5, description: 'Of PET', descriptionCn: '聚对苯二甲酸乙二醇酯制' },
+      '39206300': { rate: 6.5, description: 'Of unsaturated polyesters', descriptionCn: '不饱和聚酯制' },
+      '39206900': { rate: 6.5, description: 'Of other polyesters', descriptionCn: '其他聚酯制' },
+      '39207100': { rate: 6.5, description: 'Of regenerated cellulose', descriptionCn: '再生纤维素制' },
+      '39207300': { rate: 6.5, description: 'Of cellulose acetate', descriptionCn: '醋酸纤维素制' },
+      '39207900': { rate: 6.5, description: 'Of other cellulose derivatives', descriptionCn: '其他纤维素衍生物制' },
+      '39209100': { rate: 6.5, description: 'Of polyvinyl butyral', descriptionCn: '聚乙烯醇缩丁醛制' },
+      '39209200': { rate: 6.5, description: 'Of polyamides', descriptionCn: '聚酰胺制' },
+      '39209300': { rate: 6.5, description: 'Of amino-resins', descriptionCn: '氨基树脂制' },
+      '39209400': { rate: 6.5, description: 'Of phenolic resins', descriptionCn: '酚醛树脂制' },
+      '39209900': { rate: 6.5, description: 'Of other plastics', descriptionCn: '其他塑料制' }
+    }
+  },
+  '3921': {
+    rate: 6.5,
+    description: 'Other plates, sheets, film, foil of plastics',
+    descriptionCn: '其他塑料板、片、膜、箔',
+    subCodes: {
+      '39211100': { rate: 6.5, description: 'Of polymers of styrene, cellular', descriptionCn: '泡沫苯乙烯聚合物制' },
+      '39211200': { rate: 6.5, description: 'Of PVC, cellular', descriptionCn: '泡沫聚氯乙烯制' },
+      '39211300': { rate: 6.5, description: 'Of polyurethanes, cellular', descriptionCn: '泡沫聚氨酯制' },
+      '39211900': { rate: 6.5, description: 'Of other plastics, cellular', descriptionCn: '其他泡沫塑料制' },
+      '39219000': { rate: 6.5, description: 'Other', descriptionCn: '其他' }
+    }
+  },
+  '3923': {
+    rate: 6.5,
+    description: 'Articles for conveyance or packing of goods, of plastics',
+    descriptionCn: '塑料制包装容器',
+    subCodes: {
+      '39231000': { rate: 6.5, description: 'Boxes, cases, crates', descriptionCn: '盒子、箱子' },
+      '39232100': { rate: 6.5, description: 'Sacks and bags of ethylene polymers', descriptionCn: '乙烯聚合物制袋子' },
+      '39232900': { rate: 6.5, description: 'Sacks and bags of other plastics', descriptionCn: '其他塑料制袋子' },
+      '39233000': { rate: 6.5, description: 'Carboys, bottles, flasks', descriptionCn: '坛、瓶、烧瓶' },
+      '39234000': { rate: 6.5, description: 'Spools, cops, bobbins', descriptionCn: '卷轴、卷筒' },
+      '39235000': { rate: 6.5, description: 'Stoppers, lids, caps', descriptionCn: '塞子、盖子' },
+      '39239000': { rate: 6.5, description: 'Other', descriptionCn: '其他' }
+    }
+  },
+  '3924': {
+    rate: 6.5,
+    description: 'Tableware, kitchenware, toilet articles of plastics',
+    descriptionCn: '塑料餐具、厨房用品、卫生用品',
+    subCodes: {
+      '39241000': { rate: 6.5, description: 'Tableware and kitchenware', descriptionCn: '餐具和厨房用品' },
+      '39249000': { rate: 6.5, description: 'Other', descriptionCn: '其他' }
+    }
+  },
   '3926': {
     rate: 6.5,
     description: 'Other articles of plastics',
     descriptionCn: '其他塑料制品',
     subCodes: {
-      '39269097': { rate: 6.5, description: 'Other articles of plastics', descriptionCn: '其他塑料制品' }
+      '39261000': { rate: 6.5, description: 'Office or school supplies', descriptionCn: '办公用品或学校用品' },
+      '39262000': { rate: 6.5, description: 'Articles of apparel and accessories', descriptionCn: '服装及附件' },
+      '39263000': { rate: 6.5, description: 'Fittings for furniture, coachwork', descriptionCn: '家具或车身用附件' },
+      '39264000': { rate: 6.5, description: 'Statuettes and ornamental articles', descriptionCn: '塑像及装饰品' },
+      '39269000': { rate: 6.5, description: 'Other articles of plastics', descriptionCn: '其他塑料制品' },
+      '39269097': { rate: 6.5, description: 'Other articles of plastics (nes)', descriptionCn: '其他塑料制品（未列名）' }
     }
   },
 
