@@ -193,23 +193,117 @@ export async function getMessageById(id) {
 // ==================== 审批相关 ====================
 
 /**
+ * 根据角色获取可见的审批类型
+ * @param {string} userRole - 用户角色
+ * @returns {string[]} 可见的审批类型列表
+ */
+export function getVisibleApprovalTypes(userRole) {
+  // admin 和 boss 可以看到所有审批类型
+  if (['admin', 'boss'].includes(userRole)) {
+    return ['order', 'payment', 'supplier', 'fee', 'inquiry', 'void', 'contract']
+  }
+  
+  // 财务角色可以看到财务相关审批
+  if (['finance_manager', 'finance'].includes(userRole)) {
+    return ['payment', 'fee', 'void']
+  }
+  
+  // 经理角色可以看到订单、供应商、客户询价审批
+  if (['manager', 'czjl'].includes(userRole)) {
+    return ['order', 'supplier', 'inquiry', 'contract']
+  }
+  
+  // 操作员角色只能看到订单审批（自己提交的）
+  if (['operator', 'do'].includes(userRole)) {
+    return ['order']
+  }
+  
+  // 其他角色默认不能看到任何审批
+  return []
+}
+
+/**
+ * 检查用户是否有审批权限
+ * @param {string} userRole - 用户角色
+ * @param {string} approvalType - 审批类型
+ * @returns {boolean} 是否有权限
+ */
+export function canApprove(userRole, approvalType) {
+  // admin 和 boss 可以审批所有类型
+  if (['admin', 'boss'].includes(userRole)) {
+    return true
+  }
+  
+  // 财务经理可以审批财务相关
+  if (userRole === 'finance_manager' && ['payment', 'fee', 'void'].includes(approvalType)) {
+    return true
+  }
+  
+  // 操作经理可以审批订单、供应商、客户询价
+  if (['manager', 'czjl'].includes(userRole) && ['order', 'supplier', 'inquiry', 'contract'].includes(approvalType)) {
+    return true
+  }
+  
+  return false
+}
+
+/**
+ * 获取有审批权限的角色列表
+ * @returns {string[]} 有审批权限的角色
+ */
+export function getApproverRoles() {
+  return ['admin', 'boss', 'finance_manager', 'czjl', 'manager']
+}
+
+/**
  * 获取审批列表
+ * @param {Object} params
+ * @param {string} params.applicantId - 申请人ID
+ * @param {string} params.approverId - 审批人ID
+ * @param {string} params.userRole - 用户角色（用于权限过滤）
+ * @param {string} params.userId - 用户ID
+ * @param {string} params.status - 审批状态
+ * @param {string} params.approvalType - 审批类型
+ * @param {number} params.page - 页码
+ * @param {number} params.pageSize - 每页数量
  */
 export async function getApprovals(params = {}) {
   const db = getDatabase()
-  const { applicantId, approverId, status, approvalType, page = 1, pageSize = 20 } = params
+  const { applicantId, approverId, userRole, userId, status, approvalType, page = 1, pageSize = 20 } = params
+  
+  // 使用默认角色（最低权限）如果没有提供
+  const effectiveRole = userRole || 'operator'
+  
+  // 检查用户是否有权限查看审批
+  const approverRoles = getApproverRoles()
+  const hasApprovalPermission = approverRoles.includes(effectiveRole)
   
   let whereConditions = ['1=1']
   const queryParams = []
   let paramIndex = 1
+  
+  // 始终根据用户角色过滤可见的审批类型（admin 和 boss 除外）
+  if (!['admin', 'boss'].includes(effectiveRole)) {
+    const visibleTypes = getVisibleApprovalTypes(effectiveRole)
+    if (visibleTypes.length > 0) {
+      const typePlaceholders = visibleTypes.map((_, i) => `$${paramIndex++}`).join(', ')
+      whereConditions.push(`approval_type IN (${typePlaceholders})`)
+      queryParams.push(...visibleTypes)
+    } else {
+      // 如果没有可见类型，只能看自己提交的
+      whereConditions.push(`applicant_id = $${paramIndex++}`)
+      queryParams.push(userId || applicantId || '')
+    }
+  }
   
   if (applicantId) {
     whereConditions.push(`applicant_id = $${paramIndex++}`)
     queryParams.push(applicantId)
   }
   
-  if (approverId) {
-    whereConditions.push(`approver_id = $${paramIndex++}`)
+  // 对于非管理员审批人，只能看到分配给自己或未分配的审批
+  if (approverId && hasApprovalPermission && !['admin', 'boss'].includes(effectiveRole)) {
+    whereConditions.push(`(approver_id = $${paramIndex++} OR approver_id IS NULL)`)
     queryParams.push(approverId)
   }
   
@@ -247,14 +341,41 @@ export async function getApprovals(params = {}) {
 
 /**
  * 获取待审批数量
+ * @param {string} approverId - 审批人ID
+ * @param {string} userRole - 用户角色（用于判断审批权限）
  */
-export async function getPendingApprovalCount(approverId) {
+export async function getPendingApprovalCount(approverId, userRole) {
   const db = getDatabase()
+  
+  // 使用默认角色（最低权限）如果没有提供
+  const effectiveRole = userRole || 'operator'
+  
+  // 只有有审批权限的角色才能看到待审批数量
+  // admin, boss, finance_manager, czjl, manager 有审批权限
+  const approverRoles = ['admin', 'boss', 'finance_manager', 'czjl', 'manager']
+  
+  if (!approverRoles.includes(effectiveRole)) {
+    // 普通用户（如 do、operator、finance）没有审批权限，返回0
+    return 0
+  }
+  
+  // 根据角色获取可见的审批类型
+  const visibleTypes = getVisibleApprovalTypes(effectiveRole)
+  
   let sql = `SELECT COUNT(*) as count FROM approvals WHERE status = 'pending'`
   const params = []
+  let paramIndex = 1
   
-  if (approverId) {
-    sql += ` AND (approver_id = $1 OR approver_id IS NULL)`
+  // 添加类型过滤（admin 和 boss 可以看所有类型）
+  if (!['admin', 'boss'].includes(effectiveRole) && visibleTypes.length > 0) {
+    const typePlaceholders = visibleTypes.map((_, i) => `$${paramIndex++}`).join(', ')
+    sql += ` AND approval_type IN (${typePlaceholders})`
+    params.push(...visibleTypes)
+  }
+  
+  // 对于非管理员角色，只能看到分配给自己或未分配审批人的审批
+  if (approverId && !['admin', 'boss'].includes(userRole)) {
+    sql += ` AND (approver_id = $${paramIndex++} OR approver_id IS NULL)`
     params.push(approverId)
   }
   
@@ -415,18 +536,42 @@ export async function updateAlertRule(id, data) {
 
 /**
  * 获取预警日志列表
+ * @param {Object} params - 查询参数
+ * @param {string} params.alertType - 预警类型
+ * @param {string} params.alertLevel - 预警级别
+ * @param {string} params.status - 预警状态
+ * @param {string} params.userRole - 用户角色（用于权限过滤）
+ * @param {number} params.page - 页码
+ * @param {number} params.pageSize - 每页数量
  */
 export async function getAlertLogs(params = {}) {
   const db = getDatabase()
-  const { alertType, alertLevel, status, page = 1, pageSize = 20 } = params
+  const { alertType, alertLevel, status, userRole, page = 1, pageSize = 20 } = params
   
   let whereConditions = ['1=1']
   const queryParams = []
   let paramIndex = 1
   
+  // 始终根据用户角色过滤可见的预警类型（如果没有角色，默认使用最低权限）
+  const visibleTypes = getVisibleAlertTypes(userRole || 'operator')
+  if (visibleTypes.length > 0) {
+    const typePlaceholders = visibleTypes.map((_, i) => `$${paramIndex++}`).join(', ')
+    whereConditions.push(`alert_type IN (${typePlaceholders})`)
+    queryParams.push(...visibleTypes)
+  } else {
+    // 没有可见类型，返回空结果
+    whereConditions.push('1=0')
+  }
+  
+  // 如果指定了特定类型，还需要检查该类型是否在可见范围内
   if (alertType && alertType !== 'all') {
-    whereConditions.push(`alert_type = $${paramIndex++}`)
-    queryParams.push(alertType)
+    if (visibleTypes.includes(alertType)) {
+      whereConditions.push(`alert_type = $${paramIndex++}`)
+      queryParams.push(alertType)
+    } else {
+      // 请求的类型不在可见范围内，返回空结果
+      whereConditions.push('1=0')
+    }
   }
   
   if (alertLevel && alertLevel !== 'all') {
@@ -462,13 +607,70 @@ export async function getAlertLogs(params = {}) {
 }
 
 /**
- * 获取活跃预警数量
+ * 根据角色获取可见的预警类型
+ * @param {string} userRole - 用户角色
+ * @returns {string[]} 可见的预警类型列表
  */
-export async function getActiveAlertCount() {
+export function getVisibleAlertTypes(userRole) {
+  // 所有角色都能看到的预警类型
+  const commonTypes = ['order_overdue']
+  
+  // 财务相关预警 - 只有财务角色能看
+  const financeTypes = ['payment_due', 'payment_term_due', 'credit_limit', 'customer_overdue']
+  
+  // CRM/商务相关预警
+  const crmTypes = ['contract_expire']
+  
+  // 供应商相关预警
+  const supplierTypes = ['license_expire']
+  
+  // 管理员和老板能看所有
+  if (['admin', 'boss'].includes(userRole)) {
+    return [...commonTypes, ...financeTypes, ...crmTypes, ...supplierTypes]
+  }
+  
+  // 财务角色（finance_manager, finance）能看财务预警
+  if (['finance_manager', 'finance'].includes(userRole)) {
+    return [...commonTypes, ...financeTypes]
+  }
+  
+  // 经理角色（manager, czjl）能看CRM和供应商预警
+  if (['manager', 'czjl'].includes(userRole)) {
+    return [...commonTypes, ...crmTypes, ...supplierTypes]
+  }
+  
+  // 其他角色（do, operator等）只能看通用预警
+  return commonTypes
+}
+
+/**
+ * 获取活跃预警数量
+ * @param {string} userRole - 用户角色（用于权限过滤）
+ */
+export async function getActiveAlertCount(userRole) {
   const db = getDatabase()
+  
+  // 根据角色获取可见的预警类型
+  const effectiveRole = userRole || 'operator'
+  const visibleTypes = getVisibleAlertTypes(effectiveRole)
+  
+  // 调试日志
+  console.log('[Alert权限调试] getActiveAlertCount - userRole:', userRole, ', effectiveRole:', effectiveRole, ', visibleTypes:', visibleTypes)
+  
+  if (visibleTypes.length === 0) {
+    return 0
+  }
+  
+  // 构建 IN 子句
+  const placeholders = visibleTypes.map((_, i) => `$${i + 1}`).join(', ')
+  
   const result = await db.prepare(`
-    SELECT COUNT(*) as count FROM alert_logs WHERE status = 'active'
-  `).get()
+    SELECT COUNT(*) as count FROM alert_logs 
+    WHERE status = 'active' AND alert_type IN (${placeholders})
+  `).get(...visibleTypes)
+  
+  console.log('[Alert权限调试] getActiveAlertCount - result count:', result.count)
+  
   return parseInt(result.count)
 }
 
@@ -529,9 +731,27 @@ export async function ignoreAlert(id, data) {
 
 /**
  * 获取预警统计
+ * @param {string} userRole - 用户角色（用于权限过滤）
  */
-export async function getAlertStats() {
+export async function getAlertStats(userRole) {
   const db = getDatabase()
+  
+  // 根据角色获取可见的预警类型
+  const visibleTypes = getVisibleAlertTypes(userRole || 'operator')
+  
+  if (visibleTypes.length === 0) {
+    return {
+      active_count: 0,
+      handled_count: 0,
+      ignored_count: 0,
+      danger_count: 0,
+      warning_count: 0,
+      info_count: 0
+    }
+  }
+  
+  // 构建 IN 子句
+  const placeholders = visibleTypes.map((_, i) => `$${i + 1}`).join(', ')
   
   const stats = await db.prepare(`
     SELECT 
@@ -542,7 +762,8 @@ export async function getAlertStats() {
       COUNT(*) FILTER (WHERE alert_level = 'warning' AND status = 'active') as warning_count,
       COUNT(*) FILTER (WHERE alert_level = 'info' AND status = 'active') as info_count
     FROM alert_logs
-  `).get()
+    WHERE alert_type IN (${placeholders})
+  `).get(...visibleTypes)
   
   return stats
 }
@@ -575,5 +796,6 @@ export default {
   createAlertLog,
   handleAlert,
   ignoreAlert,
-  getAlertStats
+  getAlertStats,
+  getVisibleAlertTypes
 }

@@ -174,8 +174,28 @@ export async function getMessageById(req, res) {
  */
 export async function getApprovals(req, res) {
   try {
-    const { applicantId, approverId, status, approvalType, page, pageSize } = req.query
-    const result = await model.getApprovals({ applicantId, approverId, status, approvalType, page, pageSize })
+    const { applicantId, approverId, userRole, userId, status, approvalType, page, pageSize } = req.query
+    
+    // 优先使用请求中的用户角色，否则从 req.user 获取
+    let role = userRole
+    let currentUserId = userId
+    if (!role && req.user?.role) {
+      role = req.user.role
+    }
+    if (!currentUserId && req.user?.id) {
+      currentUserId = req.user.id
+    }
+    
+    const result = await model.getApprovals({ 
+      applicantId, 
+      approverId, 
+      userRole: role,
+      userId: currentUserId,
+      status, 
+      approvalType, 
+      page, 
+      pageSize 
+    })
     res.json({ errCode: 200, data: result })
   } catch (error) {
     console.error('获取审批列表失败:', error)
@@ -188,8 +208,15 @@ export async function getApprovals(req, res) {
  */
 export async function getPendingApprovalCount(req, res) {
   try {
-    const { approverId } = req.query
-    const count = await model.getPendingApprovalCount(approverId)
+    const { approverId, userRole } = req.query
+    
+    // 优先使用请求中的用户角色，否则从 req.user 获取
+    let role = userRole
+    if (!role && req.user?.role) {
+      role = req.user.role
+    }
+    
+    const count = await model.getPendingApprovalCount(approverId, role)
     res.json({ errCode: 200, data: { count } })
   } catch (error) {
     console.error('获取待审批数量失败:', error)
@@ -250,6 +277,26 @@ export async function processApproval(req, res) {
     
     if (approval.status !== 'pending') {
       return res.json({ errCode: 400, msg: '该审批已处理' })
+    }
+    
+    // 检查用户是否有权限审批此类型
+    const approverRole = data.approverRole || req.user?.role
+    if (!approverRole) {
+      return res.json({ errCode: 400, msg: '缺少审批人角色信息' })
+    }
+    
+    // 验证审批权限
+    const hasPermission = model.canApprove(approverRole, approval.approval_type)
+    if (!hasPermission) {
+      return res.json({ errCode: 403, msg: '您没有权限审批此类型的请求' })
+    }
+    
+    // 如果审批已分配给特定审批人，检查是否是该审批人
+    if (approval.approver_id && approval.approver_id !== data.approverId) {
+      // admin 和 boss 可以审批任何已分配的审批
+      if (!['admin', 'boss'].includes(approverRole)) {
+        return res.json({ errCode: 403, msg: '此审批已分配给其他审批人' })
+      }
     }
     
     await model.processApproval(id, data)
@@ -328,11 +375,22 @@ export async function updateAlertRule(req, res) {
 
 /**
  * 获取预警日志列表
+ * 根据用户角色过滤可见的预警
  */
 export async function getAlertLogs(req, res) {
   try {
-    const { alertType, alertLevel, status, page, pageSize } = req.query
-    const result = await model.getAlertLogs({ alertType, alertLevel, status, page, pageSize })
+    const { alertType, alertLevel, status, userRole, page, pageSize } = req.query
+    
+    // 获取用户角色
+    let role = userRole
+    if (!role && req.user?.role) {
+      role = req.user.role
+    }
+    
+    // 调试日志：查看用户角色
+    console.log('[Alert权限调试] getAlertLogs - userRole from query:', userRole, ', role from req.user:', req.user?.role, ', final role:', role)
+    
+    const result = await model.getAlertLogs({ alertType, alertLevel, status, userRole: role, page, pageSize })
     res.json({ errCode: 200, data: result })
   } catch (error) {
     console.error('获取预警日志失败:', error)
@@ -342,10 +400,19 @@ export async function getAlertLogs(req, res) {
 
 /**
  * 获取活跃预警数量
+ * 根据用户角色过滤可见的预警
  */
 export async function getActiveAlertCount(req, res) {
   try {
-    const count = await model.getActiveAlertCount()
+    const { userRole } = req.query
+    
+    // 获取用户角色
+    let role = userRole
+    if (!role && req.user?.role) {
+      role = req.user.role
+    }
+    
+    const count = await model.getActiveAlertCount(role)
     res.json({ errCode: 200, data: { count } })
   } catch (error) {
     console.error('获取活跃预警数量失败:', error)
@@ -395,10 +462,22 @@ export async function ignoreAlert(req, res) {
 
 /**
  * 获取预警统计
+ * 根据用户角色过滤可见的预警统计
  */
 export async function getAlertStats(req, res) {
   try {
-    const stats = await model.getAlertStats()
+    const { userRole } = req.query
+    
+    // 获取用户角色
+    let role = userRole
+    if (!role && req.user?.role) {
+      role = req.user.role
+    }
+    
+    // 调试日志：查看用户角色
+    console.log('[Alert权限调试] getAlertStats - userRole from query:', userRole, ', role from req.user:', req.user?.role, ', final role:', role)
+    
+    const stats = await model.getAlertStats(role)
     res.json({ errCode: 200, data: stats })
   } catch (error) {
     console.error('获取预警统计失败:', error)
@@ -408,16 +487,29 @@ export async function getAlertStats(req, res) {
 
 /**
  * 获取通知概览（未读消息 + 待审批 + 活跃预警）
+ * 根据用户角色过滤可见的审批和预警数量
  */
 export async function getNotificationOverview(req, res) {
   try {
-    const { userId } = req.query
+    const { userId, userRole } = req.query
+    
+    // 同时获取用户角色（从请求中获取或从数据库查询）
+    let role = userRole
+    if (!role && req.user?.role) {
+      role = req.user.role
+    }
+    
+    // 调试日志
+    console.log('[Alert权限调试] getNotificationOverview - userId:', userId, ', userRole from query:', userRole, ', final role:', role)
     
     const [unreadCount, pendingCount, alertCount] = await Promise.all([
       userId ? model.getUnreadCount(userId) : 0,
-      model.getPendingApprovalCount(userId),
-      model.getActiveAlertCount()
+      model.getPendingApprovalCount(userId, role),
+      model.getActiveAlertCount(role)
     ])
+    
+    // 调试日志 - 查看各计数结果
+    console.log('[Alert权限调试] getNotificationOverview - unreadCount:', unreadCount, ', pendingCount:', pendingCount, ', alertCount:', alertCount)
     
     res.json({ 
       errCode: 200, 
