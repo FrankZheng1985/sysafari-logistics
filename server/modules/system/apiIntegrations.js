@@ -3,6 +3,7 @@
  * 用于管理已对接的第三方API服务和基础设施监控
  */
 
+import 'dotenv/config'  // 确保环境变量已加载
 import { getDatabase } from '../../config/database.js'
 import https from 'https'
 import http from 'http'

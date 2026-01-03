@@ -5,6 +5,7 @@
  * 文档: https://openapi.qichacha.com/
  */
 
+import 'dotenv/config'  // 确保环境变量已加载
 import crypto from 'crypto'
 import * as model from './model.js'
 

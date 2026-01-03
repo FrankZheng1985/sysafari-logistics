@@ -3,6 +3,7 @@
  * 用于同步腾讯云OCR和COS的余额及用量
  */
 
+import 'dotenv/config'  // 确保环境变量已加载
 import crypto from 'crypto'
 import https from 'https'
 
