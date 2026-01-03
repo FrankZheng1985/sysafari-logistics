@@ -323,43 +323,47 @@ export default function HereMapDisplay({
         }
       })
       
+      // 将标记组添加到地图
+      map.addObject(group)
+      
+      // 路线需要单独添加到地图（不通过 Group），以确保在 WebGL 模式下正确渲染
+      let routeLine: any = null
+      
       // 如果有 polyline，绘制路线
       if (polyline) {
         try {
           // 将 polyline 转为数组（支持字符串或数组格式）
           let polylineSegments: string[] = []
           if (Array.isArray(polyline)) {
-            // 如果是数组，直接使用
             polylineSegments = polyline.filter(p => p && p.length > 0)
           } else if (typeof polyline === 'string') {
-            // 如果是字符串，用 | 分隔（兼容旧格式）
             polylineSegments = polyline.split('|').filter(p => p.length > 0)
           }
           
-          let hasDrawnRoute = false
+          // 合并所有段的点到一个 LineString
+          const lineString = new H.geo.LineString()
+          let totalPoints = 0
           
           for (const segment of polylineSegments) {
             const routePoints = decodeFlexiblePolyline(segment)
-            
             if (routePoints.length > 0) {
-              const lineString = new H.geo.LineString()
               routePoints.forEach(point => {
                 lineString.pushPoint({ lat: point.lat, lng: point.lng })
               })
-              
-              const routeLine = new H.map.Polyline(lineString, {
-                style: {
-                  strokeColor: '#2563eb',
-                  lineWidth: 5
-                }
-              })
-              group.addObject(routeLine)
-              hasDrawnRoute = true
+              totalPoints += routePoints.length
             }
           }
           
-          // 如果没有成功绘制任何路线，绘制虚线连接
-          if (!hasDrawnRoute) {
+          if (totalPoints > 0) {
+            // 创建路线 Polyline - 直接添加到地图而不是 Group
+            routeLine = new H.map.Polyline(lineString, {
+              style: {
+                strokeColor: '#2563eb',
+                lineWidth: 5
+              }
+            })
+            map.addObject(routeLine)
+          } else {
             throw new Error('无法解码 polyline')
           }
         } catch (err) {
@@ -374,14 +378,14 @@ export default function HereMapDisplay({
           })
           lineString.pushPoint({ lat: destination.lat, lng: destination.lng })
           
-          const routeLine = new H.map.Polyline(lineString, {
+          routeLine = new H.map.Polyline(lineString, {
             style: {
               strokeColor: '#2563eb',
               lineWidth: 3,
               lineDash: [4, 4]
             }
           })
-          group.addObject(routeLine)
+          map.addObject(routeLine)
         }
       } else {
         // 没有 polyline，绘制虚线
@@ -394,23 +398,31 @@ export default function HereMapDisplay({
         })
         lineString.pushPoint({ lat: destination.lat, lng: destination.lng })
         
-        const routeLine = new H.map.Polyline(lineString, {
+        routeLine = new H.map.Polyline(lineString, {
           style: {
             strokeColor: '#2563eb',
             lineWidth: 3,
             lineDash: [4, 4]
           }
         })
-        group.addObject(routeLine)
+        map.addObject(routeLine)
       }
       
-      // 将组添加到地图
-      map.addObject(group)
-      
-      // 自适应视图以显示所有标记
-      const bounds = group.getBoundingBox()
+      // 自适应视图以显示所有对象（标记 + 路线）
+      let bounds = group.getBoundingBox()
+      if (routeLine) {
+        const routeBounds = routeLine.getBoundingBox()
+        if (routeBounds) {
+          if (bounds) {
+            bounds = bounds.mergeRect(routeBounds)
+          } else {
+            bounds = routeBounds
+          }
+        }
+      }
       
       // 计算合适的缩放级别的辅助函数
+      // 最小缩放级别为6，约对应500公里范围
       const calculateOptimalZoom = (bounds: any): number => {
         if (!bounds) return 6
         
@@ -419,18 +431,15 @@ export default function HereMapDisplay({
         const lngSpan = Math.abs(bounds.getRight() - bounds.getLeft())
         
         // 根据跨度计算缩放级别
-        // 较大的跨度需要更低的缩放级别
         const maxSpan = Math.max(latSpan, lngSpan)
         
-        let zoom = 6 // 默认缩放级别
+        let zoom = 6 // 默认和最小缩放级别（约500公里）
         if (maxSpan < 0.5) zoom = 12
         else if (maxSpan < 1) zoom = 10
         else if (maxSpan < 2) zoom = 9
         else if (maxSpan < 5) zoom = 8
         else if (maxSpan < 10) zoom = 7
-        else if (maxSpan < 20) zoom = 6
-        else if (maxSpan < 40) zoom = 5
-        else zoom = 4
+        else zoom = 6 // 超过10度跨度也保持在6级（约500公里）
         
         return zoom
       }
@@ -454,22 +463,17 @@ export default function HereMapDisplay({
       }
       
       // 延迟触发 resize 以确保地图瓦片正确渲染
-      // 这对于在模态框中显示的地图尤为重要
       setTimeout(() => {
         if (mapInstanceRef.current && mapRef.current) {
           try {
             mapInstanceRef.current.getViewPort().resize()
-            
             const currentZoom = mapInstanceRef.current.getZoom()
-            console.log('100ms后缩放级别:', currentZoom)
-            
-            // 如果缩放级别太低，强制设置
-            if (currentZoom < 4) {
+            // 最小缩放级别为6（约500公里）
+            if (currentZoom < 6) {
               mapInstanceRef.current.setZoom(6)
-              console.log('强制调整缩放级别到: 6')
             }
           } catch (e) {
-            console.warn('100ms调整失败:', e)
+            console.warn('resize调整失败:', e)
           }
         }
       }, 100)
@@ -479,40 +483,16 @@ export default function HereMapDisplay({
         if (mapInstanceRef.current && mapRef.current) {
           try {
             mapInstanceRef.current.getViewPort().resize()
-            
             const finalZoom = mapInstanceRef.current.getZoom()
-            console.log('300ms后缩放级别:', finalZoom)
-            
-            // 如果缩放级别太低，再次强制设置
-            if (finalZoom < 4) {
-              // 重新计算并设置
-              const currentBounds = group.getBoundingBox()
-              if (currentBounds) {
-                const center = currentBounds.getCenter()
-                const optimalZoom = calculateOptimalZoom(currentBounds)
-                mapInstanceRef.current.setCenter(center)
-                mapInstanceRef.current.setZoom(Math.max(optimalZoom, 5))
-                console.log('300ms强制设置 - 缩放:', Math.max(optimalZoom, 5))
-              }
+            // 最小缩放级别为6（约500公里）
+            if (finalZoom < 6) {
+              mapInstanceRef.current.setZoom(6)
             }
           } catch (e) {
-            console.warn('300ms调整失败:', e)
+            console.warn('resize调整失败:', e)
           }
         }
       }, 300)
-      
-      // 第三次延迟，最终确认
-      setTimeout(() => {
-        if (mapInstanceRef.current && mapRef.current) {
-          try {
-            mapInstanceRef.current.getViewPort().resize()
-            const finalZoom = mapInstanceRef.current.getZoom()
-            console.log('500ms最终缩放级别:', finalZoom)
-          } catch (e) {
-            console.warn('500ms调整失败:', e)
-          }
-        }
-      }, 500)
       
       setIsLoading(false)
       

@@ -146,7 +146,8 @@ export default function CRMQuotations() {
     currency: 'EUR',
     terms: '',
     notes: '',
-    items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[]
+    items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[],
+    inquiryId: '' // 关联的询价ID
   })
   const [translatingIndex, setTranslatingIndex] = useState<number | null>(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
@@ -459,7 +460,8 @@ export default function CRMQuotations() {
         currency: item.currency || 'EUR',
         terms: '',
         notes: '',
-        items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
+        inquiryId: '' // 编辑时不关联询价
       })
     } else {
       setEditingItem(null)
@@ -474,7 +476,8 @@ export default function CRMQuotations() {
         currency: 'EUR',
         terms: '',
         notes: '',
-        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
+        inquiryId: '' // 新建时不关联询价
       })
     }
     setShowModal(true)
@@ -1690,7 +1693,8 @@ export default function CRMQuotations() {
                         currency: 'EUR',
                         terms: '',
                         notes: `关联询价：${selectedInquiry.inquiryNumber}`,
-                        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+                        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
+                        inquiryId: selectedInquiry.id // 关联询价ID
                       })
                       setActiveView('quotations')
                       setShowModal(true)
@@ -1739,7 +1743,8 @@ export default function CRMQuotations() {
                 unit: item.unit,
                 price: item.price,
                 amount: item.amount
-              }))
+              })),
+              inquiryId: inquiry.id // 关联询价ID，用于更新询价状态
             })
             
             // 清除待处理询价

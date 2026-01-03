@@ -245,6 +245,8 @@ export default function TransportQuoteCalculator({
       
       // 处理路线数据
       if (routeData.errCode === 200 && routeData.data) {
+        console.log('API 返回的路线数据:', routeData.data.route)
+        console.log('Polyline 字段:', routeData.data.route.polyline)
         setRoute(routeData.data.route)
         // 设置HERE估算的费用项
         setCostItems(routeData.data.costItems.map((item: any, index: number) => ({

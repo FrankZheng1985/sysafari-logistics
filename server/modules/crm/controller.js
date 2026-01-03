@@ -1165,7 +1165,7 @@ export async function getQuotationById(req, res) {
  */
 export async function createQuotation(req, res) {
   try {
-    const { customerId, customerName } = req.body
+    const { customerId, customerName, inquiryId, totalAmount } = req.body
     
     if (!customerId && !customerName) {
       return badRequest(res, '客户信息为必填项')
@@ -1177,6 +1177,24 @@ export async function createQuotation(req, res) {
       createdByName: req.user?.name || '系统'
     })
     const newQuotation = await model.getQuotationById(result.id)
+    
+    // 如果关联了询价，更新询价状态为"已报价"
+    if (inquiryId) {
+      try {
+        const inquiryModel = await import('../inquiry/model.js')
+        await inquiryModel.setInquiryQuote(inquiryId, {
+          totalQuote: totalAmount || 0,
+          quotedBy: req.user?.id,
+          quotedByName: req.user?.name,
+          validUntil: req.body.validUntil,
+          crmQuoteId: result.id
+        })
+        console.log(`✅ 询价 ${inquiryId} 状态已更新为"已报价"，关联报价单 ${result.id}`)
+      } catch (inquiryError) {
+        console.error('更新询价状态失败:', inquiryError)
+        // 不影响报价单创建，继续返回成功
+      }
+    }
     
     return success(res, newQuotation, '创建成功')
   } catch (error) {
@@ -1191,6 +1209,7 @@ export async function createQuotation(req, res) {
 export async function updateQuotation(req, res) {
   try {
     const { id } = req.params
+    const { status } = req.body
     
     const existing = await model.getQuotationById(id)
     if (!existing) {
@@ -1205,6 +1224,42 @@ export async function updateQuotation(req, res) {
     const updated = await model.updateQuotation(id, req.body)
     if (!updated) {
       return badRequest(res, '没有需要更新的字段')
+    }
+    
+    // 如果状态变更为"已发送"，执行发送相关操作
+    if (status === 'sent' && existing.status !== 'sent') {
+      try {
+        // 获取客户联系人邮箱
+        const contacts = await model.getContacts(existing.customerId)
+        const primaryContact = contacts?.find(c => c.isPrimary) || contacts?.[0]
+        
+        if (primaryContact?.email) {
+          // 尝试发送邮件通知
+          const emailService = await import('../../utils/emailService.js')
+          const emailCheck = emailService.checkEmailConfig()
+          
+          if (emailCheck.configured) {
+            try {
+              await emailService.sendQuotationEmail({
+                to: primaryContact.email,
+                customerName: existing.customerName,
+                quoteNumber: existing.quoteNumber,
+                validUntil: existing.validUntil
+              })
+              console.log(`✅ 报价单 ${existing.quoteNumber} 已发送邮件至 ${primaryContact.email}`)
+            } catch (emailError) {
+              console.warn('发送邮件失败:', emailError.message)
+            }
+          } else {
+            console.log(`⚠️ 邮件服务未配置，报价单 ${existing.quoteNumber} 状态已更新为"已发送"但未发送邮件`)
+          }
+        } else {
+          console.log(`⚠️ 客户 ${existing.customerName} 没有联系人邮箱，报价单状态已更新为"已发送"`)
+        }
+      } catch (sendError) {
+        console.error('发送报价单通知失败:', sendError)
+        // 不影响状态更新
+      }
     }
     
     const updatedQuotation = await model.getQuotationById(id)
