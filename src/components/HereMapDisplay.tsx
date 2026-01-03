@@ -248,23 +248,16 @@ export default function HereMapDisplay({
       const centerLat = (origin.lat + destination.lat) / 2
       const centerLng = (origin.lng + destination.lng) / 2
       
-      // 创建地图 - 禁用世界环绕，设置最小缩放级别
+      // 创建地图
       const map = new H.Map(
         mapRef.current,
         defaultLayers.vector.normal.map,
         {
           zoom: 5,
           center: { lat: centerLat, lng: centerLng },
-          // 设置地图边界和行为
           engineType: H.Map.EngineType.WEBGL,
         }
       )
-      
-      // 设置最小缩放级别为3，防止地球显示多次
-      map.getViewModel().setMinZoom(3)
-      
-      // 设置最大缩放级别
-      map.getViewModel().setMaxZoom(18)
       
       mapInstanceRef.current = map
       mapInitializedRef.current = true
@@ -421,13 +414,17 @@ export default function HereMapDisplay({
           bounds: bounds
         })
         
-        // 确保缩放级别不会太低，防止世界多次显示
+        // 确保缩放级别在合理范围内，防止世界多次显示
         setTimeout(() => {
-          const currentZoom = map.getZoom()
-          if (currentZoom < 3) {
-            map.setZoom(3)
-          } else if (currentZoom > 15) {
-            map.setZoom(15)
+          try {
+            const currentZoom = map.getZoom()
+            if (currentZoom < 3) {
+              map.setZoom(3)
+            } else if (currentZoom > 15) {
+              map.setZoom(15)
+            }
+          } catch (e) {
+            console.warn('设置缩放级别失败:', e)
           }
         }, 50)
       }
@@ -436,16 +433,20 @@ export default function HereMapDisplay({
       // 这对于在模态框中显示的地图尤为重要
       setTimeout(() => {
         if (mapInstanceRef.current && mapRef.current) {
-          mapInstanceRef.current.getViewPort().resize()
-          // 再次设置视图边界，确保所有内容可见
-          const currentBounds = group.getBoundingBox()
-          if (currentBounds) {
-            mapInstanceRef.current.getViewModel().setLookAtData({ bounds: currentBounds })
-          }
-          // 再次检查缩放级别
-          const currentZoom = mapInstanceRef.current.getZoom()
-          if (currentZoom < 3) {
-            mapInstanceRef.current.setZoom(3)
+          try {
+            mapInstanceRef.current.getViewPort().resize()
+            // 再次设置视图边界，确保所有内容可见
+            const currentBounds = group.getBoundingBox()
+            if (currentBounds) {
+              mapInstanceRef.current.getViewModel().setLookAtData({ bounds: currentBounds })
+            }
+            // 再次检查缩放级别
+            const currentZoom = mapInstanceRef.current.getZoom()
+            if (currentZoom < 3) {
+              mapInstanceRef.current.setZoom(3)
+            }
+          } catch (e) {
+            console.warn('重设地图视图失败:', e)
           }
         }
       }, 100)
@@ -453,11 +454,15 @@ export default function HereMapDisplay({
       // 再次延迟，确保动画完成后地图完全渲染
       setTimeout(() => {
         if (mapInstanceRef.current && mapRef.current) {
-          mapInstanceRef.current.getViewPort().resize()
-          // 最终检查缩放级别
-          const finalZoom = mapInstanceRef.current.getZoom()
-          if (finalZoom < 3) {
-            mapInstanceRef.current.setZoom(3)
+          try {
+            mapInstanceRef.current.getViewPort().resize()
+            // 最终检查缩放级别
+            const finalZoom = mapInstanceRef.current.getZoom()
+            if (finalZoom < 3) {
+              mapInstanceRef.current.setZoom(3)
+            }
+          } catch (e) {
+            console.warn('最终调整地图视图失败:', e)
           }
         }
       }, 300)
