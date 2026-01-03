@@ -59,6 +59,18 @@ function getStoredToken(): string | null {
 }
 
 /**
+ * 获取认证 Headers
+ * 用于需要自定义 fetch 调用的场景
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const token = getStoredToken()
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` }
+  }
+  return {}
+}
+
+/**
  * 检查是否为测试模式
  * 只有当用户以测试账号（user_type='test'）登录时才返回 true
  */

@@ -55,6 +55,8 @@ const APPROVAL_TYPES: Record<string, { label: string; icon: React.ComponentType<
   supplier: { label: '供应商审批', icon: Building2, color: 'text-purple-600 bg-purple-100' },
   fee: { label: '费用审批', icon: FileText, color: 'text-orange-600 bg-orange-100' },
   inquiry: { label: '客户询价', icon: Truck, color: 'text-teal-600 bg-teal-100' },
+  void: { label: '作废审批', icon: FileText, color: 'text-red-600 bg-red-100' },
+  contract: { label: '合同审批', icon: FileText, color: 'text-indigo-600 bg-indigo-100' },
 }
 
 // 审批状态配置
@@ -62,6 +64,54 @@ const APPROVAL_STATUS: Record<string, { label: string; color: string; icon: Reac
   pending: { label: '待审批', color: 'text-amber-600 bg-amber-100', icon: Clock },
   approved: { label: '已通过', color: 'text-green-600 bg-green-100', icon: CheckCircle },
   rejected: { label: '已驳回', color: 'text-red-600 bg-red-100', icon: XCircle },
+}
+
+// 有审批权限的角色
+const APPROVER_ROLES = ['admin', 'boss', 'finance_manager', 'czjl', 'manager']
+
+// 根据用户角色获取可见的审批类型
+function getVisibleApprovalTypes(userRole: string | undefined): string[] {
+  // admin 和 boss 可以看到所有审批类型
+  if (['admin', 'boss'].includes(userRole || '')) {
+    return ['order', 'payment', 'supplier', 'fee', 'inquiry', 'void', 'contract']
+  }
+  
+  // 财务角色可以看到财务相关审批
+  if (['finance_manager', 'finance'].includes(userRole || '')) {
+    return ['payment', 'fee', 'void']
+  }
+  
+  // 经理角色可以看到订单、供应商、客户询价审批
+  if (['manager', 'czjl'].includes(userRole || '')) {
+    return ['order', 'supplier', 'inquiry', 'contract']
+  }
+  
+  // 操作员角色只能看到订单审批
+  if (['operator', 'do'].includes(userRole || '')) {
+    return ['order']
+  }
+  
+  return []
+}
+
+// 检查用户是否有审批权限
+function canApprove(userRole: string | undefined, approvalType: string): boolean {
+  // admin 和 boss 可以审批所有类型
+  if (['admin', 'boss'].includes(userRole || '')) {
+    return true
+  }
+  
+  // 财务经理可以审批财务相关
+  if (userRole === 'finance_manager' && ['payment', 'fee', 'void'].includes(approvalType)) {
+    return true
+  }
+  
+  // 操作经理可以审批订单、供应商、客户询价
+  if (['manager', 'czjl'].includes(userRole || '') && ['order', 'supplier', 'inquiry', 'contract'].includes(approvalType)) {
+    return true
+  }
+  
+  return false
 }
 
 export default function ApprovalWorkbench() {
@@ -89,6 +139,12 @@ export default function ApprovalWorkbench() {
     { label: '预警管理', path: '/system/alerts' },
   ]
 
+  // 检查当前用户是否有审批权限
+  const hasApprovalPermission = APPROVER_ROLES.includes(user?.role || '')
+  
+  // 获取当前用户可见的审批类型
+  const visibleTypes = getVisibleApprovalTypes(user?.role)
+
   // 加载审批列表
   const fetchApprovals = async () => {
     setLoading(true)
@@ -98,9 +154,13 @@ export default function ApprovalWorkbench() {
         pageSize: pageSize.toString(),
       })
       
-      // 根据当前用户角色决定查看范围
+      // 传递用户角色和ID用于权限过滤
       if (user?.id) {
+        params.append('userId', user.id)
         params.append('approverId', user.id)
+      }
+      if (user?.role) {
+        params.append('userRole', user.role)
       }
       
       if (activeStatus !== 'all') {
@@ -138,6 +198,12 @@ export default function ApprovalWorkbench() {
   const submitApproval = async () => {
     if (!currentApproval || !user?.id) return
     
+    // 检查权限
+    if (!canApprove(user?.role, currentApproval.approval_type)) {
+      alert('您没有权限审批此类型的请求')
+      return
+    }
+    
     if (approvalAction === 'reject' && !rejectReason.trim()) {
       alert('请填写驳回原因')
       return
@@ -152,6 +218,7 @@ export default function ApprovalWorkbench() {
           status: approvalAction === 'approve' ? 'approved' : 'rejected',
           approverId: user.id,
           approverName: user.name || user.username,
+          approverRole: user.role,  // 传递审批人角色用于后端验证
           remark: remark,
           rejectReason: rejectReason
         })
@@ -290,9 +357,11 @@ export default function ApprovalWorkbench() {
               className="text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="all">全部类型</option>
-              {Object.entries(APPROVAL_TYPES).map(([key, config]) => (
-                <option key={key} value={key}>{config.label}</option>
-              ))}
+              {/* 只显示用户有权查看的审批类型 */}
+              {visibleTypes.map((key) => {
+                const config = APPROVAL_TYPES[key]
+                return config ? <option key={key} value={key}>{config.label}</option> : null
+              })}
             </select>
           </div>
           <button
@@ -371,7 +440,8 @@ export default function ApprovalWorkbench() {
                           查看
                         </button>
                       )}
-                      {approval.status === 'pending' && (
+                      {/* 只有待审批状态且用户有权限时才显示审批按钮 */}
+                      {approval.status === 'pending' && canApprove(user?.role, approval.approval_type) && (
                         <>
                           <button
                             onClick={() => openApprovalModal(approval, 'approve')}
@@ -388,6 +458,10 @@ export default function ApprovalWorkbench() {
                             驳回
                           </button>
                         </>
+                      )}
+                      {/* 如果用户没有权限，显示等待审批提示 */}
+                      {approval.status === 'pending' && !canApprove(user?.role, approval.approval_type) && (
+                        <span className="text-xs text-gray-400 px-2 py-1 bg-gray-50 rounded">等待审批</span>
                       )}
                     </div>
                   </div>

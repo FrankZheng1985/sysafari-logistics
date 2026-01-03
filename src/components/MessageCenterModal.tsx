@@ -52,6 +52,29 @@ const ALERT_LEVELS: Record<string, { label: string; color: string; icon: React.C
   info: { label: '提醒', color: 'text-blue-600 bg-blue-100', icon: Info },
 }
 
+// 有审批权限的角色
+const APPROVER_ROLES = ['admin', 'boss', 'finance_manager', 'czjl', 'manager']
+
+// 检查用户是否有审批权限
+function canApprove(userRole: string | undefined, approvalType: string): boolean {
+  // admin 和 boss 可以审批所有类型
+  if (['admin', 'boss'].includes(userRole || '')) {
+    return true
+  }
+  
+  // 财务经理可以审批财务相关
+  if (userRole === 'finance_manager' && ['payment', 'fee', 'void'].includes(approvalType)) {
+    return true
+  }
+  
+  // 操作经理可以审批订单、供应商、客户询价
+  if (['manager', 'czjl'].includes(userRole || '') && ['order', 'supplier', 'inquiry', 'contract'].includes(approvalType)) {
+    return true
+  }
+  
+  return false
+}
+
 export default function MessageCenterModal({ visible, onClose }: MessageCenterModalProps) {
   const { user } = useAuth()
   const { onConversationUpdate, onNotification } = useSocket()
@@ -92,7 +115,12 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
         setUnreadMessages(chatData.data?.count || 0)
       }
       
-      const overviewRes = await fetch(`${API_BASE}/api/notifications/overview?userId=${user.id}`)
+      // 传递用户角色，用于权限过滤
+      const overviewParams = new URLSearchParams({ userId: user.id })
+      if (user.role) {
+        overviewParams.append('userRole', user.role)
+      }
+      const overviewRes = await fetch(`${API_BASE}/api/notifications/overview?${overviewParams}`)
       const overviewData = await overviewRes.json()
       if (overviewData.errCode === 200) {
         setPendingApprovals(overviewData.data?.pendingApprovals || 0)
@@ -102,7 +130,10 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
     } catch (error) {
       console.error('加载统计数据失败:', error)
     }
-  }, [user?.id])
+  }, [user?.id, user?.role])
+
+  // 检查当前用户是否有审批权限
+  const hasApprovalPermission = APPROVER_ROLES.includes(user?.role || '')
 
   // 加载审批列表
   const fetchApprovals = async () => {
@@ -111,9 +142,14 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
     try {
       const params = new URLSearchParams({
         approverId: user.id,
+        userId: user.id,
         status: 'pending',
         pageSize: '50'
       })
+      // 传递用户角色用于权限过滤
+      if (user?.role) {
+        params.append('userRole', user.role)
+      }
       const response = await fetch(`${API_BASE}/api/approvals?${params}`)
       const data = await response.json()
       if (data.errCode === 200) {
@@ -131,6 +167,10 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
     setLoading(true)
     try {
       const params = new URLSearchParams({ status: 'active', pageSize: '50' })
+      // 传递用户角色，用于权限过滤
+      if (user?.role) {
+        params.append('userRole', user.role)
+      }
       const response = await fetch(`${API_BASE}/api/alerts/logs?${params}`)
       const data = await response.json()
       if (data.errCode === 200) {
@@ -162,7 +202,13 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
   }
 
   // 处理审批
-  const handleApproval = async (approvalId: string, action: 'approve' | 'reject') => {
+  const handleApproval = async (approvalId: string, action: 'approve' | 'reject', approvalType?: string) => {
+    // 检查权限
+    if (approvalType && !canApprove(user?.role, approvalType)) {
+      alert('您没有权限审批此类型的请求')
+      return
+    }
+    
     try {
       const response = await fetch(`${API_BASE}/api/approvals/${approvalId}/process`, {
         method: 'PUT',
@@ -170,13 +216,16 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
         body: JSON.stringify({
           status: action === 'approve' ? 'approved' : 'rejected',
           approverId: user?.id,
-          approverName: user?.name || user?.username
+          approverName: user?.name || user?.username,
+          approverRole: user?.role  // 传递审批人角色用于后端验证
         })
       })
       const data = await response.json()
       if (data.errCode === 200) {
         fetchApprovals()
         fetchStats()
+      } else {
+        alert(data.msg || '操作失败')
       }
     } catch (error) {
       console.error('处理审批失败:', error)
@@ -349,37 +398,57 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
                 ) : approvals.length === 0 ? (
                   <div className="py-12 text-center text-gray-400">
                     <ClipboardCheck className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>暂无待审批项</p>
+                    <p>{hasApprovalPermission ? '暂无待审批项' : '您没有审批权限'}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {approvals.map((item) => (
-                      <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">{item.title}</div>
-                            <div className="text-sm text-gray-500 mt-1">{item.content}</div>
-                            <div className="text-xs text-gray-400 mt-2">
-                              {item.requester_name} · {formatTime(item.created_at)}
+                    {approvals.map((item) => {
+                      const userCanApprove = canApprove(user?.role, item.approval_type)
+                      return (
+                        <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-900">{item.title}</span>
+                                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded">
+                                  {item.approval_type === 'payment' ? '付款申请' :
+                                   item.approval_type === 'fee' ? '费用审批' :
+                                   item.approval_type === 'order' ? '订单审批' :
+                                   item.approval_type === 'supplier' ? '供应商审批' :
+                                   item.approval_type === 'inquiry' ? '客户询价' :
+                                   item.approval_type === 'void' ? '作废审批' :
+                                   item.approval_type === 'contract' ? '合同审批' : item.approval_type}
+                                </span>
+                              </div>
+                              <div className="text-sm text-gray-500 mt-1">{item.content}</div>
+                              <div className="text-xs text-gray-400 mt-2">
+                                {item.requester_name || item.applicant_name} · {formatTime(item.created_at)}
+                              </div>
+                            </div>
+                            <div className="flex gap-2 ml-4">
+                              {userCanApprove ? (
+                                <>
+                                  <button
+                                    onClick={() => handleApproval(item.id, 'approve', item.approval_type)}
+                                    className="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600"
+                                  >
+                                    通过
+                                  </button>
+                                  <button
+                                    onClick={() => handleApproval(item.id, 'reject', item.approval_type)}
+                                    className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600"
+                                  >
+                                    驳回
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-gray-400 px-2 py-1 bg-gray-50 rounded">等待审批</span>
+                              )}
                             </div>
                           </div>
-                          <div className="flex gap-2 ml-4">
-                            <button
-                              onClick={() => handleApproval(item.id, 'approve')}
-                              className="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600"
-                            >
-                              通过
-                            </button>
-                            <button
-                              onClick={() => handleApproval(item.id, 'reject')}
-                              className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600"
-                            >
-                              驳回
-                            </button>
-                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

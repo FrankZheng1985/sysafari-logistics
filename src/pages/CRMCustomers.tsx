@@ -274,13 +274,18 @@ export default function CRMCustomers() {
     }
   }
 
-  // 加载业务员列表（操作员角色）
+  // 加载业务员列表（可以作为客户负责人的角色：跟单员、操作经理、单证员等）
   const loadSalesUsers = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/users?role=operator&pageSize=100`)
+      const response = await fetch(`${API_BASE}/api/users?pageSize=100&status=active`)
       const data = await response.json()
       if (data.errCode === 200) {
-        setSalesUsers(data.data.list || [])
+        // 过滤出可以作为客户负责人的角色
+        const assignableRoles = ['operator', 'czjl', 'doc_clerk', 'doc_officer', 'manager']
+        const filteredUsers = (data.data.list || []).filter(
+          (u: { role: string }) => assignableRoles.includes(u.role)
+        )
+        setSalesUsers(filteredUsers)
       }
     } catch (error) {
       console.error('加载业务员列表失败:', error)

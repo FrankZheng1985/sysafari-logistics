@@ -102,9 +102,10 @@ async function initTables() {
         { code: 'taric', name: 'TARIC关税查询', provider: 'EU Commission', category: 'tariff', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/dds2/taric/taric_consultation.jsp', description: '欧盟TARIC关税税率查询系统', icon: 'Calculator', sort_order: 5 },
         { code: 'eu_vies', name: 'EU VAT验证', provider: 'EU Commission', category: 'validation', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/vies', api_url: 'https://ec.europa.eu/taxation_customs/vies/services/checkVatService', description: '欧盟VIES系统，验证VAT税号有效性', icon: 'BadgeCheck', sort_order: 6 },
         { code: 'eu_eori', name: 'EU EORI验证', provider: 'EU Commission', category: 'validation', pricing_model: 'free', health_check_url: 'https://ec.europa.eu/taxation_customs/dds2/eos', api_url: 'https://ec.europa.eu/taxation_customs/dds2/eos/validation/services/validation', description: '欧盟EORI号码验证服务', icon: 'ShieldCheck', sort_order: 7 },
-        { code: 'aliyun_ecs', name: '阿里云ECS服务器', provider: '阿里云', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://api.xianfeng-eu.com/api/health', recharge_url: 'https://ecs.console.aliyun.com', description: '后端API服务器，托管于阿里云ECS', icon: 'Server', sort_order: 8 },
-        { code: 'aliyun_oss', name: '阿里云OSS静态托管', provider: '阿里云', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://erp.xianfeng-eu.com', recharge_url: 'https://oss.console.aliyun.com', description: '前端静态资源，托管于阿里云OSS+CDN', icon: 'Globe', sort_order: 9 },
-        { code: 'aliyun_rds', name: '阿里云RDS数据库', provider: '阿里云', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://api.xianfeng-eu.com/api/health', recharge_url: 'https://rdsnext.console.aliyun.com', description: 'PostgreSQL数据库，托管于阿里云RDS', icon: 'Database', sort_order: 10 }
+        { code: 'qichacha', name: '企查查工商信息', provider: '企查查', category: 'business_info', pricing_model: 'per_call', api_url: 'https://api.qichacha.com', health_check_url: 'https://api.qichacha.com', recharge_url: 'https://openapi.qichacha.com', description: '企业工商信息查询服务，支持企业名称搜索和详情查询', icon: 'Building2', sort_order: 8 },
+        { code: 'aliyun_ecs', name: '阿里云ECS服务器', provider: '阿里云', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://api.xianfeng-eu.com/api/health', recharge_url: 'https://ecs.console.aliyun.com', description: '后端API服务器，托管于阿里云ECS', icon: 'Server', sort_order: 9 },
+        { code: 'aliyun_oss', name: '阿里云OSS静态托管', provider: '阿里云', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://erp.xianfeng-eu.com', recharge_url: 'https://oss.console.aliyun.com', description: '前端静态资源，托管于阿里云OSS+CDN', icon: 'Globe', sort_order: 10 },
+        { code: 'aliyun_rds', name: '阿里云RDS数据库', provider: '阿里云', category: 'infrastructure', pricing_model: 'subscription', health_check_url: 'https://api.xianfeng-eu.com/api/health', recharge_url: 'https://rdsnext.console.aliyun.com', description: 'PostgreSQL数据库，托管于阿里云RDS', icon: 'Database', sort_order: 11 }
       ]
       
       for (const api of initialApis) {
@@ -616,6 +617,29 @@ async function checkGoogleTranslateHealth() {
 }
 
 /**
+ * 检查企查查API配置
+ */
+async function checkQichachaHealth() {
+  const qichachaKey = process.env.QICHACHA_KEY
+  const qichachaSecret = process.env.QICHACHA_SECRET
+  
+  if (!qichachaKey || !qichachaSecret) {
+    return {
+      status: 'degraded',
+      responseTime: 0,
+      message: '未配置企查查API密钥'
+    }
+  }
+  
+  // 企查查API配置正常
+  return {
+    status: 'online',
+    responseTime: 0,
+    message: '配置正常'
+  }
+}
+
+/**
  * 执行单个API健康检查
  */
 export async function performHealthCheck(apiCode) {
@@ -637,6 +661,9 @@ export async function performHealthCheck(apiCode) {
       break
     case 'google_translate':
       result = await checkGoogleTranslateHealth()
+      break
+    case 'qichacha':
+      result = await checkQichachaHealth()
       break
     default:
       // 默认HTTP健康检查
@@ -703,6 +730,7 @@ export function getCategories() {
     { code: 'translation', name: '翻译服务', icon: 'Languages' },
     { code: 'tariff', name: '关税查询', icon: 'Calculator' },
     { code: 'validation', name: '号码验证', icon: 'BadgeCheck' },
+    { code: 'business_info', name: '工商信息', icon: 'Building2' },
     { code: 'infrastructure', name: '基础设施', icon: 'Server' },
     { code: 'other', name: '其他', icon: 'Link' }
   ]

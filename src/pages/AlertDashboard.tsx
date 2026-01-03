@@ -79,6 +79,32 @@ const ALERT_TYPES: Record<string, { label: string; icon: React.ComponentType<{ c
   license_expire: { label: '证照到期', icon: Calendar, color: 'text-cyan-600 bg-cyan-100' },
 }
 
+// 根据用户角色获取可见的预警类型
+function getVisibleAlertTypes(userRole: string | undefined): string[] {
+  const commonTypes = ['order_overdue']
+  const financeTypes = ['payment_due', 'payment_term_due', 'credit_limit', 'customer_overdue']
+  const crmTypes = ['contract_expire']
+  const supplierTypes = ['license_expire']
+  
+  // 管理员和老板能看所有
+  if (['admin', 'boss'].includes(userRole || '')) {
+    return [...commonTypes, ...financeTypes, ...crmTypes, ...supplierTypes]
+  }
+  
+  // 财务角色能看财务预警
+  if (['finance_manager', 'finance'].includes(userRole || '')) {
+    return [...commonTypes, ...financeTypes]
+  }
+  
+  // 经理角色能看CRM和供应商预警
+  if (['manager', 'czjl'].includes(userRole || '')) {
+    return [...commonTypes, ...crmTypes, ...supplierTypes]
+  }
+  
+  // 其他角色只能看通用预警
+  return commonTypes
+}
+
 // 预警级别配置
 const ALERT_LEVELS: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
   danger: { label: '危险', color: 'text-red-600 bg-red-100', icon: AlertCircle },
@@ -128,6 +154,11 @@ export default function AlertDashboard() {
         pageSize: pageSize.toString(),
       })
       
+      // 传递用户角色，用于权限过滤
+      if (user?.role) {
+        params.append('userRole', user.role)
+      }
+      
       if (activeStatus !== 'all') {
         params.append('status', activeStatus)
       }
@@ -157,7 +188,13 @@ export default function AlertDashboard() {
   // 加载预警统计
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/alerts/stats`)
+      // 传递用户角色，用于权限过滤
+      const params = new URLSearchParams()
+      if (user?.role) {
+        params.append('userRole', user.role)
+      }
+      
+      const response = await fetch(`${API_BASE}/api/alerts/stats?${params}`)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -376,9 +413,11 @@ export default function AlertDashboard() {
               className="text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="all">全部类型</option>
-              {Object.entries(ALERT_TYPES).map(([key, config]) => (
-                <option key={key} value={key}>{config.label}</option>
-              ))}
+              {/* 只显示用户有权查看的预警类型 */}
+              {getVisibleAlertTypes(user?.role).map((key) => {
+                const config = ALERT_TYPES[key]
+                return config ? <option key={key} value={key}>{config.label}</option> : null
+              })}
             </select>
             <select
               value={activeLevel}

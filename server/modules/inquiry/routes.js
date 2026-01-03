@@ -4,6 +4,7 @@
 
 import { Router } from 'express'
 import controller from './controller.js'
+import { authenticate, optionalAuth } from '../../middleware/auth.js'
 
 const router = Router()
 
@@ -50,27 +51,27 @@ router.post('/inquiries/:id/accept', controller.acceptQuote)
 // 拒绝报价
 router.post('/inquiries/:id/reject', controller.rejectQuote)
 
-// ==================== ERP后台管理接口 ====================
+// ==================== ERP后台管理接口（需要认证） ====================
 
 // 获取所有询价列表（ERP后台）
-router.get('/manage/inquiries', controller.getAllInquiries)
+router.get('/manage/inquiries', optionalAuth, controller.getAllInquiries)
 
 // 设置询价报价（ERP后台）
-router.post('/manage/inquiries/:id/quote', controller.setQuote)
+router.post('/manage/inquiries/:id/quote', authenticate, controller.setQuote)
 
 // 分配询价给跟单员
-router.post('/manage/inquiries/:id/assign', controller.assignInquiry)
+router.post('/manage/inquiries/:id/assign', authenticate, controller.assignInquiry)
 
 // 开始处理询价
-router.post('/manage/inquiries/:id/start', controller.startProcessing)
+router.post('/manage/inquiries/:id/start', authenticate, controller.startProcessing)
 
-// ==================== 待办任务管理 ====================
+// ==================== 待办任务管理（需要认证） ====================
 
 // 获取待处理任务列表
-router.get('/tasks/pending', controller.getPendingTasks)
+router.get('/tasks/pending', authenticate, controller.getPendingTasks)
 
 // 获取任务统计
-router.get('/tasks/stats', controller.getTaskStats)
+router.get('/tasks/stats', authenticate, controller.getTaskStats)
 
 // 检查超时任务（定时任务调用）
 router.post('/tasks/check-overdue', controller.checkOverdueTasks)

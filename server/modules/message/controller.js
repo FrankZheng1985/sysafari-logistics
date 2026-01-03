@@ -3,6 +3,7 @@
  */
 
 import * as model from './model.js'
+import * as inquiryModel from '../inquiry/model.js'
 
 // ==================== 消息相关 ====================
 
@@ -486,7 +487,7 @@ export async function getAlertStats(req, res) {
 }
 
 /**
- * 获取通知概览（未读消息 + 待审批 + 活跃预警）
+ * 获取通知概览（未读消息 + 待审批 + 活跃预警 + 询价任务）
  * 根据用户角色过滤可见的审批和预警数量
  */
 export async function getNotificationOverview(req, res) {
@@ -502,14 +503,27 @@ export async function getNotificationOverview(req, res) {
     // 调试日志
     console.log('[Alert权限调试] getNotificationOverview - userId:', userId, ', userRole from query:', userRole, ', final role:', role)
     
+    // 获取询价任务统计（如果有 userId）
+    let inquiryStats = { pendingCount: 0, processingCount: 0, overdueCount: 0, todayCompleted: 0 }
+    if (userId) {
+      try {
+        inquiryStats = await inquiryModel.getTaskStats(userId)
+      } catch (err) {
+        console.debug('获取询价任务统计失败:', err)
+      }
+    }
+    
     const [unreadCount, pendingCount, alertCount] = await Promise.all([
       userId ? model.getUnreadCount(userId) : 0,
       model.getPendingApprovalCount(userId, role),
       model.getActiveAlertCount(role)
     ])
     
+    // 询价待处理数（包括待处理和超时的）
+    const pendingInquiries = inquiryStats.pendingCount + inquiryStats.overdueCount
+    
     // 调试日志 - 查看各计数结果
-    console.log('[Alert权限调试] getNotificationOverview - unreadCount:', unreadCount, ', pendingCount:', pendingCount, ', alertCount:', alertCount)
+    console.log('[Alert权限调试] getNotificationOverview - unreadCount:', unreadCount, ', pendingCount:', pendingCount, ', alertCount:', alertCount, ', pendingInquiries:', pendingInquiries)
     
     res.json({ 
       errCode: 200, 
@@ -517,7 +531,8 @@ export async function getNotificationOverview(req, res) {
         unreadMessages: unreadCount,
         pendingApprovals: pendingCount,
         activeAlerts: alertCount,
-        total: unreadCount + pendingCount + alertCount
+        pendingInquiries: pendingInquiries,
+        total: unreadCount + pendingCount + alertCount + pendingInquiries
       }
     })
   } catch (error) {

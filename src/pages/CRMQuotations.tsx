@@ -8,7 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE = getApiBaseUrl()
@@ -214,7 +214,9 @@ export default function CRMQuotations() {
       })
       if (inquiryFilterStatus) params.append('status', inquiryFilterStatus)
 
-      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`)
+      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`, {
+        headers: getAuthHeaders()
+      })
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -231,7 +233,9 @@ export default function CRMQuotations() {
   // 加载任务统计
   const loadTaskStats = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/inquiry/tasks/stats`)
+      const response = await fetch(`${API_BASE}/api/inquiry/tasks/stats`, {
+        headers: getAuthHeaders()
+      })
       const data = await response.json()
       if (data.errCode === 200) {
         setTaskStats(data.data)
@@ -245,7 +249,8 @@ export default function CRMQuotations() {
   const handleStartProcessing = async (inquiry: CustomerInquiry) => {
     try {
       const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries/${inquiry.id}/start`, {
-        method: 'POST'
+        method: 'POST',
+        headers: getAuthHeaders()
       })
       const data = await response.json()
       if (data.errCode === 200) {

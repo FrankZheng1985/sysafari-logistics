@@ -4,6 +4,7 @@
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
+import * as messageModel from '../message/model.js'
 
 // ==================== 常量定义 ====================
 
@@ -228,6 +229,39 @@ export async function createInquiryTask(data) {
     TASK_STATUS.PENDING,
     data.dueAt.toISOString()
   )
+  
+  // 发送消息通知给指定的业务员
+  try {
+    await messageModel.createMessage({
+      type: 'inquiry',
+      title: '新询价任务',
+      content: `您有一个新的客户询价需要处理，询价编号：${data.inquiryNumber}`,
+      senderId: null,
+      senderName: '系统',
+      receiverId: data.assigneeId,
+      receiverName: data.assigneeName,
+      relatedType: 'inquiry',
+      relatedId: data.inquiryId
+    })
+    
+    // 如果有上级主管，也发送通知
+    if (data.supervisorId) {
+      await messageModel.createMessage({
+        type: 'inquiry',
+        title: '团队新询价',
+        content: `${data.assigneeName} 收到一个新的客户询价任务，询价编号：${data.inquiryNumber}`,
+        senderId: null,
+        senderName: '系统',
+        receiverId: data.supervisorId,
+        receiverName: data.supervisorName,
+        relatedType: 'inquiry',
+        relatedId: data.inquiryId
+      })
+    }
+  } catch (error) {
+    console.error('发送询价通知失败:', error)
+    // 通知发送失败不影响主流程
+  }
   
   return true
 }
