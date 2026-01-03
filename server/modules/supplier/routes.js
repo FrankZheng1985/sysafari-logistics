@@ -37,6 +37,11 @@ router.post('/translate', controller.translate)
 // 翻译费用名称（带预设映射）
 router.post('/translate/fee', controller.translateFee)
 
+// ==================== 运输报价匹配 ====================
+
+// 匹配运输报价（根据起点终点查询供应商报价）
+router.get('/prices/match', controller.matchTransportPrices)
+
 // ==================== 供应商管理路由 ====================
 
 // 获取供应商统计

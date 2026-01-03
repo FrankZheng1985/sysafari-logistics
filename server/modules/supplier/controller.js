@@ -535,6 +535,32 @@ export async function getImportRecords(req, res) {
   }
 }
 
+/**
+ * 匹配运输报价
+ * 根据起点和终点匹配供应商的运输报价
+ */
+export async function matchTransportPrices(req, res) {
+  try {
+    const { origin, destination, originPostalCode, destPostalCode } = req.query
+    
+    if (!destination && !destPostalCode) {
+      return badRequest(res, '请提供目的地信息')
+    }
+    
+    const prices = await model.matchTransportPrices({
+      origin,
+      destination,
+      originPostalCode,
+      destPostalCode
+    })
+    
+    return success(res, prices, `找到 ${prices.length} 条匹配的运输报价`)
+  } catch (error) {
+    console.error('匹配运输报价失败:', error)
+    return serverError(res, '匹配运输报价失败')
+  }
+}
+
 export default {
   getSupplierList,
   getSupplierStats,
@@ -557,5 +583,7 @@ export default {
   // 智能导入
   parseImportFile,
   confirmImport,
-  getImportRecords
+  getImportRecords,
+  // 运输报价匹配
+  matchTransportPrices
 }

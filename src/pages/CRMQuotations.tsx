@@ -8,6 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
+import TransportQuoteCalculator from '../components/TransportQuoteCalculator'
 import { getApiBaseUrl } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -160,6 +161,10 @@ export default function CRMQuotations() {
   const [selectedInquiry, setSelectedInquiry] = useState<CustomerInquiry | null>(null)
   const [showInquiryDetail, setShowInquiryDetail] = useState(false)
   const [taskStats, setTaskStats] = useState({ pendingCount: 0, processingCount: 0, overdueCount: 0, todayCompleted: 0 })
+  
+  // 运输报价计算弹窗状态
+  const [showTransportCalculator, setShowTransportCalculator] = useState(false)
+  const [pendingInquiryForQuote, setPendingInquiryForQuote] = useState<CustomerInquiry | null>(null)
 
    
   useEffect(() => {
@@ -1663,24 +1668,33 @@ export default function CRMQuotations() {
               {(selectedInquiry.status === 'pending' || selectedInquiry.status === 'processing') && (
                 <button
                   onClick={() => {
-                    // TODO: 跳转到报价页面或打开报价弹窗
-                    setShowInquiryDetail(false)
-                    // 创建报价单并预填信息
-                    setFormData({
-                      customerId: selectedInquiry.customerId,
-                      customerName: selectedInquiry.customerName,
-                      subject: `${getInquiryTypeLabel(selectedInquiry.inquiryType)} - ${selectedInquiry.inquiryNumber}`,
-                      quoteDate: new Date().toISOString().split('T')[0],
-                      validUntil: '',
-                      validityValue: 30,
-                      validityUnit: 'day',
-                      currency: 'EUR',
-                      terms: '',
-                      notes: `关联询价：${selectedInquiry.inquiryNumber}`,
-                      items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
-                    })
-                    setActiveView('quotations')
-                    setShowModal(true)
+                    // 判断是否是运输类询价
+                    const hasTransport = selectedInquiry.inquiryType === 'transport' || selectedInquiry.inquiryType === 'combined'
+                    
+                    if (hasTransport && selectedInquiry.transportData) {
+                      // 运输询价：先打开运输报价计算弹窗
+                      setPendingInquiryForQuote(selectedInquiry)
+                      setShowInquiryDetail(false)
+                      setShowTransportCalculator(true)
+                    } else {
+                      // 非运输询价：直接打开报价单弹窗
+                      setShowInquiryDetail(false)
+                      setFormData({
+                        customerId: selectedInquiry.customerId,
+                        customerName: selectedInquiry.customerName,
+                        subject: `${getInquiryTypeLabel(selectedInquiry.inquiryType)} - ${selectedInquiry.inquiryNumber}`,
+                        quoteDate: new Date().toISOString().split('T')[0],
+                        validUntil: '',
+                        validityValue: 30,
+                        validityUnit: 'day',
+                        currency: 'EUR',
+                        terms: '',
+                        notes: `关联询价：${selectedInquiry.inquiryNumber}`,
+                        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+                      })
+                      setActiveView('quotations')
+                      setShowModal(true)
+                    }
                   }}
                   className="px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
                 >
@@ -1690,6 +1704,60 @@ export default function CRMQuotations() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* 运输报价计算弹窗 */}
+      {pendingInquiryForQuote && pendingInquiryForQuote.transportData && (
+        <TransportQuoteCalculator
+          visible={showTransportCalculator}
+          onClose={() => {
+            setShowTransportCalculator(false)
+            setPendingInquiryForQuote(null)
+          }}
+          onConfirm={(data) => {
+            // 关闭运输报价计算弹窗
+            setShowTransportCalculator(false)
+            
+            // 将计算结果填入报价单
+            const inquiry = pendingInquiryForQuote
+            setFormData({
+              customerId: inquiry.customerId,
+              customerName: inquiry.customerName,
+              subject: `${getInquiryTypeLabel(inquiry.inquiryType)} - ${inquiry.inquiryNumber}`,
+              quoteDate: new Date().toISOString().split('T')[0],
+              validUntil: '',
+              validityValue: 30,
+              validityUnit: 'day',
+              currency: 'EUR',
+              terms: '',
+              notes: `关联询价：${inquiry.inquiryNumber}\n路线：${data.route.origin.address || inquiry.transportData?.origin} → ${data.route.destination.address || inquiry.transportData?.destination}\n距离：${data.route.distance}km | 利润设置：${data.profitSettings.type === 'percent' ? `${data.profitSettings.value}%` : `€${data.profitSettings.value}`}`,
+              items: data.items.map(item => ({
+                name: item.name,
+                nameEn: item.nameEn,
+                description: item.description,
+                quantity: item.quantity,
+                unit: item.unit,
+                price: item.price,
+                amount: item.amount
+              }))
+            })
+            
+            // 清除待处理询价
+            setPendingInquiryForQuote(null)
+            
+            // 打开报价单弹窗
+            setActiveView('quotations')
+            setShowModal(true)
+          }}
+          transportData={{
+            origin: pendingInquiryForQuote.transportData.origin,
+            destination: pendingInquiryForQuote.transportData.destination,
+            transportMode: pendingInquiryForQuote.transportData.transportMode,
+            containerType: pendingInquiryForQuote.transportData.containerType,
+            returnLocation: pendingInquiryForQuote.transportData.returnLocation,
+            returnAddress: pendingInquiryForQuote.transportData.returnAddress
+          }}
+        />
       )}
     </div>
   )

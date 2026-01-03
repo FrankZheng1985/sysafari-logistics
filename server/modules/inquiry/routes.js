@@ -29,6 +29,9 @@ router.post('/cities-by-postal', controller.batchGetCitiesByPostalCodes)
 // 计算运输费用
 router.post('/transport/calculate', controller.calculateTransport)
 
+// 运输报价计算（用于报价弹窗，返回完整路线和费用信息）
+router.post('/transport/quote-calculate', controller.calculateTransportQuote)
+
 // ==================== 清关估算 ====================
 
 // 估算清关费用

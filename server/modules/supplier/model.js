@@ -881,6 +881,108 @@ export async function getImportRecords(supplierId, options = {}) {
   }))
 }
 
+/**
+ * 匹配运输报价
+ * 根据起点和终点信息匹配供应商的运输报价
+ * @param {Object} params - 匹配参数
+ * @param {string} params.origin - 起点地址或邮编
+ * @param {string} params.destination - 终点地址或邮编
+ * @param {string} params.originPostalCode - 起点邮编
+ * @param {string} params.destPostalCode - 终点邮编
+ */
+export async function matchTransportPrices(params = {}) {
+  const db = getDatabase()
+  const { origin, destination, originPostalCode, destPostalCode } = params
+  
+  // 提取邮编（如果没有直接提供）
+  let originCode = originPostalCode || ''
+  let destCode = destPostalCode || ''
+  
+  // 尝试从地址中提取邮编
+  if (!originCode && origin) {
+    const match = origin.match(/\b(\d{4,5})\b/)
+    if (match) originCode = match[1]
+  }
+  if (!destCode && destination) {
+    const match = destination.match(/\b(\d{4,5})\b/)
+    if (match) destCode = match[1]
+  }
+  
+  try {
+    // 查询匹配的运输报价
+    // 匹配逻辑：
+    // 1. 目的地邮编匹配 route_to
+    // 2. 费用类别为运输相关（transport, clearing_dispatching, express）
+    // 3. 价格有效且状态为启用
+    let sql = `
+      SELECT 
+        spi.*,
+        s.supplier_name,
+        s.supplier_code,
+        s.contact_person,
+        s.contact_phone
+      FROM supplier_price_items spi
+      LEFT JOIN suppliers s ON spi.supplier_id = s.id
+      WHERE spi.fee_category IN ('transport', 'clearing_dispatching', 'express', 'freight')
+        AND (spi.status IS NULL OR spi.status != 'disabled')
+        AND s.status = 'active'
+    `
+    const queryParams = []
+    let paramIndex = 1
+    
+    // 如果有目的地邮编，匹配 route_to
+    if (destCode) {
+      sql += ` AND (spi.route_to ILIKE $${paramIndex} OR spi.route_to ILIKE $${paramIndex + 1})`
+      queryParams.push(`%${destCode}%`, `${destCode.substring(0, 2)}%`)
+      paramIndex += 2
+    }
+    
+    // 如果有起点，匹配 route_from
+    if (originCode || origin) {
+      const originMatch = originCode || origin
+      sql += ` AND (spi.route_from ILIKE $${paramIndex} OR spi.route_from IS NULL OR spi.route_from = '')`
+      queryParams.push(`%${originMatch}%`)
+      paramIndex++
+    }
+    
+    // 检查有效期
+    sql += ` AND (spi.effective_date IS NULL OR spi.effective_date <= CURRENT_DATE)`
+    sql += ` AND (spi.expiry_date IS NULL OR spi.expiry_date >= CURRENT_DATE)`
+    
+    sql += ` ORDER BY spi.price ASC LIMIT 20`
+    
+    const result = await db.pool.query(sql, queryParams)
+    
+    return result.rows.map(row => ({
+      id: row.id,
+      supplierId: row.supplier_id,
+      supplierCode: row.supplier_code,
+      supplierName: row.supplier_name,
+      contactPerson: row.contact_person,
+      contactPhone: row.contact_phone,
+      feeName: row.fee_name,
+      feeNameEn: row.fee_name_en,
+      feeCategory: row.fee_category,
+      unit: row.unit,
+      price: parseFloat(row.price) || 0,
+      currency: row.currency || 'EUR',
+      routeFrom: row.route_from,
+      routeTo: row.route_to,
+      city: row.city,
+      country: row.country,
+      returnPoint: row.return_point,
+      transportMode: row.transport_mode,
+      billingType: row.billing_type || 'fixed',
+      remark: row.remark,
+      effectiveDate: row.effective_date,
+      expiryDate: row.expiry_date
+    }))
+  } catch (error) {
+    console.error('匹配运输报价失败:', error.message)
+    return []
+  }
+}
+
 export default {
   // 常量
   SUPPLIER_TYPES,
@@ -917,5 +1019,8 @@ export default {
   // 批量导入
   batchCreateSupplierPrices,
   createImportRecord,
-  getImportRecords
+  getImportRecords,
+  
+  // 运输报价匹配
+  matchTransportPrices
 }
