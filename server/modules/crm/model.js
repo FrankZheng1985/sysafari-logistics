@@ -2918,7 +2918,7 @@ export async function getCustomerAccounts(params = {}) {
   let sql = `
     SELECT ca.*, c.customer_name, c.customer_code
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE 1=1
   `
   const conditions = []
@@ -2962,7 +2962,7 @@ export async function getCustomerAccountById(id) {
   const row = await db.prepare(`
     SELECT ca.*, c.customer_name, c.customer_code
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE ca.id = ?
   `).get(id)
   
@@ -2977,7 +2977,7 @@ export async function getCustomerAccountByUsername(username) {
   const row = await db.prepare(`
     SELECT ca.*, c.customer_name, c.customer_code, c.id as customer_id
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE ca.username = ?
   `).get(username)
   
@@ -3083,7 +3083,7 @@ export async function verifyCustomerLogin(username, password) {
   const account = await db.prepare(`
     SELECT ca.*, c.customer_name, c.customer_code
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE ca.username = ?
   `).get(username)
   
@@ -3195,7 +3195,7 @@ export async function getApiKeyByKey(apiKey) {
   const row = await db.prepare(`
     SELECT ak.*, c.customer_name, c.customer_code
     FROM customer_api_keys ak
-    LEFT JOIN customers c ON ak.customer_id = c.id
+    LEFT JOIN customers c ON ak.customer_id = c.id::text
     WHERE ak.api_key = ?
   `).get(apiKey)
   
@@ -3311,7 +3311,7 @@ export async function verifyApiKey(apiKey, apiSecret) {
   const keyInfo = await db.prepare(`
     SELECT ak.*, c.customer_name, c.customer_code
     FROM customer_api_keys ak
-    LEFT JOIN customers c ON ak.customer_id = c.id
+    LEFT JOIN customers c ON ak.customer_id = c.id::text
     WHERE ak.api_key = ?
   `).get(apiKey)
   
