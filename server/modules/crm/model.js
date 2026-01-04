@@ -760,17 +760,16 @@ export async function deleteFollowUp(id) {
 
 /**
  * 获取客户订单统计
+ * 只使用 customer_id 精确匹配，避免名称模糊匹配导致数据混淆
  */
 export async function getCustomerOrderStats(customerId) {
   const db = getDatabase()
   
-  // 根据客户ID关联提单统计
+  // 验证客户存在
   const customer = await getCustomerById(customerId)
   if (!customer) return null
   
-  const searchPattern = `%${customer.customerName}%`
-  
-  // 统计该客户相关的所有订单（通过customer_id或名称匹配）
+  // 仅通过 customer_id 精确匹配统计订单
   const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total_orders,
@@ -781,12 +780,8 @@ export async function getCustomerOrderStats(customerId) {
       COALESCE(SUM(volume), 0) as total_volume
     FROM bills_of_lading
     WHERE (is_void = 0 OR is_void IS NULL)
-      AND (
-        customer_id = ? OR 
-        shipper LIKE ? OR 
-        consignee LIKE ?
-      )
-  `).get(customerId, searchPattern, searchPattern)
+      AND customer_id = ?
+  `).get(customerId)
   
   return {
     totalOrders: Number(stats?.total_orders || 0),
@@ -800,6 +795,7 @@ export async function getCustomerOrderStats(customerId) {
 
 /**
  * 获取客户相关订单列表
+ * 只使用 customer_id 精确匹配，避免名称模糊匹配导致数据混淆
  */
 export async function getCustomerOrders(customerId, params = {}) {
   const db = getDatabase()
@@ -808,17 +804,12 @@ export async function getCustomerOrders(customerId, params = {}) {
   const customer = await getCustomerById(customerId)
   if (!customer) return { list: [], total: 0, page, pageSize }
   
-  // 优先通过customer_id查找，同时也支持通过shipper/consignee名称匹配（兼容历史数据）
+  // 仅通过 customer_id 精确匹配查询订单
   let query = `
     SELECT * FROM bills_of_lading 
-    WHERE is_void = 0 AND (
-      customer_id = ? OR 
-      shipper LIKE ? OR 
-      consignee LIKE ?
-    )
+    WHERE is_void = 0 AND customer_id = ?
   `
-  const searchPattern = `%${customer.customerName}%`
-  const queryParams = [customerId, searchPattern, searchPattern]
+  const queryParams = [customerId]
   
   // 关键词搜索
   if (search) {
