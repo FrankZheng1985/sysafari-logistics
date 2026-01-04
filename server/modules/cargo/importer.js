@@ -999,6 +999,69 @@ export async function updateShipperAndImporter(importId, data) {
   return true
 }
 
+/**
+ * 从提单同步发货方信息
+ * 根据 cargo_imports 的 bill_number 或 order_id 查找关联的提单，获取 shipper 信息
+ * 注意：bills_of_lading 表只有 shipper 字段，没有 shipper_address 和 shipper_contact
+ */
+export async function syncShipperFromBL(importId) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  // 1. 获取导入批次信息
+  const importBatch = await db.prepare(
+    'SELECT id, bill_number, order_id FROM cargo_imports WHERE id = ?'
+  ).get(importId)
+  
+  if (!importBatch) {
+    throw new Error('找不到导入批次')
+  }
+  
+  // 2. 根据 bill_number 或 order_id 查找提单
+  // bills_of_lading 表只有 shipper 字段
+  let billInfo = null
+  
+  if (importBatch.bill_number) {
+    billInfo = await db.prepare(
+      'SELECT id, shipper FROM bills_of_lading WHERE bill_number = ?'
+    ).get(importBatch.bill_number)
+  }
+  
+  // 如果通过 bill_number 没找到，尝试通过 order_id
+  if (!billInfo && importBatch.order_id) {
+    billInfo = await db.prepare(
+      'SELECT id, shipper FROM bills_of_lading WHERE id = ?'
+    ).get(importBatch.order_id)
+  }
+  
+  if (!billInfo) {
+    throw new Error('找不到关联的提单，请确保已设置正确的提单号')
+  }
+  
+  if (!billInfo.shipper) {
+    throw new Error('提单中没有发货人(Shipper)信息')
+  }
+  
+  // 3. 更新 cargo_imports 的发货方信息（只更新 shipper_name）
+  await db.prepare(`
+    UPDATE cargo_imports SET
+      shipper_name = ?,
+      updated_at = ?
+    WHERE id = ?
+  `).run(
+    billInfo.shipper,
+    now,
+    importId
+  )
+  
+  return {
+    shipperName: billInfo.shipper,
+    shipperAddress: null,
+    shipperContact: null,
+    source: 'bill_of_lading'
+  }
+}
+
 export default {
   generateImportNo,
   parseCSVContent,
@@ -1015,5 +1078,6 @@ export default {
   deleteImportBatch,
   updateImportStatus,
   updateImportStats,
-  updateShipperAndImporter
+  updateShipperAndImporter,
+  syncShipperFromBL
 }

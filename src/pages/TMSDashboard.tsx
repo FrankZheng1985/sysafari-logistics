@@ -14,8 +14,6 @@ interface StepDistribution {
   step1: number
   step2: number
   step3: number
-  step4: number
-  step5: number
 }
 
 interface CMRStats {
@@ -59,7 +57,6 @@ export default function TMSDashboard() {
   const tabs = [
     { label: 'TMS概览', path: '/tms' },
     { label: 'TMS管理', path: '/cmr-manage' },
-    { label: '运输供应商', path: '/supplier-manage?type=transport' },
     { label: '运费管理', path: '/tms/pricing' },
     { label: '条件管理', path: '/tms/conditions' },
   ]
@@ -118,10 +115,10 @@ export default function TMSDashboard() {
   }
 
   const getStepLabel = (step: number | null | undefined, deliveryStatus?: string) => {
-    // 如果有有效的step值，使用step
+    // 简化为3步流程：提货-到达-确认
     if (step !== null && step !== undefined && step > 0) {
-      const steps = ['未开始', '已提货', '运输中', '已到达', '卸货中', '已送达']
-      return steps[step] || '未知'
+      const steps = ['未开始', '已提货', '已到达', '已送达']
+      return steps[Math.min(step, 3)] || '未知'
     }
     // 否则根据deliveryStatus推断
     if (deliveryStatus === '派送中') return '运输中'
@@ -130,12 +127,12 @@ export default function TMSDashboard() {
     return '未开始'
   }
 
-  // 根据deliveryStatus推断步骤数
+  // 根据deliveryStatus推断步骤数（简化为3步）
   const inferStep = (step: number | null | undefined, deliveryStatus?: string): number => {
-    if (step !== null && step !== undefined && step > 0) return step
+    if (step !== null && step !== undefined && step > 0) return Math.min(step, 3)
     if (deliveryStatus === '派送中') return 2 // 运输中
-    if (deliveryStatus === '已送达') return 5
-    if (deliveryStatus === '订单异常') return 3
+    if (deliveryStatus === '已送达') return 3
+    if (deliveryStatus === '订单异常') return 2
     return 0
   }
 
@@ -312,7 +309,7 @@ export default function TMSDashboard() {
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
             <Users className="w-4 h-4 text-gray-500" />
-            运输供应商
+            服务供应商
           </h3>
           {serviceProviders.length > 0 ? (
             <div className="space-y-2">
@@ -323,7 +320,7 @@ export default function TMSDashboard() {
                 </div>
               ))}
               <button
-                onClick={() => navigate('/supplier-manage?type=transport')}
+                onClick={() => navigate('/suppliers/list')}
                 className="w-full text-xs text-primary-600 hover:text-primary-700 text-center mt-2"
               >
                 查看全部供应商
@@ -331,9 +328,9 @@ export default function TMSDashboard() {
             </div>
           ) : (
             <div className="text-center py-4">
-              <div className="text-gray-400 text-sm mb-2">暂无运输供应商</div>
+              <div className="text-gray-400 text-sm mb-2">暂无服务供应商</div>
               <button
-                onClick={() => navigate('/supplier-manage?type=transport')}
+                onClick={() => navigate('/suppliers/list')}
                 className="text-xs text-primary-600 hover:text-primary-700"
               >
                 添加供应商
@@ -436,10 +433,8 @@ export default function TMSDashboard() {
         <div className="flex items-center justify-between gap-4">
           {[
             { step: 1, label: '已提货', color: 'bg-blue-500', key: 'step1' as const },
-            { step: 2, label: '运输中', color: 'bg-cyan-500', key: 'step2' as const },
-            { step: 3, label: '已到达', color: 'bg-emerald-500', key: 'step3' as const },
-            { step: 4, label: '卸货中', color: 'bg-amber-500', key: 'step4' as const },
-            { step: 5, label: '已送达', color: 'bg-green-500', key: 'step5' as const },
+            { step: 2, label: '已到达', color: 'bg-cyan-500', key: 'step2' as const },
+            { step: 3, label: '已送达', color: 'bg-green-500', key: 'step3' as const },
           ].map((item, index) => {
             const count = stats?.stepDistribution?.[item.key] || 0
             return (

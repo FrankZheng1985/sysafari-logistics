@@ -2550,6 +2550,156 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_due_at ON inquiry_tasks(due_at)`)
     console.log('  ✅ 询价工作流模块表就绪')
 
+    // ==================== 税费计算精准改进 - 贸易条件字段 ====================
+    // cargo_imports 批次表添加贸易条件字段
+    const tradeTermsFields = [
+      { name: 'incoterm', type: 'TEXT', default: "'FOB'", comment: '贸易条件：EXW/FCA/FAS/FOB/CFR/CIF/CPT/CIP/DAP/DPU/DDP/DDU' },
+      { name: 'international_freight', type: 'NUMERIC', default: '0', comment: '国际运费（EUR）' },
+      { name: 'domestic_freight_export', type: 'NUMERIC', default: '0', comment: '出口国内陆运费（EUR），EXW条款使用' },
+      { name: 'domestic_freight_import', type: 'NUMERIC', default: '0', comment: '进口国内陆运费（EUR），D组条款使用' },
+      { name: 'unloading_cost', type: 'NUMERIC', default: '0', comment: '卸货费（EUR），DPU条款专用' },
+      { name: 'insurance_cost', type: 'NUMERIC', default: '0', comment: '保险费（EUR）' },
+      { name: 'prepaid_duties', type: 'NUMERIC', default: '0', comment: '预付关税（EUR），DDP条款使用' },
+      { name: 'freight_allocation_method', type: 'TEXT', default: "'by_value'", comment: '运费分摊方式：by_value按货值/by_weight按重量' },
+      { name: 'total_customs_value', type: 'NUMERIC', default: '0', comment: '总完税价格（EUR）' }
+    ]
+    
+    for (const field of tradeTermsFields) {
+      try {
+        await client.query(`ALTER TABLE cargo_imports ADD COLUMN IF NOT EXISTS ${field.name} ${field.type} DEFAULT ${field.default}`)
+      } catch (e) { /* 字段可能已存在 */ }
+    }
+    
+    // cargo_items 明细表添加完税价格相关字段
+    const itemCustomsFields = [
+      { name: 'origin_country_code', type: 'TEXT', default: "'CN'", comment: '原产国代码（ISO 2位）' },
+      { name: 'customs_value', type: 'NUMERIC', default: '0', comment: '完税价格（EUR）' },
+      { name: 'freight_allocation', type: 'NUMERIC', default: '0', comment: '分摊的运费（EUR）' },
+      { name: 'insurance_allocation', type: 'NUMERIC', default: '0', comment: '分摊的保险费（EUR）' }
+    ]
+    
+    for (const field of itemCustomsFields) {
+      try {
+        await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS ${field.name} ${field.type} DEFAULT ${field.default}`)
+      } catch (e) { /* 字段可能已存在 */ }
+    }
+    
+    // 创建索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cargo_imports_incoterm ON cargo_imports(incoterm)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cargo_items_origin_code ON cargo_items(origin_country_code)`)
+    
+    // 初始化现有数据
+    try {
+      // 将现有记录的 origin_country_code 从 origin_country 字段提取
+      await client.query(`
+        UPDATE cargo_items 
+        SET origin_country_code = COALESCE(
+          CASE 
+            WHEN origin_country = '中国' OR origin_country = 'China' THEN 'CN'
+            WHEN origin_country = '越南' OR origin_country = 'Vietnam' THEN 'VN'
+            WHEN origin_country = '印度' OR origin_country = 'India' THEN 'IN'
+            WHEN origin_country = '韩国' OR origin_country = 'South Korea' THEN 'KR'
+            WHEN origin_country = '日本' OR origin_country = 'Japan' THEN 'JP'
+            WHEN origin_country = '泰国' OR origin_country = 'Thailand' THEN 'TH'
+            WHEN origin_country = '马来西亚' OR origin_country = 'Malaysia' THEN 'MY'
+            WHEN origin_country = '印度尼西亚' OR origin_country = 'Indonesia' THEN 'ID'
+            WHEN origin_country = '台湾' OR origin_country = 'Taiwan' THEN 'TW'
+            ELSE 'CN'
+          END,
+          'CN'
+        )
+        WHERE origin_country_code IS NULL OR origin_country_code = ''
+      `)
+      
+      // 初始化 customs_value 为 total_value
+      await client.query(`
+        UPDATE cargo_items 
+        SET customs_value = COALESCE(total_value, 0)
+        WHERE customs_value IS NULL OR customs_value = 0
+      `)
+      
+      // 初始化批次的 total_customs_value
+      await client.query(`
+        UPDATE cargo_imports ci
+        SET total_customs_value = COALESCE(
+          (SELECT SUM(COALESCE(customs_value, total_value, 0)) FROM cargo_items WHERE import_id = ci.id),
+          0
+        )
+        WHERE total_customs_value IS NULL OR total_customs_value = 0
+      `)
+    } catch (e) { /* 初始化数据失败不影响迁移 */ }
+    
+    console.log('  ✅ 税费计算贸易条件字段就绪')
+
+    // ==================== 创建工商信息表 ====================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS business_info (
+        id VARCHAR(32) PRIMARY KEY,
+        credit_code VARCHAR(50) UNIQUE,
+        company_name TEXT NOT NULL,
+        company_name_en TEXT,
+        legal_person TEXT,
+        registered_capital TEXT,
+        paid_capital TEXT,
+        establishment_date DATE,
+        business_scope TEXT,
+        address TEXT,
+        province VARCHAR(50),
+        city VARCHAR(50),
+        district VARCHAR(50),
+        company_type TEXT,
+        operating_status TEXT,
+        industry TEXT,
+        registration_authority TEXT,
+        approval_date DATE,
+        business_term_start DATE,
+        business_term_end DATE,
+        former_names TEXT,
+        phone TEXT,
+        email TEXT,
+        website TEXT,
+        source VARCHAR(20) DEFAULT 'qichacha',
+        source_id VARCHAR(100),
+        raw_data JSONB,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `)
+    
+    // 创建索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_credit_code ON business_info(credit_code)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_company_name ON business_info(company_name)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_source ON business_info(source)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_business_info_operating_status ON business_info(operating_status)`)
+    
+    // 为 customers 表添加 business_info_id 关联字段
+    const biColCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'customers' AND column_name = 'business_info_id'
+    `)
+    if (biColCheck.rows.length === 0) {
+      await client.query(`ALTER TABLE customers ADD COLUMN business_info_id VARCHAR(32)`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_business_info ON customers(business_info_id)`)
+      console.log('  ✅ customers.business_info_id 字段已添加')
+    }
+    
+    console.log('  ✅ 工商信息管理表就绪')
+
+    // ==================== 客户跟单员字段迁移 ====================
+    // 添加 assigned_operator 和 assigned_operator_name 字段
+    const operatorColCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'customers' AND column_name = 'assigned_operator'
+    `)
+    if (operatorColCheck.rows.length === 0) {
+      await client.query(`ALTER TABLE customers ADD COLUMN assigned_operator INTEGER`)
+      await client.query(`ALTER TABLE customers ADD COLUMN assigned_operator_name TEXT`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_assigned_operator ON customers(assigned_operator)`)
+      console.log('  ✅ customers.assigned_operator 字段已添加 (跟单员分配)')
+    }
+
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）
     try {

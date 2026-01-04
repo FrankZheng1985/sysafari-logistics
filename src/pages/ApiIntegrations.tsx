@@ -4,7 +4,7 @@ import {
   FileText, Ship, HardDrive, Languages, Calculator, BadgeCheck,
   ShieldCheck, Globe, ExternalLink, Plus, AlertTriangle, 
   CheckCircle, XCircle, Clock, Loader2, TrendingUp, Wallet,
-  ChevronRight, Info, Download, X
+  ChevronRight, Info, Download, X, Building2
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 
@@ -19,6 +19,7 @@ const categoryIcons: Record<string, React.ElementType> = {
   translation: Languages,
   tariff: Calculator,
   validation: BadgeCheck,
+  business_info: Building2,
   infrastructure: Server,
   other: Link2
 }
@@ -32,6 +33,7 @@ const categoryNames: Record<string, string> = {
   translation: '翻译服务',
   tariff: '关税查询',
   validation: '号码验证',
+  business_info: '工商信息',
   infrastructure: '基础设施',
   other: '其他'
 }
@@ -656,7 +658,7 @@ export default function ApiIntegrations() {
   }, {} as Record<string, ApiIntegration[]>)
   
   // 分类顺序
-  const categoryOrder = ['tracking', 'ocr', 'storage', 'finance', 'translation', 'tariff', 'validation', 'infrastructure', 'other']
+  const categoryOrder = ['tracking', 'ocr', 'storage', 'finance', 'translation', 'tariff', 'validation', 'business_info', 'infrastructure', 'other']
   
   if (loading) {
     return (

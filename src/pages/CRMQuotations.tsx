@@ -8,6 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
+import TransportQuoteCalculator from '../components/TransportQuoteCalculator'
 import { getApiBaseUrl } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -115,7 +116,7 @@ interface InquiryTask {
 
 export default function CRMQuotations() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, getAccessToken } = useAuth()
   
   // 视图切换：quotations / inquiries
   const [activeView, setActiveView] = useState<'quotations' | 'inquiries'>('quotations')
@@ -140,28 +141,36 @@ export default function CRMQuotations() {
     subject: '',
     quoteDate: new Date().toISOString().split('T')[0],
     validUntil: '',
+    validityValue: 30,
+    validityUnit: 'day' as 'day' | 'week' | 'month' | 'year',
     currency: 'EUR',
     terms: '',
     notes: '',
-    items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[]
+    items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[],
+    inquiryId: '' // 关联的询价ID
   })
   const [translatingIndex, setTranslatingIndex] = useState<number | null>(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
+  const [isComposing, setIsComposing] = useState(false) // 跟踪输入法状态
   
   // 客户询价状态
   const [inquiries, setInquiries] = useState<CustomerInquiry[]>([])
   const [inquiryTotal, setInquiryTotal] = useState(0)
   const [inquiryPage, setInquiryPage] = useState(1)
   const [inquiryLoading, setInquiryLoading] = useState(false)
-  const [inquiryFilterStatus, setInquiryFilterStatus] = useState<string>('')
+  const [inquiryFilterStatus, setInquiryFilterStatus] = useState<string>('unquoted') // 默认只显示待报价的询价
   const [selectedInquiry, setSelectedInquiry] = useState<CustomerInquiry | null>(null)
   const [showInquiryDetail, setShowInquiryDetail] = useState(false)
   const [taskStats, setTaskStats] = useState({ pendingCount: 0, processingCount: 0, overdueCount: 0, todayCompleted: 0 })
+  
+  // 运输报价计算弹窗状态
+  const [showTransportCalculator, setShowTransportCalculator] = useState(false)
+  const [pendingInquiryForQuote, setPendingInquiryForQuote] = useState<CustomerInquiry | null>(null)
 
    
   useEffect(() => {
     if (activeView === 'quotations') {
-      loadData()
+    loadData()
     } else {
       loadInquiries()
       loadTaskStats()
@@ -214,7 +223,10 @@ export default function CRMQuotations() {
       })
       if (inquiryFilterStatus) params.append('status', inquiryFilterStatus)
 
-      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`)
+      const token = await getAccessToken()
+      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -231,7 +243,10 @@ export default function CRMQuotations() {
   // 加载任务统计
   const loadTaskStats = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/inquiry/tasks/stats`)
+      const token = await getAccessToken()
+      const response = await fetch(`${API_BASE}/api/inquiry/tasks/stats`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
       const data = await response.json()
       if (data.errCode === 200) {
         setTaskStats(data.data)
@@ -244,8 +259,10 @@ export default function CRMQuotations() {
   // 开始处理询价
   const handleStartProcessing = async (inquiry: CustomerInquiry) => {
     try {
+      const token = await getAccessToken()
       const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries/${inquiry.id}/start`, {
-        method: 'POST'
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
       const data = await response.json()
       if (data.errCode === 200) {
@@ -323,11 +340,28 @@ export default function CRMQuotations() {
       return
     }
 
+    // 检查是否已有手动添加的项目（非产品项目）
+    const hasManualItems = formData.items.some(item => 
+      item.name.trim() && !item.productId && !item.feeItemId
+    )
+    
+    if (hasManualItems) {
+      if (!confirm('导入产品会清除当前手动添加的项目，是否继续？')) {
+        return
+      }
+    }
+
     const newItems: QuotationItem[] = []
+    let detectedCurrency: string | null = null
     
     for (const productId of selectedProducts) {
       const feeItems = await loadProductFeeItems(productId)
       feeItems.forEach(feeItem => {
+        // 记录第一个费用项的币种
+        if (!detectedCurrency && feeItem.currency) {
+          detectedCurrency = feeItem.currency
+        }
+        
         newItems.push({
           name: feeItem.feeName,
           nameEn: feeItem.feeNameEn || '',
@@ -343,11 +377,13 @@ export default function CRMQuotations() {
     }
 
     if (newItems.length > 0) {
-      // 合并到现有项目（移除空白项）
-      const existingItems = formData.items.filter(item => item.name.trim())
+      // 只保留从产品导入的项目（有 productId 的），清除手动项目
+      const existingProductItems = formData.items.filter(item => item.productId || item.feeItemId)
       setFormData(prev => ({
         ...prev,
-        items: [...existingItems, ...newItems]
+        items: [...existingProductItems, ...newItems],
+        // 使用检测到的币种，如果没有则保持原币种
+        currency: detectedCurrency || prev.currency
       }))
     }
 
@@ -387,6 +423,31 @@ export default function CRMQuotations() {
 
   const handleOpenModal = (item?: Quotation) => {
     if (item) {
+      // 计算有效期值和单位
+      let validityValue = 30
+      let validityUnit: 'day' | 'week' | 'month' | 'year' = 'day'
+      
+      if (item.validUntil && item.quoteDate) {
+        const startDate = new Date(item.quoteDate)
+        const endDate = new Date(item.validUntil)
+        const daysDiff = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+        
+        // 智能判断最合适的单位
+        if (daysDiff % 365 === 0 && daysDiff >= 365) {
+          validityValue = daysDiff / 365
+          validityUnit = 'year'
+        } else if (daysDiff % 30 === 0 && daysDiff >= 30) {
+          validityValue = daysDiff / 30
+          validityUnit = 'month'
+        } else if (daysDiff % 7 === 0 && daysDiff >= 7) {
+          validityValue = daysDiff / 7
+          validityUnit = 'week'
+        } else {
+          validityValue = daysDiff
+          validityUnit = 'day'
+        }
+      }
+      
       setEditingItem(item)
       setFormData({
         customerId: item.customerId || '',
@@ -394,10 +455,13 @@ export default function CRMQuotations() {
         subject: item.subject || '',
         quoteDate: item.quoteDate || new Date().toISOString().split('T')[0],
         validUntil: item.validUntil || '',
+        validityValue,
+        validityUnit,
         currency: item.currency || 'EUR',
         terms: '',
         notes: '',
-        items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
+        inquiryId: '' // 编辑时不关联询价
       })
     } else {
       setEditingItem(null)
@@ -407,10 +471,13 @@ export default function CRMQuotations() {
         subject: '',
         quoteDate: new Date().toISOString().split('T')[0],
         validUntil: '',
+        validityValue: 30,
+        validityUnit: 'day',
         currency: 'EUR',
         terms: '',
         notes: '',
-        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
+        inquiryId: '' // 新建时不关联询价
       })
     }
     setShowModal(true)
@@ -478,10 +545,29 @@ export default function CRMQuotations() {
 
     const { subtotal, totalAmount } = calculateTotals()
 
+    // 计算有效期截止日期
+    const quoteDate = new Date(formData.quoteDate)
+    let validUntil = new Date(quoteDate)
+    
+    switch (formData.validityUnit) {
+      case 'day':
+        validUntil.setDate(validUntil.getDate() + formData.validityValue)
+        break
+      case 'week':
+        validUntil.setDate(validUntil.getDate() + formData.validityValue * 7)
+        break
+      case 'month':
+        validUntil.setMonth(validUntil.getMonth() + formData.validityValue)
+        break
+      case 'year':
+        validUntil.setFullYear(validUntil.getFullYear() + formData.validityValue)
+        break
+    }
+
     try {
       const url = editingItem 
-        ? `/api/quotations/${editingItem.id}`
-        : '/api/quotations'
+        ? `${API_BASE}/api/quotations/${editingItem.id}`
+        : `${API_BASE}/api/quotations`
       const method = editingItem ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
@@ -489,6 +575,7 @@ export default function CRMQuotations() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          validUntil: validUntil.toISOString().split('T')[0],
           subtotal,
           totalAmount,
           items: formData.items.filter(item => item.name)
@@ -875,10 +962,7 @@ export default function CRMQuotations() {
     { label: '销售机会', path: '/crm/opportunities' },
     { label: '报价管理', path: '/crm/quotations' },
     { label: '合同管理', path: '/crm/contracts' },
-    { label: '客户反馈', path: '/crm/feedbacks' },
-    { label: '提成规则', path: '/crm/commission/rules' },
-    { label: '提成记录', path: '/crm/commission/records' },
-    { label: '月度结算', path: '/crm/commission/settlements' },
+    { label: '客户反馈', path: '/crm/feedbacks' }
   ]
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -936,44 +1020,44 @@ export default function CRMQuotations() {
       {/* 报价单视图 */}
       {activeView === 'quotations' && (
         <>
-          {/* 工具栏 */}
-          <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="搜索报价单号、客户..."
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && loadData()}
-                  className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                />
-              </div>
-
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                title="筛选报价状态"
-              >
-                <option value="">全部状态</option>
-                <option value="draft">草稿</option>
-                <option value="sent">已发送</option>
-                <option value="accepted">已接受</option>
-                <option value="rejected">已拒绝</option>
-                <option value="expired">已过期</option>
-              </select>
-            </div>
-
-            <button
-              onClick={() => handleOpenModal()}
-              className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700"
-            >
-              <Plus className="w-4 h-4" />
-              新建报价
-            </button>
+      {/* 工具栏 */}
+      <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="搜索报价单号、客户..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && loadData()}
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            />
           </div>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            title="筛选报价状态"
+          >
+            <option value="">全部状态</option>
+            <option value="draft">草稿</option>
+            <option value="sent">已发送</option>
+            <option value="accepted">已接受</option>
+            <option value="rejected">已拒绝</option>
+            <option value="expired">已过期</option>
+          </select>
+        </div>
+
+        <button
+          onClick={() => handleOpenModal()}
+          className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700"
+        >
+          <Plus className="w-4 h-4" />
+          新建报价
+        </button>
+      </div>
         </>
       )}
 
@@ -1032,6 +1116,7 @@ export default function CRMQuotations() {
                 className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 title="筛选询价状态"
               >
+                <option value="unquoted">待报价</option>
                 <option value="">全部状态</option>
                 <option value="pending">待处理</option>
                 <option value="processing">处理中</option>
@@ -1084,49 +1169,49 @@ export default function CRMQuotations() {
       {/* 报价单数据表格 */}
       {activeView === 'quotations' && (
         <>
-          <DataTable
-            columns={columns}
-            data={quotations}
-            loading={loading}
-            rowKey="id"
-          />
+      <DataTable
+        columns={columns}
+        data={quotations}
+        loading={loading}
+        rowKey="id"
+      />
 
-          {/* 分页 */}
-          {total > pageSize && (
-            <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
-              <div className="text-xs text-gray-500">
-                共 {total} 条记录
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  上一页
-                </button>
-                <button
-                  onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
-                  disabled={page >= Math.ceil(total / pageSize)}
-                  className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
-                >
-                  下一页
-                </button>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value))
-                    setPage(1)
-                  }}
-                  className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                  title="每页显示条数"
-                >
-                  <option value={20}>20 条/页</option>
-                  <option value={50}>50 条/页</option>
-                  <option value={100}>100 条/页</option>
-                </select>
-              </div>
-            </div>
+      {/* 分页 */}
+      {total > pageSize && (
+        <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-4 py-3">
+          <div className="text-xs text-gray-500">
+            共 {total} 条记录
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+            >
+              上一页
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))}
+              disabled={page >= Math.ceil(total / pageSize)}
+              className="px-3 py-1 text-xs border rounded hover:bg-gray-50 disabled:opacity-50"
+            >
+              下一页
+            </button>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value))
+                setPage(1)
+              }}
+              className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              title="每页显示条数"
+            >
+              <option value={20}>20 条/页</option>
+              <option value={50}>50 条/页</option>
+              <option value={100}>100 条/页</option>
+            </select>
+          </div>
+        </div>
           )}
         </>
       )}
@@ -1157,7 +1242,7 @@ export default function CRMQuotations() {
                         customerName: customer?.customerName || ''
                       })
                     }}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                     title="选择客户"
                   >
                     <option value="">请选择客户</option>
@@ -1172,13 +1257,13 @@ export default function CRMQuotations() {
                     type="text"
                     value={formData.subject}
                     onChange={(e) => setFormData({...formData, subject: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    placeholder="请输入报价主题"
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    placeholder="输入报价件数-产品品名"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">报价日期</label>
                   <DatePicker
@@ -1188,20 +1273,42 @@ export default function CRMQuotations() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">有效期至</label>
-                  <DatePicker
-                    value={formData.validUntil}
-                    onChange={(value) => setFormData({...formData, validUntil: value})}
-                    placeholder="选择有效期"
+                  <label className="block text-xs text-gray-600 mb-1">有效期</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.validityValue}
+                    onChange={(e) => setFormData({...formData, validityValue: parseInt(e.target.value) || 1})}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    placeholder="数量"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">币种</label>
+                  <label className="block text-xs text-gray-600 mb-1">单位</label>
+                  <select
+                    value={formData.validityUnit}
+                    onChange={(e) => setFormData({...formData, validityUnit: e.target.value as 'day' | 'week' | 'month' | 'year'})}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="day">天</option>
+                    <option value="week">周</option>
+                    <option value="month">月</option>
+                    <option value="year">年</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    币种
+                    {formData.items.some(item => item.productId || item.feeItemId) && (
+                      <span className="ml-1 text-[10px] text-amber-600">(由产品决定)</span>
+                    )}
+                  </label>
                   <select
                     value={formData.currency}
                     onChange={(e) => setFormData({...formData, currency: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                    title="选择币种"
+                    disabled={formData.items.some(item => item.productId || item.feeItemId)}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    title={formData.items.some(item => item.productId || item.feeItemId) ? "已导入产品，币种由产品决定" : "选择币种"}
                   >
                     <option value="CNY">人民币 (CNY)</option>
                     <option value="USD">美元 (USD)</option>
@@ -1231,8 +1338,8 @@ export default function CRMQuotations() {
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <div className="grid grid-cols-12 gap-2 text-[10px] text-gray-500 font-medium">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-12 gap-3 text-[10px] text-gray-500 font-medium">
                     <div className="col-span-3">项目名称（中文）</div>
                     <div className="col-span-2">英文名称</div>
                     <div className="col-span-2 text-center">数量</div>
@@ -1242,35 +1349,46 @@ export default function CRMQuotations() {
                   </div>
 
                   {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                    <div key={index} className="grid grid-cols-12 gap-3 items-center">
                       <input
                         type="text"
                         value={item.name}
                         onChange={(e) => handleItemChange(index, 'name', e.target.value)}
-                        className="col-span-3 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        onCompositionStart={() => setIsComposing(true)}
+                        onCompositionEnd={(e) => {
+                          setIsComposing(false)
+                          // 输入法确认后，更新值并触发翻译
+                          const value = (e.target as HTMLInputElement).value
+                          if (value.trim()) {
+                            handleItemChange(index, 'name', value)
+                            // 清空旧的英文名称并重新翻译
+                            handleItemChange(index, 'nameEn', '')
+                            setTimeout(() => handleTranslateItem(index), 100)
+                          }
+                        }}
+                        onBlur={() => {
+                          // 只在非输入法状态下触发翻译
+                          if (!isComposing && item.name.trim() && !item.nameEn) {
+                            handleTranslateItem(index)
+                          }
+                        }}
+                        className="col-span-3 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="中文名称"
                       />
-                      <div className="col-span-2 flex gap-1">
+                      <div className="col-span-2 relative">
                         <input
                           type="text"
                           value={item.nameEn || ''}
-                          onChange={(e) => handleItemChange(index, 'nameEn', e.target.value)}
-                          className="flex-1 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                          readOnly
+                          className="w-full px-3 py-2 text-sm border rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                           placeholder="英文名称"
+                          title="自动翻译，不可编辑"
                         />
-                        <button
-                          type="button"
-                          onClick={() => handleTranslateItem(index)}
-                          disabled={translatingIndex === index || !item.name.trim()}
-                          className="px-1.5 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
-                          title="翻译"
-                        >
-                          {translatingIndex === index ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <Languages className="w-3 h-3" />
-                          )}
-                        </button>
+                        {translatingIndex === index && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                            <Loader2 className="w-4 h-4 text-primary-500 animate-spin" />
+                          </div>
+                        )}
                       </div>
                       <input
                         type="text"
@@ -1280,7 +1398,7 @@ export default function CRMQuotations() {
                           const val = e.target.value.replace(/[^0-9.]/g, '')
                           handleItemChange(index, 'quantity', parseFloat(val) || 0)
                         }}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-center"
+                        className="col-span-2 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-center"
                         placeholder="数量"
                       />
                       <input
@@ -1291,10 +1409,10 @@ export default function CRMQuotations() {
                           const val = e.target.value.replace(/[^0-9.]/g, '')
                           handleItemChange(index, 'price', parseFloat(val) || 0)
                         }}
-                        className="col-span-2 px-2 py-1.5 text-xs border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        className="col-span-2 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         placeholder="单价"
                       />
-                      <div className="col-span-2 text-xs text-gray-700 font-medium">
+                      <div className="col-span-2 text-sm text-gray-700 font-medium">
                         {formatCurrency(item.quantity * item.price, formData.currency)}
                       </div>
                       <button
@@ -1554,22 +1672,34 @@ export default function CRMQuotations() {
               {(selectedInquiry.status === 'pending' || selectedInquiry.status === 'processing') && (
                 <button
                   onClick={() => {
-                    // TODO: 跳转到报价页面或打开报价弹窗
+                    // 判断是否是运输类询价
+                    const hasTransport = selectedInquiry.inquiryType === 'transport' || selectedInquiry.inquiryType === 'combined'
+                    
+                    if (hasTransport && selectedInquiry.transportData) {
+                      // 运输询价：先打开运输报价计算弹窗
+                      setPendingInquiryForQuote(selectedInquiry)
                     setShowInquiryDetail(false)
-                    // 创建报价单并预填信息
+                      setShowTransportCalculator(true)
+                    } else {
+                      // 非运输询价：直接打开报价单弹窗
+                      setShowInquiryDetail(false)
                     setFormData({
                       customerId: selectedInquiry.customerId,
                       customerName: selectedInquiry.customerName,
                       subject: `${getInquiryTypeLabel(selectedInquiry.inquiryType)} - ${selectedInquiry.inquiryNumber}`,
                       quoteDate: new Date().toISOString().split('T')[0],
                       validUntil: '',
+                      validityValue: 30,
+                      validityUnit: 'day',
                       currency: 'EUR',
                       terms: '',
                       notes: `关联询价：${selectedInquiry.inquiryNumber}`,
-                      items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }]
+                        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
+                        inquiryId: selectedInquiry.id // 关联询价ID
                     })
                     setActiveView('quotations')
                     setShowModal(true)
+                    }
                   }}
                   className="px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"
                 >
@@ -1579,6 +1709,61 @@ export default function CRMQuotations() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* 运输报价计算弹窗 */}
+      {pendingInquiryForQuote && pendingInquiryForQuote.transportData && (
+        <TransportQuoteCalculator
+          visible={showTransportCalculator}
+          onClose={() => {
+            setShowTransportCalculator(false)
+            setPendingInquiryForQuote(null)
+          }}
+          onConfirm={(data) => {
+            // 关闭运输报价计算弹窗
+            setShowTransportCalculator(false)
+            
+            // 将计算结果填入报价单
+            const inquiry = pendingInquiryForQuote
+            setFormData({
+              customerId: inquiry.customerId,
+              customerName: inquiry.customerName,
+              subject: `${getInquiryTypeLabel(inquiry.inquiryType)} - ${inquiry.inquiryNumber}`,
+              quoteDate: new Date().toISOString().split('T')[0],
+              validUntil: '',
+              validityValue: 30,
+              validityUnit: 'day',
+              currency: 'EUR',
+              terms: '',
+              notes: `关联询价：${inquiry.inquiryNumber}\n路线：${data.route.origin.address || inquiry.transportData?.origin} → ${data.route.destination.address || inquiry.transportData?.destination}\n距离：${data.route.distance}km | 利润设置：${data.profitSettings.type === 'percent' ? `${data.profitSettings.value}%` : `€${data.profitSettings.value}`}`,
+              items: data.items.map(item => ({
+                name: item.name,
+                nameEn: item.nameEn,
+                description: item.description,
+                quantity: item.quantity,
+                unit: item.unit,
+                price: item.price,
+                amount: item.amount
+              })),
+              inquiryId: inquiry.id // 关联询价ID，用于更新询价状态
+            })
+            
+            // 清除待处理询价
+            setPendingInquiryForQuote(null)
+            
+            // 打开报价单弹窗
+            setActiveView('quotations')
+            setShowModal(true)
+          }}
+          transportData={{
+            origin: pendingInquiryForQuote.transportData.origin,
+            destination: pendingInquiryForQuote.transportData.destination,
+            transportMode: pendingInquiryForQuote.transportData.transportMode,
+            containerType: pendingInquiryForQuote.transportData.containerType,
+            returnLocation: pendingInquiryForQuote.transportData.returnLocation,
+            returnAddress: pendingInquiryForQuote.transportData.returnAddress
+          }}
+        />
       )}
     </div>
   )

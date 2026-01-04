@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader'
 import { copyToClipboard } from '../components/Toast'
 import { formatDate, formatDateTime } from '../utils/dateFormat'
 import DatePicker from '../components/DatePicker'
+import DateTimePicker from '../components/DateTimePicker'
 // DataTable available if needed
 import Timeline, { TimelineItem } from '../components/Timeline'
 import FeeModal from '../components/FeeModal'
@@ -2487,17 +2488,14 @@ export default function BillDetails() {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   <Clock className="w-3 h-3 inline mr-1" />
-                  预计提货时间 <span className="text-red-500">*</span>
+                  预计提货日期 <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="datetime-local"
-                    value={pickupEstimatedTime}
-                    onChange={(e) => setPickupEstimatedTime(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
-                  />
-                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
+                <DateTimePicker
+                  value={pickupEstimatedTime}
+                  onChange={setPickupEstimatedTime}
+                  placeholder="请选择预计提货日期"
+                  showTime={false}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">备注</label>
@@ -2515,7 +2513,7 @@ export default function BillDetails() {
                 <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
                   <p className="text-xs text-amber-700">
                     <span className="font-medium">当前设置：</span>
-                    {new Date(billDetail.cmrEstimatedPickupTime).toLocaleString('zh-CN')}
+                    {new Date(billDetail.cmrEstimatedPickupTime).toLocaleDateString('zh-CN')}
                   </p>
                 </div>
               )}
@@ -2532,7 +2530,7 @@ export default function BillDetails() {
               <button
                 onClick={async () => {
                   if (!pickupEstimatedTime) {
-                    alert('请选择预计提货时间')
+                    alert('请选择预计提货日期')
                     return
                   }
                   setPickupSubmitting(true)
@@ -2733,15 +2731,11 @@ export default function BillDetails() {
                   <Calendar className="w-3 h-3 inline mr-1" />
                   放行时间 <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="datetime-local"
-                    value={customsReleaseDate}
-                    onChange={(e) => setCustomsReleaseDate(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
-                  />
-                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
+                <DateTimePicker
+                  value={customsReleaseDate}
+                  onChange={setCustomsReleaseDate}
+                  placeholder="请选择放行时间"
+                />
                 <p className="mt-1 text-xs text-gray-500">
                   选择实际清关放行的日期和时间
                 </p>
@@ -2880,6 +2874,14 @@ export default function BillDetails() {
           customerId: billDetail.customerId,
           customerName: billDetail.customerName,
           status: billDetail.status,
+          // 系统导入/人工录入字段
+          customsReleaseTime: billDetail.customsReleaseTime,
+          cmrUnloadingCompleteTime: billDetail.cmrUnloadingCompleteTime,
+          // 订单导入扩展字段
+          serviceType: billDetail.serviceType,
+          cargoValue: billDetail.cargoValue,
+          documentsSentDate: billDetail.documentsSentDate,
+          cmrSentDate: billDetail.cmrSentDate,
         } : null}
       />
     </div>

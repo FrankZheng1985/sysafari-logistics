@@ -5,6 +5,7 @@
 import * as model from './model.js'
 import * as hereService from './hereService.js'
 import * as quoteCalculator from './quoteCalculator.js'
+import * as addressCacheModel from './addressCacheModel.js'
 import { success, badRequest, notFound, serverError, successWithPagination } from '../../utils/response.js'
 
 // ==================== 询价管理 ====================
@@ -247,6 +248,138 @@ export async function calculateTransport(req, res) {
 }
 
 /**
+ * 运输报价计算（用于报价弹窗）
+ * 返回完整的路线信息、费用明细和polyline数据用于地图显示
+ */
+export async function calculateTransportQuote(req, res) {
+  try {
+    const { origin, destination, waypoints, truckTypeCode, goods } = req.body
+    
+    if (!origin || !destination) {
+      return badRequest(res, '请提供起点和终点')
+    }
+    
+    // 获取卡车类型
+    let truckType = null
+    if (truckTypeCode) {
+      truckType = await model.getTruckTypeByCode(truckTypeCode)
+    } else if (goods) {
+      // 根据货物推荐卡车
+      const recommendation = quoteCalculator.recommendTruckByGoods(goods)
+      const trucks = await model.getTruckTypes({ category: recommendation.recommendedCategory })
+      truckType = trucks[0]
+    }
+    
+    if (!truckType) {
+      // 使用默认卡车类型
+      truckType = await model.getTruckTypeByCode('SEMI_40')
+    }
+    
+    // 计算路线
+    const routeData = await hereService.calculateTruckRoute({
+      origin,
+      destination,
+      waypoints: waypoints || [],
+      truck: {
+        grossWeight: truckType.maxWeight,
+        height: truckType.height,
+        width: truckType.width,
+        length: truckType.length,
+        axleCount: truckType.axleCount
+      }
+    })
+    
+    // 计算费用明细
+    const costResult = hereService.calculateTransportCost(routeData, truckType)
+    
+    // 构建费用明细项（用于报价单）
+    const costItems = [
+      {
+        source: 'HERE',
+        name: '运输费',
+        nameEn: 'Transport Fee',
+        category: 'transport',
+        costPrice: costResult.transportCost,
+        currency: 'EUR',
+        unit: '趟',
+        quantity: 1,
+        selected: true
+      },
+      {
+        source: 'HERE',
+        name: '通行费',
+        nameEn: 'Toll Fee',
+        category: 'transport',
+        costPrice: costResult.tolls,
+        currency: 'EUR',
+        unit: '趟',
+        quantity: 1,
+        selected: costResult.tolls > 0
+      },
+      {
+        source: 'HERE',
+        name: '燃油附加费',
+        nameEn: 'Fuel Surcharge',
+        category: 'transport',
+        costPrice: costResult.fuelSurcharge,
+        currency: 'EUR',
+        unit: '趟',
+        quantity: 1,
+        selected: costResult.fuelSurcharge > 0
+      }
+    ]
+    
+    // 如果有渡轮费，添加渡轮费项
+    if (costResult.ferryFee > 0) {
+      costItems.push({
+        source: 'HERE',
+        name: '渡轮费',
+        nameEn: 'Ferry Fee',
+        category: 'transport',
+        costPrice: costResult.ferryFee,
+        currency: 'EUR',
+        unit: '趟',
+        quantity: 1,
+        selected: true
+      })
+    }
+    
+    return success(res, {
+      // 路线信息
+      route: {
+        origin: routeData.origin,
+        destination: routeData.destination,
+        waypoints: routeData.waypoints,
+        distance: routeData.route.distance,
+        roadDistance: routeData.route.roadDistance,
+        ferryDistance: routeData.route.ferryDistance,
+        duration: routeData.route.duration,
+        durationFormatted: routeData.route.durationFormatted,
+        hasFerry: routeData.route.hasFerry,
+        polyline: routeData.route.polyline  // 用于地图显示
+      },
+      // 费用明细
+      costItems: costItems,
+      // 费用汇总
+      summary: {
+        totalCost: costResult.totalCost,
+        currency: 'EUR'
+      },
+      // 卡车类型信息
+      truckType: {
+        code: truckType.code,
+        name: truckType.name,
+        nameEn: truckType.nameEn,
+        category: truckType.category
+      }
+    })
+  } catch (error) {
+    console.error('运输报价计算失败:', error)
+    return serverError(res, error.message || '运输报价计算失败')
+  }
+}
+
+/**
  * 估算清关费用
  */
 export async function estimateClearance(req, res) {
@@ -342,6 +475,26 @@ export async function geocodeAddress(req, res) {
   } catch (error) {
     console.error('地理编码失败:', error)
     return serverError(res, '地理编码失败')
+  }
+}
+
+/**
+ * 地址自动补全
+ */
+export async function autosuggestAddress(req, res) {
+  try {
+    const { query, limit = 5 } = req.query
+    
+    if (!query || query.length < 2) {
+      return success(res, [])
+    }
+    
+    const results = await hereService.autosuggestAddress(query, parseInt(limit))
+    
+    return success(res, results)
+  } catch (error) {
+    console.error('地址自动补全失败:', error)
+    return serverError(res, '地址自动补全失败')
   }
 }
 
@@ -561,6 +714,7 @@ export default {
   
   // 计算
   calculateTransport,
+  calculateTransportQuote,
   estimateClearance,
   
   // 卡车类型
@@ -569,6 +723,7 @@ export default {
   
   // 地理编码
   geocodeAddress,
+  autosuggestAddress,
   batchGetCitiesByPostalCodes,
   
   // ERP内部
@@ -580,7 +735,14 @@ export default {
   getTaskStats,
   assignInquiry,
   startProcessing,
-  checkOverdueTasks
+  checkOverdueTasks,
+  
+  // 地址缓存管理
+  getAddressCacheStats,
+  searchAddressCache,
+  addAddressToCache,
+  deleteAddressCache,
+  cleanupAddressCache
 }
 
 /**
@@ -608,6 +770,111 @@ export async function batchGetCitiesByPostalCodes(req, res) {
   } catch (error) {
     console.error('批量获取城市失败:', error)
     res.status(500).json({ error: '获取城市信息失败' })
+  }
+}
+
+// ==================== 地址缓存管理 ====================
+
+/**
+ * 获取地址缓存统计
+ */
+export async function getAddressCacheStats(req, res) {
+  try {
+    const stats = await addressCacheModel.getCacheStats()
+    const topAddresses = await addressCacheModel.getTopAddresses(10)
+    
+    return success(res, {
+      stats,
+      topAddresses
+    })
+  } catch (error) {
+    console.error('获取地址缓存统计失败:', error)
+    return serverError(res, '获取地址缓存统计失败')
+  }
+}
+
+/**
+ * 搜索地址缓存
+ */
+export async function searchAddressCache(req, res) {
+  try {
+    const { keyword, countryCode, cacheType, page, pageSize } = req.query
+    
+    const result = await addressCacheModel.searchCachedAddresses({
+      keyword,
+      countryCode,
+      cacheType,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('搜索地址缓存失败:', error)
+    return serverError(res, '搜索地址缓存失败')
+  }
+}
+
+/**
+ * 手动添加地址到缓存
+ */
+export async function addAddressToCache(req, res) {
+  try {
+    const addressData = req.body
+    
+    if (!addressData.address && !addressData.queryText) {
+      return badRequest(res, '请提供地址或查询关键词')
+    }
+    
+    const result = await addressCacheModel.addManualAddress(addressData)
+    
+    return success(res, result, '地址已添加到缓存')
+  } catch (error) {
+    console.error('添加地址缓存失败:', error)
+    if (error.code === '23505') {
+      return badRequest(res, '该地址已存在于缓存中')
+    }
+    return serverError(res, '添加地址缓存失败')
+  }
+}
+
+/**
+ * 删除地址缓存
+ */
+export async function deleteAddressCache(req, res) {
+  try {
+    const { id } = req.params
+    
+    if (!id) {
+      return badRequest(res, '请提供缓存ID')
+    }
+    
+    await addressCacheModel.deleteCache(id)
+    
+    return success(res, { id }, '地址缓存已删除')
+  } catch (error) {
+    console.error('删除地址缓存失败:', error)
+    return serverError(res, '删除地址缓存失败')
+  }
+}
+
+/**
+ * 清理过期缓存
+ */
+export async function cleanupAddressCache(req, res) {
+  try {
+    const { days = 90 } = req.body
+    
+    const count = await addressCacheModel.cleanupOldCache(parseInt(days))
+    
+    return success(res, { cleanedCount: count }, `已清理 ${count} 条过期缓存`)
+  } catch (error) {
+    console.error('清理地址缓存失败:', error)
+    return serverError(res, '清理地址缓存失败')
   }
 }
 

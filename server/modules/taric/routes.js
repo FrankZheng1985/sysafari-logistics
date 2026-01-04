@@ -123,4 +123,42 @@ router.get('/china-anti-dumping/codes', controller.getChinaAntiDumpingCodes)
 // GET /api/taric/china-anti-dumping/:hsCode
 router.get('/china-anti-dumping/:hsCode', controller.lookupChinaAntiDumping)
 
+// ==================== UK Trade Tariff API 查询 ====================
+
+// 实时查询单个 HS 编码（从 UK Trade Tariff API）
+// GET /api/taric/uk/realtime/:hsCode?originCountry=CN&region=uk&saveToDb=true
+// region: 'uk' (英国) 或 'xi' (北爱尔兰，适用EU规则)
+router.get('/uk/realtime/:hsCode', controller.lookupHsCodeUk)
+
+// 批量实时查询 UK HS 编码
+// POST /api/taric/uk/realtime-batch
+// body: { hsCodes: ['6109100010', '8471300000'], originCountry: 'CN', region: 'uk' }
+router.post('/uk/realtime-batch', controller.batchLookupUk)
+
+// 搜索 UK 商品
+// GET /api/taric/uk/search?q=keyword&region=uk
+router.get('/uk/search', controller.searchUkCommodities)
+
+// 获取 UK 章节列表
+// GET /api/taric/uk/chapters?region=uk
+router.get('/uk/chapters', controller.getUkChapters)
+
+// 检查 UK Trade Tariff API 健康状态
+router.get('/uk/api-health', controller.checkUkApiHealth)
+
+// 清除 UK API 缓存
+router.post('/uk/clear-cache', controller.clearUkApiCache)
+
+// ==================== 统一查询接口 ====================
+
+// 统一实时查询接口（支持 EU 和 UK）
+// GET /api/taric/unified/:hsCode?originCountry=CN&source=eu&region=uk&saveToDb=true
+// source: 'eu' (欧盟 TARIC) 或 'uk' (英国 Trade Tariff)
+// region: 仅当 source=uk 时有效，'uk' 或 'xi'
+router.get('/unified/:hsCode', controller.lookupHsCodeUnified)
+
+// 检查所有 API 健康状态
+// GET /api/taric/all-api-health
+router.get('/all-api-health', controller.checkAllApiHealth)
+
 export default router

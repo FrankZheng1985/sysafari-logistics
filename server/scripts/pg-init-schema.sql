@@ -675,6 +675,8 @@ CREATE TABLE IF NOT EXISTS customers (
     source TEXT,
     assigned_sales INTEGER,
     assigned_sales_name TEXT,
+    assigned_operator INTEGER,
+    assigned_operator_name TEXT,
     tags TEXT,
     notes TEXT,
     status TEXT DEFAULT 'active',

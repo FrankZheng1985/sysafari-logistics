@@ -12,7 +12,8 @@ import {
   AlertTriangle,
   ChevronRight,
   Check,
-  X
+  X,
+  FileQuestion
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getApiBaseUrl } from '../utils/api'
@@ -24,6 +25,7 @@ interface NotificationOverview {
   unreadMessages: number
   pendingApprovals: number
   activeAlerts: number
+  pendingInquiries?: number
   total: number
 }
 
@@ -54,21 +56,22 @@ export default function NotificationBell() {
 
   // 获取通知概览数据（使用缓存）
   const fetchOverview = useCallback(async (forceRefresh = false) => {
-    if (!user?.id) return
+    if (!user?.id || !user?.role) return
     
     try {
-      // 如果强制刷新，先清除缓存
+      // 如果强制刷新，先清除缓存（传递角色以精确清除）
       if (forceRefresh) {
-        invalidateNotificationCache(user.id)
+        invalidateNotificationCache(user.id, user.role)
       }
-      const data = await getCachedNotificationOverview(user.id, API_BASE)
+      // 传递用户角色，用于权限过滤
+      const data = await getCachedNotificationOverview(user.id, API_BASE, user.role)
       if (data.errCode === 200) {
         setOverview(data.data)
       }
     } catch (error) {
       console.debug('获取通知概览失败:', error)
     }
-  }, [user?.id])
+  }, [user?.id, user?.role])
 
   // 获取最近消息
   const fetchRecentMessages = async () => {
@@ -260,7 +263,7 @@ export default function NotificationBell() {
           </div>
 
           {/* 统计概览 */}
-          <div className="grid grid-cols-3 gap-2 p-3 border-b border-gray-100">
+          <div className="grid grid-cols-4 gap-2 p-3 border-b border-gray-100">
             <button
               onClick={() => { navigate('/system/messages'); setShowDropdown(false) }}
               className="flex flex-col items-center p-2 rounded-lg hover:bg-gray-50 transition-colors"
@@ -269,7 +272,17 @@ export default function NotificationBell() {
                 <MessageSquare className="w-4 h-4 text-blue-500" />
                 <span className="text-lg font-semibold text-gray-900">{overview.unreadMessages}</span>
               </div>
-              <span className="text-xs text-gray-500">未读消息</span>
+              <span className="text-xs text-gray-500">消息</span>
+            </button>
+            <button
+              onClick={() => { navigate('/crm/quotations'); setShowDropdown(false) }}
+              className="flex flex-col items-center p-2 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-1">
+                <FileQuestion className="w-4 h-4 text-amber-500" />
+                <span className="text-lg font-semibold text-gray-900">{overview.pendingInquiries || 0}</span>
+              </div>
+              <span className="text-xs text-gray-500">询价</span>
             </button>
             <button
               onClick={() => { navigate('/system/approvals'); setShowDropdown(false) }}
@@ -279,7 +292,7 @@ export default function NotificationBell() {
                 <ClipboardCheck className="w-4 h-4 text-orange-500" />
                 <span className="text-lg font-semibold text-gray-900">{overview.pendingApprovals}</span>
               </div>
-              <span className="text-xs text-gray-500">待审批</span>
+              <span className="text-xs text-gray-500">审批</span>
             </button>
             <button
               onClick={() => { navigate('/system/alerts'); setShowDropdown(false) }}

@@ -65,15 +65,30 @@ router.delete('/documents/imports/:id', controller.deleteImport)
 // 更新发货方和进口商信息
 router.put('/documents/imports/:id/shipper-importer', controller.updateShipperAndImporter)
 
+// 从提单同步发货方信息
+router.post('/documents/imports/:id/sync-shipper', controller.syncShipperFromBL)
+
 // ==================== HS匹配 ====================
 // 执行批量匹配
 router.post('/documents/matching/run', controller.runBatchMatch)
 
-// 获取待审核列表
+// 获取待审核列表（未匹配）
 router.get('/documents/matching/review', controller.getReviewItems)
+
+// 获取已匹配列表
+router.get('/documents/matching/matched', controller.getMatchedItems)
+
+// 获取匹配统计
+router.get('/documents/matching/stats', controller.getMatchingStats)
 
 // 批量审核
 router.post('/documents/matching/batch', controller.batchReview)
+
+// 批量更新整个提单的原产地
+router.put('/documents/matching/batch-origin', controller.updateBatchOrigin)
+
+// 更新单个商品的材质和用途
+router.put('/documents/matching/item/:itemId/detail', controller.updateItemDetail)
 
 // 获取HS推荐
 router.post('/documents/matching/recommend', controller.getRecommendations)
@@ -102,6 +117,22 @@ router.put('/documents/tax-calc/:importId/clearance-type', controller.updateClea
 
 // 更新单个商品税费
 router.put('/documents/tax-calc/item/:itemId', controller.updateItemTax)
+
+// ==================== 贸易条件和完税价格 ====================
+// 获取 Incoterms 贸易条款列表
+router.get('/documents/incoterms', controller.getIncotermsList)
+
+// 更新贸易条件和运费信息
+router.put('/documents/tax-calc/:importId/trade-terms', controller.updateTradeTerms)
+
+// 更新商品原产地
+router.put('/documents/tax-calc/item/:itemId/origin', controller.updateItemOrigin)
+
+// 重新计算完税价格和税费
+router.post('/documents/tax-calc/:importId/recalculate', controller.recalculateTax)
+
+// 根据原产地查询税率
+router.get('/documents/tariff/by-origin', controller.getTariffByOrigin)
 
 // ==================== 数据补充 ====================
 // 获取待补充列表（支持智能分类）

@@ -188,6 +188,11 @@ router.delete('/quotations/:id', controller.deleteQuotation)
 // 生成报价单PDF
 router.post('/quotations/:id/pdf', controller.generateQuotationPdf)
 
+// ==================== 报价费用项选择路由（用于新增费用） ====================
+
+// 获取客户已确认的报价单（用于新增费用时选择）
+router.get('/customers/:customerId/confirmed-quotations', controller.getCustomerConfirmedQuotations)
+
 // ==================== 合同管理路由 ====================
 
 // 获取合同列表

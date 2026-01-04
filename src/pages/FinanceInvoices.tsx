@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -822,11 +823,11 @@ export default function FinanceInvoices() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {invoices.find(inv => selectedInvoiceIds.includes(inv.id))?.invoiceType === 'sales' ? '收款' : '付款'}日期
                 </label>
-                <input
-                  type="date"
+                <DateTimePicker
                   value={batchPaymentData.paymentDate}
-                  onChange={(e) => setBatchPaymentData(prev => ({ ...prev, paymentDate: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  onChange={(value) => setBatchPaymentData(prev => ({ ...prev, paymentDate: value }))}
+                  showTime={false}
+                  placeholder="选择日期"
                 />
               </div>
               

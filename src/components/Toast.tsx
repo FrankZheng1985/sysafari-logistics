@@ -85,7 +85,7 @@ const toastConfig: Record<ToastType, { icon: typeof CheckCircle; bgColor: string
 
 // 单个 Toast 组件
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
-  const config = toastConfig[toast.type]
+  const config = toastConfig[toast.type] || toastConfig.info // 防御性检查，默认使用 info 样式
   const Icon = config.icon
 
   useEffect(() => {

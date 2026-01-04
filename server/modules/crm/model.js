@@ -7,6 +7,43 @@ import { getDatabase, generateId } from '../../config/database.js'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { translateText } from '../../utils/translate.js'
+import { pinyin } from 'pinyin-pro'
+
+/**
+ * 获取名称的拼音首字母（大写）
+ * 支持中文和英文混合
+ * @param {string} name - 客户名称
+ * @returns {string} - 拼音首字母（大写），如"傲翼" -> "AY"
+ */
+function getNameInitials(name) {
+  if (!name || typeof name !== 'string') {
+    return 'XX' // 默认值
+  }
+  
+  // 去除空格和特殊字符，只保留中文和英文字母
+  const cleanName = name.replace(/[^\u4e00-\u9fa5a-zA-Z]/g, '')
+  
+  if (!cleanName) {
+    return 'XX'
+  }
+  
+  let initials = ''
+  
+  for (const char of cleanName) {
+    // 检查是否是中文字符
+    if (/[\u4e00-\u9fa5]/.test(char)) {
+      // 获取中文拼音首字母
+      const py = pinyin(char, { pattern: 'first', toneType: 'none' })
+      initials += py.toUpperCase()
+    } else if (/[a-zA-Z]/.test(char)) {
+      // 英文字母直接取大写
+      initials += char.toUpperCase()
+    }
+  }
+  
+  // 限制首字母长度（最多4个字符，避免过长）
+  return initials.slice(0, 4) || 'XX'
+}
 
 // ==================== 常量定义 ====================
 
@@ -224,15 +261,27 @@ export async function getCustomerByCode(code) {
 
 /**
  * 生成客户编码
- * 格式：C + 年月日 + 3位序号（如：C20241216001）
+ * 新格式：简称拼音首字母 + 年月(YYMM) + 4位序号
+ * 示例：傲翼 + 2024年1月 -> AY24010001
+ * @param {string} customerName - 客户名称（用于提取拼音首字母）
+ * @returns {Promise<string>} - 生成的客户编码
  */
-export async function generateCustomerCode() {
+export async function generateCustomerCode(customerName) {
   const db = getDatabase()
   const today = new Date()
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '')
-  const prefix = `C${dateStr}`
   
-  // 查询今天已有的最大序号
+  // 获取年月：YYMM格式（2位年+2位月）
+  const year = today.getFullYear().toString().slice(-2) // 后2位年份
+  const month = (today.getMonth() + 1).toString().padStart(2, '0') // 2位月份
+  const yearMonth = `${year}${month}` // 如: 2401
+  
+  // 获取客户名称的拼音首字母
+  const initials = getNameInitials(customerName)
+  
+  // 前缀：首字母 + 年月
+  const prefix = `${initials}${yearMonth}`
+  
+  // 查询该前缀下已有的最大序号
   const result = await db.prepare(`
     SELECT customer_code FROM customers 
     WHERE customer_code LIKE ? 
@@ -242,13 +291,15 @@ export async function generateCustomerCode() {
   
   let seq = 1
   if (result && result.customer_code) {
-    const lastSeq = parseInt(result.customer_code.slice(-3), 10)
+    // 提取最后4位序号
+    const lastSeq = parseInt(result.customer_code.slice(-4), 10)
     if (!isNaN(lastSeq)) {
       seq = lastSeq + 1
     }
   }
   
-  return `${prefix}${seq.toString().padStart(3, '0')}`
+  // 返回完整编码：首字母 + 年月 + 4位序号
+  return `${prefix}${seq.toString().padStart(4, '0')}`
 }
 
 /**
@@ -259,7 +310,8 @@ export async function createCustomer(data) {
   const id = generateId()
   
   // 自动生成客户编码（如果没有提供）
-  const customerCode = data.customerCode || await generateCustomerCode()
+  // 新格式：简称拼音首字母 + 年月(YYMM) + 4位序号
+  const customerCode = data.customerCode || await generateCustomerCode(data.customerName)
   
   // 自动翻译公司中文全称为英文（如果有中文名称且没有提供英文名称）
   let companyNameEn = data.companyNameEn || ''
@@ -280,9 +332,9 @@ export async function createCustomer(data) {
       contact_person, contact_phone, contact_email, tax_number,
       legal_person, registered_capital, establishment_date, business_scope,
       bank_name, bank_account, credit_limit, payment_terms,
-      assigned_to, assigned_name, tags, notes, status,
+      assigned_to, assigned_name, assigned_operator, assigned_operator_name, tags, notes, status,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     customerCode,
@@ -311,6 +363,8 @@ export async function createCustomer(data) {
     data.paymentTerms || '',
     data.assignedTo || null,
     data.assignedName || '',
+    data.assignedOperator || null,
+    data.assignedOperatorName || '',
     data.tags ? JSON.stringify(data.tags) : '[]',
     data.notes || '',
     data.status || 'active'
@@ -369,6 +423,8 @@ export async function updateCustomer(id, data) {
     paymentTerms: 'payment_terms',
     assignedTo: 'assigned_to',
     assignedName: 'assigned_name',
+    assignedOperator: 'assigned_operator',
+    assignedOperatorName: 'assigned_operator_name',
     notes: 'notes',
     status: 'status'
   }
@@ -704,17 +760,16 @@ export async function deleteFollowUp(id) {
 
 /**
  * 获取客户订单统计
+ * 只使用 customer_id 精确匹配，避免名称模糊匹配导致数据混淆
  */
 export async function getCustomerOrderStats(customerId) {
   const db = getDatabase()
   
-  // 根据客户ID关联提单统计
+  // 验证客户存在
   const customer = await getCustomerById(customerId)
   if (!customer) return null
   
-  const searchPattern = `%${customer.customerName}%`
-  
-  // 统计该客户相关的所有订单（通过customer_id或名称匹配）
+  // 仅通过 customer_id 精确匹配统计订单
   const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total_orders,
@@ -725,12 +780,8 @@ export async function getCustomerOrderStats(customerId) {
       COALESCE(SUM(volume), 0) as total_volume
     FROM bills_of_lading
     WHERE (is_void = 0 OR is_void IS NULL)
-      AND (
-        customer_id = ? OR 
-        shipper LIKE ? OR 
-        consignee LIKE ?
-      )
-  `).get(customerId, searchPattern, searchPattern)
+      AND customer_id = ?
+  `).get(customerId)
   
   return {
     totalOrders: Number(stats?.total_orders || 0),
@@ -744,6 +795,7 @@ export async function getCustomerOrderStats(customerId) {
 
 /**
  * 获取客户相关订单列表
+ * 只使用 customer_id 精确匹配，避免名称模糊匹配导致数据混淆
  */
 export async function getCustomerOrders(customerId, params = {}) {
   const db = getDatabase()
@@ -752,17 +804,12 @@ export async function getCustomerOrders(customerId, params = {}) {
   const customer = await getCustomerById(customerId)
   if (!customer) return { list: [], total: 0, page, pageSize }
   
-  // 优先通过customer_id查找，同时也支持通过shipper/consignee名称匹配（兼容历史数据）
+  // 仅通过 customer_id 精确匹配查询订单
   let query = `
     SELECT * FROM bills_of_lading 
-    WHERE is_void = 0 AND (
-      customer_id = ? OR 
-      shipper LIKE ? OR 
-      consignee LIKE ?
-    )
+    WHERE is_void = 0 AND customer_id = ?
   `
-  const searchPattern = `%${customer.customerName}%`
-  const queryParams = [customerId, searchPattern, searchPattern]
+  const queryParams = [customerId]
   
   // 关键词搜索
   if (search) {
@@ -868,15 +915,14 @@ export async function createCustomerAddress(customerId, data) {
     `).run(customerId)
   }
   
-  const id = crypto.randomUUID()
-  
-  await db.prepare(`
+  // 使用数据库自增 id，不手动传入
+  const result = await db.prepare(`
     INSERT INTO customer_addresses (
-      id, customer_id, address_code, company_name, contact_person, phone,
+      customer_id, address_code, company_name, contact_person, phone,
       country, city, address, postal_code, is_default, address_type
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
     customerId,
     data.addressCode || null,
     data.companyName || null,
@@ -890,7 +936,7 @@ export async function createCustomerAddress(customerId, data) {
     data.addressType || 'both'
   )
   
-  return { id }
+  return { id: result?.id }
 }
 
 /**
@@ -1794,6 +1840,61 @@ export async function createQuotationForCustomer({ customerId, customerName, pro
   }
 }
 
+// ==================== 报价费用项选择（用于新增费用） ====================
+
+/**
+ * 获取客户已确认的报价单列表（用于新增费用时选择）
+ * @param {string} customerId - 客户ID
+ * @returns {Promise<Array>} - 报价单列表（只返回已确认的报价单）
+ */
+export async function getCustomerConfirmedQuotations(customerId) {
+  const db = getDatabase()
+  
+  // 获取该客户所有已确认（accepted）或已发送（sent）的报价单
+  const quotations = await db.prepare(`
+    SELECT id, quote_number, customer_name, subject, quote_date, valid_until,
+           total_amount, currency, items, status, created_by_name
+    FROM quotations 
+    WHERE customer_id = ? AND status IN ('accepted', 'sent')
+    ORDER BY quote_date DESC
+  `).all(customerId)
+  
+  return (quotations || []).map(q => {
+    // 解析 items JSON
+    let items = []
+    try {
+      items = q.items ? JSON.parse(q.items) : []
+    } catch (e) {
+      items = []
+    }
+    
+    return {
+      id: q.id,
+      quoteNumber: q.quote_number,
+      customerName: q.customer_name,
+      subject: q.subject,
+      quoteDate: q.quote_date,
+      validUntil: q.valid_until,
+      totalAmount: parseFloat(q.total_amount) || 0,
+      currency: q.currency || 'EUR',
+      status: q.status,
+      createdByName: q.created_by_name,
+      // 费用明细项
+      items: items.map((item, index) => ({
+        id: `${q.id}-item-${index}`,
+        name: item.name || item.feeName || '',
+        nameEn: item.nameEn || item.feeNameEn || '',
+        description: item.description || '',
+        quantity: item.quantity || 1,
+        unit: item.unit || '',
+        price: parseFloat(item.price) || 0,
+        amount: parseFloat(item.amount) || 0,
+        feeCategory: item.feeCategory || item.category || 'other'
+      }))
+    }
+  })
+}
+
 // ==================== 合同管理 ====================
 
 /**
@@ -2658,6 +2759,8 @@ export function convertCustomerToCamelCase(row) {
     paymentTerms: row.payment_terms,
     assignedTo: row.assigned_to,
     assignedName: row.assigned_name,
+    assignedOperator: row.assigned_operator,
+    assignedOperatorName: row.assigned_operator_name,
     tags,
     notes: row.notes,
     status: row.status,
@@ -2860,7 +2963,7 @@ export async function getCustomerAccounts(params = {}) {
   let sql = `
     SELECT ca.*, c.customer_name, c.customer_code
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE 1=1
   `
   const conditions = []
@@ -2904,7 +3007,7 @@ export async function getCustomerAccountById(id) {
   const row = await db.prepare(`
     SELECT ca.*, c.customer_name, c.customer_code
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE ca.id = ?
   `).get(id)
   
@@ -2919,7 +3022,7 @@ export async function getCustomerAccountByUsername(username) {
   const row = await db.prepare(`
     SELECT ca.*, c.customer_name, c.customer_code, c.id as customer_id
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE ca.username = ?
   `).get(username)
   
@@ -3025,7 +3128,7 @@ export async function verifyCustomerLogin(username, password) {
   const account = await db.prepare(`
     SELECT ca.*, c.customer_name, c.customer_code
     FROM customer_accounts ca
-    LEFT JOIN customers c ON ca.customer_id = c.id
+    LEFT JOIN customers c ON ca.customer_id = c.id::text
     WHERE ca.username = ?
   `).get(username)
   
@@ -3137,7 +3240,7 @@ export async function getApiKeyByKey(apiKey) {
   const row = await db.prepare(`
     SELECT ak.*, c.customer_name, c.customer_code
     FROM customer_api_keys ak
-    LEFT JOIN customers c ON ak.customer_id = c.id
+    LEFT JOIN customers c ON ak.customer_id = c.id::text
     WHERE ak.api_key = ?
   `).get(apiKey)
   
@@ -3253,7 +3356,7 @@ export async function verifyApiKey(apiKey, apiSecret) {
   const keyInfo = await db.prepare(`
     SELECT ak.*, c.customer_name, c.customer_code
     FROM customer_api_keys ak
-    LEFT JOIN customers c ON ak.customer_id = c.id
+    LEFT JOIN customers c ON ak.customer_id = c.id::text
     WHERE ak.api_key = ?
   `).get(apiKey)
   

@@ -14,9 +14,13 @@ import {
   TariffRate,
   TariffRateStats,
   lookupTaricRealtime,
+  lookupUkTaricRealtime,
   TaricRealtimeResult,
+  UkTaricRealtimeResult,
   getTaricCountryCodes,
   CountryCode,
+  TaricDataSource,
+  UkRegion,
 } from '../utils/api'
 
 // 导入弹窗组件
@@ -584,11 +588,14 @@ function RealtimeLookupModal({
   const [hsCode, setHsCode] = useState('')
   const [originCountry, setOriginCountry] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<TaricRealtimeResult | null>(null)
+  const [result, setResult] = useState<TaricRealtimeResult | UkTaricRealtimeResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [countries, setCountries] = useState<CountryCode[]>([])
   const [loadingCountries, setLoadingCountries] = useState(false)
   const [saving, setSaving] = useState(false)
+  // 数据源选择
+  const [dataSource, setDataSource] = useState<TaricDataSource>('eu')
+  const [ukRegion, setUkRegion] = useState<UkRegion>('uk')
 
   // 加载国家代码
   useEffect(() => {
@@ -596,6 +603,12 @@ function RealtimeLookupModal({
       loadCountries()
     }
   }, [visible])
+
+  // 切换数据源时清除结果
+  useEffect(() => {
+    setResult(null)
+    setError(null)
+  }, [dataSource, ukRegion])
 
   const loadCountries = async () => {
     setLoadingCountries(true)
@@ -622,11 +635,22 @@ function RealtimeLookupModal({
     setResult(null)
 
     try {
-      const response = await lookupTaricRealtime(hsCode, originCountry || undefined, false)
-      if (response.errCode === 200 && response.data) {
-        setResult(response.data)
+      if (dataSource === 'uk') {
+        // 使用 UK Trade Tariff API
+        const response = await lookupUkTaricRealtime(hsCode, originCountry || undefined, ukRegion, false)
+        if (response.errCode === 200 && response.data) {
+          setResult(response.data)
+        } else {
+          setError(response.msg || '查询失败')
+        }
       } else {
-        setError(response.msg || '查询失败')
+        // 使用 EU TARIC API
+        const response = await lookupTaricRealtime(hsCode, originCountry || undefined, false)
+        if (response.errCode === 200 && response.data) {
+          setResult(response.data)
+        } else {
+          setError(response.msg || '查询失败')
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '查询失败')
@@ -640,11 +664,21 @@ function RealtimeLookupModal({
 
     setSaving(true)
     try {
-      const response = await lookupTaricRealtime(hsCode, originCountry || undefined, true)
-      if (response.errCode === 200 && response.data) {
-        setResult(response.data)
-        if (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated') {
-          onSaveSuccess()
+      if (dataSource === 'uk') {
+        const response = await lookupUkTaricRealtime(hsCode, originCountry || undefined, ukRegion, true)
+        if (response.errCode === 200 && response.data) {
+          setResult(response.data)
+          if (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated') {
+            onSaveSuccess()
+          }
+        }
+      } else {
+        const response = await lookupTaricRealtime(hsCode, originCountry || undefined, true)
+        if (response.errCode === 200 && response.data) {
+          setResult(response.data)
+          if (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated') {
+            onSaveSuccess()
+          }
         }
       }
     } catch (err) {
@@ -654,6 +688,14 @@ function RealtimeLookupModal({
     }
   }
 
+  // 获取数据源显示名称
+  const getDataSourceLabel = () => {
+    if (dataSource === 'uk') {
+      return ukRegion === 'xi' ? 'UK Trade Tariff (北爱尔兰/EU规则)' : 'UK Trade Tariff (英国)'
+    }
+    return 'EU TARIC (欧盟)'
+  }
+
   if (!visible) return null
 
   return (
@@ -661,12 +703,14 @@ function RealtimeLookupModal({
       <div className="bg-white rounded shadow-xl w-full max-w-3xl mx-4">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              dataSource === 'uk' ? 'bg-red-600' : 'bg-blue-600'
+            }`}>
               <Globe className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">TARIC 实时查询</h3>
-              <p className="text-xs text-gray-500">从欧盟官方系统获取最新税率数据</p>
+              <h3 className="text-sm font-semibold text-gray-900">关税税率实时查询</h3>
+              <p className="text-xs text-gray-500">{getDataSourceLabel()}</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
@@ -675,6 +719,46 @@ function RealtimeLookupModal({
         </div>
 
         <div className="p-4 space-y-4">
+          {/* 数据源选择 */}
+          <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+            <span className="text-xs text-gray-600 font-medium">数据源:</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDataSource('eu')}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  dataSource === 'eu'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                🇪🇺 EU TARIC
+              </button>
+              <button
+                onClick={() => setDataSource('uk')}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                  dataSource === 'uk'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                🇬🇧 UK Trade Tariff
+              </button>
+            </div>
+            {dataSource === 'uk' && (
+              <div className="flex items-center gap-2 ml-2 pl-2 border-l border-gray-300">
+                <span className="text-xs text-gray-500">地区:</span>
+                <select
+                  value={ukRegion}
+                  onChange={(e) => setUkRegion(e.target.value as UkRegion)}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                >
+                  <option value="uk">英国本土</option>
+                  <option value="xi">北爱尔兰 (EU规则)</option>
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* 查询表单 */}
           <div className="flex items-end gap-3">
             <div className="flex-1">
@@ -706,7 +790,11 @@ function RealtimeLookupModal({
             <button
               onClick={handleLookup}
               disabled={loading || !hsCode}
-              className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+              className={`px-4 py-2 text-white rounded text-sm disabled:opacity-50 flex items-center gap-1 ${
+                dataSource === 'uk' 
+                  ? 'bg-red-600 hover:bg-red-700' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
               {loading ? '查询中...' : '实时查询'}
@@ -727,6 +815,26 @@ function RealtimeLookupModal({
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-gray-700">查询结果</span>
+                  {/* 数据源标签 */}
+                  {'dataSource' in result && (
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      result.dataSource?.includes('uk_api') 
+                        ? 'bg-red-100 text-red-700' 
+                        : result.dataSource === 'xi_api'
+                        ? 'bg-blue-100 text-blue-700'
+                        : result.dataSource === 'local_database'
+                        ? 'bg-gray-100 text-gray-700'
+                        : result.dataSource === 'china_anti_dumping_database'
+                        ? 'bg-orange-100 text-orange-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {result.dataSource?.includes('uk_api') ? '🇬🇧 UK API' :
+                       result.dataSource === 'xi_api' ? '🇪🇺 EU TARIC' :
+                       result.dataSource === 'local_database' ? '📦 本地数据库' :
+                       result.dataSource === 'china_anti_dumping_database' ? '🇨🇳 反倾销数据' :
+                       '🇪🇺 EU TARIC'}
+                    </span>
+                  )}
                   {result.fromCache && (
                     <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-[10px]">
                       来自缓存
@@ -749,6 +857,31 @@ function RealtimeLookupModal({
               </div>
 
               <div className="p-3 space-y-3">
+                {/* 编码匹配提示 */}
+                {'exactMatch' in result && result.exactMatch === false && (
+                  <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                    <p className="font-medium">⚠️ 编码匹配提示</p>
+                    <p className="mt-1">
+                      系统未找到精确编码 <code className="bg-amber-100 px-1 rounded">{(result as any).originalHsCode}</code>，
+                      已使用最接近的编码 <code className="bg-amber-100 px-1 rounded">{result.hsCode10}</code> 进行查询。
+                    </p>
+                    {(result as any).note && <p className="mt-1 text-amber-600">{(result as any).note}</p>}
+                  </div>
+                )}
+
+                {/* 本地数据库提示 */}
+                {'dataSource' in result && (result.dataSource === 'local_database' || result.dataSource === 'china_anti_dumping_database') && (
+                  <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                    <p className="font-medium">ℹ️ 数据来源提示</p>
+                    <p className="mt-1">
+                      {result.dataSource === 'china_anti_dumping_database' 
+                        ? '数据来自中国反倾销税本地数据库，包含针对中国商品的特殊关税。'
+                        : '数据来自本地常用税率数据库，如需最新数据请查询官方系统。'}
+                    </p>
+                    {(result as any).note && <p className="mt-1 text-blue-600">{(result as any).note}</p>}
+                  </div>
+                )}
+
                 {/* 基本信息 */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-gray-50 rounded p-2">
@@ -758,6 +891,9 @@ function RealtimeLookupModal({
                   <div className="bg-gray-50 rounded p-2">
                     <p className="text-[10px] text-gray-500 mb-0.5">TARIC 编码 (10位)</p>
                     <p className="text-sm font-medium text-gray-900">{result.hsCode10}</p>
+                    {(result as any).originalHsCode && (result as any).originalHsCode !== result.hsCode10 && (
+                      <p className="text-[9px] text-amber-600">原查询: {(result as any).originalHsCode}</p>
+                    )}
                   </div>
                   <div className="bg-gray-50 rounded p-2">
                     <p className="text-[10px] text-gray-500 mb-0.5">原产国</p>
@@ -776,30 +912,36 @@ function RealtimeLookupModal({
                 )}
 
                 {/* 税率信息 */}
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-5 gap-3">
                   <div className="bg-green-50 rounded p-2 text-center">
                     <p className="text-[10px] text-gray-500 mb-0.5">第三国关税</p>
                     <p className="text-lg font-bold text-green-700">
-                      {result.thirdCountryDuty !== null ? `${result.thirdCountryDuty}%` : '-'}
+                      {typeof result.thirdCountryDuty === 'number' ? `${result.thirdCountryDuty}%` : '-'}
                     </p>
                   </div>
                   <div className="bg-blue-50 rounded p-2 text-center">
                     <p className="text-[10px] text-gray-500 mb-0.5">适用关税</p>
                     <p className="text-lg font-bold text-blue-700">
-                      {result.dutyRate !== null ? `${result.dutyRate}%` : '-'}
+                      {typeof result.dutyRate === 'number' ? `${result.dutyRate}%` : '-'}
+                    </p>
+                  </div>
+                  <div className="bg-purple-50 rounded p-2 text-center">
+                    <p className="text-[10px] text-gray-500 mb-0.5">VAT</p>
+                    <p className="text-lg font-bold text-purple-700">
+                      {typeof (result as any).vatRate === 'number' ? `${(result as any).vatRate}%` : '-'}
                     </p>
                   </div>
                   <div className="bg-orange-50 rounded p-2 text-center">
                     <p className="text-[10px] text-gray-500 mb-0.5">反倾销税</p>
                     <p className="text-lg font-bold text-orange-700">
-                      {result.antiDumpingRate !== null ? `${result.antiDumpingRate}%` : 
+                      {typeof result.antiDumpingRate === 'number' ? `${result.antiDumpingRate}%` : 
                        result.hasAntiDumping ? '有' : '-'}
                     </p>
                   </div>
                   <div className="bg-red-50 rounded p-2 text-center">
                     <p className="text-[10px] text-gray-500 mb-0.5">反补贴税</p>
                     <p className="text-lg font-bold text-red-700">
-                      {result.countervailingRate !== null ? `${result.countervailingRate}%` :
+                      {typeof result.countervailingRate === 'number' ? `${result.countervailingRate}%` :
                        result.hasCountervailing ? '有' : '-'}
                     </p>
                   </div>
@@ -858,13 +1000,26 @@ function RealtimeLookupModal({
           )}
 
           {/* 提示信息 */}
-          <div className="bg-blue-50 rounded p-3 text-xs text-blue-700">
+          <div className={`rounded p-3 text-xs ${
+            dataSource === 'uk' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+          }`}>
             <p className="font-medium mb-1">💡 使用说明</p>
-            <ul className="space-y-0.5 text-blue-600">
+            <ul className={`space-y-0.5 ${dataSource === 'uk' ? 'text-red-600' : 'text-blue-600'}`}>
               <li>• 输入 HS 编码（8-10位）进行实时查询</li>
               <li>• 选择原产国可获取针对特定国家的税率（如反倾销税）</li>
               <li>• 查询结果会缓存24小时，避免重复请求</li>
               <li>• 点击"保存到数据库"可将查询结果保存到本地税率库</li>
+              {dataSource === 'uk' ? (
+                <>
+                  <li>• <strong>🇬🇧 UK Trade Tariff</strong>: 免费官方 API，脱欧后英国独立关税数据</li>
+                  <li>• <strong>北爱尔兰</strong>: 选择"北爱尔兰"地区可查询适用 EU 规则的税率</li>
+                </>
+              ) : (
+                <>
+                  <li>• <strong>🇪🇺 EU TARIC</strong>: 欧盟官方关税数据（通过网页解析获取）</li>
+                  <li>• 对于中国原产商品，会自动查询反倾销税</li>
+                </>
+              )}
             </ul>
           </div>
         </div>

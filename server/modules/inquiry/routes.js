@@ -4,6 +4,7 @@
 
 import { Router } from 'express'
 import controller from './controller.js'
+import { authenticate, optionalAuth } from '../../middleware/auth.js'
 
 const router = Router()
 
@@ -20,6 +21,9 @@ router.get('/truck-types/recommend', controller.recommendTruckType)
 // 地址地理编码
 router.get('/geocode', controller.geocodeAddress)
 
+// 地址自动补全（HERE API）
+router.get('/autosuggest', controller.autosuggestAddress)
+
 // 批量获取邮编对应的城市
 router.post('/cities-by-postal', controller.batchGetCitiesByPostalCodes)
 
@@ -27,6 +31,9 @@ router.post('/cities-by-postal', controller.batchGetCitiesByPostalCodes)
 
 // 计算运输费用
 router.post('/transport/calculate', controller.calculateTransport)
+
+// 运输报价计算（用于报价弹窗，返回完整路线和费用信息）
+router.post('/transport/quote-calculate', controller.calculateTransportQuote)
 
 // ==================== 清关估算 ====================
 
@@ -50,30 +57,47 @@ router.post('/inquiries/:id/accept', controller.acceptQuote)
 // 拒绝报价
 router.post('/inquiries/:id/reject', controller.rejectQuote)
 
-// ==================== ERP后台管理接口 ====================
+// ==================== ERP后台管理接口（需要认证） ====================
 
 // 获取所有询价列表（ERP后台）
-router.get('/manage/inquiries', controller.getAllInquiries)
+router.get('/manage/inquiries', optionalAuth, controller.getAllInquiries)
 
 // 设置询价报价（ERP后台）
-router.post('/manage/inquiries/:id/quote', controller.setQuote)
+router.post('/manage/inquiries/:id/quote', authenticate, controller.setQuote)
 
 // 分配询价给跟单员
-router.post('/manage/inquiries/:id/assign', controller.assignInquiry)
+router.post('/manage/inquiries/:id/assign', authenticate, controller.assignInquiry)
 
 // 开始处理询价
-router.post('/manage/inquiries/:id/start', controller.startProcessing)
+router.post('/manage/inquiries/:id/start', authenticate, controller.startProcessing)
 
-// ==================== 待办任务管理 ====================
+// ==================== 待办任务管理（需要认证） ====================
 
 // 获取待处理任务列表
-router.get('/tasks/pending', controller.getPendingTasks)
+router.get('/tasks/pending', authenticate, controller.getPendingTasks)
 
 // 获取任务统计
-router.get('/tasks/stats', controller.getTaskStats)
+router.get('/tasks/stats', authenticate, controller.getTaskStats)
 
 // 检查超时任务（定时任务调用）
 router.post('/tasks/check-overdue', controller.checkOverdueTasks)
+
+// ==================== 地址缓存管理（需要认证） ====================
+
+// 获取地址缓存统计
+router.get('/address-cache/stats', authenticate, controller.getAddressCacheStats)
+
+// 搜索地址缓存
+router.get('/address-cache', authenticate, controller.searchAddressCache)
+
+// 添加地址到缓存
+router.post('/address-cache', authenticate, controller.addAddressToCache)
+
+// 删除地址缓存
+router.delete('/address-cache/:id', authenticate, controller.deleteAddressCache)
+
+// 清理过期缓存
+router.post('/address-cache/cleanup', authenticate, controller.cleanupAddressCache)
 
 export default router
 

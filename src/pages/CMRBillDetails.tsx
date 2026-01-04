@@ -337,10 +337,9 @@ export default function CMRBillDetails() {
               className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 flex items-center gap-1"
             >
               <Truck className="w-3 h-3" />
-              {/* 根据步骤显示不同的按钮文字 */}
+              {/* 简化为3步流程 */}
               {billDetail.deliveryStatus === '待派送' ? '开始派送' :
-               billDetail.cmrUnloadingCompleteTime ? '完成派送' :
-               billDetail.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
+               billDetail.cmrActualArrivalTime ? '确认送达' : '更新状态'}
             </button>
           )}
         </div>
@@ -455,17 +454,13 @@ export default function CMRBillDetails() {
                 </div>
               )}
               
-              {/* 实际时间 */}
-              {(cmrDetail?.actualArrivalTime || cmrDetail?.unloadingCompleteTime || cmrDetail?.confirmedTime) && (
+              {/* 实际时间（简化为3步） */}
+              {(cmrDetail?.actualArrivalTime || cmrDetail?.confirmedTime) && (
                 <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] text-gray-500 mb-0.5">实际送达时间</label>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">到达时间</label>
                       <p className="text-xs text-gray-900">{formatTime(cmrDetail?.actualArrivalTime)}</p>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-gray-500 mb-0.5">卸货完成时间</label>
-                      <p className="text-xs text-gray-900">{formatTime(cmrDetail?.unloadingCompleteTime)}</p>
                     </div>
                     <div>
                       <label className="block text-[10px] text-gray-500 mb-0.5">确认送达时间</label>
@@ -494,22 +489,22 @@ export default function CMRBillDetails() {
               )}
             </div>
             
-            {/* 派送进度 */}
+            {/* 派送进度（简化为3步） */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-2">
                 <Clock className="w-3 h-3 text-blue-600" />
                 派送进度
               </h3>
               <div className="space-y-2">
-                {/* 步骤1: 预计提货 */}
+                {/* 步骤1: 提货 */}
                 <div className={`flex items-center gap-2 p-2 rounded ${cmrDetail?.estimatedPickupTime ? 'bg-green-50' : 'bg-gray-50'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium ${
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                     cmrDetail?.estimatedPickupTime ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
                   }`}>
                     {cmrDetail?.estimatedPickupTime ? '✓' : '1'}
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-700">预计提货</p>
+                    <p className="text-xs font-medium text-gray-700">提货</p>
                     {cmrDetail?.estimatedPickupTime && (
                       <p className="text-[10px] text-gray-500">
                         {formatTime(cmrDetail.estimatedPickupTime)} | 服务商: {cmrDetail.serviceProvider || '-'}
@@ -518,15 +513,18 @@ export default function CMRBillDetails() {
                   </div>
                 </div>
                 
-                {/* 步骤2: 预计到达 */}
-                <div className={`flex items-center gap-2 p-2 rounded ${cmrDetail?.deliveryAddress ? 'bg-green-50' : 'bg-gray-50'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium ${
-                    cmrDetail?.deliveryAddress ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
+                {/* 步骤2: 到达 */}
+                <div className={`flex items-center gap-2 p-2 rounded ${cmrDetail?.actualArrivalTime ? 'bg-green-50' : 'bg-gray-50'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    cmrDetail?.actualArrivalTime ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
                   }`}>
-                    {cmrDetail?.deliveryAddress ? '✓' : '2'}
+                    {cmrDetail?.actualArrivalTime ? '✓' : '2'}
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-700">设置送达地址</p>
+                    <p className="text-xs font-medium text-gray-700">到达</p>
+                    {cmrDetail?.actualArrivalTime && (
+                      <p className="text-[10px] text-gray-500">{formatTime(cmrDetail.actualArrivalTime)}</p>
+                    )}
                     {cmrDetail?.deliveryAddress && (
                       <p className="text-[10px] text-gray-500 truncate max-w-xs">
                         {cmrDetail.deliveryAddress}
@@ -535,42 +533,12 @@ export default function CMRBillDetails() {
                   </div>
                 </div>
                 
-                {/* 步骤3: 送达 */}
-                <div className={`flex items-center gap-2 p-2 rounded ${cmrDetail?.actualArrivalTime ? 'bg-green-50' : 'bg-gray-50'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium ${
-                    cmrDetail?.actualArrivalTime ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
-                  }`}>
-                    {cmrDetail?.actualArrivalTime ? '✓' : '3'}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-700">送达</p>
-                    {cmrDetail?.actualArrivalTime && (
-                      <p className="text-[10px] text-gray-500">{formatTime(cmrDetail.actualArrivalTime)}</p>
-                    )}
-                  </div>
-                </div>
-                
-                {/* 步骤4: 卸货完成 */}
-                <div className={`flex items-center gap-2 p-2 rounded ${cmrDetail?.unloadingCompleteTime ? 'bg-green-50' : 'bg-gray-50'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium ${
-                    cmrDetail?.unloadingCompleteTime ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
-                  }`}>
-                    {cmrDetail?.unloadingCompleteTime ? '✓' : '4'}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-gray-700">卸货完成</p>
-                    {cmrDetail?.unloadingCompleteTime && (
-                      <p className="text-[10px] text-gray-500">{formatTime(cmrDetail.unloadingCompleteTime)}</p>
-                    )}
-                  </div>
-                </div>
-                
-                {/* 步骤5: 确认送达 */}
+                {/* 步骤3: 确认送达 */}
                 <div className={`flex items-center gap-2 p-2 rounded ${cmrDetail?.confirmedTime ? 'bg-green-50' : 'bg-gray-50'}`}>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium ${
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                     cmrDetail?.confirmedTime ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
                   }`}>
-                    {cmrDetail?.confirmedTime ? '✓' : '5'}
+                    {cmrDetail?.confirmedTime ? '✓' : '3'}
                   </div>
                   <div className="flex-1">
                     <p className="text-xs font-medium text-gray-700">确认送达</p>

@@ -11,10 +11,11 @@ import { getDatabase } from '../../config/database.js'
  * @param {string} params.productName - 商品名称
  * @param {string} params.productNameEn - 英文名称
  * @param {string} params.material - 材质
+ * @param {string} params.originCountry - 原产国代码（如 CN）
  * @param {number} limit - 返回数量
  */
 export async function getRecommendations(params, limit = 5) {
-  const { productName, productNameEn, material } = params
+  const { productName, productNameEn, material, originCountry = 'CN' } = params
   const db = getDatabase()
   
   const recommendations = []
@@ -24,7 +25,8 @@ export async function getRecommendations(params, limit = 5) {
   if (productName) {
     const exactMatches = await db.prepare(`
       SELECT h.matched_hs_code as hs_code, h.match_count, h.product_name,
-             t.goods_description_cn as tariff_name, t.goods_description as product_name_en, t.duty_rate, t.vat_rate
+             t.goods_description_cn as tariff_name, t.goods_description as product_name_en, 
+             t.duty_rate, t.vat_rate, t.anti_dumping_rate, t.countervailing_rate
       FROM hs_match_history h
       LEFT JOIN tariff_rates t ON h.matched_hs_code = t.hs_code
       WHERE h.product_name = ?
@@ -35,6 +37,8 @@ export async function getRecommendations(params, limit = 5) {
     for (const row of (exactMatches || [])) {
       if (!usedHsCodes.has(row.hs_code)) {
         usedHsCodes.add(row.hs_code)
+        // 根据原产国查询特定税率
+        const tariffByOrigin = await getTariffByOriginCountry(db, row.hs_code, originCountry)
         recommendations.push({
           hsCode: row.hs_code,
           confidence: Math.min(95, 70 + row.match_count * 5),
@@ -42,8 +46,11 @@ export async function getRecommendations(params, limit = 5) {
           reason: `历史匹配 ${row.match_count} 次`,
           productName: row.tariff_name || row.product_name,
           productNameEn: row.product_name_en,
-          dutyRate: parseFloat(row.duty_rate) || 0,
-          vatRate: parseFloat(row.vat_rate) || 19
+          dutyRate: tariffByOrigin?.dutyRate ?? (parseFloat(row.duty_rate) || 0),
+          vatRate: tariffByOrigin?.vatRate ?? (parseFloat(row.vat_rate) || 19),
+          antiDumpingRate: tariffByOrigin?.antiDumpingRate ?? (parseFloat(row.anti_dumping_rate) || 0),
+          countervailingRate: tariffByOrigin?.countervailingRate ?? (parseFloat(row.countervailing_rate) || 0),
+          originCountry: originCountry
         })
       }
     }
@@ -53,7 +60,8 @@ export async function getRecommendations(params, limit = 5) {
   if (recommendations.length < limit && productName) {
     const fuzzyHistory = await db.prepare(`
       SELECT h.matched_hs_code as hs_code, h.match_count, h.product_name,
-             t.goods_description_cn as tariff_name, t.goods_description as product_name_en, t.duty_rate, t.vat_rate
+             t.goods_description_cn as tariff_name, t.goods_description as product_name_en, 
+             t.duty_rate, t.vat_rate, t.anti_dumping_rate, t.countervailing_rate
       FROM hs_match_history h
       LEFT JOIN tariff_rates t ON h.matched_hs_code = t.hs_code
       WHERE h.product_name ILIKE ?
@@ -64,6 +72,8 @@ export async function getRecommendations(params, limit = 5) {
     for (const row of (fuzzyHistory || [])) {
       if (!usedHsCodes.has(row.hs_code)) {
         usedHsCodes.add(row.hs_code)
+        // 根据原产国查询特定税率
+        const tariffByOrigin = await getTariffByOriginCountry(db, row.hs_code, originCountry)
         recommendations.push({
           hsCode: row.hs_code,
           confidence: Math.min(80, 50 + row.match_count * 3),
@@ -71,27 +81,35 @@ export async function getRecommendations(params, limit = 5) {
           reason: `相似商品历史匹配`,
           productName: row.tariff_name || row.product_name,
           productNameEn: row.product_name_en,
-          dutyRate: parseFloat(row.duty_rate) || 0,
-          vatRate: parseFloat(row.vat_rate) || 19
+          dutyRate: tariffByOrigin?.dutyRate ?? (parseFloat(row.duty_rate) || 0),
+          vatRate: tariffByOrigin?.vatRate ?? (parseFloat(row.vat_rate) || 19),
+          antiDumpingRate: tariffByOrigin?.antiDumpingRate ?? (parseFloat(row.anti_dumping_rate) || 0),
+          countervailingRate: tariffByOrigin?.countervailingRate ?? (parseFloat(row.countervailing_rate) || 0),
+          originCountry: originCountry
         })
         if (recommendations.length >= limit) break
       }
     }
   }
   
-  // 3. 如果仍不足，从税率库中模糊查找
+  // 3. 如果仍不足，从税率库中模糊查找（优先匹配指定原产国）
   if (recommendations.length < limit && productName) {
     const tariffMatch = await db.prepare(`
-      SELECT hs_code, goods_description_cn as product_name, goods_description as product_name_en, duty_rate, vat_rate
+      SELECT hs_code, goods_description_cn as product_name, goods_description as product_name_en, 
+             duty_rate, vat_rate, anti_dumping_rate, countervailing_rate, origin_country_code
       FROM tariff_rates
-      WHERE goods_description_cn ILIKE ? OR goods_description ILIKE ?
-      ORDER BY LENGTH(COALESCE(goods_description_cn, '')) ASC
+      WHERE (goods_description_cn ILIKE ? OR goods_description ILIKE ?)
+      ORDER BY 
+        CASE WHEN origin_country_code = ? THEN 0 ELSE 1 END,
+        LENGTH(COALESCE(goods_description_cn, '')) ASC
       LIMIT ?
-    `).all(`%${productName}%`, `%${productName}%`, limit)
+    `).all(`%${productName}%`, `%${productName}%`, originCountry, limit)
     
     for (const row of (tariffMatch || [])) {
       if (!usedHsCodes.has(row.hs_code)) {
         usedHsCodes.add(row.hs_code)
+        // 根据原产国查询特定税率
+        const tariffByOrigin = await getTariffByOriginCountry(db, row.hs_code, originCountry)
         recommendations.push({
           hsCode: row.hs_code,
           confidence: 50,
@@ -99,8 +117,11 @@ export async function getRecommendations(params, limit = 5) {
           reason: '税率库商品名匹配',
           productName: row.product_name,
           productNameEn: row.product_name_en,
-          dutyRate: parseFloat(row.duty_rate) || 0,
-          vatRate: parseFloat(row.vat_rate) || 19
+          dutyRate: tariffByOrigin?.dutyRate ?? (parseFloat(row.duty_rate) || 0),
+          vatRate: tariffByOrigin?.vatRate ?? (parseFloat(row.vat_rate) || 19),
+          antiDumpingRate: tariffByOrigin?.antiDumpingRate ?? (parseFloat(row.anti_dumping_rate) || 0),
+          countervailingRate: tariffByOrigin?.countervailingRate ?? (parseFloat(row.countervailing_rate) || 0),
+          originCountry: originCountry
         })
         if (recommendations.length >= limit) break
       }
@@ -110,7 +131,8 @@ export async function getRecommendations(params, limit = 5) {
   // 4. 如果有材质信息，尝试基于材质匹配
   if (recommendations.length < limit && material) {
     const materialMatch = await db.prepare(`
-      SELECT hs_code, goods_description_cn as product_name, goods_description as product_name_en, material, duty_rate, vat_rate
+      SELECT hs_code, goods_description_cn as product_name, goods_description as product_name_en, material, 
+             duty_rate, vat_rate, anti_dumping_rate, countervailing_rate
       FROM tariff_rates
       WHERE material ILIKE ?
       ORDER BY hs_code ASC
@@ -120,6 +142,8 @@ export async function getRecommendations(params, limit = 5) {
     for (const row of (materialMatch || [])) {
       if (!usedHsCodes.has(row.hs_code)) {
         usedHsCodes.add(row.hs_code)
+        // 根据原产国查询特定税率
+        const tariffByOrigin = await getTariffByOriginCountry(db, row.hs_code, originCountry)
         recommendations.push({
           hsCode: row.hs_code,
           confidence: 40,
@@ -127,8 +151,11 @@ export async function getRecommendations(params, limit = 5) {
           reason: `材质匹配: ${row.material}`,
           productName: row.product_name,
           productNameEn: row.product_name_en,
-          dutyRate: parseFloat(row.duty_rate) || 0,
-          vatRate: parseFloat(row.vat_rate) || 19
+          dutyRate: tariffByOrigin?.dutyRate ?? (parseFloat(row.duty_rate) || 0),
+          vatRate: tariffByOrigin?.vatRate ?? (parseFloat(row.vat_rate) || 19),
+          antiDumpingRate: tariffByOrigin?.antiDumpingRate ?? (parseFloat(row.anti_dumping_rate) || 0),
+          countervailingRate: tariffByOrigin?.countervailingRate ?? (parseFloat(row.countervailing_rate) || 0),
+          originCountry: originCountry
         })
         if (recommendations.length >= limit) break
       }
@@ -139,6 +166,60 @@ export async function getRecommendations(params, limit = 5) {
   recommendations.sort((a, b) => b.confidence - a.confidence)
   
   return recommendations.slice(0, limit)
+}
+
+/**
+ * 根据 HS 编码和原产国查询特定关税税率
+ * 特别是反倾销税和反补贴税，这些税率通常与原产国相关
+ * @param {Object} db - 数据库连接
+ * @param {string} hsCode - HS 编码
+ * @param {string} originCountryCode - 原产国代码
+ * @returns {Object|null} 税率信息
+ */
+async function getTariffByOriginCountry(db, hsCode, originCountryCode) {
+  if (!hsCode || !originCountryCode) return null
+  
+  // 首先精确匹配原产国
+  let tariff = await db.prepare(`
+    SELECT duty_rate, vat_rate, anti_dumping_rate, countervailing_rate
+    FROM tariff_rates 
+    WHERE hs_code = ?
+      AND origin_country_code = ?
+      AND is_active = 1
+    ORDER BY anti_dumping_rate DESC, duty_rate DESC
+    LIMIT 1
+  `).get(hsCode, originCountryCode)
+  
+  if (tariff) {
+    return {
+      dutyRate: parseFloat(tariff.duty_rate) || 0,
+      vatRate: parseFloat(tariff.vat_rate) || 19,
+      antiDumpingRate: parseFloat(tariff.anti_dumping_rate) || 0,
+      countervailingRate: parseFloat(tariff.countervailing_rate) || 0
+    }
+  }
+  
+  // 如果没有特定原产国的税率，查找通用税率
+  tariff = await db.prepare(`
+    SELECT duty_rate, vat_rate, anti_dumping_rate, countervailing_rate
+    FROM tariff_rates 
+    WHERE hs_code = ?
+      AND (origin_country_code IS NULL OR origin_country_code = '' OR origin_country_code = 'ERGA_OMNES')
+      AND is_active = 1
+    ORDER BY duty_rate DESC
+    LIMIT 1
+  `).get(hsCode)
+  
+  if (tariff) {
+    return {
+      dutyRate: parseFloat(tariff.duty_rate) || 0,
+      vatRate: parseFloat(tariff.vat_rate) || 19,
+      antiDumpingRate: parseFloat(tariff.anti_dumping_rate) || 0,
+      countervailingRate: parseFloat(tariff.countervailing_rate) || 0
+    }
+  }
+  
+  return null
 }
 
 /**

@@ -64,27 +64,36 @@ ON CONFLICT (api_code) DO UPDATE SET
     health_check_url = EXCLUDED.health_check_url,
     updated_at = CURRENT_TIMESTAMP;
 
--- 9. 阿里云 ECS 后端服务器
+-- 9. 企查查工商信息
 INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
-VALUES ('aliyun_ecs', '阿里云ECS服务器', '阿里云', 'infrastructure', 'https://api.xianfeng-eu.com', 'https://api.xianfeng-eu.com/api/health', 'subscription', 'https://ecs.console.aliyun.com', '后端API服务器，托管于阿里云ECS', 'Server', 9)
+VALUES ('qichacha', '企查查工商信息', '企查查', 'business_info', 'https://api.qichacha.com', 'https://api.qichacha.com', 'per_call', 'https://openapi.qichacha.com', '企业工商信息查询服务，支持企业名称搜索和详情查询', 'Building2', 9)
 ON CONFLICT (api_code) DO UPDATE SET
     api_name = EXCLUDED.api_name,
     provider = EXCLUDED.provider,
     health_check_url = EXCLUDED.health_check_url,
     updated_at = CURRENT_TIMESTAMP;
 
--- 10. 阿里云 OSS 前端静态托管
+-- 10. 阿里云 ECS 后端服务器
 INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
-VALUES ('aliyun_oss', '阿里云OSS静态托管', '阿里云', 'infrastructure', 'https://erp.xianfeng-eu.com', 'https://erp.xianfeng-eu.com', 'subscription', 'https://oss.console.aliyun.com', '前端静态资源，托管于阿里云OSS+CDN', 'Globe', 10)
+VALUES ('aliyun_ecs', '阿里云ECS服务器', '阿里云', 'infrastructure', 'https://api.xianfeng-eu.com', 'https://api.xianfeng-eu.com/api/health', 'subscription', 'https://ecs.console.aliyun.com', '后端API服务器，托管于阿里云ECS', 'Server', 10)
 ON CONFLICT (api_code) DO UPDATE SET
     api_name = EXCLUDED.api_name,
     provider = EXCLUDED.provider,
     health_check_url = EXCLUDED.health_check_url,
     updated_at = CURRENT_TIMESTAMP;
 
--- 11. 阿里云 RDS PostgreSQL 数据库
+-- 11. 阿里云 OSS 前端静态托管
 INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
-VALUES ('aliyun_rds', '阿里云RDS数据库', '阿里云', 'infrastructure', 'https://api.xianfeng-eu.com', 'https://api.xianfeng-eu.com/api/health', 'subscription', 'https://rdsnext.console.aliyun.com', 'PostgreSQL数据库，托管于阿里云RDS', 'Database', 11)
+VALUES ('aliyun_oss', '阿里云OSS静态托管', '阿里云', 'infrastructure', 'https://erp.xianfeng-eu.com', 'https://erp.xianfeng-eu.com', 'subscription', 'https://oss.console.aliyun.com', '前端静态资源，托管于阿里云OSS+CDN', 'Globe', 11)
+ON CONFLICT (api_code) DO UPDATE SET
+    api_name = EXCLUDED.api_name,
+    provider = EXCLUDED.provider,
+    health_check_url = EXCLUDED.health_check_url,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- 12. 阿里云 RDS PostgreSQL 数据库
+INSERT INTO api_integrations (api_code, api_name, provider, category, api_url, health_check_url, pricing_model, recharge_url, description, icon, sort_order)
+VALUES ('aliyun_rds', '阿里云RDS数据库', '阿里云', 'infrastructure', 'https://api.xianfeng-eu.com', 'https://api.xianfeng-eu.com/api/health', 'subscription', 'https://rdsnext.console.aliyun.com', 'PostgreSQL数据库，托管于阿里云RDS', 'Database', 12)
 ON CONFLICT (api_code) DO UPDATE SET
     api_name = EXCLUDED.api_name,
     provider = EXCLUDED.provider,
@@ -98,5 +107,5 @@ DELETE FROM api_integrations WHERE api_code IN ('render_backend', 'vercel_fronte
 DO $$
 BEGIN
     RAISE NOTICE '✅ API服务初始数据插入完成！';
-    RAISE NOTICE '📊 已初始化9个API服务配置';
+    RAISE NOTICE '📊 已初始化10个API服务配置（含企查查工商信息API）';
 END $$;

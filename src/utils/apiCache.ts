@@ -175,17 +175,26 @@ export function invalidateSystemSettings(key?: string): void {
 
 /**
  * 通知概览缓存（较短的 TTL）
+ * @param userId - 用户ID
+ * @param apiBaseUrl - API基础URL
+ * @param userRole - 用户角色（用于权限过滤）
  */
 export async function getCachedNotificationOverview(
   userId: string | number,
-  apiBaseUrl: string
+  apiBaseUrl: string,
+  userRole?: string
 ): Promise<any> {
-  const cacheKey = `notifications:overview:${userId}`
+  // 缓存键需要包含角色，因为不同角色看到的数据不同
+  const cacheKey = `notifications:overview:${userId}:${userRole || 'unknown'}`
   
   return cachedFetch(
     cacheKey,
     async () => {
-      const res = await fetch(`${apiBaseUrl}/api/notifications/overview?userId=${userId}`)
+      const params = new URLSearchParams({ userId: String(userId) })
+      if (userRole) {
+        params.append('userRole', userRole)
+      }
+      const res = await fetch(`${apiBaseUrl}/api/notifications/overview?${params}`)
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`)
       }
@@ -197,10 +206,18 @@ export async function getCachedNotificationOverview(
 
 /**
  * 清除通知缓存（用于新通知到达时）
+ * @param userId - 用户ID
+ * @param userRole - 用户角色（可选，如果提供将清除该角色的缓存）
  */
-export function invalidateNotificationCache(userId?: string | number): void {
+export function invalidateNotificationCache(userId?: string | number, userRole?: string): void {
   if (userId) {
-    clearCache(`notifications:overview:${userId}`)
+    if (userRole) {
+      // 清除特定用户和角色的缓存
+      clearCache(`notifications:overview:${userId}:${userRole}`)
+    } else {
+      // 清除该用户的所有角色缓存
+      clearCacheByPrefix(`notifications:overview:${userId}:`)
+    }
   } else {
     clearCacheByPrefix('notifications:')
   }

@@ -8,6 +8,7 @@ import * as model from './model.js'
 import * as downloader from './downloader.js'
 import * as scheduler from './scheduler.js'
 import * as apiClient from './apiClient.js'
+import * as ukApiClient from './ukTaricApiClient.js'
 import * as translator from './translator.js'
 
 // ==================== 同步状态 ====================
@@ -717,6 +718,327 @@ export async function lookupChinaAntiDumping(req, res) {
   }
 }
 
+// ==================== UK Trade Tariff API 查询 ====================
+
+/**
+ * 实时查询单个 HS 编码（从 UK Trade Tariff API）
+ * 支持 UK 和 XI（北爱尔兰）两个数据集
+ */
+export async function lookupHsCodeUk(req, res) {
+  try {
+    const { hsCode } = req.params
+    const { originCountry, region = 'uk', saveToDb } = req.query
+    
+    if (!hsCode || hsCode.length < 6) {
+      return badRequest(res, '请提供有效的 HS 编码（至少6位）')
+    }
+    
+    // 验证 region 参数
+    const validRegions = ['uk', 'xi']
+    if (!validRegions.includes(region)) {
+      return badRequest(res, '无效的地区参数，请使用 uk 或 xi')
+    }
+    
+    // 调用 UK Trade Tariff API
+    const result = await ukApiClient.lookupUkTaricCode(hsCode, originCountry || '', region)
+    
+    // 如果请求保存到数据库
+    if (saveToDb === 'true' && result) {
+      try {
+        const { getDatabase } = await import('../../config/database.js')
+        const db = getDatabase()
+        
+        // 检查是否已存在
+        const existing = await db.prepare(`
+          SELECT id FROM tariff_rates 
+          WHERE hs_code = ? AND COALESCE(origin_country_code, '') = ? AND data_source = ?
+        `).get(result.hsCode, result.originCountryCode || '', result.dataSource)
+        
+        if (existing) {
+          // 更新
+          await db.prepare(`
+            UPDATE tariff_rates SET
+              hs_code_10 = COALESCE(?, hs_code_10),
+              goods_description = COALESCE(?, goods_description),
+              third_country_duty = COALESCE(?, third_country_duty),
+              duty_rate = COALESCE(?, duty_rate),
+              anti_dumping_rate = COALESCE(?, anti_dumping_rate),
+              vat_rate = COALESCE(?, vat_rate),
+              api_source = ?,
+              last_api_sync = NOW(),
+              updated_at = NOW()
+            WHERE id = ?
+          `).run(
+            result.hsCode10 || null,
+            result.goodsDescription || null,
+            result.thirdCountryDuty ?? null,
+            result.dutyRate ?? null,
+            result.antiDumpingRate ?? null,
+            result.vatRate ?? null,
+            result.dataSource,
+            existing.id
+          )
+          result.savedToDb = 'updated'
+        } else {
+          // 插入新记录
+          await db.prepare(`
+            INSERT INTO tariff_rates (
+              hs_code, hs_code_10, origin_country_code,
+              goods_description, third_country_duty, duty_rate, vat_rate,
+              anti_dumping_rate, api_source, last_api_sync, data_source, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)
+          `).run(
+            result.hsCode,
+            result.hsCode10 || null,
+            result.originCountryCode || null,
+            result.goodsDescription || null,
+            result.thirdCountryDuty ?? null,
+            result.dutyRate ?? null,
+            result.vatRate ?? null,
+            result.antiDumpingRate ?? null,
+            result.dataSource,
+            result.dataSource
+          )
+          result.savedToDb = 'inserted'
+        }
+      } catch (dbError) {
+        console.error('保存到数据库失败:', dbError)
+        result.savedToDb = 'failed'
+        result.dbError = dbError.message
+      }
+    }
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('UK Trade Tariff API 查询失败:', error)
+    return serverError(res, 'UK Trade Tariff API 查询失败: ' + error.message)
+  }
+}
+
+/**
+ * 批量实时查询 UK HS 编码
+ */
+export async function batchLookupUk(req, res) {
+  try {
+    const { hsCodes, originCountry, region = 'uk', concurrency = 5 } = req.body
+    
+    if (!hsCodes || !Array.isArray(hsCodes) || hsCodes.length === 0) {
+      return badRequest(res, '请提供 HS 编码数组')
+    }
+    
+    if (hsCodes.length > 50) {
+      return badRequest(res, '批量查询最多支持 50 个 HS 编码')
+    }
+    
+    const validRegions = ['uk', 'xi']
+    if (!validRegions.includes(region)) {
+      return badRequest(res, '无效的地区参数，请使用 uk 或 xi')
+    }
+    
+    const result = await ukApiClient.batchLookupUk(hsCodes, originCountry || '', region, { concurrency })
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('UK Trade Tariff API 批量查询失败:', error)
+    return serverError(res, '批量查询失败: ' + error.message)
+  }
+}
+
+/**
+ * 搜索 UK 商品
+ */
+export async function searchUkCommodities(req, res) {
+  try {
+    const { q, region = 'uk' } = req.query
+    
+    if (!q || q.length < 2) {
+      return badRequest(res, '请提供至少2个字符的搜索关键词')
+    }
+    
+    const validRegions = ['uk', 'xi']
+    if (!validRegions.includes(region)) {
+      return badRequest(res, '无效的地区参数，请使用 uk 或 xi')
+    }
+    
+    const result = await ukApiClient.searchUkCommodities(q, region)
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('UK Trade Tariff 搜索失败:', error)
+    return serverError(res, '搜索失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取 UK 章节列表
+ */
+export async function getUkChapters(req, res) {
+  try {
+    const { region = 'uk' } = req.query
+    
+    const validRegions = ['uk', 'xi']
+    if (!validRegions.includes(region)) {
+      return badRequest(res, '无效的地区参数，请使用 uk 或 xi')
+    }
+    
+    const result = await ukApiClient.getUkChapters(region)
+    return success(res, result)
+  } catch (error) {
+    console.error('获取 UK 章节列表失败:', error)
+    return serverError(res, '获取章节列表失败: ' + error.message)
+  }
+}
+
+/**
+ * 检查 UK Trade Tariff API 健康状态
+ */
+export async function checkUkApiHealth(req, res) {
+  try {
+    const result = await ukApiClient.checkUkApiHealth()
+    return success(res, result)
+  } catch (error) {
+    console.error('UK API 健康检查失败:', error)
+    return serverError(res, 'UK API 健康检查失败: ' + error.message)
+  }
+}
+
+/**
+ * 清除 UK API 缓存
+ */
+export async function clearUkApiCache(req, res) {
+  try {
+    ukApiClient.clearCache()
+    return success(res, { message: 'UK API 缓存已清除' })
+  } catch (error) {
+    console.error('清除 UK API 缓存失败:', error)
+    return serverError(res, '清除缓存失败')
+  }
+}
+
+/**
+ * 统一实时查询接口（支持 EU 和 UK）
+ * 根据 source 参数选择数据源
+ */
+export async function lookupHsCodeUnified(req, res) {
+  try {
+    const { hsCode } = req.params
+    const { originCountry, source = 'eu', region = 'uk', saveToDb } = req.query
+    
+    if (!hsCode || hsCode.length < 6) {
+      return badRequest(res, '请提供有效的 HS 编码（至少6位）')
+    }
+    
+    let result
+    
+    if (source === 'uk') {
+      // 使用 UK Trade Tariff API
+      const validRegions = ['uk', 'xi']
+      if (!validRegions.includes(region)) {
+        return badRequest(res, '无效的地区参数，请使用 uk 或 xi')
+      }
+      result = await ukApiClient.lookupUkTaricCode(hsCode, originCountry || '', region)
+    } else {
+      // 使用 EU TARIC（默认）
+      result = await apiClient.lookupTaricCode(hsCode, originCountry || '')
+    }
+    
+    // 如果请求保存到数据库
+    if (saveToDb === 'true' && result) {
+      try {
+        const { getDatabase } = await import('../../config/database.js')
+        const db = getDatabase()
+        
+        const dataSourceValue = result.dataSource || (source === 'uk' ? 'uk_api' : 'taric_api')
+        
+        // 检查是否已存在
+        const existing = await db.prepare(`
+          SELECT id FROM tariff_rates 
+          WHERE hs_code = ? AND COALESCE(origin_country_code, '') = ?
+        `).get(result.hsCode, result.originCountryCode || '')
+        
+        if (existing) {
+          // 更新
+          await db.prepare(`
+            UPDATE tariff_rates SET
+              hs_code_10 = COALESCE(?, hs_code_10),
+              goods_description = COALESCE(?, goods_description),
+              third_country_duty = COALESCE(?, third_country_duty),
+              duty_rate = COALESCE(?, duty_rate),
+              anti_dumping_rate = COALESCE(?, anti_dumping_rate),
+              vat_rate = COALESCE(?, vat_rate),
+              api_source = ?,
+              last_api_sync = NOW(),
+              updated_at = NOW()
+            WHERE id = ?
+          `).run(
+            result.hsCode10 || null,
+            result.goodsDescription || null,
+            result.thirdCountryDuty ?? null,
+            result.dutyRate ?? null,
+            result.antiDumpingRate ?? null,
+            result.vatRate ?? null,
+            dataSourceValue,
+            existing.id
+          )
+          result.savedToDb = 'updated'
+        } else {
+          // 插入新记录
+          await db.prepare(`
+            INSERT INTO tariff_rates (
+              hs_code, hs_code_10, origin_country_code,
+              goods_description, third_country_duty, duty_rate, vat_rate,
+              anti_dumping_rate, api_source, last_api_sync, data_source, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)
+          `).run(
+            result.hsCode,
+            result.hsCode10 || null,
+            result.originCountryCode || null,
+            result.goodsDescription || null,
+            result.thirdCountryDuty ?? null,
+            result.dutyRate ?? null,
+            result.vatRate ?? null,
+            result.antiDumpingRate ?? null,
+            dataSourceValue,
+            dataSourceValue
+          )
+          result.savedToDb = 'inserted'
+        }
+      } catch (dbError) {
+        console.error('保存到数据库失败:', dbError)
+        result.savedToDb = 'failed'
+        result.dbError = dbError.message
+      }
+    }
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('统一 API 查询失败:', error)
+    return serverError(res, '查询失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取所有数据源的健康状态
+ */
+export async function checkAllApiHealth(req, res) {
+  try {
+    // 并行检查 EU 和 UK API 状态
+    const [euHealth, ukHealth] = await Promise.allSettled([
+      apiClient.checkApiHealth(),
+      ukApiClient.checkUkApiHealth()
+    ])
+    
+    return success(res, {
+      eu: euHealth.status === 'fulfilled' ? euHealth.value : { available: false, error: euHealth.reason?.message },
+      uk: ukHealth.status === 'fulfilled' ? ukHealth.value : { available: false, error: ukHealth.reason?.message },
+      timestamp: new Date().toISOString()
+    })
+  } catch (error) {
+    console.error('API 健康检查失败:', error)
+    return serverError(res, 'API 健康检查失败: ' + error.message)
+  }
+}
+
 // ==================== 导出 ====================
 
 export default {
@@ -728,13 +1050,23 @@ export default {
   getTradeAgreements,
   getFileStatus,
   downloadTemplate,
-  // 实时 API 查询
+  // 实时 API 查询（EU TARIC）
   lookupHsCodeRealtime,
   batchLookupRealtime,
   getMeasures,
   getCountryCodes,
   checkApiHealth,
   clearApiCache,
+  // UK Trade Tariff API 查询
+  lookupHsCodeUk,
+  batchLookupUk,
+  searchUkCommodities,
+  getUkChapters,
+  checkUkApiHealth,
+  clearUkApiCache,
+  // 统一查询接口
+  lookupHsCodeUnified,
+  checkAllApiHealth,
   // 翻译功能
   triggerTranslation,
   getTranslationStatus,

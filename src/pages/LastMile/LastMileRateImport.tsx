@@ -5,6 +5,7 @@ import {
   ArrowLeft, ChevronDown, Table, Grid3X3
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
+import DateTimePicker from '../../components/DateTimePicker'
 import { getApiBaseUrl } from '../../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -697,22 +698,22 @@ export default function LastMileRateImport() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               生效日期 <span className="text-red-500">*</span>
             </label>
-            <input
-              type="date"
+            <DateTimePicker
               value={validFrom}
-              onChange={(e) => setValidFrom(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={setValidFrom}
+              showTime={false}
+              placeholder="选择生效日期"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               失效日期（可选）
             </label>
-            <input
-              type="date"
+            <DateTimePicker
               value={validUntil}
-              onChange={(e) => setValidUntil(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              onChange={setValidUntil}
+              showTime={false}
+              placeholder="选择失效日期"
             />
           </div>
         </div>

@@ -393,9 +393,8 @@ export default function CMRManage() {
                 className="text-green-600 hover:text-green-700 hover:underline text-xs flex items-center gap-0.5"
               >
                 <CheckCircle className="w-3 h-3" />
-                {/* 根据步骤显示不同的按钮文字 */}
-                {record.cmrUnloadingCompleteTime ? '完成派送' : 
-                 record.cmrActualArrivalTime ? '卸货完成' : '确认送达'}
+                {/* 简化为3步流程：根据是否已到达显示不同的按钮 */}
+                {record.cmrActualArrivalTime ? '确认送达' : '更新状态'}
               </button>
             )}
             {isException && (

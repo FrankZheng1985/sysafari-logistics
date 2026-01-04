@@ -3,14 +3,24 @@
  * 用于计算欧洲卡车运输路线和费用
  * 
  * 文档: https://developer.here.com/documentation/routing-api/dev_guide/index.html
+ * 
+ * 地址缓存策略：
+ * 1. 输入地址时，先从本地地址缓存库查找匹配
+ * 2. 如果缓存没有，再调用 HERE API 获取
+ * 3. HERE API 返回的结果会自动保存到缓存库
  */
 
 import fetch from 'node-fetch'
+import * as addressCache from './addressCacheModel.js'
 
 // HERE API 配置
 const HERE_API_KEY = process.env.HERE_API_KEY || ''
 const HERE_ROUTING_URL = 'https://router.hereapi.com/v8/routes'
 const HERE_GEOCODING_URL = 'https://geocode.search.hereapi.com/v1/geocode'
+const HERE_AUTOSUGGEST_URL = 'https://autosuggest.search.hereapi.com/v1/autosuggest'
+
+// 是否启用地址缓存（可通过环境变量控制）
+const ENABLE_ADDRESS_CACHE = process.env.DISABLE_ADDRESS_CACHE !== 'true'
 
 // 欧洲国家通行费率（EUR/km，估算值）
 const TOLL_RATES = {
@@ -32,12 +42,104 @@ const TOLL_RATES = {
 const FUEL_SURCHARGE_RATE = 0.15 // EUR/km
 
 /**
- * 地理编码 - 将地址转换为坐标
+ * 地址自动补全 - 返回多个匹配地址建议
+ * 先从本地缓存查找，没有再调用 HERE API
+ * @param {string} query - 搜索关键词
+ * @param {number} limit - 返回结果数量限制
+ * @param {boolean} forceApi - 强制使用 API（跳过缓存）
  */
-export async function geocodeAddress(address) {
+export async function autosuggestAddress(query, limit = 5, forceApi = false) {
+  // 1. 先从缓存查找
+  if (ENABLE_ADDRESS_CACHE && !forceApi) {
+    try {
+      const cachedResults = await addressCache.findAutosuggestCache(query, limit)
+      if (cachedResults && cachedResults.length > 0) {
+        console.log(`[AddressCache] 缓存命中: "${query}", 返回 ${cachedResults.length} 条结果`)
+        // 更新命中统计
+        for (const result of cachedResults) {
+          if (result.id) {
+            addressCache.updateHitCount(result.id)
+          }
+        }
+        return cachedResults
+      }
+      console.log(`[AddressCache] 缓存未命中: "${query}", 调用 HERE API`)
+    } catch (cacheError) {
+      console.error('[AddressCache] 查询缓存出错，降级到 API:', cacheError)
+    }
+  }
+  
+  // 2. 调用 HERE API
   if (!HERE_API_KEY) {
-    console.warn('HERE API Key 未配置，使用模拟数据')
-    return mockGeocode(address)
+    console.error('HERE API Key 未配置')
+    throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
+  }
+  
+  try {
+    // 添加 at 参数（欧洲中心点：德国法兰克福）作为搜索中心，提高搜索准确性
+    const url = `${HERE_AUTOSUGGEST_URL}?q=${encodeURIComponent(query)}&apiKey=${HERE_API_KEY}&limit=${limit}&at=50.1109,8.6821&in=countryCode:DEU,FRA,NLD,BEL,ITA,ESP,POL,AUT,CHE,CZE,GBR&lang=en`
+    const response = await fetch(url)
+    const data = await response.json()
+    
+    if (data.items && data.items.length > 0) {
+      const results = data.items
+        .filter(item => item.address)
+        .map(item => ({
+          title: item.title,
+          address: item.address.label,
+          city: item.address.city,
+          country: item.address.countryName,
+          countryCode: item.address.countryCode,
+          postalCode: item.address.postalCode,
+          lat: item.position?.lat,
+          lng: item.position?.lng
+        }))
+      
+      // 3. 保存到缓存（异步，不阻塞返回）
+      if (ENABLE_ADDRESS_CACHE && results.length > 0) {
+        addressCache.saveAutosuggestCache(query, results).catch(err => {
+          console.error('[AddressCache] 保存缓存失败:', err)
+        })
+      }
+      
+      return results
+    }
+    
+    return []
+  } catch (error) {
+    console.error('地址自动补全失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 地理编码 - 将地址转换为坐标
+ * 先从本地缓存查找，没有再调用 HERE API
+ * @param {string} address - 地址
+ * @param {boolean} forceApi - 强制使用 API（跳过缓存）
+ */
+export async function geocodeAddress(address, forceApi = false) {
+  // 1. 先从缓存查找
+  if (ENABLE_ADDRESS_CACHE && !forceApi) {
+    try {
+      const cachedResult = await addressCache.findGeocodeCache(address)
+      if (cachedResult) {
+        console.log(`[AddressCache] 地理编码缓存命中: "${address}"`)
+        if (cachedResult.id) {
+          addressCache.updateHitCount(cachedResult.id)
+        }
+        return cachedResult
+      }
+      console.log(`[AddressCache] 地理编码缓存未命中: "${address}", 调用 HERE API`)
+    } catch (cacheError) {
+      console.error('[AddressCache] 查询地理编码缓存出错，降级到 API:', cacheError)
+    }
+  }
+  
+  // 2. 调用 HERE API
+  if (!HERE_API_KEY) {
+    console.error('HERE API Key 未配置')
+    throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
   }
   
   try {
@@ -47,7 +149,7 @@ export async function geocodeAddress(address) {
     
     if (data.items && data.items.length > 0) {
       const item = data.items[0]
-      return {
+      const result = {
         lat: item.position.lat,
         lng: item.position.lng,
         address: item.address.label,
@@ -55,12 +157,21 @@ export async function geocodeAddress(address) {
         city: item.address.city,
         postalCode: item.address.postalCode
       }
+      
+      // 3. 保存到缓存（异步，不阻塞返回）
+      if (ENABLE_ADDRESS_CACHE) {
+        addressCache.saveGeocodeCache(address, result).catch(err => {
+          console.error('[AddressCache] 保存地理编码缓存失败:', err)
+        })
+      }
+      
+      return result
     }
     
     return null
   } catch (error) {
     console.error('地理编码失败:', error)
-    return null
+    throw error
   }
 }
 
@@ -74,6 +185,11 @@ export async function geocodeAddress(address) {
  */
 export async function calculateTruckRoute(params) {
   const { origin, destination, waypoints = [], truck = {} } = params
+  
+  if (!HERE_API_KEY) {
+    console.error('HERE API Key 未配置')
+    throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
+  }
   
   // 处理地址到坐标的转换
   let originCoords = origin.lat ? origin : await geocodeAddress(origin.address)
@@ -90,11 +206,6 @@ export async function calculateTruckRoute(params) {
     if (coords) {
       waypointCoords.push(coords)
     }
-  }
-  
-  if (!HERE_API_KEY) {
-    console.warn('HERE API Key 未配置，使用模拟路线数据')
-    return mockRouteCalculation(originCoords, destCoords, waypointCoords, truck)
   }
   
   try {
@@ -126,12 +237,36 @@ export async function calculateTruckRoute(params) {
       url += `&truck[axleCount]=${truck.axleCount}`
     }
     
-    // 返回详细信息
-    url += `&return=summary,polyline,actions,turnByTurnActions`
+    // 允许渡轮路线（对于岛屿目的地很重要）
+    // 不设置 avoid[features]=ferry，默认允许渡轮
+    
+    // 返回详细信息，包括渡轮段信息
+    url += `&return=summary,polyline,actions,turnByTurnActions,typicalDuration`
     url += `&apiKey=${HERE_API_KEY}`
+    
+    console.log('[HERE API] 请求路线:', {
+      origin: `${originCoords.lat},${originCoords.lng}`,
+      destination: `${destCoords.lat},${destCoords.lng}`,
+      originAddress: originCoords.address,
+      destAddress: destCoords.address
+    })
     
     const response = await fetch(url)
     const data = await response.json()
+    
+    // 记录 API 返回的路段数量
+    if (data.routes && data.routes.length > 0) {
+      const route = data.routes[0]
+      console.log('[HERE API] 返回路线信息:', {
+        sectionsCount: route.sections?.length || 0,
+        sections: route.sections?.map((s, i) => ({
+          index: i,
+          transport: s.transport?.mode,
+          distance: s.summary?.length,
+          duration: s.summary?.duration
+        }))
+      })
+    }
     
     if (data.routes && data.routes.length > 0) {
       return parseHereRouteResponse(data.routes[0], originCoords, destCoords, waypointCoords, truck)
@@ -140,27 +275,58 @@ export async function calculateTruckRoute(params) {
     throw new Error('未找到可用路线')
   } catch (error) {
     console.error('HERE API 调用失败:', error)
-    // 失败时返回模拟数据
-    return mockRouteCalculation(originCoords, destCoords, waypointCoords, truck)
+    throw error
   }
 }
 
 /**
  * 解析 HERE API 返回的路线数据
+ * 注意：需要累加所有 sections 的距离和时间（特别是涉及渡轮的路线）
  */
 function parseHereRouteResponse(route, origin, destination, waypoints, truck) {
-  const section = route.sections[0]
-  const summary = section.summary
+  const sections = route.sections
   
-  // 计算总距离和时间
-  const totalDistance = summary.length / 1000 // 转换为公里
-  const totalDuration = summary.duration / 60 // 转换为分钟
+  // 累加所有 sections 的距离和时间
+  let totalLength = 0      // 总距离（米）
+  let totalDurationSec = 0 // 总时间（秒）
+  let roadDistance = 0     // 陆路距离（米）
+  let ferryDistance = 0    // 渡轮距离（米）
+  let hasFerry = false     // 是否包含渡轮
+  const polylines = []     // 收集所有路段的 polyline
   
-  // 估算通行费（基于距离和国家）
-  const estimatedTolls = estimateTolls(totalDistance, origin.country, destination.country)
+  for (const section of sections) {
+    const summary = section.summary
+    totalLength += summary.length || 0
+    totalDurationSec += summary.duration || 0
+    
+    // 检测渡轮段
+    if (section.transport && section.transport.mode === 'ferry') {
+      hasFerry = true
+      ferryDistance += summary.length || 0
+    } else {
+      roadDistance += summary.length || 0
+    }
+    
+    if (section.polyline) {
+      polylines.push(section.polyline)
+    }
+  }
   
-  // 估算燃油附加费
-  const fuelSurcharge = totalDistance * FUEL_SURCHARGE_RATE
+  // 转换单位
+  const totalDistance = totalLength / 1000       // 公里
+  const totalDuration = totalDurationSec / 60    // 分钟
+  const roadDistanceKm = roadDistance / 1000     // 陆路公里
+  const ferryDistanceKm = ferryDistance / 1000   // 渡轮公里
+  
+  // 估算通行费（仅基于陆路距离）
+  const estimatedTolls = estimateTolls(roadDistanceKm, origin.country, destination.country)
+  
+  // 估算燃油附加费（仅基于陆路距离）
+  const fuelSurcharge = roadDistanceKm * FUEL_SURCHARGE_RATE
+  
+  // 渡轮费用估算（如果有渡轮段）
+  // 巴塞罗那到 Mallorca 渡轮大约 80-150 EUR/卡车
+  const ferryEstimate = hasFerry ? estimateFerryFee(ferryDistanceKm, truck) : 0
   
   return {
     origin: {
@@ -184,15 +350,46 @@ function parseHereRouteResponse(route, origin, destination, waypoints, truck) {
       distance: Math.round(totalDistance),
       duration: Math.round(totalDuration),
       durationFormatted: formatDuration(totalDuration),
-      polyline: section.polyline
+      polyline: polylines.join('|'), // 合并所有路段的 polyline，用 | 分隔
+      polylines: polylines,          // 保留原始数组供前端使用
+      segments: sections.length,     // 路段数量
+      roadDistance: Math.round(roadDistanceKm),   // 陆路距离
+      ferryDistance: Math.round(ferryDistanceKm), // 渡轮距离
+      hasFerry: hasFerry             // 是否包含渡轮
     },
     costs: {
       tolls: Math.round(estimatedTolls * 100) / 100,
       fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+      ferryFee: Math.round(ferryEstimate * 100) / 100,
       currency: 'EUR'
     },
     truck: truck
   }
+}
+
+/**
+ * 估算渡轮费用
+ * 基于渡轮距离和卡车类型
+ */
+function estimateFerryFee(ferryDistanceKm, truck) {
+  // 基础费率：约 0.8 EUR/km（渡轮比陆路贵很多）
+  // 巴塞罗那-Mallorca 约 200km，费用约 100-200 EUR
+  const baseFerryRate = 0.8
+  
+  // 根据卡车重量调整费率
+  let weightMultiplier = 1
+  if (truck.grossWeight) {
+    if (truck.grossWeight > 30000) {
+      weightMultiplier = 1.5  // 重型卡车
+    } else if (truck.grossWeight > 12000) {
+      weightMultiplier = 1.2  // 中型卡车
+    }
+  }
+  
+  // 最低渡轮费用 80 EUR
+  const ferryFee = Math.max(80, ferryDistanceKm * baseFerryRate * weightMultiplier)
+  
+  return ferryFee
 }
 
 /**
@@ -225,27 +422,33 @@ function formatDuration(minutes) {
  * 计算运输费用
  */
 export function calculateTransportCost(routeData, truckType) {
-  const { distance } = routeData.route
-  const { tolls, fuelSurcharge } = routeData.costs
+  const { distance, roadDistance, ferryDistance, hasFerry } = routeData.route
+  const { tolls, fuelSurcharge, ferryFee } = routeData.costs
   
-  // 基础运费 = 距离 × 费率
-  const baseCost = distance * truckType.baseRatePerKm
+  // 基础运费 = 陆路距离 × 费率（渡轮段单独计算）
+  const effectiveDistance = roadDistance || distance
+  const baseCost = effectiveDistance * truckType.baseRatePerKm
   
   // 应用最低收费
   const transportCost = Math.max(baseCost, truckType.minCharge)
   
-  // 总费用 = 运费 + 通行费 + 燃油附加费
-  const totalCost = transportCost + tolls + fuelSurcharge
+  // 总费用 = 运费 + 通行费 + 燃油附加费 + 渡轮费
+  const totalFerryFee = ferryFee || 0
+  const totalCost = transportCost + tolls + fuelSurcharge + totalFerryFee
   
   return {
     baseCost: Math.round(baseCost * 100) / 100,
     transportCost: Math.round(transportCost * 100) / 100,
     tolls: Math.round(tolls * 100) / 100,
     fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+    ferryFee: Math.round(totalFerryFee * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
     currency: 'EUR',
     breakdown: {
       distance,
+      roadDistance: roadDistance || distance,
+      ferryDistance: ferryDistance || 0,
+      hasFerry: hasFerry || false,
       ratePerKm: truckType.baseRatePerKm,
       minCharge: truckType.minCharge,
       truckType: truckType.name
@@ -253,122 +456,6 @@ export function calculateTransportCost(routeData, truckType) {
   }
 }
 
-// ==================== 模拟数据（用于测试和API未配置时） ====================
-
-/**
- * 模拟地理编码
- */
-function mockGeocode(address) {
-  // 一些常见的欧洲城市坐标
-  const mockLocations = {
-    'hamburg': { lat: 53.5511, lng: 9.9937, country: 'DE', city: 'Hamburg' },
-    'rotterdam': { lat: 51.9244, lng: 4.4777, country: 'NL', city: 'Rotterdam' },
-    'antwerp': { lat: 51.2194, lng: 4.4025, country: 'BE', city: 'Antwerp' },
-    'paris': { lat: 48.8566, lng: 2.3522, country: 'FR', city: 'Paris' },
-    'berlin': { lat: 52.5200, lng: 13.4050, country: 'DE', city: 'Berlin' },
-    'munich': { lat: 48.1351, lng: 11.5820, country: 'DE', city: 'Munich' },
-    'frankfurt': { lat: 50.1109, lng: 8.6821, country: 'DE', city: 'Frankfurt' },
-    'amsterdam': { lat: 52.3676, lng: 4.9041, country: 'NL', city: 'Amsterdam' },
-    'brussels': { lat: 50.8503, lng: 4.3517, country: 'BE', city: 'Brussels' },
-    'milan': { lat: 45.4642, lng: 9.1900, country: 'IT', city: 'Milan' },
-    'vienna': { lat: 48.2082, lng: 16.3738, country: 'AT', city: 'Vienna' },
-    'warsaw': { lat: 52.2297, lng: 21.0122, country: 'PL', city: 'Warsaw' },
-    'prague': { lat: 50.0755, lng: 14.4378, country: 'CZ', city: 'Prague' }
-  }
-  
-  const lowerAddress = address.toLowerCase()
-  
-  for (const [key, location] of Object.entries(mockLocations)) {
-    if (lowerAddress.includes(key)) {
-      return {
-        ...location,
-        address: address,
-        postalCode: '00000'
-      }
-    }
-  }
-  
-  // 默认返回汉堡港（假设从港口出发）
-  return {
-    lat: 53.5511,
-    lng: 9.9937,
-    address: address,
-    country: 'DE',
-    city: 'Hamburg',
-    postalCode: '20457'
-  }
-}
-
-/**
- * 模拟路线计算
- */
-function mockRouteCalculation(origin, destination, waypoints, truck) {
-  // 使用 Haversine 公式计算直线距离，然后乘以1.3作为道路距离估算
-  const directDistance = haversineDistance(
-    origin.lat, origin.lng,
-    destination.lat, destination.lng
-  )
-  
-  // 加上途经点的额外距离
-  let waypointDistance = 0
-  let prevPoint = origin
-  for (const wp of waypoints) {
-    waypointDistance += haversineDistance(
-      prevPoint.lat, prevPoint.lng,
-      wp.lat, wp.lng
-    )
-    prevPoint = wp
-  }
-  waypointDistance += haversineDistance(
-    prevPoint.lat, prevPoint.lng,
-    destination.lat, destination.lng
-  )
-  
-  const totalDirectDistance = waypoints.length > 0 ? waypointDistance : directDistance
-  const roadDistance = Math.round(totalDirectDistance * 1.3) // 道路距离约为直线距离的1.3倍
-  
-  // 估算时间（平均速度70km/h）
-  const duration = Math.round((roadDistance / 70) * 60)
-  
-  // 估算通行费
-  const estimatedTolls = estimateTolls(roadDistance, origin.country, destination.country)
-  
-  // 燃油附加费
-  const fuelSurcharge = roadDistance * FUEL_SURCHARGE_RATE
-  
-  return {
-    origin: {
-      lat: origin.lat,
-      lng: origin.lng,
-      address: origin.address,
-      country: origin.country || 'DE'
-    },
-    destination: {
-      lat: destination.lat,
-      lng: destination.lng,
-      address: destination.address,
-      country: destination.country || 'DE'
-    },
-    waypoints: waypoints.map(wp => ({
-      lat: wp.lat,
-      lng: wp.lng,
-      address: wp.address
-    })),
-    route: {
-      distance: roadDistance,
-      duration: duration,
-      durationFormatted: formatDuration(duration),
-      polyline: null // 模拟数据没有路线
-    },
-    costs: {
-      tolls: Math.round(estimatedTolls * 100) / 100,
-      fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
-      currency: 'EUR'
-    },
-    truck: truck,
-    isMockData: true
-  }
-}
 
 /**
  * Haversine 公式计算两点间距离（公里）
@@ -455,12 +542,17 @@ export async function batchGetCities(postalCodes) {
   return results
 }
 
+// 导出地址缓存相关功能
+export { addressCache }
+
 export default {
+  autosuggestAddress,
   geocodeAddress,
   calculateTruckRoute,
   calculateTransportCost,
   getCityByPostalCode,
   batchGetCities,
+  addressCache,  // 导出缓存模块，供其他模块使用
   TOLL_RATES,
   FUEL_SURCHARGE_RATE
 }

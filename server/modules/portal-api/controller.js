@@ -652,6 +652,154 @@ export function authMiddleware(req, res, next) {
   }
 }
 
+// ==================== 基础数据接口 ====================
+
+/**
+ * 获取起运港列表
+ */
+export async function getPortsOfLoading(req, res) {
+  try {
+    const { country, search } = req.query
+    const ports = await model.getPortsOfLoading(country, search)
+    return success(res, ports)
+  } catch (error) {
+    console.error('获取起运港列表失败:', error)
+    return serverError(res, '获取起运港列表失败')
+  }
+}
+
+/**
+ * 获取目的港列表
+ */
+export async function getDestinationPorts(req, res) {
+  try {
+    const { country, search } = req.query
+    const ports = await model.getDestinationPorts(country, search)
+    return success(res, ports)
+  } catch (error) {
+    console.error('获取目的港列表失败:', error)
+    return serverError(res, '获取目的港列表失败')
+  }
+}
+
+/**
+ * 获取机场列表
+ */
+export async function getAirPorts(req, res) {
+  try {
+    const { country, search } = req.query
+    const ports = await model.getAirPorts(country, search)
+    return success(res, ports)
+  } catch (error) {
+    console.error('获取机场列表失败:', error)
+    return serverError(res, '获取机场列表失败')
+  }
+}
+
+/**
+ * 获取国家列表
+ */
+export async function getCountries(req, res) {
+  try {
+    const { region, search } = req.query
+    const countries = await model.getCountries(region, search)
+    return success(res, countries)
+  } catch (error) {
+    console.error('获取国家列表失败:', error)
+    return serverError(res, '获取国家列表失败')
+  }
+}
+
+/**
+ * 获取城市列表
+ */
+export async function getCities(req, res) {
+  try {
+    const { countryCode, search, level } = req.query
+    const cities = await model.getCities(countryCode, search, level)
+    return success(res, cities)
+  } catch (error) {
+    console.error('获取城市列表失败:', error)
+    return serverError(res, '获取城市列表失败')
+  }
+}
+
+/**
+ * 获取常用地址/位置（起运地和目的地汇总）
+ */
+export async function getLocations(req, res) {
+  try {
+    const { type, search } = req.query // type: origin | destination | all
+    const locations = await model.getLocations(type, search)
+    return success(res, locations)
+  } catch (error) {
+    console.error('获取位置列表失败:', error)
+    return serverError(res, '获取位置列表失败')
+  }
+}
+
+// ==================== HS Code / 关税查询 ====================
+
+/**
+ * 搜索 HS Code 税率
+ * GET /api/portal/tariff-rates/search
+ */
+export async function searchTariffRates(req, res) {
+  try {
+    const { hsCode, origin, limit = 20 } = req.query
+    
+    if (!hsCode || hsCode.length < 2) {
+      return badRequest(res, 'HS编码至少需要2个字符')
+    }
+    
+    const rates = await model.searchTariffRates(hsCode, origin, parseInt(limit))
+    return success(res, rates)
+  } catch (error) {
+    console.error('搜索HS编码失败:', error)
+    return serverError(res, '搜索HS编码失败')
+  }
+}
+
+/**
+ * 精确查询 HS Code 税率
+ * GET /api/portal/tariff-rates/query
+ */
+export async function queryTariffRate(req, res) {
+  try {
+    const { hsCode, origin } = req.query
+    
+    if (!hsCode) {
+      return badRequest(res, '请提供HS编码')
+    }
+    
+    const rates = await model.queryTariffRate(hsCode, origin)
+    return success(res, rates)
+  } catch (error) {
+    console.error('查询HS编码失败:', error)
+    return serverError(res, '查询HS编码失败')
+  }
+}
+
+/**
+ * 获取国家增值税率
+ * GET /api/portal/vat-rates/:countryCode
+ */
+export async function getCountryVatRate(req, res) {
+  try {
+    const { countryCode } = req.params
+    
+    if (!countryCode) {
+      return badRequest(res, '请提供国家代码')
+    }
+    
+    const vatRate = await model.getCountryVatRate(countryCode)
+    return success(res, vatRate)
+  } catch (error) {
+    console.error('获取国家增值税率失败:', error)
+    return serverError(res, '获取国家增值税率失败')
+  }
+}
+
 export default {
   // 认证
   login,
@@ -685,6 +833,19 @@ export default {
   updateMyApiKey,
   deleteMyApiKey,
   getMyApiLogs,
+  
+  // 基础数据
+  getPortsOfLoading,
+  getDestinationPorts,
+  getAirPorts,
+  getCountries,
+  getCities,
+  getLocations,
+  
+  // HS Code / 关税查询
+  searchTariffRates,
+  queryTariffRate,
+  getCountryVatRate,
   
   // 中间件
   authMiddleware

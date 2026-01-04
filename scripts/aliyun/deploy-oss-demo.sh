@@ -22,7 +22,7 @@ PROJECT_DIR="/Users/fengzheng/sysafari-logistics"
 OSS_BUCKET="sysafari-logistics-demo"
 OSS_ENDPOINT="oss-cn-hongkong.aliyuncs.com"
 CDN_DOMAIN="demo.xianfeng-eu.com"
-API_URL="https://demo.xianfeng-eu.com"
+API_URL="https://demo-api.xianfeng-eu.com"
 
 cd ${PROJECT_DIR}
 

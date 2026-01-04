@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { 
-  FileText, Calculator, ArrowRight,
-  TrendingUp, BarChart3, Building2, Wrench, Settings
+  FileText, ArrowRight,
+  TrendingUp, Building2, Wrench, Settings
 } from 'lucide-react'
 
 interface ToolCard {
@@ -23,14 +23,6 @@ const tools: ToolCard[] = [
     bgColor: 'bg-blue-50 hover:bg-blue-100',
   },
   {
-    path: '/tools/tariff-calculator',
-    label: '关税计算',
-    description: '快速计算进口关税、增值税和其他费用',
-    icon: Calculator,
-    color: 'text-green-600',
-    bgColor: 'bg-green-50 hover:bg-green-100',
-  },
-  {
     path: '/tools/shared-tax',
     label: '共享税号库',
     description: '公司级税号管理，可分享给客户使用',
@@ -44,7 +36,6 @@ const tools: ToolCard[] = [
 const quickStats = [
   { label: '本月报价', value: '28', trend: '+12%', icon: TrendingUp, color: 'text-blue-600' },
   { label: '待处理发票', value: '5', trend: '', icon: FileText, color: 'text-orange-600' },
-  { label: '关税计算次数', value: '156', trend: '+8%', icon: BarChart3, color: 'text-green-600' },
 ]
 
 export default function ToolsDashboard() {
@@ -65,7 +56,7 @@ export default function ToolsDashboard() {
         </div>
 
         {/* 快捷统计 */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {quickStats.map((stat) => (
             <div key={stat.label} className="bg-white rounded-lg shadow border border-gray-200 p-4">
               <div className="flex items-center justify-between">

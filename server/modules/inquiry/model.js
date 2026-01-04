@@ -4,6 +4,7 @@
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
+import * as messageModel from '../message/model.js'
 
 // ==================== 常量定义 ====================
 
@@ -75,30 +76,34 @@ export async function generateInquiryNumber() {
 
 /**
  * 获取客户的负责跟单员
- * 优先查找 customers 表的 sales_id，否则返回 null
+ * 从 customers 表的 assigned_to 字段获取，否则返回 null
  */
 export async function getCustomerAssignee(customerId) {
   const db = getDatabase()
   
   // 从客户表查找负责的跟单员/业务员
+  // 注意：客户表使用 assigned_to 和 assigned_name 字段存储负责人
   const customer = await db.prepare(`
-    SELECT c.sales_id, c.sales_name, u.supervisor_id, s.name as supervisor_name,
+    SELECT c.assigned_to, c.assigned_name, u.supervisor_id, s.name as supervisor_name,
            ss.supervisor_id as super_supervisor_id, ss2.name as super_supervisor_name
     FROM customers c
-    LEFT JOIN users u ON c.sales_id = u.id
+    LEFT JOIN users u ON c.assigned_to = u.id
     LEFT JOIN users s ON u.supervisor_id = s.id
     LEFT JOIN users ss ON s.supervisor_id = ss.id
     LEFT JOIN users ss2 ON ss.supervisor_id = ss2.id
     WHERE c.id = $1
   `).get(customerId)
   
-  if (!customer || !customer.sales_id) {
+  if (!customer || !customer.assigned_to) {
+    console.log(`[询价分配] 客户 ${customerId} 没有设置负责业务员`)
     return null
   }
   
+  console.log(`[询价分配] 客户 ${customerId} 的负责人: ${customer.assigned_name} (ID: ${customer.assigned_to})`)
+  
   return {
-    assigneeId: customer.sales_id,
-    assigneeName: customer.sales_name,
+    assigneeId: customer.assigned_to,
+    assigneeName: customer.assigned_name,
     supervisorId: customer.supervisor_id || null,
     supervisorName: customer.supervisor_name || null,
     superSupervisorId: customer.super_supervisor_id || null,
@@ -225,6 +230,39 @@ export async function createInquiryTask(data) {
     data.dueAt.toISOString()
   )
   
+  // 发送消息通知给指定的业务员
+  try {
+    await messageModel.createMessage({
+      type: 'inquiry',
+      title: '新询价任务',
+      content: `您有一个新的客户询价需要处理，询价编号：${data.inquiryNumber}`,
+      senderId: null,
+      senderName: '系统',
+      receiverId: data.assigneeId,
+      receiverName: data.assigneeName,
+      relatedType: 'inquiry',
+      relatedId: data.inquiryId
+    })
+    
+    // 如果有上级主管，也发送通知
+    if (data.supervisorId) {
+      await messageModel.createMessage({
+        type: 'inquiry',
+        title: '团队新询价',
+        content: `${data.assigneeName} 收到一个新的客户询价任务，询价编号：${data.inquiryNumber}`,
+        senderId: null,
+        senderName: '系统',
+        receiverId: data.supervisorId,
+        receiverName: data.supervisorName,
+        relatedType: 'inquiry',
+        relatedId: data.inquiryId
+      })
+    }
+  } catch (error) {
+    console.error('发送询价通知失败:', error)
+    // 通知发送失败不影响主流程
+  }
+  
   return true
 }
 
@@ -288,8 +326,13 @@ export async function getInquiries(params = {}) {
   }
   
   if (status) {
+    // 'unquoted' 表示待报价（pending 或 processing）
+    if (status === 'unquoted') {
+      query += ` AND status IN ('pending', 'processing')`
+    } else {
     query += ` AND status = $${paramIndex++}`
     queryParams.push(status)
+    }
   }
   
   if (inquiryType) {

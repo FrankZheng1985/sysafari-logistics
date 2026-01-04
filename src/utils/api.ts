@@ -59,6 +59,18 @@ function getStoredToken(): string | null {
 }
 
 /**
+ * 获取认证 Headers
+ * 用于需要自定义 fetch 调用的场景
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const token = getStoredToken()
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` }
+  }
+  return {}
+}
+
+/**
  * 检查是否为测试模式
  * 只有当用户以测试账号（user_type='test'）登录时才返回 true
  */
@@ -4232,6 +4244,269 @@ export async function clearTaricApiCache(): Promise<ApiResponse<{ message: strin
   }
 }
 
+// ==================== UK Trade Tariff API 接口 ====================
+
+/**
+ * UK Trade Tariff 查询结果（继承 EU TARIC 结果结构）
+ */
+export interface UkTaricRealtimeResult extends TaricRealtimeResult {
+  dataSource: 'uk_api' | 'uk_xi_api'
+  region: 'uk' | 'xi'
+  regionName: string
+  formattedDescription?: string
+  vatRate?: number | null
+}
+
+/**
+ * UK Trade Tariff API 健康状态
+ */
+export interface UkTaricApiHealth {
+  available: boolean
+  uk: {
+    available: boolean
+    responseTime: number
+  }
+  xi: {
+    available: boolean
+    responseTime: number
+  }
+  timestamp: string
+  cacheStats: {
+    validCount: number
+    expiredCount: number
+    totalCount: number
+  }
+}
+
+/**
+ * 数据源类型
+ */
+export type TaricDataSource = 'eu' | 'uk'
+
+/**
+ * UK 地区类型
+ */
+export type UkRegion = 'uk' | 'xi'
+
+/**
+ * 实时查询单个 HS 编码（UK Trade Tariff API）
+ * @param hsCode HS 编码（6-10位）
+ * @param originCountry 原产国代码（可选，如 CN）
+ * @param region UK 地区：'uk' 或 'xi'（北爱尔兰，适用EU规则）
+ * @param saveToDb 是否保存到数据库
+ */
+export async function lookupUkTaricRealtime(
+  hsCode: string,
+  originCountry?: string,
+  region: UkRegion = 'uk',
+  saveToDb?: boolean
+): Promise<ApiResponse<UkTaricRealtimeResult>> {
+  try {
+    const params = new URLSearchParams()
+    if (originCountry) params.append('originCountry', originCountry)
+    params.append('region', region)
+    if (saveToDb) params.append('saveToDb', 'true')
+    
+    const queryString = params.toString()
+    const url = `${API_BASE_URL}/api/taric/uk/realtime/${hsCode}?${queryString}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('UK Trade Tariff 实时查询失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 批量实时查询 UK HS 编码
+ * @param hsCodes HS 编码数组
+ * @param originCountry 原产国代码（可选）
+ * @param region UK 地区：'uk' 或 'xi'
+ */
+export async function batchLookupUkTaricRealtime(
+  hsCodes: string[],
+  originCountry?: string,
+  region: UkRegion = 'uk'
+): Promise<ApiResponse<{
+  results: Array<{ hsCode: string; data: UkTaricRealtimeResult }>
+  errors: Array<{ hsCode: string; error: string }>
+  totalCount: number
+}>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/uk/realtime-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hsCodes, originCountry, region }),
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('UK Trade Tariff 批量查询失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 搜索 UK 商品
+ * @param query 搜索关键词
+ * @param region UK 地区：'uk' 或 'xi'
+ */
+export async function searchUkCommodities(
+  query: string,
+  region: UkRegion = 'uk'
+): Promise<ApiResponse<{
+  results: any[]
+  meta: any
+  dataSource: string
+}>> {
+  try {
+    const params = new URLSearchParams()
+    params.append('q', query)
+    params.append('region', region)
+    
+    const response = await fetch(`${API_BASE_URL}/api/taric/uk/search?${params.toString()}`)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('UK 商品搜索失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取 UK 章节列表
+ * @param region UK 地区：'uk' 或 'xi'
+ */
+export async function getUkChapters(region: UkRegion = 'uk'): Promise<ApiResponse<{
+  chapters: Array<{
+    id: string
+    code: string
+    description: string
+    formattedDescription?: string
+  }>
+  fromCache: boolean
+}>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/uk/chapters?region=${region}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取 UK 章节列表失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 检查 UK Trade Tariff API 健康状态
+ */
+export async function checkUkTaricApiHealth(): Promise<ApiResponse<UkTaricApiHealth>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/uk/api-health`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('UK Trade Tariff API 健康检查失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 清除 UK Trade Tariff API 缓存
+ */
+export async function clearUkTaricApiCache(): Promise<ApiResponse<{ message: string }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/uk/clear-cache`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('清除 UK API 缓存失败:', error)
+    throw error
+  }
+}
+
+// ==================== 统一 TARIC 查询接口 ====================
+
+/**
+ * 统一实时查询结果（支持 EU 和 UK）
+ */
+export type UnifiedTaricResult = TaricRealtimeResult | UkTaricRealtimeResult
+
+/**
+ * 统一实时查询单个 HS 编码（支持 EU 和 UK）
+ * @param hsCode HS 编码（6-10位）
+ * @param originCountry 原产国代码（可选，如 CN）
+ * @param source 数据源：'eu'（欧盟 TARIC）或 'uk'（英国 Trade Tariff）
+ * @param region 仅当 source='uk' 时有效：'uk' 或 'xi'（北爱尔兰）
+ * @param saveToDb 是否保存到数据库
+ */
+export async function lookupTaricUnified(
+  hsCode: string,
+  originCountry?: string,
+  source: TaricDataSource = 'eu',
+  region: UkRegion = 'uk',
+  saveToDb?: boolean
+): Promise<ApiResponse<UnifiedTaricResult>> {
+  try {
+    const params = new URLSearchParams()
+    if (originCountry) params.append('originCountry', originCountry)
+    params.append('source', source)
+    if (source === 'uk') params.append('region', region)
+    if (saveToDb) params.append('saveToDb', 'true')
+    
+    const queryString = params.toString()
+    const url = `${API_BASE_URL}/api/taric/unified/${hsCode}?${queryString}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('统一 TARIC 查询失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 检查所有 TARIC API 健康状态
+ */
+export async function checkAllTaricApiHealth(): Promise<ApiResponse<{
+  eu: TaricApiHealth
+  uk: UkTaricApiHealth
+  timestamp: string
+}>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/all-api-health`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('API 健康检查失败:', error)
+    throw error
+  }
+}
+
 // ==================== 系统设置 API 接口 ====================
 
 /**
@@ -4316,6 +4591,8 @@ export interface Customer {
   notes: string
   assignedTo: number
   assignedName: string
+  assignedOperator?: number | null
+  assignedOperatorName?: string
   createTime: string
   updateTime: string
 }
@@ -5521,6 +5798,178 @@ export async function deleteCustomerAccount(id: number): Promise<ApiResponse<nul
     console.error('删除客户账户失败:', error)
     throw error
   }
+}
+
+
+// ==================== HERE 地理编码 API ====================
+
+export interface HereGeocodeResult {
+  lat: number
+  lng: number
+  address: string
+  country: string
+  countryName?: string
+  city: string
+  postalCode: string
+}
+
+export interface HereAddressSuggestion {
+  title: string
+  address: string
+  city: string
+  country: string
+  countryCode: string
+  postalCode: string
+  lat?: number
+  lng?: number
+}
+
+/**
+ * HERE 地理编码 - 通过地址或邮编获取位置信息
+ * @param query 地址或邮编（如 "41751, DE" 或 "德国柏林"）
+ */
+export async function hereGeocode(query: string): Promise<ApiResponse<HereGeocodeResult>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/inquiry/geocode?address=${encodeURIComponent(query)}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('HERE 地理编码失败:', error)
+    throw error
+  }
+}
+
+/**
+ * HERE 地址自动补全 - 输入关键词返回匹配的地址列表
+ * @param query 搜索关键词（邮编或地址）
+ * @param limit 返回结果数量限制，默认5条
+ */
+export async function hereAutosuggest(query: string, limit: number = 5): Promise<ApiResponse<HereAddressSuggestion[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/inquiry/autosuggest?query=${encodeURIComponent(query)}&limit=${limit}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('HERE 地址自动补全失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 根据邮编获取城市和国家信息
+ * @param postalCode 邮编
+ * @param countryCode 国家代码（可选，如 DE、NL）
+ */
+export async function getAddressByPostalCode(postalCode: string, countryCode?: string): Promise<ApiResponse<HereGeocodeResult>> {
+  const query = countryCode ? `${postalCode}, ${countryCode}` : postalCode
+  return hereGeocode(query)
+}
+
+// ==================== 地址缓存管理 API ====================
+
+export interface AddressCacheItem {
+  id: number
+  query_text: string
+  title: string
+  address: string
+  city: string
+  country: string
+  country_code: string
+  postal_code: string
+  lat: number
+  lng: number
+  cache_type: 'autosuggest' | 'geocode'
+  source: 'here' | 'manual'
+  hit_count: number
+  last_hit_at: string
+  created_at: string
+}
+
+export interface AddressCacheStats {
+  cache_type: string
+  total_count: number
+  total_hits: number
+  avg_hits: number
+  last_hit: string
+}
+
+/**
+ * 获取地址缓存统计
+ */
+export async function getAddressCacheStats(): Promise<ApiResponse<{
+  stats: AddressCacheStats[]
+  topAddresses: AddressCacheItem[]
+}>> {
+  return fetchApi('/api/inquiry/address-cache/stats')
+}
+
+/**
+ * 搜索地址缓存
+ */
+export async function searchAddressCache(params: {
+  keyword?: string
+  countryCode?: string
+  cacheType?: 'autosuggest' | 'geocode'
+  page?: number
+  pageSize?: number
+}): Promise<ApiResponse<{
+  list: AddressCacheItem[]
+  total: number
+  page: number
+  pageSize: number
+}>> {
+  const queryParams = new URLSearchParams()
+  if (params.keyword) queryParams.append('keyword', params.keyword)
+  if (params.countryCode) queryParams.append('countryCode', params.countryCode)
+  if (params.cacheType) queryParams.append('cacheType', params.cacheType)
+  if (params.page) queryParams.append('page', params.page.toString())
+  if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString())
+  
+  return fetchApi(`/api/inquiry/address-cache?${queryParams.toString()}`)
+}
+
+/**
+ * 手动添加地址到缓存
+ */
+export async function addAddressToCache(addressData: {
+  queryText?: string
+  title?: string
+  address: string
+  city?: string
+  country?: string
+  countryCode?: string
+  postalCode?: string
+  lat?: number
+  lng?: number
+  cacheType?: 'autosuggest' | 'geocode'
+}): Promise<ApiResponse<AddressCacheItem>> {
+  return fetchApi('/api/inquiry/address-cache', {
+    method: 'POST',
+    body: JSON.stringify(addressData)
+  })
+}
+
+/**
+ * 删除地址缓存
+ */
+export async function deleteAddressCache(id: number): Promise<ApiResponse<{ id: number }>> {
+  return fetchApi(`/api/inquiry/address-cache/${id}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 清理过期地址缓存
+ */
+export async function cleanupAddressCache(days: number = 90): Promise<ApiResponse<{ cleanedCount: number }>> {
+  return fetchApi('/api/inquiry/address-cache/cleanup', {
+    method: 'POST',
+    body: JSON.stringify({ days })
+  })
 }
 
 

@@ -386,7 +386,12 @@ export async function updateBill(id, data) {
     fullContainerTransport: 'full_container_transport',
     lastMileTransport: 'last_mile_transport',
     devanning: 'devanning',
-    t1Declaration: 't1_declaration'
+    t1Declaration: 't1_declaration',
+    // 订单导入扩展字段
+    serviceType: 'service_type',
+    cargoValue: 'cargo_value',
+    documentsSentDate: 'documents_sent_date',
+    cmrSentDate: 'cmr_sent_date'
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {

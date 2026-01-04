@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Languages, Loader2 } from 'lucide-react'
+import DateTimePicker from './DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -313,20 +314,20 @@ export default function SupplierPriceModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">有效期开始</label>
-              <input
-                type="date"
+              <DateTimePicker
                 value={formData.validFrom}
-                onChange={e => setFormData({ ...formData, validFrom: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(value) => setFormData({ ...formData, validFrom: value })}
+                showTime={false}
+                placeholder="选择开始日期"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">有效期结束</label>
-              <input
-                type="date"
+              <DateTimePicker
                 value={formData.validUntil}
-                onChange={e => setFormData({ ...formData, validUntil: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onChange={(value) => setFormData({ ...formData, validUntil: value })}
+                showTime={false}
+                placeholder="选择结束日期"
               />
             </div>
           </div>

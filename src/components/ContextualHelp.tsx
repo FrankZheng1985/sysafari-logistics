@@ -9,7 +9,8 @@ import {
   ChevronRight,
   ExternalLink,
   BookOpen,
-  CheckCircle2
+  CheckCircle2,
+  ChevronLeft
 } from 'lucide-react'
 import VideoPlayer from './VideoPlayer'
 import { getHelpByPath, HelpItem } from '../data/helpData'
@@ -18,6 +19,9 @@ interface ContextualHelpProps {
   className?: string
 }
 
+// localStorage key
+const HELP_BUTTON_HIDDEN_KEY = 'help-button-hidden'
+
 export default function ContextualHelp({ className = '' }: ContextualHelpProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -25,6 +29,23 @@ export default function ContextualHelp({ className = '' }: ContextualHelpProps) 
   const [currentHelp, setCurrentHelp] = useState<HelpItem | null>(null)
   const [activeTab, setActiveTab] = useState<'video' | 'steps' | 'tips'>('video')
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
+  const [isHidden, setIsHidden] = useState(() => {
+    // 从 localStorage 读取隐藏状态
+    const stored = localStorage.getItem(HELP_BUTTON_HIDDEN_KEY)
+    return stored === 'true'
+  })
+
+  // 隐藏/显示按钮的处理函数
+  const handleHide = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsHidden(true)
+    localStorage.setItem(HELP_BUTTON_HIDDEN_KEY, 'true')
+  }
+
+  const handleShow = () => {
+    setIsHidden(false)
+    localStorage.setItem(HELP_BUTTON_HIDDEN_KEY, 'false')
+  }
 
   // 当路由变化时，更新当前帮助内容
   useEffect(() => {
@@ -49,49 +70,129 @@ export default function ContextualHelp({ className = '' }: ContextualHelpProps) 
   // 如果没有当前页面的帮助内容，显示简化的帮助按钮
   if (!currentHelp) {
     return (
-      <button
-        onClick={handleOpenHelpCenter}
-        className={`
-          fixed bottom-6 right-6 z-50
-          w-14 h-14 rounded-full
-          bg-primary-600 hover:bg-primary-700
-          text-white shadow-lg hover:shadow-xl
-          flex items-center justify-center
-          transition-all duration-200
-          ${className}
-        `}
-        title="帮助中心"
-      >
-        <HelpCircle className="w-6 h-6" />
-      </button>
+      <>
+        {/* 隐藏状态下的边缘触发器 */}
+        {isHidden && (
+          <button
+            onClick={handleShow}
+            className={`
+              fixed bottom-6 right-0 z-50
+              w-6 h-12 rounded-l-lg
+              bg-primary-600 hover:bg-primary-700 hover:w-8
+              text-white shadow-lg
+              flex items-center justify-center
+              transition-all duration-200
+              ${className}
+            `}
+            title="显示帮助按钮"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
+        
+        {/* 帮助按钮 */}
+        {!isHidden && (
+          <div className="fixed bottom-6 right-6 z-50 group">
+            <button
+              onClick={handleOpenHelpCenter}
+              className={`
+                w-14 h-14 rounded-full
+                bg-primary-600 hover:bg-primary-700
+                text-white shadow-lg hover:shadow-xl
+                flex items-center justify-center
+                transition-all duration-200
+                ${className}
+              `}
+              title="帮助中心"
+            >
+              <HelpCircle className="w-6 h-6" />
+            </button>
+            {/* 隐藏按钮 */}
+            <button
+              onClick={handleHide}
+              className="
+                absolute -top-1 -right-1
+                w-5 h-5 rounded-full
+                bg-gray-500 hover:bg-gray-600
+                text-white shadow
+                flex items-center justify-center
+                opacity-0 group-hover:opacity-100
+                transition-all duration-200
+                transform scale-75 group-hover:scale-100
+              "
+              title="隐藏帮助按钮"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+      </>
     )
   }
 
   return (
     <>
+      {/* 隐藏状态下的边缘触发器 */}
+      {isHidden && !isOpen && (
+        <button
+          onClick={handleShow}
+          className={`
+            fixed bottom-6 right-0 z-50
+            w-6 h-12 rounded-l-lg
+            bg-primary-600 hover:bg-primary-700 hover:w-8
+            text-white shadow-lg
+            flex items-center justify-center
+            transition-all duration-200
+            ${className}
+          `}
+          title="显示帮助按钮"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      )}
+
       {/* 帮助按钮 */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className={`
-          fixed bottom-6 right-6 z-50
-          w-14 h-14 rounded-full
-          bg-primary-600 hover:bg-primary-700
-          text-white shadow-lg hover:shadow-xl
-          flex items-center justify-center
-          transition-all duration-200
-          ${isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'}
-          ${className}
-        `}
-        title={`${currentHelp.title} - 帮助`}
-      >
-        <HelpCircle className="w-6 h-6" />
-        {/* 提示点 - 如果有视频则显示 */}
-        {currentHelp.videoUrl && (
-          <span className="absolute top-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
-            <Play className="w-2 h-2 text-white" fill="white" />
-          </span>
-        )}
-      </button>
+      {!isHidden && (
+        <div className={`fixed bottom-6 right-6 z-50 group ${isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'} transition-all duration-200`}>
+          <button
+            onClick={() => setIsOpen(true)}
+            className={`
+              w-14 h-14 rounded-full
+              bg-primary-600 hover:bg-primary-700
+              text-white shadow-lg hover:shadow-xl
+              flex items-center justify-center
+              transition-all duration-200
+              ${className}
+            `}
+            title={`${currentHelp.title} - 帮助`}
+          >
+            <HelpCircle className="w-6 h-6" />
+            {/* 提示点 - 如果有视频则显示 */}
+            {currentHelp.videoUrl && (
+              <span className="absolute top-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white flex items-center justify-center">
+                <Play className="w-2 h-2 text-white" fill="white" />
+              </span>
+            )}
+          </button>
+          {/* 隐藏按钮 */}
+          <button
+            onClick={handleHide}
+            className="
+              absolute -top-1 -right-1
+              w-5 h-5 rounded-full
+              bg-gray-500 hover:bg-gray-600
+              text-white shadow
+              flex items-center justify-center
+              opacity-0 group-hover:opacity-100
+              transition-all duration-200
+              transform scale-75 group-hover:scale-100
+            "
+            title="隐藏帮助按钮"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {/* 帮助面板遮罩 */}
       {isOpen && (

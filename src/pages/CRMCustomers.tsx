@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Plus, Search, Eye, Edit, Trash2, 
   Phone, Mail, MapPin, X, Upload, Loader2,
   ChevronLeft, ChevronRight, Check, Building2, Globe, User, FileText,
-  Package, DollarSign
+  Package, DollarSign, Database, RefreshCw
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -25,12 +25,22 @@ interface Customer {
   contactPhone: string
   contactEmail: string
   countryCode: string
+  province?: string
   city: string
   address: string
   status: string
   assignedName: string
+  assignedOperatorName?: string
   lastFollowUpTime: string | null
   createTime: string
+  // 工商信息字段
+  taxNumber?: string
+  legalPerson?: string
+  registeredCapital?: string
+  establishmentDate?: string
+  businessScope?: string
+  businessInfoId?: string
+  notes?: string
 }
 
 interface CustomerFormData {
@@ -52,6 +62,18 @@ interface CustomerFormData {
   city: string
   address: string
   notes: string
+  assignedTo?: number | null
+  assignedName?: string
+  assignedOperator?: number | null
+  assignedOperatorName?: string
+}
+
+// 业务员/操作员用户接口
+interface SalesUser {
+  id: number
+  name: string
+  role: string
+  roleName?: string
 }
 
 interface ContactInfo {
@@ -61,6 +83,30 @@ interface ContactInfo {
   mobile: string
   email: string
   position: string
+}
+
+// 工商信息接口
+interface BusinessInfo {
+  id?: string
+  creditCode: string
+  companyName: string
+  companyNameEn?: string
+  legalPerson: string
+  registeredCapital: string
+  paidCapital?: string
+  establishmentDate: string
+  businessScope: string
+  address: string
+  province?: string
+  city?: string
+  district?: string
+  companyType?: string
+  operatingStatus?: string
+  industry?: string
+  phone?: string
+  email?: string
+  source?: string
+  usageCount?: number
 }
 
 // 产品接口
@@ -115,61 +161,15 @@ export default function CRMCustomers() {
   const [filterLevel, setFilterLevel] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
   
-  // 模态框状态
-  const [showModal, setShowModal] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
-  const [currentStep, setCurrentStep] = useState(1)
-  
-  // 表单数据
-  const [formData, setFormData] = useState<CustomerFormData>({
-    customerRegion: 'china',
-    customerType: 'shipper',
-    customerLevel: 'normal',
-    customerName: '',
-    companyName: '',
-    taxNumber: '',
-    legalPerson: '',
-    registeredCapital: '',
-    establishmentDate: '',
-    businessScope: '',
-    contactPerson: '',
-    contactPhone: '',
-    contactEmail: '',
-    countryCode: '中国',
-    province: '',
-    city: '',
-    address: '',
-    notes: ''
-  })
-
-  // 多联系人
-  const [contacts, setContacts] = useState<ContactInfo[]>([])
-  
-  // OCR状态
-  const [ocrLoading, setOcrLoading] = useState(false)
-  const [ocrError, setOcrError] = useState<string | null>(null)
-  const [licenseImage, setLicenseImage] = useState<string | null>(null)
-  
-  // 产品和费用项状态
-  const [products, setProducts] = useState<Product[]>([])
-  const [selectedProductId, setSelectedProductId] = useState<string>('')
-  const [productFeeItems, setProductFeeItems] = useState<ProductFeeItem[]>([])
-  const [selectedFeeItemIds, setSelectedFeeItemIds] = useState<number[]>([])
-  const [loadingFeeItems, setLoadingFeeItems] = useState(false)
-  
-  // 提交状态
-  const [submitting, setSubmitting] = useState(false)
 
   const tabs = [
     { path: '/crm', label: '概览' },
     { path: '/crm/customers', label: '客户管理' },
+    { path: '/crm/business-info', label: '工商信息库' },
     { path: '/crm/opportunities', label: '销售机会' },
     { path: '/crm/quotations', label: '报价管理' },
     { path: '/crm/contracts', label: '合同管理' },
-    { path: '/crm/feedbacks', label: '客户反馈' },
-    { path: '/crm/commission/rules', label: '提成规则' },
-    { path: '/crm/commission/records', label: '提成记录' },
-    { path: '/crm/commission/settlements', label: '月度结算' }
+    { path: '/crm/feedbacks', label: '客户反馈' }
   ]
    
   useEffect(() => {
@@ -201,293 +201,6 @@ export default function CRMCustomers() {
       console.error('加载客户列表失败:', error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  // 加载产品列表
-  const loadProducts = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/products?isActive=1&pageSize=100`)
-      const data = await response.json()
-      if (data.errCode === 200) {
-        setProducts(data.data.list || [])
-      }
-    } catch (error) {
-      console.error('加载产品列表失败:', error)
-    }
-  }
-
-  // 加载产品费用项
-  const loadProductFeeItems = async (productId: string) => {
-    setLoadingFeeItems(true)
-    try {
-      const response = await fetch(`${API_BASE}/api/products/${productId}`)
-      const data = await response.json()
-      if (data.errCode === 200 && data.data?.feeItems) {
-        setProductFeeItems(data.data.feeItems)
-        // 默认选中必选项
-        const requiredIds = data.data.feeItems
-          .filter((item: ProductFeeItem) => item.isRequired)
-          .map((item: ProductFeeItem) => item.id)
-        setSelectedFeeItemIds(requiredIds)
-      }
-    } catch (error) {
-      console.error('加载产品费用项失败:', error)
-    } finally {
-      setLoadingFeeItems(false)
-    }
-  }
-
-  // 当选择产品时加载费用项
-  useEffect(() => {
-    if (selectedProductId) {
-      loadProductFeeItems(selectedProductId)
-    } else {
-      setProductFeeItems([])
-      setSelectedFeeItemIds([])
-    }
-  }, [selectedProductId])
-
-  const handleOpenModal = (customer?: Customer) => {
-    if (customer) {
-      setEditingCustomer(customer)
-      setFormData({
-        customerRegion: (customer.customerRegion as 'china' | 'overseas') || 'china',
-        customerType: customer.customerType,
-        customerLevel: customer.customerLevel,
-        customerName: customer.customerName,
-        companyName: customer.companyName || '',
-        taxNumber: customer.taxNumber || '',
-        legalPerson: customer.legalPerson || '',
-        registeredCapital: customer.registeredCapital || '',
-        establishmentDate: customer.establishmentDate || '',
-        businessScope: customer.businessScope || '',
-        contactPerson: customer.contactPerson || '',
-        contactPhone: customer.contactPhone || '',
-        contactEmail: customer.contactEmail || '',
-        countryCode: customer.countryCode || '',
-        province: customer.province || '',
-        city: customer.city || '',
-        address: customer.address || '',
-        notes: customer.notes || ''
-      })
-      setCurrentStep(2) // 编辑模式直接跳到第二步
-    } else {
-      setEditingCustomer(null)
-      setFormData({
-        customerRegion: 'china',
-        customerType: 'shipper',
-        customerLevel: 'normal',
-        customerName: '',
-        companyName: '',
-        taxNumber: '',
-        legalPerson: '',
-        registeredCapital: '',
-        establishmentDate: '',
-        businessScope: '',
-        contactPerson: '',
-        contactPhone: '',
-        contactEmail: '',
-        countryCode: '中国',
-        province: '',
-        city: '',
-        address: '',
-        notes: ''
-      })
-      setCurrentStep(1)
-    }
-    setContacts([])
-    setLicenseImage(null)
-    setOcrError(null)
-    // 重置产品和费用项状态
-    setSelectedProductId('')
-    setProductFeeItems([])
-    setSelectedFeeItemIds([])
-    // 加载产品列表
-    loadProducts()
-    setShowModal(true)
-  }
-
-  // 处理营业执照上传
-  const handleLicenseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    
-    // 检查文件大小（限制5MB）
-    if (file.size > 5 * 1024 * 1024) {
-      setOcrError('图片大小不能超过5MB')
-      return
-    }
-    
-    // 转换为Base64
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const base64 = reader.result as string
-      setLicenseImage(base64)
-      setOcrLoading(true)
-      setOcrError(null)
-      
-      try {
-        console.log('开始调用OCR API:', `${API_BASE}/api/ocr/business-license`)
-        const response = await fetch(`${API_BASE}/api/ocr/business-license`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64 })
-        })
-        console.log('OCR API响应状态:', response.status)
-        
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error('OCR API错误响应:', errorText)
-          try {
-            const errorData = JSON.parse(errorText)
-            setOcrError(errorData.msg || `服务器错误 (${response.status})`)
-          } catch {
-            setOcrError(`服务器错误 (${response.status})`)
-          }
-          setOcrLoading(false)
-          return
-        }
-        
-        const data = await response.json()
-        console.log('OCR API返回数据:', data)
-        
-        if (data.errCode === 200 && data.data) {
-          const ocrData = data.data
-          setFormData(prev => ({
-            ...prev,
-            companyName: ocrData.companyName || prev.companyName,
-            customerName: ocrData.companyName || prev.customerName,
-            taxNumber: ocrData.creditCode || prev.taxNumber,
-            legalPerson: ocrData.legalPerson || prev.legalPerson,
-            registeredCapital: ocrData.registeredCapital || prev.registeredCapital,
-            establishmentDate: ocrData.establishmentDate || prev.establishmentDate,
-            businessScope: ocrData.businessScope || prev.businessScope,
-            address: ocrData.address || prev.address
-          }))
-          
-          // 如果识别出法人信息，自动添加到联系人
-          if (ocrData.legalPerson) {
-            setContacts(prev => {
-              const hasLegal = prev.some(c => c.contactType === 'legal')
-              if (!hasLegal) {
-                return [...prev, {
-                  contactType: 'legal',
-                  contactName: ocrData.legalPerson,
-                  phone: '',
-                  mobile: '',
-                  email: '',
-                  position: '法定代表人'
-                }]
-              }
-              return prev
-            })
-          }
-        } else {
-          setOcrError(data.msg || '营业执照识别失败')
-        }
-      } catch (error: unknown) {
-        console.error('OCR识别失败:', error)
-        // 显示更详细的错误信息
-        const errorMessage = error instanceof Error ? error.message : '未知错误'
-        setOcrError(`营业执照识别服务暂时不可用: ${errorMessage}`)
-      } finally {
-        setOcrLoading(false)
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  // 添加联系人
-  const handleAddContact = () => {
-    setContacts(prev => [...prev, {
-      contactType: 'other',
-      contactName: '',
-      phone: '',
-      mobile: '',
-      email: '',
-      position: ''
-    }])
-  }
-
-  // 删除联系人
-  const handleRemoveContact = (index: number) => {
-    setContacts(prev => prev.filter((_, i) => i !== index))
-  }
-
-  // 更新联系人
-  const handleUpdateContact = (index: number, field: keyof ContactInfo, value: string) => {
-    setContacts(prev => prev.map((c, i) => i === index ? { ...c, [field]: value } : c))
-  }
-
-  const handleSubmit = async () => {
-    if (!formData.customerName) {
-      alert('请输入客户名称')
-      return
-    }
-
-    // 新建客户时需要验证产品和费用项
-    if (!editingCustomer) {
-      if (!selectedProductId) {
-        alert('请选择产品')
-        return
-      }
-      if (selectedFeeItemIds.length === 0) {
-        alert('请选择至少一项费用')
-        return
-      }
-    }
-
-    setSubmitting(true)
-    try {
-      if (editingCustomer) {
-        // 编辑模式：只更新客户信息
-        const response = await fetch(`${API_BASE}/api/customers/${editingCustomer.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
-        })
-        const data = await response.json()
-        if (data.errCode === 200) {
-          setShowModal(false)
-          loadCustomers()
-        } else {
-          alert(data.msg || '操作失败')
-        }
-      } else {
-        // 新建模式：创建客户 + 自动生成报价
-        const requestData = {
-          ...formData,
-          productId: selectedProductId,
-          selectedFeeItemIds,
-          contacts: contacts.filter(c => c.contactName) // 过滤空联系人
-        }
-
-        const response = await fetch(`${API_BASE}/api/customers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestData)
-        })
-
-        const data = await response.json()
-        if (data.errCode === 200) {
-          // 显示成功信息
-          let successMsg = '客户创建成功！'
-          if (data.data?.quotation) {
-            successMsg += `\n报价单号：${data.data.quotation.quoteNumber}`
-          }
-          alert(successMsg)
-          setShowModal(false)
-          loadCustomers()
-        } else {
-          alert(data.msg || '操作失败')
-        }
-      }
-    } catch (error) {
-      console.error('保存客户失败:', error)
-      alert('保存失败')
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -652,6 +365,44 @@ export default function CRMCustomers() {
       )
     },
     {
+      key: 'assignedName',
+      label: '销售员',
+      width: 80,
+      sorter: true,
+      render: (_value, item) => (
+        <div className="flex items-center justify-center">
+          {item?.assignedName ? (
+            <span className="inline-flex items-center justify-center min-w-[48px] px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+              {item.assignedName}
+            </span>
+          ) : (
+            <span className="inline-flex items-center justify-center min-w-[48px] px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-500">
+              -
+            </span>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'assignedOperatorName',
+      label: '跟单员',
+      width: 80,
+      sorter: true,
+      render: (_value, item) => (
+        <div className="flex items-center justify-center">
+          {item?.assignedOperatorName ? (
+            <span className="inline-flex items-center justify-center min-w-[48px] px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+              {item.assignedOperatorName}
+            </span>
+          ) : (
+            <span className="inline-flex items-center justify-center min-w-[48px] px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-500">
+              -
+            </span>
+          )}
+        </div>
+      )
+    },
+    {
       key: 'createTime',
       label: '创建时间',
       width: 120,
@@ -678,7 +429,7 @@ export default function CRMCustomers() {
             <Eye className="w-4 h-4" />
           </button>
           <button 
-            onClick={() => item && handleOpenModal(item)}
+            onClick={() => item?.id && navigate(`/crm/customers/${item.id}/edit`)}
             className="p-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded"
             title="编辑"
           >
@@ -696,43 +447,10 @@ export default function CRMCustomers() {
     }
   ], [navigate])
 
-  // 步骤配置
-  const steps = [
-    { num: 1, title: '选择类型', icon: Building2 },
-    { num: 2, title: '填写信息', icon: FileText },
-    { num: 3, title: '联系人', icon: User },
-    { num: 4, title: '选择产品', icon: Package },
-    { num: 5, title: '费用项', icon: DollarSign },
-    { num: 6, title: '确认', icon: Check }
-  ]
-
-  // 渲染步骤指示器
-  const renderStepIndicator = () => (
-    <div className="flex items-center justify-center gap-2 mb-6">
-      {steps.map((step, index) => (
-        <div key={step.num} className="flex items-center">
-          <div 
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
-              currentStep === step.num 
-                ? 'bg-primary-100 text-primary-700' 
-                : currentStep > step.num 
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-100 text-gray-500'
-            }`}
-          >
-            <step.icon className="w-4 h-4" />
-            <span className="text-xs font-medium">{step.title}</span>
-          </div>
-          {index < steps.length - 1 && (
-            <ChevronRight className="w-4 h-4 text-gray-300 mx-1" />
-          )}
-        </div>
-      ))}
-    </div>
-  )
-
-  // 步骤1：选择客户区域和类型
-  const renderStep1 = () => (
+  // 注意: 分步表单功能已移至独立的 CRMCustomerEdit.tsx 页面
+  // 以下渲染函数保留作为参考但不再使用
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _deprecatedRenderStep1 = () => (
     <div className="space-y-6">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">客户区域</label>
@@ -816,9 +534,136 @@ export default function CRMCustomers() {
   // 步骤2：填写公司信息
   const renderStep2 = () => (
     <div className="space-y-4">
-      {/* 中国客户：营业执照上传 */}
+      {/* 中国客户：工商信息查询 */}
       {formData.customerRegion === 'china' && (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">工商信息查询</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOcrMode(!showOcrMode)}
+              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            >
+              <Upload className="w-3 h-3" />
+              {showOcrMode ? '切换到搜索模式' : '上传营业执照'}
+            </button>
+          </div>
+          
+          {!showOcrMode ? (
+            // 工商信息搜索模式
+            <div ref={businessSearchRef} className="relative">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={businessSearchKeyword}
+                  onChange={(e) => {
+                    setBusinessSearchKeyword(e.target.value)
+                    setSelectedBusinessInfo(null)
+                  }}
+                  onFocus={() => businessSearchResults.length > 0 && setShowBusinessResults(true)}
+                  placeholder="输入公司名称或统一社会信用代码搜索..."
+                  className="w-full px-4 py-2.5 pl-10 pr-10 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                {businessSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+                )}
+                {!businessSearching && selectedBusinessInfo && (
+                  <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
+                )}
+              </div>
+              
+              {/* 搜索结果下拉列表 */}
+              {showBusinessResults && businessSearchResults.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 max-h-64 overflow-y-auto">
+                  {businessSearchResults.map((item, index) => (
+                    <div
+                      key={item.creditCode || index}
+                      onClick={() => handleSelectBusinessInfo(item)}
+                      className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-gray-800 truncate">{item.companyName}</div>
+                          <div className="text-xs text-gray-500 mt-1 space-x-2">
+                            {item.creditCode && <span>信用代码: {item.creditCode}</span>}
+                            {item.legalPerson && <span>法人: {item.legalPerson}</span>}
+                          </div>
+                          {item.operatingStatus && (
+                            <span className={`inline-block mt-1 text-xs px-1.5 py-0.5 rounded ${
+                              item.operatingStatus === '存续' || item.operatingStatus === '在业' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {item.operatingStatus}
+                            </span>
+                          )}
+                        </div>
+                        {item.source === 'local' || item.id ? (
+                          <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                            <Database className="w-3 h-3" /> 本地
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* 无结果提示 */}
+              {showBusinessResults && businessSearchResults.length === 0 && businessSearchKeyword.length >= 2 && !businessSearching && (
+                <div className="absolute z-50 mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 p-4 text-center">
+                  <p className="text-sm text-gray-500">未找到相关企业</p>
+                  <p className="text-xs text-gray-400 mt-1">可手动填写或尝试其他关键词</p>
+                </div>
+              )}
+              
+              {/* 选中的工商信息预览 */}
+              {selectedBusinessInfo && (
+                <div className="mt-3 p-3 bg-white rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-green-700 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> 已选择企业
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBusinessInfo(null)
+                        setBusinessSearchKeyword('')
+                      }}
+                      className="text-xs text-gray-500 hover:text-red-500"
+                    >
+                      清除
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                    <div><span className="text-gray-400">公司:</span> {selectedBusinessInfo.companyName}</div>
+                    <div><span className="text-gray-400">信用代码:</span> {selectedBusinessInfo.creditCode || '-'}</div>
+                    <div><span className="text-gray-400">法人:</span> {selectedBusinessInfo.legalPerson || '-'}</div>
+                    <div><span className="text-gray-400">状态:</span> {selectedBusinessInfo.operatingStatus || '-'}</div>
+                  </div>
+                </div>
+              )}
+              
+              {loadingBusinessDetail && (
+                <div className="mt-3 flex items-center justify-center gap-2 text-blue-600">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">获取详细信息...</span>
+                </div>
+              )}
+              
+              {businessInfoError && (
+                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3" /> {businessInfoError}
+                </p>
+              )}
+            </div>
+          ) : (
+            // OCR上传模式（保留作为备选）
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-white">
           <div className="text-center">
             {licenseImage ? (
               <div className="space-y-3">
@@ -854,6 +699,8 @@ export default function CRMCustomers() {
               <p className="text-xs text-red-500 mt-2">{ocrError}</p>
             )}
           </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -937,6 +784,40 @@ export default function CRMCustomers() {
           />
               </div>
       )}
+
+      {/* 负责业务员 */}
+      <div className="border-t pt-4">
+        <h4 className="text-xs font-medium text-gray-700 mb-3 flex items-center gap-2">
+          <User className="w-4 h-4" />
+          负责业务员
+        </h4>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">选择负责的业务员（跟单员）</label>
+          <select
+            value={formData.assignedTo || ''}
+            onChange={(e) => {
+              const userId = e.target.value ? parseInt(e.target.value) : null
+              const user = salesUsers.find(u => u.id === userId)
+              setFormData({
+                ...formData, 
+                assignedTo: userId,
+                assignedName: user?.name || ''
+              })
+            }}
+            className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+          >
+            <option value="">暂不指定</option>
+            {salesUsers.map(user => (
+              <option key={user.id} value={user.id}>
+                {user.name} {user.roleName ? `(${user.roleName})` : ''}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-gray-400 mt-1">
+            指定业务员后，该客户的询价将自动分配给对应人员处理
+          </p>
+        </div>
+      </div>
 
               {/* 地址信息 */}
               <div className="border-t pt-4">
@@ -1315,7 +1196,7 @@ export default function CRMCustomers() {
         </div>
 
         <button
-          onClick={() => handleOpenModal()}
+          onClick={() => navigate('/crm/customers/new')}
           className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -1369,97 +1250,6 @@ export default function CRMCustomers() {
         </div>
       )}
 
-      {/* 新增/编辑弹窗 - 分步表单 */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-sm font-medium">{editingCustomer ? '编辑客户' : '新增客户'}</h3>
-              <button 
-                onClick={() => setShowModal(false)} 
-                className="p-1 hover:bg-gray-100 rounded"
-                title="关闭"
-                aria-label="关闭"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1">
-              {renderStepIndicator()}
-              
-              {currentStep === 1 && renderStep1()}
-              {currentStep === 2 && renderStep2()}
-              {currentStep === 3 && renderStep3()}
-              {currentStep === 4 && renderStep4()}
-              {currentStep === 5 && renderStep5()}
-              {currentStep === 6 && renderStep6()}
-            </div>
-
-            <div className="flex justify-between items-center p-4 border-t bg-gray-50">
-              <div>
-                {currentStep > 1 && (
-                  <button
-                    onClick={() => setCurrentStep(s => s - 1)}
-                    className="flex items-center gap-1 px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
-                    disabled={submitting}
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    上一步
-                  </button>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-100"
-                  disabled={submitting}
-                >
-                  取消
-                </button>
-                {currentStep < 6 ? (
-                  <button
-                    onClick={() => {
-                      // 编辑模式下跳过产品与费用，直接进入确认
-                      if (currentStep === 3 && editingCustomer) {
-                        setCurrentStep(6)
-                      } else {
-                        setCurrentStep(s => Math.min(6, s + 1))
-                      }
-                    }}
-                    disabled={
-                      (currentStep === 4 && !selectedProductId) ||
-                      (currentStep === 5 && selectedFeeItemIds.length === 0)
-                    }
-                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    下一步
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    className="flex items-center gap-1 px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        处理中...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4" />
-                        保存
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

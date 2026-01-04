@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { 
-  ArrowLeft, CreditCard, Calendar, DollarSign, 
+  ArrowLeft, CreditCard, DollarSign, 
   FileText, CheckCircle, AlertCircle, Building2,
   Upload, X, Image, Eye, Loader2
 } from 'lucide-react'
+import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -382,16 +383,14 @@ export default function RegisterPayment() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               <span className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
                 收款日期 <span className="text-red-500">*</span>
               </span>
             </label>
-            <input
-              type="date"
+            <DateTimePicker
               value={formData.paymentDate}
-              onChange={(e) => setFormData(prev => ({ ...prev, paymentDate: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              required
+              onChange={(value) => setFormData(prev => ({ ...prev, paymentDate: value }))}
+              showTime={false}
+              placeholder="选择收款日期"
             />
           </div>
 

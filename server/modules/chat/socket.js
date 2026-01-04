@@ -16,13 +16,28 @@ const socketUserMap = new Map() // socketId -> userId
  * @returns {Server} Socket.io服务器实例
  */
 export function initSocketServer(httpServer) {
+  // 开发环境允许所有来源，生产环境限制特定域名
+  const isDev = process.env.NODE_ENV !== 'production'
+  
   const io = new Server(httpServer, {
     cors: {
-      origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5173'],
-      credentials: true
+      origin: isDev 
+        ? true  // 开发环境允许所有来源
+        : [
+            'http://localhost:5173', 
+            'http://localhost:3000', 
+            'http://localhost:3001', 
+            'http://127.0.0.1:5173',
+            'https://erp.xianfeng-eu.com',
+            'https://demo.xianfeng-eu.com'
+          ],
+      credentials: true,
+      methods: ['GET', 'POST']
     },
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'],  // 支持 WebSocket 和轮询
+    allowEIO3: true  // 兼容旧版本客户端
   })
   
   // 连接事件

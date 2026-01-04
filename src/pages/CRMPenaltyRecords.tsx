@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -166,16 +167,10 @@ export default function CRMPenaltyRecords() {
   })
 
   const tabs = [
-    { label: '仪表盘', path: '/crm' },
-    { label: '客户管理', path: '/crm/customers' },
-    { label: '销售机会', path: '/crm/opportunities' },
-    { label: '报价管理', path: '/crm/quotations' },
-    { label: '合同管理', path: '/crm/contracts' },
-    { label: '客户反馈', path: '/crm/feedbacks' },
-    { label: '提成规则', path: '/crm/commission/rules' },
-    { label: '提成记录', path: '/crm/commission/records' },
-    { label: '惩罚记录', path: '/crm/commission/penalties' },
-    { label: '月度结算', path: '/crm/commission/settlements' }
+    { label: '提成规则', path: '/finance/commission/rules' },
+    { label: '提成记录', path: '/finance/commission/records' },
+    { label: '惩罚记录', path: '/finance/commission/penalties' },
+    { label: '月度结算', path: '/finance/commission/settlements' }
   ]
 
   useEffect(() => {
@@ -625,9 +620,9 @@ export default function CRMPenaltyRecords() {
   return (
     <div className="p-4 space-y-4">
       <PageHeader
-        title="CRM客户关系管理"
+        title="提成管理"
         tabs={tabs}
-        activeTab="/crm/commission/penalties"
+        activeTab="/finance/commission/penalties"
         onTabChange={(path) => navigate(path)}
       />
 
@@ -930,11 +925,11 @@ export default function CRMPenaltyRecords() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">事件发生日期 *</label>
-                  <input
-                    type="date"
+                  <DateTimePicker
                     value={formData.incidentDate}
-                    onChange={(e) => setFormData({...formData, incidentDate: e.target.value})}
-                    className="w-full px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                    onChange={(value) => setFormData({...formData, incidentDate: value})}
+                    showTime={false}
+                    placeholder="选择事件日期"
                   />
                 </div>
                 <div>
