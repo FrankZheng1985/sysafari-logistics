@@ -2939,11 +2939,15 @@ export async function getBillPrimaryInvoiceNumber(billId) {
 /**
  * 创建追加发票
  * @param {Object} data - 发票数据
+ * @param {Array} data.feeIds - 关联的费用ID列表（可选）
+ * @param {Array} data.items - 发票项目列表（可选）
  * @returns {Object} 创建结果
  */
 export async function createSupplementInvoice(data) {
   const db = getDatabase()
   const id = generateId()
+  const now = new Date().toISOString()
+  const invoiceDate = data.invoiceDate || now.split('T')[0]
   
   // 生成追加发票号
   const invoiceNumber = await generateSupplementInvoiceNumber(data.parentInvoiceNumber)
@@ -2960,21 +2964,31 @@ export async function createSupplementInvoice(data) {
     ? JSON.stringify(data.containerNumbers) 
     : JSON.stringify([])
   
+  // 处理费用ID数组
+  const feeIds = Array.isArray(data.feeIds) 
+    ? JSON.stringify(data.feeIds) 
+    : JSON.stringify([])
+  
+  // 处理发票项目数组
+  const items = Array.isArray(data.items) 
+    ? JSON.stringify(data.items) 
+    : JSON.stringify([])
+  
   await db.prepare(`
     INSERT INTO invoices (
       id, invoice_number, invoice_type, invoice_date, due_date,
       customer_id, customer_name, bill_id, bill_number, container_numbers,
       subtotal, tax_amount, total_amount, paid_amount,
-      currency, exchange_rate, description, notes,
+      currency, exchange_rate, description, notes, items, fee_ids,
       status, language, created_by,
       parent_invoice_number, supplement_seq,
       created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW())
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW(), NOW())
   `).run(
     id,
     invoiceNumber,
     data.invoiceType || 'sales',
-    data.invoiceDate || new Date().toISOString().split('T')[0],
+    invoiceDate,
     data.dueDate || null,
     data.customerId || null,
     data.customerName || '',
@@ -2989,12 +3003,28 @@ export async function createSupplementInvoice(data) {
     data.exchangeRate || 1,
     data.description || '',
     data.notes || '',
+    items,
+    feeIds,
     data.status || 'issued',
     data.language || 'en',
     data.createdBy || null,
     data.parentInvoiceNumber,
     supplementSeq
   )
+  
+  // 如果有关联的费用ID，更新费用记录的发票状态
+  if (Array.isArray(data.feeIds) && data.feeIds.length > 0) {
+    for (const feeId of data.feeIds) {
+      await db.prepare(`
+        UPDATE fees SET 
+          invoice_status = 'invoiced',
+          invoice_number = ?,
+          invoice_date = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).run(invoiceNumber, invoiceDate, now, feeId)
+    }
+  }
   
   return { id, invoiceNumber, supplementSeq }
 }

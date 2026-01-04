@@ -76,6 +76,7 @@ const routeTitleMap: Record<string, string> = {
   // CRM客户管理
   '/crm': 'CRM客户管理 - CRM概览',
   '/crm/customers': 'CRM客户管理 - 客户管理',
+  '/crm/customers/new': 'CRM客户管理 - 新建客户',
   '/crm/opportunities': 'CRM客户管理 - 商机管理',
   '/crm/quotations': 'CRM客户管理 - 报价管理',
   '/crm/contracts': 'CRM客户管理 - 合同管理',
@@ -98,25 +99,32 @@ const routeTitleMap: Record<string, string> = {
   '/finance/invoices/create': '财务管理 - 新建发票',
   '/finance/payments': '财务管理 - 收付款',
   '/finance/fees': '财务管理 - 费用管理',
+  '/finance/fee-approval': '财务管理 - 费用审批',
   '/finance/reports': '财务管理 - 报表分析',
   '/finance/order-report': '财务管理 - 订单报表',
   '/finance/statements': '财务管理 - 财务报表',
   '/finance/bank-accounts': '财务管理 - 银行账户',
   '/finance/carrier-settlement': '财务管理 - 承运商结算',
   '/finance/fee-approvals': '财务管理 - 费用审批',
+  '/finance/commission': '财务管理 - 佣金管理',
+  '/finance/commission/rules': '财务管理 - 佣金规则',
+  '/finance/commission/records': '财务管理 - 佣金记录',
+  '/finance/commission/penalties': '财务管理 - 罚款记录',
+  '/finance/commission/settlements': '财务管理 - 佣金结算',
+  '/supplement-fee': '财务管理 - 追加费用',
   // 合同管理
-  '/contracts': '合同管理',
+  '/contracts': '合同管理 - 合同概览',
   '/contracts/config': '合同管理 - 合同模板配置',
   // 工具
-  '/tools': '工具',
+  '/tools': '工具 - 工具概览',
   '/tools/inquiry': '工具 - 服务费配置',
   '/tools/shared-tax': '工具 - 共享税号库',
   '/tools/product-pricing': '工具 - 产品定价',
   // 帮助中心
-  '/help': '帮助中心',
+  '/help': '帮助中心 - 帮助概览',
   '/help/videos': '帮助中心 - 视频管理',
   // 系统管理
-  '/system': '系统管理',
+  '/system': '系统管理 - 系统概览',
   '/system/info-center': '系统管理 - 信息中心',
   '/system/data-import': '系统管理 - 数据导入',
   '/system/menu-settings': '系统管理 - 板块开关',
@@ -143,6 +151,26 @@ const routeTitleMap: Record<string, string> = {
   '/system/api-integrations': '系统管理 - API对接管理',
 }
 
+// 模块前缀映射（用于动态路由的回退）
+const moduleNameMap: Record<string, string> = {
+  'bookings': '订单管理',
+  'documents': '单证管理',
+  'document-center': '单证管理',
+  'inspection': '查验管理',
+  'tms': 'TMS运输管理',
+  'cmr-manage': 'TMS运输管理',
+  'last-mile': 'TMS运输管理',
+  'crm': 'CRM客户管理',
+  'suppliers': '供应商管理',
+  'finance': '财务管理',
+  'supplement-fee': '财务管理',
+  'contracts': '合同管理',
+  'tools': '工具',
+  'help': '帮助中心',
+  'system': '系统管理',
+  'bp-view': 'BP View',
+}
+
 // 获取路由标题
 export function getRouteTitle(path: string): string {
   // 精确匹配
@@ -151,38 +179,50 @@ export function getRouteTitle(path: string): string {
   }
   
   // 处理动态路由，如 /bookings/bill/:id
-  const pathParts = path.split('/')
+  const pathParts = path.split('/').filter(Boolean) // 移除空字符串
   
   // 处理详情页面
-  if (pathParts[1] === 'bookings' && pathParts[2] === 'bill' && pathParts[3]) {
+  if (pathParts[0] === 'bookings' && pathParts[1] === 'bill' && pathParts[2]) {
     return '订单管理 - 提单详情'
   }
-  if (pathParts[1] === 'cmr-manage' && pathParts[2]) {
+  if (pathParts[0] === 'cmr-manage' && pathParts[1]) {
     return 'TMS运输管理 - CMR详情'
   }
-  if (pathParts[1] === 'inspection' && pathParts[2]) {
+  if (pathParts[0] === 'inspection' && pathParts[1] && pathParts[1] !== 'pending' && pathParts[1] !== 'released') {
     return '查验管理 - 查验详情'
   }
-  if (pathParts[1] === 'crm' && pathParts[2] === 'customers' && pathParts[3]) {
-    if (pathParts[4] === 'edit') return 'CRM客户管理 - 编辑客户'
+  if (pathParts[0] === 'crm' && pathParts[1] === 'customers' && pathParts[2]) {
+    if (pathParts[3] === 'edit') return 'CRM客户管理 - 编辑客户'
     return 'CRM客户管理 - 客户详情'
   }
-  if (pathParts[1] === 'crm' && pathParts[2] === 'bill' && pathParts[3]) {
+  if (pathParts[0] === 'crm' && pathParts[1] === 'bill' && pathParts[2]) {
     return 'CRM客户管理 - 订单详情'
   }
-  if (pathParts[1] === 'finance' && pathParts[2] === 'invoices' && pathParts[3]) {
-    if (pathParts[4] === 'edit') return '财务管理 - 编辑发票'
-    if (pathParts[4] === 'payment') return '财务管理 - 登记付款'
+  if (pathParts[0] === 'finance' && pathParts[1] === 'invoices' && pathParts[2]) {
+    if (pathParts[3] === 'edit') return '财务管理 - 编辑发票'
+    if (pathParts[3] === 'payment') return '财务管理 - 登记付款'
     return '财务管理 - 发票详情'
   }
-  if (pathParts[1] === 'finance' && pathParts[2] === 'payments' && pathParts[3]) {
+  if (pathParts[0] === 'finance' && pathParts[1] === 'payments' && pathParts[2]) {
     return '财务管理 - 收付款详情'
   }
-  if (pathParts[1] === 'finance' && pathParts[2] === 'bill-details' && pathParts[3]) {
+  if (pathParts[0] === 'finance' && pathParts[1] === 'bill-details' && pathParts[2]) {
     return '财务管理 - 订单详情'
   }
-  if (pathParts[1] === 'contracts' && pathParts[2] === 'preview' && pathParts[3]) {
+  if (pathParts[0] === 'contracts' && pathParts[1] === 'preview' && pathParts[2]) {
     return '合同管理 - 合同预览'
+  }
+  if (pathParts[0] === 'supplement-fee' && pathParts[1]) {
+    return '财务管理 - 追加费用'
+  }
+  if (pathParts[0] === 'last-mile' && pathParts[1]) {
+    return 'TMS运输管理 - 最后里程'
+  }
+  
+  // 使用模块前缀映射作为回退
+  const moduleName = moduleNameMap[pathParts[0]]
+  if (moduleName) {
+    return `${moduleName} - 页面`
   }
   
   return '页面'

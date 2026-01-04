@@ -48,6 +48,11 @@ interface Invoice {
   pdfUrl?: string | null
   excelUrl?: string | null
   payments?: Payment[]
+  // 追加发票相关字段
+  parentInvoiceNumber?: string | null
+  parentInvoiceId?: string | null
+  supplementSeq?: number
+  isSupplementInvoice?: boolean
 }
 
 interface Payment {
@@ -607,6 +612,38 @@ export default function InvoiceDetail() {
               发票信息
             </h2>
             
+            {/* 追加发票关联信息 */}
+            {invoice.isSupplementInvoice && invoice.parentInvoiceNumber && (
+              <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-purple-600 font-medium">追加发票</span>
+                    <span className="text-xs text-purple-500">（第 {invoice.supplementSeq || 1} 次追加）</span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      // 根据原发票号查询原发票ID
+                      try {
+                        const res = await fetch(`${API_BASE}/api/invoices?invoiceNumber=${invoice.parentInvoiceNumber}`)
+                        const data = await res.json()
+                        if (data.list && data.list.length > 0) {
+                          navigate(`/finance/invoices/${data.list[0].id}`)
+                        } else {
+                          alert('未找到原发票')
+                        }
+                      } catch {
+                        alert('查询失败')
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-purple-700 hover:bg-purple-100 rounded transition-colors"
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    返回原发票: {invoice.parentInvoiceNumber}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-4 gap-x-6 gap-y-4">
               {/* 第一行：基本信息 */}
               <div>

@@ -623,28 +623,43 @@ export default function SupplementFee() {
     ))
   }
 
-  // 提交追加费用
+  // 提交追加费用并创建追加发票
   const handleSubmit = async () => {
     if (pendingFeeItems.length === 0) {
       alert('请至少添加一项费用')
       return
     }
     
-    // 应付费用需要选择供应商
-    if (feeType === 'payable' && !selectedSupplier) {
-      alert('应付费用请先选择供应商')
+    // 追加发票只支持应收费用
+    if (feeType !== 'receivable') {
+      alert('追加发票仅支持应收费用')
+      return
+    }
+    
+    // 必须有原发票信息
+    if (!invoice?.invoiceNumber) {
+      alert('无法获取原发票信息，请确认发票存在')
       return
     }
     
     setSubmitting(true)
     try {
-      let successCount = 0
+      const createdFeeIds: string[] = []
+      const invoiceItems: Array<{
+        feeName: string
+        category: string
+        amount: number
+        currency: string
+        description: string
+      }> = []
+      let totalAmount = 0
       let failCount = 0
       
+      // 第一步：创建费用记录
       for (const fee of pendingFeeItems) {
         const feeData = {
           feeName: fee.feeName,
-          feeType: feeType,
+          feeType: 'receivable',
           category: fee.category,
           amount: fee.amount,
           currency: fee.currency,
@@ -652,10 +667,8 @@ export default function SupplementFee() {
           description: fee.routeInfo || '',
           billId: bill?.id,
           billNumber: bill?.billNumber,
-          customerId: feeType === 'receivable' ? bill?.customerId : null,
-          customerName: feeType === 'receivable' ? bill?.customerName : '',
-          supplierId: feeType === 'payable' ? selectedSupplier?.id : null,
-          supplierName: feeType === 'payable' ? selectedSupplier?.supplierName : '',
+          customerId: bill?.customerId,
+          customerName: bill?.customerName,
           feeSource: fee.source,
           needApproval: fee.source === 'manual'
         }
@@ -668,11 +681,19 @@ export default function SupplementFee() {
         
         const result = await response.json()
         
-        if (result.errCode === 200) {
-          successCount++
+        if (result.errCode === 200 && result.data?.id) {
+          createdFeeIds.push(result.data.id)
+          invoiceItems.push({
+            feeName: fee.feeName,
+            category: fee.category,
+            amount: fee.amount,
+            currency: fee.currency,
+            description: fee.routeInfo || ''
+          })
+          totalAmount += fee.amount
           
           // 手动录入的费用创建审批记录
-          if (fee.source === 'manual' && result.data?.id) {
+          if (fee.source === 'manual') {
             try {
               await fetch(`${API_BASE}/api/fee-item-approvals`, {
                 method: 'POST',
@@ -683,8 +704,6 @@ export default function SupplementFee() {
                   category: fee.category,
                   amount: fee.amount,
                   currency: fee.currency,
-                  supplierId: selectedSupplier?.id || null,
-                  supplierName: selectedSupplier?.supplierName || '',
                   description: fee.routeInfo,
                   status: 'pending'
                 })
@@ -698,20 +717,53 @@ export default function SupplementFee() {
         }
       }
       
-      if (successCount > 0) {
-        const message = hasFinancePermission 
-          ? `成功添加 ${successCount} 条追加费用`
-          : `成功提交 ${successCount} 条追加费用，等待财务审批`
-        
-        if (failCount > 0) {
-          alert(`${message}，${failCount} 条失败`)
-        } else {
-          alert(message)
+      // 第二步：如果有成功创建的费用，直接创建追加发票
+      if (createdFeeIds.length > 0) {
+        const supplementInvoiceData = {
+          parentInvoiceNumber: invoice.invoiceNumber,
+          billId: bill?.id,
+          billNumber: bill?.billNumber,
+          customerId: bill?.customerId,
+          customerName: bill?.customerName,
+          containerNumbers: bill?.containerNumbers || [],
+          invoiceDate: feeDate,
+          feeIds: createdFeeIds,
+          items: invoiceItems,
+          subtotal: totalAmount,
+          totalAmount: totalAmount,
+          currency: pendingFeeItems[0]?.currency || 'EUR',
+          invoiceType: 'sales',
+          status: 'issued',
+          description: `追加费用 - 原发票: ${invoice.invoiceNumber}`
         }
         
-        safeGoBack()
+        const invoiceResponse = await fetch(`${API_BASE}/api/invoices/supplement`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(supplementInvoiceData)
+        })
+        
+        const invoiceResult = await invoiceResponse.json()
+        
+        if (invoiceResult.errCode === 200 && invoiceResult.data?.id) {
+          // 追加发票创建成功，跳转到新发票详情页
+          const successMessage = failCount > 0 
+            ? `追加发票创建成功！发票号：${invoiceResult.data.invoiceNumber}\n（${failCount} 条费用创建失败）`
+            : `追加发票创建成功！发票号：${invoiceResult.data.invoiceNumber}`
+          
+          alert(successMessage)
+          navigate(`/finance/invoices/${invoiceResult.data.id}`)
+        } else {
+          // 费用创建成功但发票创建失败
+          alert(`费用已创建成功，但追加发票创建失败：${invoiceResult.errMsg || '未知错误'}\n请到发票管理中手动创建发票。`)
+          if (bill?.id) {
+            navigate(`/bill/${bill.id}`)
+          } else {
+            navigate('/finance/fees')
+          }
+        }
       } else {
-        alert('添加失败，请稍后重试')
+        alert('费用创建失败，请稍后重试')
       }
     } catch (error) {
       console.error('提交追加费用失败:', error)
@@ -856,239 +908,104 @@ export default function SupplementFee() {
         )}
       </div>
 
-      {/* 费用类型和来源选择 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
-        {/* 费用类型选择 */}
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-2">
-            费用类型 <span className="text-red-500">*</span>
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setFeeType('receivable')
-                setSelectedSupplier(null)
-                setSupplierPrices([])
-              }}
-              className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all ${
-                feeType === 'receivable'
-                  ? 'bg-green-50 border-green-500 text-green-700'
-                  : 'border-gray-200 text-gray-600 hover:border-green-300'
-              }`}
-            >
-              <ArrowDownCircle className="w-5 h-5" />
-              <span className="font-medium">应收费用</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFeeType('payable')}
-              className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all ${
-                feeType === 'payable'
-                  ? 'bg-orange-50 border-orange-500 text-orange-700'
-                  : 'border-gray-200 text-gray-600 hover:border-orange-300'
-              }`}
-            >
-              <ArrowUpCircle className="w-5 h-5" />
-              <span className="font-medium">应付费用</span>
-            </button>
+      {/* 追加发票说明 */}
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+            <FileText className="w-4 h-4 text-purple-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-medium text-purple-900 mb-1">追加发票说明</h3>
+            <p className="text-xs text-purple-700">
+              追加费用将自动创建一张新的销售发票（追加发票），发票号格式为：原发票号-1、原发票号-2 依此类推。
+            </p>
+            {invoice?.invoiceNumber && (
+              <p className="text-xs text-purple-600 mt-1">
+                原发票号：<span className="font-medium">{invoice.invoiceNumber}</span>
+              </p>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* 供应商选择（仅应付费用） */}
-        {feeType === 'payable' && (
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              供应商 <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={selectedSupplier?.supplierName || supplierSearch}
-                  onChange={(e) => handleSupplierSearchChange(e.target.value)}
-                  onFocus={() => setShowSupplierDropdown(true)}
-                  placeholder="搜索供应商名称或编码..."
-                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                />
-                {loadingSuppliers && (
-                  <div className="absolute right-8 top-1/2 -translate-y-1/2">
-                    <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                )}
-                {selectedSupplier && (
-                  <button
-                    onClick={() => {
-                      setSelectedSupplier(null)
-                      setSupplierPrices([])
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              
-              {showSupplierDropdown && !selectedSupplier && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredSuppliers.length > 0 ? (
-                    <>
-                      <div className="px-3 py-1.5 bg-gray-50 text-xs text-gray-500 border-b sticky top-0">
-                        共 {filteredSuppliers.length} 个供应商
-                      </div>
-                      {filteredSuppliers.slice(0, 20).map(supplier => (
-                        <div
-                          key={supplier.id}
-                          onClick={() => handleSupplierSelect(supplier)}
-                          className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                        >
-                          <div className="font-medium text-sm text-gray-900">{supplier.supplierName}</div>
-                          <div className="text-xs text-gray-500">{supplier.supplierCode}</div>
-                        </div>
-                      ))}
-                    </>
-                  ) : supplierSearch.length >= 2 ? (
-                    <div className="px-3 py-4 text-center">
-                      <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                      <p className="text-sm text-gray-500">未找到匹配的供应商</p>
-                    </div>
-                  ) : (
-                    <div className="px-3 py-3 text-sm text-gray-400 text-center">
-                      请输入至少2个字符搜索供应商
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 费用来源选择 */}
+      {/* 费用来源选择 */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-2">
             费用来源
           </label>
           
-          {/* 应收费用：产品库 + 报价单 + 手动录入 */}
-          {feeType === 'receivable' && (
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setFeeSource('product')
+          {/* 产品库 + 报价单 + 手动录入 */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => {
+                setFeeSource('product')
+                setIsManualEntry(false)
+                setShowProductSelect(true)
+              }}
+              className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                feeSource === 'product' && !isManualEntry
+                  ? 'bg-green-50 text-green-600 border-green-500 ring-1 ring-green-500'
+                  : 'border-gray-200 text-gray-600 hover:bg-green-50'
+              }`}
+            >
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <Package className="w-4 h-4" />
+              <span className="font-medium text-xs">产品库</span>
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => {
+                if (bill?.customerId && customerQuotations.length > 0) {
+                  setFeeSource('quotation')
                   setIsManualEntry(false)
-                  setShowProductSelect(true)
-                }}
-                className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
-                  feeSource === 'product' && !isManualEntry
-                    ? 'bg-green-50 text-green-600 border-green-500 ring-1 ring-green-500'
-                    : 'border-gray-200 text-gray-600 hover:bg-green-50'
-                }`}
-              >
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <Package className="w-4 h-4" />
-                <span className="font-medium text-xs">产品库</span>
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => {
-                  if (bill?.customerId && customerQuotations.length > 0) {
-                    setFeeSource('quotation')
-                    setIsManualEntry(false)
-                    setShowQuotationSelect(true)
-                  }
-                }}
-                disabled={!bill?.customerId || customerQuotations.length === 0}
-                className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
-                  feeSource === 'quotation' && !isManualEntry
-                    ? 'bg-purple-50 text-purple-600 border-purple-500 ring-1 ring-purple-500'
-                    : (!bill?.customerId || customerQuotations.length === 0)
-                      ? 'border-gray-200 text-gray-300 bg-gray-50 cursor-not-allowed'
-                      : 'border-gray-200 text-gray-600 hover:bg-purple-50'
-                }`}
-              >
-                {bill?.customerId && customerQuotations.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
-                )}
-                <FileText className="w-4 h-4" />
-                <span className="font-medium text-xs">报价单 {customerQuotations.length > 0 ? `(${customerQuotations.length})` : ''}</span>
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => {
-                  setFeeSource('manual')
-                  setIsManualEntry(true)
-                }}
-                className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
-                  isManualEntry
-                    ? 'bg-blue-50 text-blue-600 border-blue-500 ring-1 ring-blue-500'
-                    : 'border-gray-200 text-gray-600 hover:bg-blue-50'
-                }`}
-              >
-                <Edit3 className="w-4 h-4" />
-                <span className="font-medium text-xs">手动录入</span>
-              </button>
-            </div>
-          )}
-          
-          {/* 应付费用：供应商报价 + 手动录入 */}
-          {feeType === 'payable' && (
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (selectedSupplier) {
-                    setFeeSource('supplier_price')
-                    setIsManualEntry(false)
-                    setShowSupplierPriceSelect(true)
-                  }
-                }}
-                disabled={!selectedSupplier}
-                className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
-                  feeSource === 'supplier_price' && !isManualEntry
-                    ? 'bg-orange-50 text-orange-600 border-orange-500 ring-1 ring-orange-500'
-                    : !selectedSupplier
-                      ? 'border-gray-200 text-gray-300 bg-gray-50 cursor-not-allowed'
-                      : 'border-gray-200 text-gray-600 hover:bg-orange-50'
-                }`}
-              >
-                {selectedSupplier && supplierPrices.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
-                )}
-                <Receipt className="w-4 h-4" />
-                <span className="font-medium text-xs">供应商报价 {supplierPrices.length > 0 ? `(${supplierPrices.length})` : ''}</span>
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => {
-                  setFeeSource('manual')
-                  setIsManualEntry(true)
-                }}
-                className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
-                  isManualEntry
-                    ? 'bg-blue-50 text-blue-600 border-blue-500 ring-1 ring-blue-500'
-                    : 'border-gray-200 text-gray-600 hover:bg-blue-50'
-                }`}
-              >
-                <Edit3 className="w-4 h-4" />
-                <span className="font-medium text-xs">手动录入</span>
-              </button>
-            </div>
-          )}
+                  setShowQuotationSelect(true)
+                }
+              }}
+              disabled={!bill?.customerId || customerQuotations.length === 0}
+              className={`relative flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                feeSource === 'quotation' && !isManualEntry
+                  ? 'bg-purple-50 text-purple-600 border-purple-500 ring-1 ring-purple-500'
+                  : (!bill?.customerId || customerQuotations.length === 0)
+                    ? 'border-gray-200 text-gray-300 bg-gray-50 cursor-not-allowed'
+                    : 'border-gray-200 text-gray-600 hover:bg-purple-50'
+              }`}
+            >
+              {bill?.customerId && customerQuotations.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
+              )}
+              <FileText className="w-4 h-4" />
+              <span className="font-medium text-xs">报价单 {customerQuotations.length > 0 ? `(${customerQuotations.length})` : ''}</span>
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setFeeSource('manual')
+                setIsManualEntry(true)
+              }}
+              className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                isManualEntry
+                  ? 'bg-blue-50 text-blue-600 border-blue-500 ring-1 ring-blue-500'
+                  : 'border-gray-200 text-gray-600 hover:bg-blue-50'
+              }`}
+            >
+              <Edit3 className="w-4 h-4" />
+              <span className="font-medium text-xs">手动录入</span>
+            </button>
+          </div>
           
           {/* 费用来源说明 */}
           <div className="text-xs text-gray-500">
-            {feeType === 'receivable' && feeSource === 'product' && !isManualEntry && (
+            {feeSource === 'product' && !isManualEntry && (
               <span className="flex items-center gap-1">
                 <Package className="w-3 h-3 text-green-500" />
                 从产品库选择标准费用项，价格自动填充
               </span>
             )}
-            {feeType === 'receivable' && feeSource === 'quotation' && !isManualEntry && (
+            {feeSource === 'quotation' && !isManualEntry && (
               <span className="flex items-center gap-1">
                 <FileText className="w-3 h-3 text-purple-500" />
                 {bill?.customerId 
