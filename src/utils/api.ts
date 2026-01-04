@@ -5801,3 +5801,175 @@ export async function deleteCustomerAccount(id: number): Promise<ApiResponse<nul
 }
 
 
+// ==================== HERE 地理编码 API ====================
+
+export interface HereGeocodeResult {
+  lat: number
+  lng: number
+  address: string
+  country: string
+  countryName?: string
+  city: string
+  postalCode: string
+}
+
+export interface HereAddressSuggestion {
+  title: string
+  address: string
+  city: string
+  country: string
+  countryCode: string
+  postalCode: string
+  lat?: number
+  lng?: number
+}
+
+/**
+ * HERE 地理编码 - 通过地址或邮编获取位置信息
+ * @param query 地址或邮编（如 "41751, DE" 或 "德国柏林"）
+ */
+export async function hereGeocode(query: string): Promise<ApiResponse<HereGeocodeResult>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/inquiry/geocode?address=${encodeURIComponent(query)}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('HERE 地理编码失败:', error)
+    throw error
+  }
+}
+
+/**
+ * HERE 地址自动补全 - 输入关键词返回匹配的地址列表
+ * @param query 搜索关键词（邮编或地址）
+ * @param limit 返回结果数量限制，默认5条
+ */
+export async function hereAutosuggest(query: string, limit: number = 5): Promise<ApiResponse<HereAddressSuggestion[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/inquiry/autosuggest?query=${encodeURIComponent(query)}&limit=${limit}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('HERE 地址自动补全失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 根据邮编获取城市和国家信息
+ * @param postalCode 邮编
+ * @param countryCode 国家代码（可选，如 DE、NL）
+ */
+export async function getAddressByPostalCode(postalCode: string, countryCode?: string): Promise<ApiResponse<HereGeocodeResult>> {
+  const query = countryCode ? `${postalCode}, ${countryCode}` : postalCode
+  return hereGeocode(query)
+}
+
+// ==================== 地址缓存管理 API ====================
+
+export interface AddressCacheItem {
+  id: number
+  query_text: string
+  title: string
+  address: string
+  city: string
+  country: string
+  country_code: string
+  postal_code: string
+  lat: number
+  lng: number
+  cache_type: 'autosuggest' | 'geocode'
+  source: 'here' | 'manual'
+  hit_count: number
+  last_hit_at: string
+  created_at: string
+}
+
+export interface AddressCacheStats {
+  cache_type: string
+  total_count: number
+  total_hits: number
+  avg_hits: number
+  last_hit: string
+}
+
+/**
+ * 获取地址缓存统计
+ */
+export async function getAddressCacheStats(): Promise<ApiResponse<{
+  stats: AddressCacheStats[]
+  topAddresses: AddressCacheItem[]
+}>> {
+  return fetchApi('/api/inquiry/address-cache/stats')
+}
+
+/**
+ * 搜索地址缓存
+ */
+export async function searchAddressCache(params: {
+  keyword?: string
+  countryCode?: string
+  cacheType?: 'autosuggest' | 'geocode'
+  page?: number
+  pageSize?: number
+}): Promise<ApiResponse<{
+  list: AddressCacheItem[]
+  total: number
+  page: number
+  pageSize: number
+}>> {
+  const queryParams = new URLSearchParams()
+  if (params.keyword) queryParams.append('keyword', params.keyword)
+  if (params.countryCode) queryParams.append('countryCode', params.countryCode)
+  if (params.cacheType) queryParams.append('cacheType', params.cacheType)
+  if (params.page) queryParams.append('page', params.page.toString())
+  if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString())
+  
+  return fetchApi(`/api/inquiry/address-cache?${queryParams.toString()}`)
+}
+
+/**
+ * 手动添加地址到缓存
+ */
+export async function addAddressToCache(addressData: {
+  queryText?: string
+  title?: string
+  address: string
+  city?: string
+  country?: string
+  countryCode?: string
+  postalCode?: string
+  lat?: number
+  lng?: number
+  cacheType?: 'autosuggest' | 'geocode'
+}): Promise<ApiResponse<AddressCacheItem>> {
+  return fetchApi('/api/inquiry/address-cache', {
+    method: 'POST',
+    body: JSON.stringify(addressData)
+  })
+}
+
+/**
+ * 删除地址缓存
+ */
+export async function deleteAddressCache(id: number): Promise<ApiResponse<{ id: number }>> {
+  return fetchApi(`/api/inquiry/address-cache/${id}`, {
+    method: 'DELETE'
+  })
+}
+
+/**
+ * 清理过期地址缓存
+ */
+export async function cleanupAddressCache(days: number = 90): Promise<ApiResponse<{ cleanedCount: number }>> {
+  return fetchApi('/api/inquiry/address-cache/cleanup', {
+    method: 'POST',
+    body: JSON.stringify({ days })
+  })
+}
+
+

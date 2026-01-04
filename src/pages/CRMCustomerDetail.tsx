@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Building, Building2, User, Phone, Mail, MapPin,
@@ -271,16 +271,24 @@ export default function CRMCustomerDetail() {
 
   const handleSaveAddress = async (data: CustomerAddress) => {
     try {
+      let response
       if (editingAddress?.id) {
-        await updateCustomerAddress(id!, editingAddress.id, data)
+        response = await updateCustomerAddress(id!, editingAddress.id, data)
       } else {
-        await createCustomerAddress(id!, data)
+        response = await createCustomerAddress(id!, data)
       }
-      setAddressModalVisible(false)
-      setEditingAddress(null)
-      loadAddresses()
+      
+      if (response.errCode === 200) {
+        alert(editingAddress?.id ? '地址更新成功' : '地址添加成功')
+        setAddressModalVisible(false)
+        setEditingAddress(null)
+        loadAddresses()
+      } else {
+        alert(`保存失败: ${response.errMsg || '未知错误'}`)
+      }
     } catch (error) {
       console.error('保存地址失败:', error)
+      alert(`保存地址失败: ${error instanceof Error ? error.message : '网络错误'}`)
     }
   }
 
@@ -1289,6 +1297,20 @@ function AddressModal({
   const [cities, setCities] = useState<Array<{ id: number; cityNameCn: string; cityNameEn?: string; cityNamePinyin?: string; level: number; postalCode?: string }>>([])
   const [citySearch, setCitySearch] = useState('')
   const [showCityDropdown, setShowCityDropdown] = useState(false)
+  
+  // HERE API 相关状态
+  const [isLoadingHere, setIsLoadingHere] = useState(false)
+  const [hereError, setHereError] = useState('')
+  const [hereSuggestions, setHereSuggestions] = useState<Array<{
+    title: string
+    address: string
+    city: string
+    country: string
+    countryCode: string
+    postalCode: string
+  }>>([])
+  const [showHereDropdown, setShowHereDropdown] = useState(false)
+  const [hereSearchQuery, setHereSearchQuery] = useState('')
 
   useEffect(() => {
     loadCountries()
@@ -1418,6 +1440,88 @@ function AddressModal({
   const handleCityBlur = () => {
     setTimeout(() => setShowCityDropdown(false), 200)
   }
+  
+  // 调用 HERE API 获取地址建议列表
+  const handleHereAutosuggest = async (query: string) => {
+    if (!query || query.length < 2) {
+      setHereSuggestions([])
+      setShowHereDropdown(false)
+      return
+    }
+    
+    setIsLoadingHere(true)
+    setHereError('')
+    setHereSearchQuery(query)
+    
+    try {
+      const { hereAutosuggest } = await import('../utils/api')
+      const response = await hereAutosuggest(query, 8)
+      
+      if (response.errCode === 200 && response.data && response.data.length > 0) {
+        setHereSuggestions(response.data)
+        setShowHereDropdown(true)
+      } else {
+        setHereSuggestions([])
+        setShowHereDropdown(false)
+      }
+    } catch (error) {
+      console.error('HERE API 调用失败:', error)
+      setHereSuggestions([])
+    } finally {
+      setIsLoadingHere(false)
+    }
+  }
+  
+  // 选择 HERE 建议的地址
+  const handleSelectHereAddress = (suggestion: typeof hereSuggestions[0]) => {
+    console.log('选择的地址:', suggestion)
+    
+    // 从 title 中解析信息（格式通常是: "邮编, 城市, 州/省, 国家"）
+    const titleParts = suggestion.title?.split(', ') || []
+    const parsedPostalCode = suggestion.postalCode || titleParts[0] || ''
+    const parsedCity = suggestion.city || titleParts[1] || ''
+    const parsedCountry = suggestion.country || titleParts[titleParts.length - 1] || ''
+    
+    // 自动填充所有地址相关字段
+    setFormData(prev => ({
+      ...prev,
+      address: suggestion.address || suggestion.title || prev.address,
+      country: parsedCountry,
+      city: parsedCity,
+      postalCode: parsedPostalCode
+    }))
+    setCountrySearch(parsedCountry)
+    setCitySearch(parsedCity)
+    setHereSearchQuery('')
+    setShowHereDropdown(false)
+    setHereSuggestions([])
+    
+    // 尝试匹配国家代码
+    const matchedCountry = countries.find(c => 
+      c.countryCode === suggestion.countryCode || 
+      c.countryNameCn === parsedCountry ||
+      c.countryNameCn?.includes(parsedCountry) ||
+      parsedCountry?.includes(c.countryNameCn || '')
+    )
+    if (matchedCountry) {
+      setSelectedCountryCode(matchedCountry.countryCode)
+    }
+  }
+  
+  // 防抖定时器引用
+  const hereSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // 防抖处理 HERE 查询
+  const debounceHereSearch = (query: string) => {
+    // 清除之前的定时器
+    if (hereSearchTimeoutRef.current) {
+      clearTimeout(hereSearchTimeoutRef.current)
+    }
+    // 设置新的定时器
+    hereSearchTimeoutRef.current = setTimeout(() => {
+      handleHereAutosuggest(query)
+    }, 300)
+  }
 
   const getLevelLabel = (level: number) => {
     switch (level) {
@@ -1475,134 +1579,111 @@ function AddressModal({
               />
             </div>
           </div>
+          {/* HERE 地址搜索 */}
+          <div className="relative">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              地址搜索
+              <span className="text-[10px] text-gray-400 ml-1">(输入邮编或地址，从HERE获取匹配结果)</span>
+              {isLoadingHere && <span className="ml-1 text-primary-500 text-[10px]">查询中...</span>}
+            </label>
+            <input
+              type="text"
+              value={hereSearchQuery}
+              onChange={(e) => {
+                setHereSearchQuery(e.target.value)
+                debounceHereSearch(e.target.value)
+              }}
+              onFocus={() => {
+                if (hereSuggestions.length > 0) {
+                  setShowHereDropdown(true)
+                }
+              }}
+              onBlur={() => {
+                // 延迟关闭，以便点击选项
+                setTimeout(() => setShowHereDropdown(false), 200)
+              }}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="输入邮编或地址搜索，如: 41751 或 Berlin..."
+            />
+            {showHereDropdown && hereSuggestions.length > 0 && (
+              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {hereSuggestions.map((suggestion, index) => (
+                  <div
+                    key={index}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleSelectHereAddress(suggestion)}
+                    className="px-2.5 py-2 text-xs hover:bg-primary-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div className="font-medium text-gray-900">{suggestion.title}</div>
+                    <div className="text-gray-500 text-[10px] mt-0.5">
+                      {suggestion.address}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-400">
+                      {suggestion.postalCode && <span>邮编: {suggestion.postalCode}</span>}
+                      {suggestion.city && <span>城市: {suggestion.city}</span>}
+                      {suggestion.country && <span>国家: {suggestion.country}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 详细地址 - 显示选中的完整地址 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              详细地址
+              <span className="text-[10px] text-gray-400 ml-1">(选择后自动填充，可手动修改)</span>
+            </label>
+            <input
+              type="text"
+              value={formData.address || ''}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="选择地址后自动填充，或手动输入"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
-            <div className="relative">
-              <label className="block text-xs font-medium text-gray-700 mb-1">国家</label>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                国家
+                <span className="text-[10px] text-gray-400 ml-1">(自动填充)</span>
+              </label>
               <input
                 type="text"
-                value={countrySearch}
-                onChange={(e) => {
-                  setCountrySearch(e.target.value)
-                  setShowCountryDropdown(true)
-                  if (!e.target.value) {
-                    setFormData({ ...formData, country: '' })
-                  }
-                }}
-                onFocus={() => setShowCountryDropdown(true)}
-                onBlur={handleCountryBlur}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="搜索国家..."
+                value={countrySearch || formData.country || ''}
+                readOnly
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded bg-gray-50 text-gray-700 cursor-not-allowed"
+                placeholder="选择地址后自动填充"
               />
-              {showCountryDropdown && filteredCountries.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredCountries.slice(0, 20).map((country) => (
-                    <div
-                      key={country.id}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleSelectCountry(country)}
-                      className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
-                    >
-                      <span>{country.countryNameCn}</span>
-                      <span className="text-gray-400">{country.countryCode}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
-            <div className="relative">
-              <label className="block text-xs font-medium text-gray-700 mb-1">城市</label>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                城市
+                <span className="text-[10px] text-gray-400 ml-1">(自动填充)</span>
+              </label>
               <input
                 type="text"
-                value={citySearch}
-                onChange={(e) => {
-                  setCitySearch(e.target.value)
-                  setShowCityDropdown(true)
-                  if (!e.target.value) {
-                    setFormData({ ...formData, city: '' })
-                  } else {
-                    setFormData({ ...formData, city: e.target.value })
-                  }
-                }}
-                onFocus={() => {
-                  setShowCityDropdown(true)
-                  // 如果已选择国家但城市列表为空，尝试重新加载
-                  if (selectedCountryCode && cities.length === 0) {
-                    loadCities(selectedCountryCode)
-                  }
-                }}
-                onBlur={handleCityBlur}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder={selectedCountryCode ? '搜索城市...' : '请先选择国家'}
-                disabled={!selectedCountryCode}
+                value={citySearch || formData.city || ''}
+                readOnly
+                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded bg-gray-50 text-gray-700 cursor-not-allowed"
+                placeholder="选择地址后自动填充"
               />
-              {showCityDropdown && selectedCountryCode && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredCities.length > 0 ? (
-                    filteredCities.slice(0, 30).map((city) => (
-                      <div
-                        key={city.id}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSelectCity(city)}
-                        className="px-2.5 py-1.5 text-xs hover:bg-primary-50 cursor-pointer flex items-center justify-between"
-                      >
-                        <div className="flex flex-col">
-                        <span>{city.cityNameCn}</span>
-                          {city.cityNamePinyin && (
-                            <span className="text-gray-400 text-[10px]">{city.cityNamePinyin}</span>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-end">
-                        <span className="text-gray-400 text-[10px]">{getLevelLabel(city.level)}</span>
-                          {city.postalCode && (
-                            <span className="text-gray-400 text-[10px]">{city.postalCode}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : cities.length === 0 ? (
-                    <div className="px-2.5 py-2 text-xs text-gray-400 text-center">
-                      该国家暂无城市数据，可直接输入
-                    </div>
-                  ) : (
-                    <div className="px-2.5 py-2 text-xs text-gray-400 text-center">
-                      未找到匹配的城市
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">详细地址 *</label>
-            <textarea
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-              rows={2}
-              placeholder="请输入详细地址"
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              邮编
+              <span className="text-[10px] text-gray-400 ml-1">(自动填充)</span>
+            </label>
+            <input
+              type="text"
+              value={formData.postalCode || ''}
+              readOnly
+              className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded bg-gray-50 text-gray-700 cursor-not-allowed"
+              placeholder="选择地址后自动填充"
             />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">邮编</label>
-              <input
-                type="text"
-                value={formData.postalCode || ''}
-                onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="邮政编码"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">地址编码</label>
-              <input
-                type="text"
-                value={formData.addressCode || ''}
-                onChange={(e) => setFormData({ ...formData, addressCode: e.target.value })}
-                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                placeholder="地址编码"
-              />
-            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1639,8 +1720,8 @@ function AddressModal({
           </button>
           <button
             onClick={() => {
-              if (!formData.companyName || !formData.address) {
-                alert('请填写公司名称和详细地址')
+              if (!formData.companyName) {
+                alert('请填写公司名称')
                 return
               }
               onSave(formData)

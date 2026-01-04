@@ -3,15 +3,24 @@
  * 用于计算欧洲卡车运输路线和费用
  * 
  * 文档: https://developer.here.com/documentation/routing-api/dev_guide/index.html
+ * 
+ * 地址缓存策略：
+ * 1. 输入地址时，先从本地地址缓存库查找匹配
+ * 2. 如果缓存没有，再调用 HERE API 获取
+ * 3. HERE API 返回的结果会自动保存到缓存库
  */
 
 import fetch from 'node-fetch'
+import * as addressCache from './addressCacheModel.js'
 
 // HERE API 配置
 const HERE_API_KEY = process.env.HERE_API_KEY || ''
 const HERE_ROUTING_URL = 'https://router.hereapi.com/v8/routes'
 const HERE_GEOCODING_URL = 'https://geocode.search.hereapi.com/v1/geocode'
 const HERE_AUTOSUGGEST_URL = 'https://autosuggest.search.hereapi.com/v1/autosuggest'
+
+// 是否启用地址缓存（可通过环境变量控制）
+const ENABLE_ADDRESS_CACHE = process.env.DISABLE_ADDRESS_CACHE !== 'true'
 
 // 欧洲国家通行费率（EUR/km，估算值）
 const TOLL_RATES = {
@@ -34,10 +43,33 @@ const FUEL_SURCHARGE_RATE = 0.15 // EUR/km
 
 /**
  * 地址自动补全 - 返回多个匹配地址建议
+ * 先从本地缓存查找，没有再调用 HERE API
  * @param {string} query - 搜索关键词
  * @param {number} limit - 返回结果数量限制
+ * @param {boolean} forceApi - 强制使用 API（跳过缓存）
  */
-export async function autosuggestAddress(query, limit = 5) {
+export async function autosuggestAddress(query, limit = 5, forceApi = false) {
+  // 1. 先从缓存查找
+  if (ENABLE_ADDRESS_CACHE && !forceApi) {
+    try {
+      const cachedResults = await addressCache.findAutosuggestCache(query, limit)
+      if (cachedResults && cachedResults.length > 0) {
+        console.log(`[AddressCache] 缓存命中: "${query}", 返回 ${cachedResults.length} 条结果`)
+        // 更新命中统计
+        for (const result of cachedResults) {
+          if (result.id) {
+            addressCache.updateHitCount(result.id)
+          }
+        }
+        return cachedResults
+      }
+      console.log(`[AddressCache] 缓存未命中: "${query}", 调用 HERE API`)
+    } catch (cacheError) {
+      console.error('[AddressCache] 查询缓存出错，降级到 API:', cacheError)
+    }
+  }
+  
+  // 2. 调用 HERE API
   if (!HERE_API_KEY) {
     console.error('HERE API Key 未配置')
     throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
@@ -50,7 +82,7 @@ export async function autosuggestAddress(query, limit = 5) {
     const data = await response.json()
     
     if (data.items && data.items.length > 0) {
-      return data.items
+      const results = data.items
         .filter(item => item.address)
         .map(item => ({
           title: item.title,
@@ -62,6 +94,15 @@ export async function autosuggestAddress(query, limit = 5) {
           lat: item.position?.lat,
           lng: item.position?.lng
         }))
+      
+      // 3. 保存到缓存（异步，不阻塞返回）
+      if (ENABLE_ADDRESS_CACHE && results.length > 0) {
+        addressCache.saveAutosuggestCache(query, results).catch(err => {
+          console.error('[AddressCache] 保存缓存失败:', err)
+        })
+      }
+      
+      return results
     }
     
     return []
@@ -73,8 +114,29 @@ export async function autosuggestAddress(query, limit = 5) {
 
 /**
  * 地理编码 - 将地址转换为坐标
+ * 先从本地缓存查找，没有再调用 HERE API
+ * @param {string} address - 地址
+ * @param {boolean} forceApi - 强制使用 API（跳过缓存）
  */
-export async function geocodeAddress(address) {
+export async function geocodeAddress(address, forceApi = false) {
+  // 1. 先从缓存查找
+  if (ENABLE_ADDRESS_CACHE && !forceApi) {
+    try {
+      const cachedResult = await addressCache.findGeocodeCache(address)
+      if (cachedResult) {
+        console.log(`[AddressCache] 地理编码缓存命中: "${address}"`)
+        if (cachedResult.id) {
+          addressCache.updateHitCount(cachedResult.id)
+        }
+        return cachedResult
+      }
+      console.log(`[AddressCache] 地理编码缓存未命中: "${address}", 调用 HERE API`)
+    } catch (cacheError) {
+      console.error('[AddressCache] 查询地理编码缓存出错，降级到 API:', cacheError)
+    }
+  }
+  
+  // 2. 调用 HERE API
   if (!HERE_API_KEY) {
     console.error('HERE API Key 未配置')
     throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
@@ -87,7 +149,7 @@ export async function geocodeAddress(address) {
     
     if (data.items && data.items.length > 0) {
       const item = data.items[0]
-      return {
+      const result = {
         lat: item.position.lat,
         lng: item.position.lng,
         address: item.address.label,
@@ -95,6 +157,15 @@ export async function geocodeAddress(address) {
         city: item.address.city,
         postalCode: item.address.postalCode
       }
+      
+      // 3. 保存到缓存（异步，不阻塞返回）
+      if (ENABLE_ADDRESS_CACHE) {
+        addressCache.saveGeocodeCache(address, result).catch(err => {
+          console.error('[AddressCache] 保存地理编码缓存失败:', err)
+        })
+      }
+      
+      return result
     }
     
     return null
@@ -471,6 +542,9 @@ export async function batchGetCities(postalCodes) {
   return results
 }
 
+// 导出地址缓存相关功能
+export { addressCache }
+
 export default {
   autosuggestAddress,
   geocodeAddress,
@@ -478,6 +552,7 @@ export default {
   calculateTransportCost,
   getCityByPostalCode,
   batchGetCities,
+  addressCache,  // 导出缓存模块，供其他模块使用
   TOLL_RATES,
   FUEL_SURCHARGE_RATE
 }

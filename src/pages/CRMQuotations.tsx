@@ -1678,27 +1678,27 @@ export default function CRMQuotations() {
                     if (hasTransport && selectedInquiry.transportData) {
                       // 运输询价：先打开运输报价计算弹窗
                       setPendingInquiryForQuote(selectedInquiry)
-                      setShowInquiryDetail(false)
+                    setShowInquiryDetail(false)
                       setShowTransportCalculator(true)
                     } else {
                       // 非运输询价：直接打开报价单弹窗
                       setShowInquiryDetail(false)
-                      setFormData({
-                        customerId: selectedInquiry.customerId,
-                        customerName: selectedInquiry.customerName,
-                        subject: `${getInquiryTypeLabel(selectedInquiry.inquiryType)} - ${selectedInquiry.inquiryNumber}`,
-                        quoteDate: new Date().toISOString().split('T')[0],
-                        validUntil: '',
-                        validityValue: 30,
-                        validityUnit: 'day',
-                        currency: 'EUR',
-                        terms: '',
-                        notes: `关联询价：${selectedInquiry.inquiryNumber}`,
+                    setFormData({
+                      customerId: selectedInquiry.customerId,
+                      customerName: selectedInquiry.customerName,
+                      subject: `${getInquiryTypeLabel(selectedInquiry.inquiryType)} - ${selectedInquiry.inquiryNumber}`,
+                      quoteDate: new Date().toISOString().split('T')[0],
+                      validUntil: '',
+                      validityValue: 30,
+                      validityUnit: 'day',
+                      currency: 'EUR',
+                      terms: '',
+                      notes: `关联询价：${selectedInquiry.inquiryNumber}`,
                         items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
                         inquiryId: selectedInquiry.id // 关联询价ID
-                      })
-                      setActiveView('quotations')
-                      setShowModal(true)
+                    })
+                    setActiveView('quotations')
+                    setShowModal(true)
                     }
                   }}
                   className="px-4 py-2 text-xs text-white bg-primary-600 rounded-lg hover:bg-primary-700"

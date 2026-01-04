@@ -5,6 +5,7 @@
 import * as model from './model.js'
 import * as hereService from './hereService.js'
 import * as quoteCalculator from './quoteCalculator.js'
+import * as addressCacheModel from './addressCacheModel.js'
 import { success, badRequest, notFound, serverError, successWithPagination } from '../../utils/response.js'
 
 // ==================== 询价管理 ====================
@@ -734,7 +735,14 @@ export default {
   getTaskStats,
   assignInquiry,
   startProcessing,
-  checkOverdueTasks
+  checkOverdueTasks,
+  
+  // 地址缓存管理
+  getAddressCacheStats,
+  searchAddressCache,
+  addAddressToCache,
+  deleteAddressCache,
+  cleanupAddressCache
 }
 
 /**
@@ -762,6 +770,111 @@ export async function batchGetCitiesByPostalCodes(req, res) {
   } catch (error) {
     console.error('批量获取城市失败:', error)
     res.status(500).json({ error: '获取城市信息失败' })
+  }
+}
+
+// ==================== 地址缓存管理 ====================
+
+/**
+ * 获取地址缓存统计
+ */
+export async function getAddressCacheStats(req, res) {
+  try {
+    const stats = await addressCacheModel.getCacheStats()
+    const topAddresses = await addressCacheModel.getTopAddresses(10)
+    
+    return success(res, {
+      stats,
+      topAddresses
+    })
+  } catch (error) {
+    console.error('获取地址缓存统计失败:', error)
+    return serverError(res, '获取地址缓存统计失败')
+  }
+}
+
+/**
+ * 搜索地址缓存
+ */
+export async function searchAddressCache(req, res) {
+  try {
+    const { keyword, countryCode, cacheType, page, pageSize } = req.query
+    
+    const result = await addressCacheModel.searchCachedAddresses({
+      keyword,
+      countryCode,
+      cacheType,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('搜索地址缓存失败:', error)
+    return serverError(res, '搜索地址缓存失败')
+  }
+}
+
+/**
+ * 手动添加地址到缓存
+ */
+export async function addAddressToCache(req, res) {
+  try {
+    const addressData = req.body
+    
+    if (!addressData.address && !addressData.queryText) {
+      return badRequest(res, '请提供地址或查询关键词')
+    }
+    
+    const result = await addressCacheModel.addManualAddress(addressData)
+    
+    return success(res, result, '地址已添加到缓存')
+  } catch (error) {
+    console.error('添加地址缓存失败:', error)
+    if (error.code === '23505') {
+      return badRequest(res, '该地址已存在于缓存中')
+    }
+    return serverError(res, '添加地址缓存失败')
+  }
+}
+
+/**
+ * 删除地址缓存
+ */
+export async function deleteAddressCache(req, res) {
+  try {
+    const { id } = req.params
+    
+    if (!id) {
+      return badRequest(res, '请提供缓存ID')
+    }
+    
+    await addressCacheModel.deleteCache(id)
+    
+    return success(res, { id }, '地址缓存已删除')
+  } catch (error) {
+    console.error('删除地址缓存失败:', error)
+    return serverError(res, '删除地址缓存失败')
+  }
+}
+
+/**
+ * 清理过期缓存
+ */
+export async function cleanupAddressCache(req, res) {
+  try {
+    const { days = 90 } = req.body
+    
+    const count = await addressCacheModel.cleanupOldCache(parseInt(days))
+    
+    return success(res, { cleanedCount: count }, `已清理 ${count} 条过期缓存`)
+  } catch (error) {
+    console.error('清理地址缓存失败:', error)
+    return serverError(res, '清理地址缓存失败')
   }
 }
 

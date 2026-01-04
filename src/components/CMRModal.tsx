@@ -377,7 +377,7 @@ export default function CMRModal({
     // 验证
     if (step === 'pickup') {
       if (!estimatedPickupTime) {
-        alert('请选择预计提货时间')
+        alert('请选择预计提货日期')
         return
       }
       if (!serviceProvider.trim()) {
@@ -687,13 +687,14 @@ export default function CMRModal({
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       <Clock className="w-3 h-3 inline mr-1" />
-                      预计提货时间 <span className="text-red-500">*</span>
+                      预计提货日期 <span className="text-red-500">*</span>
                     </label>
                     <DateTimePicker
                       value={estimatedPickupTime}
                       onChange={setEstimatedPickupTime}
-                      placeholder="请选择预计提货时间"
-                      title="预计提货时间"
+                      placeholder="请选择预计提货日期"
+                      title="预计提货日期"
+                      showTime={false}
                     />
                   </div>
                   <div>

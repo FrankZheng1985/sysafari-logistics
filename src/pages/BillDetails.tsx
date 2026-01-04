@@ -2488,12 +2488,13 @@ export default function BillDetails() {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   <Clock className="w-3 h-3 inline mr-1" />
-                  预计提货时间 <span className="text-red-500">*</span>
+                  预计提货日期 <span className="text-red-500">*</span>
                 </label>
                 <DateTimePicker
                   value={pickupEstimatedTime}
                   onChange={setPickupEstimatedTime}
-                  placeholder="请选择预计提货时间"
+                  placeholder="请选择预计提货日期"
+                  showTime={false}
                 />
               </div>
               <div>
@@ -2512,7 +2513,7 @@ export default function BillDetails() {
                 <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
                   <p className="text-xs text-amber-700">
                     <span className="font-medium">当前设置：</span>
-                    {new Date(billDetail.cmrEstimatedPickupTime).toLocaleString('zh-CN')}
+                    {new Date(billDetail.cmrEstimatedPickupTime).toLocaleDateString('zh-CN')}
                   </p>
                 </div>
               )}
@@ -2529,7 +2530,7 @@ export default function BillDetails() {
               <button
                 onClick={async () => {
                   if (!pickupEstimatedTime) {
-                    alert('请选择预计提货时间')
+                    alert('请选择预计提货日期')
                     return
                   }
                   setPickupSubmitting(true)

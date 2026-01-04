@@ -915,15 +915,14 @@ export async function createCustomerAddress(customerId, data) {
     `).run(customerId)
   }
   
-  const id = crypto.randomUUID()
-  
-  await db.prepare(`
+  // 使用数据库自增 id，不手动传入
+  const result = await db.prepare(`
     INSERT INTO customer_addresses (
-      id, customer_id, address_code, company_name, contact_person, phone,
+      customer_id, address_code, company_name, contact_person, phone,
       country, city, address, postal_code, is_default, address_type
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
     customerId,
     data.addressCode || null,
     data.companyName || null,
@@ -937,7 +936,7 @@ export async function createCustomerAddress(customerId, data) {
     data.addressType || 'both'
   )
   
-  return { id }
+  return { id: result?.id }
 }
 
 /**

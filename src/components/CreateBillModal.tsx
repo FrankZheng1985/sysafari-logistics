@@ -1596,25 +1596,23 @@ export default function CreateBillModal({
       if (!formData.billType) {
         newErrors.billType = '提单类型为必填项'
       }
-      if (!formData.consigneeType) {
-        newErrors.consigneeType = '请选择收货人'
-      }
+      // 收货人为非必填字段，不再验证
     }
     
-    // 简易创建时，需要验证参考号
-    if (easyBill && selectedType === 'official') {
+    // 简易创建时，需要验证参考号（仅新建模式，编辑模式不强制）
+    if (easyBill && selectedType === 'official' && !isEditMode) {
       if (referenceList.length === 0) {
         newErrors.referenceList = '请至少添加一条参考号信息'
       } else {
         referenceList.forEach((ref, index) => {
           if (!ref.referenceNumber) {
-            newErrors[`reference_${index}_number`] = '参考号为必填项'
+            newErrors[`reference_${index}_number`] = `第${index + 1}行参考号为必填项`
           }
           if (!ref.pieces || parseInt(ref.pieces) <= 0) {
-            newErrors[`reference_${index}_pieces`] = '件数为必填项且必须大于0'
+            newErrors[`reference_${index}_pieces`] = `第${index + 1}行件数为必填项且必须大于0`
           }
           if (!ref.grossWeight || parseFloat(ref.grossWeight) <= 0) {
-            newErrors[`reference_${index}_weight`] = '毛重为必填项且必须大于0'
+            newErrors[`reference_${index}_weight`] = `第${index + 1}行毛重为必填项且必须大于0`
           }
         })
       }
@@ -1627,10 +1625,15 @@ export default function CreateBillModal({
   const handleSubmit = async () => {
     const validation = validateForm()
     if (!validation.valid) {
-      // 获取具体的错误信息
-      const errorMessages = Object.values(validation.errors).filter(Boolean)
+      // 获取具体的错误信息，按字段名分类显示
+      const errorMessages = Object.entries(validation.errors)
+        .filter(([_, msg]) => Boolean(msg))
+        .map(([key, msg]) => `• ${msg}`)
+      
       if (errorMessages.length > 0) {
-        alert(`请填写以下必填项：\n${errorMessages.slice(0, 5).join('\n')}${errorMessages.length > 5 ? `\n... 还有 ${errorMessages.length - 5} 项` : ''}`)
+        const displayMessages = errorMessages.slice(0, 8).join('\n')
+        const moreCount = errorMessages.length > 8 ? `\n\n... 还有 ${errorMessages.length - 8} 项未填写` : ''
+        alert(`请填写以下必填项：\n\n${displayMessages}${moreCount}`)
       } else {
         alert('请填写所有必填项')
       }
@@ -2541,7 +2544,7 @@ export default function CreateBillModal({
                     {/* 主单文件 - 显示已上传的文件名 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        主单文件 <span className="text-red-500">*</span>
+                        主单文件
                       </label>
                       <input
                         type="text"
@@ -3246,7 +3249,7 @@ export default function CreateBillModal({
                   {/* 地勤（码头） */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
-                      地勤（码头） <span className="text-red-500">*</span>
+                      地勤（码头）
                     </label>
                     <input
                       type="text"
@@ -3589,57 +3592,45 @@ export default function CreateBillModal({
                       </div>
                     </div>
 
-                    {/* 收货人（关联客户税号） */}
+                    {/* 收货人（关联客户收货地址） */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
-                        收货人 <span className="text-red-500">*</span>
+                        收货人
                       </label>
                       <select
                         value={formData.consigneeType}
                         onChange={(e) => handleInputChange('consigneeType', e.target.value)}
-                        className={`w-full px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-1 bg-white text-gray-900 ${
-                          errors.consigneeType ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-primary-500'
-                        }`}
-                        disabled={loadingTaxNumbers || !selectedCustomer}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
+                        disabled={loadingAddresses || !selectedCustomer}
                       >
                         <option value="">请选择收货人</option>
-                        {/* 按公司名称分组显示，每个公司一行 */}
-                        {selectedCustomer && customerTaxNumbers.length > 0 && (() => {
-                          // 按公司名称分组
-                          const grouped = customerTaxNumbers.reduce((acc, tax) => {
-                            const key = tax.companyName || '未知公司'
-                            if (!acc[key]) {
-                              acc[key] = { companyName: key, taxNumbers: [], firstTaxNumber: tax.taxNumber }
-                            }
-                            acc[key].taxNumbers.push(`${tax.taxType === 'vat' ? 'VAT' : tax.taxType === 'eori' ? 'EORI' : '其他'}: ${tax.taxNumber}`)
-                            return acc
-                          }, {} as Record<string, { companyName: string; taxNumbers: string[]; firstTaxNumber: string }>)
-                          
-                          return Object.values(grouped).map((group) => (
-                            <option key={group.companyName} value={group.firstTaxNumber}>
-                              {group.companyName}
-                            </option>
-                          ))
-                        })()}
+                        {/* 从客户地址中筛选收货地址（addressType 为 consignee 或 both） */}
+                        {selectedCustomer && customerAddresses.length > 0 && 
+                          customerAddresses
+                            .filter(addr => addr.addressType === 'consignee' || addr.addressType === 'both')
+                            .map((addr) => (
+                              <option key={addr.id} value={addr.companyName || addr.contactPerson || `addr_${addr.id}`}>
+                                {addr.companyName || addr.contactPerson || '未命名收货人'}
+                                {addr.contactPerson && addr.companyName && ` (${addr.contactPerson})`}
+                              </option>
+                            ))
+                        }
                       </select>
-                      {loadingTaxNumbers && (
+                      {loadingAddresses && (
                         <p className="mt-1 text-[10px] text-gray-400 flex items-center gap-1">
                           <Loader2 className="w-3 h-3 animate-spin" />
-                          正在加载客户税号...
+                          正在加载收货人信息...
                         </p>
                       )}
-                      {!loadingTaxNumbers && selectedCustomer && customerTaxNumbers.length === 0 && (
-                        <p className="mt-1 text-[10px] text-amber-500">
-                          该客户暂无税号，请先在CRM客户管理中添加税号
+                      {!loadingAddresses && selectedCustomer && customerAddresses.filter(addr => addr.addressType === 'consignee' || addr.addressType === 'both').length === 0 && (
+                        <p className="mt-1 text-[10px] text-gray-400">
+                          该客户暂无收货人信息，可在CRM客户管理中添加
                         </p>
                       )}
                       {!selectedCustomer && (
-                        <p className="mt-1 text-[10px] text-amber-500">
+                        <p className="mt-1 text-[10px] text-gray-400">
                           请先选择关联客户
                         </p>
-                      )}
-                      {errors.consigneeType && (
-                        <p className="mt-1 text-[10px] text-red-500">{errors.consigneeType}</p>
                       )}
                     </div>
                   </div>

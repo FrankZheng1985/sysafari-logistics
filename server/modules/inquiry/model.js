@@ -330,8 +330,8 @@ export async function getInquiries(params = {}) {
     if (status === 'unquoted') {
       query += ` AND status IN ('pending', 'processing')`
     } else {
-      query += ` AND status = $${paramIndex++}`
-      queryParams.push(status)
+    query += ` AND status = $${paramIndex++}`
+    queryParams.push(status)
     }
   }
   

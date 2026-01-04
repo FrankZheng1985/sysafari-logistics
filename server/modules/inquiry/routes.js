@@ -21,6 +21,9 @@ router.get('/truck-types/recommend', controller.recommendTruckType)
 // 地址地理编码
 router.get('/geocode', controller.geocodeAddress)
 
+// 地址自动补全（HERE API）
+router.get('/autosuggest', controller.autosuggestAddress)
+
 // 批量获取邮编对应的城市
 router.post('/cities-by-postal', controller.batchGetCitiesByPostalCodes)
 
@@ -78,6 +81,23 @@ router.get('/tasks/stats', authenticate, controller.getTaskStats)
 
 // 检查超时任务（定时任务调用）
 router.post('/tasks/check-overdue', controller.checkOverdueTasks)
+
+// ==================== 地址缓存管理（需要认证） ====================
+
+// 获取地址缓存统计
+router.get('/address-cache/stats', authenticate, controller.getAddressCacheStats)
+
+// 搜索地址缓存
+router.get('/address-cache', authenticate, controller.searchAddressCache)
+
+// 添加地址到缓存
+router.post('/address-cache', authenticate, controller.addAddressToCache)
+
+// 删除地址缓存
+router.delete('/address-cache/:id', authenticate, controller.deleteAddressCache)
+
+// 清理过期缓存
+router.post('/address-cache/cleanup', authenticate, controller.cleanupAddressCache)
 
 export default router
 
