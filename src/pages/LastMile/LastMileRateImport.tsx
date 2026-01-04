@@ -544,7 +544,7 @@ export default function LastMileRateImport() {
       <div>
         <h4 className="font-medium text-gray-900 mb-2">费率预览</h4>
         <div className="overflow-x-auto border rounded-lg">
-          <table className="min-w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">重量段</th>
@@ -783,7 +783,7 @@ export default function LastMileRateImport() {
         <div>
           <h4 className="font-medium text-gray-900 mb-2">价格预览（示例）</h4>
           <div className="overflow-x-auto border rounded-lg">
-            <table className="min-w-full text-sm">
+            <table className="w-full text-sm table-fixed">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium text-gray-600">Zone</th>
@@ -870,7 +870,7 @@ export default function LastMileRateImport() {
           <h3 className="font-medium text-gray-900">最近导入记录</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">文件名</th>

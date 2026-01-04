@@ -506,7 +506,7 @@ export default function ContractTemplateConfig() {
                 </button>
               </div>
 
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="w-full divide-y divide-gray-200 table-fixed">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">货物类型</th>
@@ -571,7 +571,7 @@ export default function ContractTemplateConfig() {
             <div className="space-y-4">
               <p className="text-sm text-gray-600">配置不同货物类型的保险封顶金额</p>
 
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="w-full divide-y divide-gray-200 table-fixed">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">货物类型</th>

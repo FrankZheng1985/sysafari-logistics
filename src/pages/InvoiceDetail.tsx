@@ -845,7 +845,7 @@ export default function InvoiceDetail() {
               {invoice.status === 'paid' && invoice.billId && (
                 <button
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
-                  onClick={() => navigate(`/finance/bill-details/${invoice.billId}?source=finance&addFee=true`)}
+                  onClick={() => navigate(`/supplement-fee/${invoice.id}?billId=${invoice.billId}`)}
                 >
                   <Plus className="w-4 h-4" />
                   追加费用

@@ -352,7 +352,7 @@ export default function CustomsContracts() {
             <p>暂无合同记录</p>
           </div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="w-full divide-y divide-gray-200 table-fixed">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">合同编号</th>

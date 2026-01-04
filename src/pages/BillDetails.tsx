@@ -1118,7 +1118,7 @@ export default function BillDetails() {
                   Reference List
                 </h3>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-xs">
+                  <table className="w-full divide-y divide-gray-200 text-xs table-fixed">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">参考号</th>
@@ -1412,13 +1412,16 @@ export default function BillDetails() {
                 {canEdit ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                 录入应付
               </button>
-              <button
-                onClick={() => navigate(`/finance/fees?billId=${billDetail.id}`)}
-                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                费用管理页
-              </button>
+              {/* 追加费用按钮 - 提单已完成时显示 */}
+              {isCompleted && (
+                <button
+                  onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}`)}
+                  className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  追加费用
+                </button>
+              )}
             </div>
 
             {/* 费用列表 - 分应收应付显示 */}
@@ -2257,6 +2260,16 @@ export default function BillDetails() {
                       全部费用
                     </button>
                   </div>
+                  {/* 追加费用按钮 - 提单已完成时显示 */}
+                  {isCompleted && (
+                    <button
+                      onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}`)}
+                      className="w-full mt-2 px-3 py-2 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      追加费用
+                    </button>
+                  )}
                 </div>
                 
                 {/* 费用汇总 - 分应收/应付显示 */}

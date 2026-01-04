@@ -413,7 +413,7 @@ export default function CarrierSettlement() {
       {/* 结算单列表 */}
       <div className="bg-white rounded-lg shadow">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">结算单号</th>
@@ -672,7 +672,7 @@ export default function CarrierSettlement() {
             
             {/* 明细列表 */}
             <div className="overflow-auto max-h-[50vh]">
-              <table className="min-w-full text-sm">
+              <table className="w-full text-sm table-fixed">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="px-4 py-3 text-left font-medium text-gray-600">运单号</th>

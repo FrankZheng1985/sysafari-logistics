@@ -70,6 +70,7 @@ import FinancePayments from './pages/FinancePayments'
 import PaymentDetail from './pages/PaymentDetail'
 import FinanceFees from './pages/FinanceFees'
 import FinanceFeeApproval from './pages/FinanceFeeApproval'
+import SupplementFee from './pages/SupplementFee'
 import FinanceReports from './pages/FinanceReports'
 import FinanceOrderReport from './pages/FinanceOrderReport'
 import FinancialStatements from './pages/FinancialStatements'
@@ -264,6 +265,9 @@ function AppRoutes() {
         <Route path="/finance/payments" element={<FinancePayments />} />
         <Route path="/finance/fees" element={<FinanceFees />} />
         <Route path="/finance/fee-approval" element={<FinanceFeeApproval />} />
+        {/* 追加费用 - 独立页面，不在财务模块下 */}
+        <Route path="/supplement-fee/:invoiceId" element={<SupplementFee />} />
+        <Route path="/supplement-fee" element={<SupplementFee />} />
         <Route path="/finance/reports" element={<FinanceReports />} />
         <Route path="/finance/order-report" element={<FinanceOrderReport />} />
         <Route path="/finance/bill-details/:id" element={<BillDetails />} />

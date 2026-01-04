@@ -3901,7 +3901,7 @@ export default function CreateBillModal({
 
                       {/* 表格 */}
                       <div className="border border-gray-200 rounded overflow-hidden">
-                        <table className="min-w-full divide-y divide-gray-200">
+                        <table className="w-full divide-y divide-gray-200 table-fixed">
                           <thead className="bg-gray-50">
                             <tr>
                               <th className="px-2 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase">参考号</th>
