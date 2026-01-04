@@ -535,7 +535,13 @@ export default function CMRManage() {
           billNumber={selectedBill.billNumber}
           currentStatus={selectedBill.deliveryStatus || '待派送'}
           cmrDetail={parseCMRDetail(selectedBill)}
-          defaultDeliveryAddress={selectedBill.placeOfDelivery || selectedBill.portOfDischarge}
+          defaultDeliveryAddress={
+            // 优先使用 referenceList 中第一个地址的详情（收货地址详情）
+            selectedBill.referenceList?.find(ref => ref.consigneeAddressDetails || ref.consigneeAddress)?.consigneeAddressDetails 
+            || selectedBill.referenceList?.find(ref => ref.consigneeAddressDetails || ref.consigneeAddress)?.consigneeAddress
+            || selectedBill.placeOfDelivery 
+            || selectedBill.portOfDischarge
+          }
           deliveryAddresses={
             // 从 referenceList 中提取地址列表
             selectedBill.referenceList?.filter(ref => ref.consigneeAddress || ref.consigneeAddressDetails).map(ref => ({

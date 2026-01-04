@@ -925,9 +925,23 @@ export default function BillDetails() {
                   <span className="text-xs text-gray-500">创建时间:</span>
                   <span className="ml-2 font-medium text-xs">{formatDate(billDetail.createTime)}</span>
                 </div>
-                <div>
+                <div className="col-span-2">
                   <span className="text-xs text-gray-500">派送地址:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.cmrDeliveryAddress || '-'}</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {(() => {
+                      // 优先从 referenceList 获取完整收货地址
+                      const refAddress = billDetail.referenceList?.find(ref => ref.consigneeAddressDetails)?.consigneeAddressDetails
+                      const deliveryAddr = billDetail.cmrDeliveryAddress?.trim()
+                      
+                      // 如果有 referenceList 中的完整地址，优先显示
+                      if (refAddress) {
+                        return refAddress
+                      }
+                      
+                      // 否则显示 cmrDeliveryAddress
+                      return deliveryAddr || '-'
+                    })()}
+                  </span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">服务产品:</span>
@@ -2004,30 +2018,6 @@ export default function BillDetails() {
                             {billDetail.cmrEstimatedPickupTime && (
                               <span className="ml-1 text-amber-500">✓</span>
                             )}
-                          </button>
-                        )}
-                        {canEdit && billDetail.deliveryStatus === '待派送' && (
-                          <button
-                            onClick={async () => {
-                              if (!confirm('确定要开始派送吗？')) return
-                              try {
-                                const response = await updateBillDeliveryStatus(String(billDetail.id), '派送中')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, deliveryStatus: '派送中' })
-                                  loadOperationLogs()
-                                  alert('已开始派送')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
-                                }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
-                              }
-                            }}
-                            className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 flex items-center gap-1"
-                          >
-                            <Truck className="w-3.5 h-3.5" />
-                            开始派送
                           </button>
                         )}
                         <button
