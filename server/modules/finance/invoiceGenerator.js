@@ -816,15 +816,25 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }))
   }
 
+  // 获取客户全称（优先使用 company_name，否则使用 customer_name）
+  let customerFullName = invoice.customer_name || ''
+  if (invoice.customer_id) {
+    const customer = await db.prepare('SELECT company_name, customer_name FROM customers WHERE id = ?').get(invoice.customer_id)
+    if (customer) {
+      // 优先使用公司全称 company_name，如果没有则用 customer_name
+      customerFullName = customer.company_name || customer.customer_name || invoice.customer_name || ''
+    }
+  }
+
   const excelData = {
-    customerName: invoice.customer_name || '',
+    customerName: customerFullName,
     date: invoice.invoice_date,
     items: excelItems,
     total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
     currency: invoice.currency || 'EUR'
   }
 
-  console.log(`[regenerateInvoiceFiles] 开始生成 Excel...`)
+  console.log(`[regenerateInvoiceFiles] 开始生成 Excel, 客户全称: ${customerFullName}`)
   const excelBuffer = await generateExcel(excelData)
   console.log(`[regenerateInvoiceFiles] Excel 生成成功, 大小: ${excelBuffer?.length || 0} bytes`)
 
