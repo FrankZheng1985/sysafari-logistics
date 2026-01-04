@@ -22,6 +22,7 @@ type TabsAction =
   | { type: 'REMOVE_ALL' }
   | { type: 'SET_ACTIVE'; payload: string }
   | { type: 'UPDATE_TAB_TITLE'; payload: { key: string; title: string } }
+  | { type: 'REORDER_TABS'; payload: { fromIndex: number; toIndex: number } }
   | { type: 'INIT'; payload: TabsState }
 
 // 路由到标题的映射（显示完整模块路径：父模块 - 子模块）
@@ -174,6 +175,9 @@ export function getRouteTitle(path: string): string {
     if (pathParts[4] === 'payment') return '财务管理 - 登记付款'
     return '财务管理 - 发票详情'
   }
+  if (pathParts[1] === 'finance' && pathParts[2] === 'payments' && pathParts[3]) {
+    return '财务管理 - 收付款详情'
+  }
   if (pathParts[1] === 'finance' && pathParts[2] === 'bill-details' && pathParts[3]) {
     return '财务管理 - 订单详情'
   }
@@ -268,6 +272,20 @@ function tabsReducer(state: TabsState, action: TabsAction): TabsState {
       return { ...state, tabs: newTabs }
     }
 
+    case 'REORDER_TABS': {
+      const { fromIndex, toIndex } = action.payload
+      // 不能移动首页标签（index 0）
+      if (fromIndex === 0 || toIndex === 0) return state
+      if (fromIndex === toIndex) return state
+      if (fromIndex < 0 || fromIndex >= state.tabs.length) return state
+      if (toIndex < 0 || toIndex >= state.tabs.length) return state
+      
+      const newTabs = [...state.tabs]
+      const [movedTab] = newTabs.splice(fromIndex, 1)
+      newTabs.splice(toIndex, 0, movedTab)
+      return { ...state, tabs: newTabs }
+    }
+
     default:
       return state
   }
@@ -283,6 +301,7 @@ interface TabsContextValue {
   removeAll: () => void
   setActiveTab: (key: string) => void
   updateTabTitle: (key: string, title: string) => void
+  reorderTabs: (fromIndex: number, toIndex: number) => void
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null)
@@ -402,6 +421,11 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'UPDATE_TAB_TITLE', payload: { key, title } })
   }, [])
 
+  // 重新排序标签（拖拽）
+  const reorderTabs = useCallback((fromIndex: number, toIndex: number) => {
+    dispatch({ type: 'REORDER_TABS', payload: { fromIndex, toIndex } })
+  }, [])
+
   return (
     <TabsContext.Provider value={{
       tabs: state.tabs,
@@ -411,7 +435,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       removeOthers,
       removeAll,
       setActiveTab,
-      updateTabTitle
+      updateTabTitle,
+      reorderTabs
     }}>
       {children}
     </TabsContext.Provider>

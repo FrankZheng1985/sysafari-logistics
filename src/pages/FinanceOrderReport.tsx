@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Download, DollarSign, PieChart, BarChart3, 
-  RefreshCw, Package, Copy
+  RefreshCw, Package, Copy, Plus, CheckCircle, Lock
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
@@ -34,6 +34,10 @@ interface OrderFeeReport {
   otherPayable: number
   firstFeeDate: string
   lastFeeDate: string
+  // 收款确认状态
+  paymentConfirmed?: boolean
+  paymentConfirmedAt?: string
+  primaryInvoiceNumber?: string
 }
 
 interface OrderReportData {
@@ -103,6 +107,35 @@ export default function FinanceOrderReport() {
       currency: currency,
       minimumFractionDigits: 2
     }).format(amount)
+  }
+
+  // 确认提单收款
+  const handleConfirmPayment = async (billId: string) => {
+    if (!confirm('确定要确认该提单的收款吗？确认后将锁定现有费用，不可修改。')) {
+      return
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/bills/${billId}/confirm-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        alert(`收款确认成功！已锁定 ${data.data.lockedFeesCount} 条费用`)
+        // 刷新列表
+        fetchOrderReport()
+      } else {
+        alert(`操作失败: ${data.msg || '未知错误'}`)
+      }
+    } catch (error) {
+      console.error('确认收款失败:', error)
+      alert('操作失败，请稍后重试')
+    }
   }
 
   const handleExport = () => {
@@ -343,13 +376,42 @@ export default function FinanceOrderReport() {
                       <td className="py-2 px-1 text-right text-orange-600 text-xs">
                         {otherPay > 0 ? formatCurrency(otherPay) : '-'}
                       </td>
-                      <td className="py-2 px-2 text-center">
-                        <button
-                          onClick={() => navigate(`/finance/fees?billId=${item.billId}`)}
-                          className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
-                        >
-                          明细
-                        </button>
+                      <td className="py-2 px-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => navigate(`/finance/fees?billId=${item.billId}`)}
+                            className="px-1.5 py-0.5 text-[10px] text-primary-600 hover:bg-primary-50 rounded"
+                            title="查看费用明细"
+                          >
+                            明细
+                          </button>
+                          {/* 追加费用按钮 - 已确认收款才显示 */}
+                          {item.paymentConfirmed && (
+                            <button
+                              onClick={() => navigate(`/finance/bill-details/${item.billId}?source=finance&addFee=true`)}
+                              className="p-1 text-purple-600 hover:bg-purple-50 rounded"
+                              title="追加费用"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          )}
+                          {/* 确认收款按钮 - 未确认才显示 */}
+                          {!item.paymentConfirmed && (
+                            <button
+                              onClick={() => handleConfirmPayment(item.billId)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded"
+                              title="确认收款"
+                            >
+                              <CheckCircle className="w-3 h-3" />
+                            </button>
+                          )}
+                          {/* 已确认状态图标 */}
+                          {item.paymentConfirmed && (
+                            <span className="p-1 text-gray-400" title={`已确认收款 ${item.paymentConfirmedAt || ''}`}>
+                              <Lock className="w-3 h-3" />
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )

@@ -67,6 +67,10 @@ interface Fee {
   description?: string
   billId?: string
   billNumber?: string
+  // 审批相关
+  approvalStatus?: 'pending' | 'approved' | 'rejected'
+  isSupplementary?: boolean
+  isLocked?: boolean
 }
 
 // 供应商费用项（包含订单信息）
@@ -544,6 +548,7 @@ export default function CreateInvoice() {
 
   // 获取订单关联的费用
   // 根据发票类型筛选对应的费用类型：销售发票->应收费用，采购发票->应付费用
+  // 过滤条件：只显示已审批通过的费用（过滤 pending/rejected）
   const fetchBillFees = async (billId: string, invoiceType?: 'sales' | 'purchase') => {
     setLoadingFees(true)
     try {
@@ -554,10 +559,15 @@ export default function CreateInvoice() {
       const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&feeType=${feeType}&pageSize=100`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
-        // 基于 feeId 去重，防止重复费用
-        const uniqueFees = data.data.list.filter((fee: Fee, index: number, self: Fee[]) => 
-          index === self.findIndex((f: Fee) => f.id === fee.id)
-        )
+        // 基于 feeId 去重，并过滤掉待审批和已拒绝的费用
+        // 只保留 approvalStatus 为 'approved' 或 undefined（旧数据）的费用
+        const uniqueFees = data.data.list.filter((fee: Fee, index: number, self: Fee[]) => {
+          // 去重
+          const isUnique = index === self.findIndex((f: Fee) => f.id === fee.id)
+          // 过滤审批状态：只保留已审批通过的
+          const isApproved = !fee.approvalStatus || fee.approvalStatus === 'approved'
+          return isUnique && isApproved
+        })
         setBillFees(uniqueFees)
         
         let items: InvoiceItem[]

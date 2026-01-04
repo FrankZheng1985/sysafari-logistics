@@ -67,7 +67,9 @@ import InvoiceDetail from './pages/InvoiceDetail'
 import EditInvoice from './pages/EditInvoice'
 import RegisterPayment from './pages/RegisterPayment'
 import FinancePayments from './pages/FinancePayments'
+import PaymentDetail from './pages/PaymentDetail'
 import FinanceFees from './pages/FinanceFees'
+import FinanceFeeApproval from './pages/FinanceFeeApproval'
 import FinanceReports from './pages/FinanceReports'
 import FinanceOrderReport from './pages/FinanceOrderReport'
 import FinancialStatements from './pages/FinancialStatements'
@@ -253,12 +255,15 @@ function AppRoutes() {
         <Route path="/finance" element={<FinanceDashboard />} />
         <Route path="/finance/invoices" element={<FinanceInvoices />} />
         <Route path="/finance/invoices/history" element={<FinanceInvoiceHistory />} />
-        <Route path="/finance/invoices/create" element={<CreateInvoice />} />
+        {/* KeepAlive 路由 - 实际组件在 KeepAliveOutlet 中渲染，这里只是占位 */}
+        <Route path="/finance/invoices/create" element={<div className="keep-alive-placeholder" />} />
         <Route path="/finance/invoices/:id/edit" element={<EditInvoice />} />
         <Route path="/finance/invoices/:id/payment" element={<RegisterPayment />} />
         <Route path="/finance/invoices/:id" element={<InvoiceDetail />} />
+        <Route path="/finance/payments/:id" element={<PaymentDetail />} />
         <Route path="/finance/payments" element={<FinancePayments />} />
         <Route path="/finance/fees" element={<FinanceFees />} />
+        <Route path="/finance/fee-approval" element={<FinanceFeeApproval />} />
         <Route path="/finance/reports" element={<FinanceReports />} />
         <Route path="/finance/order-report" element={<FinanceOrderReport />} />
         <Route path="/finance/bill-details/:id" element={<BillDetails />} />

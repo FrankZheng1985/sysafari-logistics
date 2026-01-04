@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, FileText, Building, Calendar, CreditCard,
   Package, Edit2, Trash2, CheckCircle, Clock,
-  AlertTriangle, DollarSign, Receipt, Printer, Ship, Download, RefreshCw
+  AlertTriangle, DollarSign, Receipt, Printer, Ship, Download, RefreshCw, Plus
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
@@ -840,6 +840,17 @@ export default function InvoiceDetail() {
                     作废发票
                   </button>
                 </>
+              )}
+              {/* 追加费用按钮 - 已收款的发票可以追加费用 */}
+              {invoice.status === 'paid' && invoice.billId && (
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
+                  onClick={() => navigate(`/finance/bill-details/${invoice.billId}?source=finance&addFee=true`)}
+                >
+                  <Plus className="w-4 h-4" />
+                  追加费用
+                  <span className="ml-auto text-xs text-purple-500">需新发票</span>
+                </button>
               )}
             </div>
           </div>

@@ -101,6 +101,9 @@ router.get('/payments/:id/receipt', controller.viewPaymentReceipt)
 // 获取费用统计
 router.get('/fees/stats', controller.getFeeStats)
 
+// 获取待审批的追加费用列表
+router.get('/fees/pending-approval', controller.getPendingApprovalFees)
+
 // 获取费用列表
 router.get('/fees', controller.getFees)
 
@@ -116,10 +119,41 @@ router.put('/fees/:id', controller.updateFee)
 // 删除费用
 router.delete('/fees/:id', controller.deleteFee)
 
+// 审批通过费用
+router.post('/fees/:id/approve', controller.approveFee)
+
+// 审批拒绝费用
+router.post('/fees/:id/reject', controller.rejectFee)
+
+// 批量审批通过
+router.post('/fees/batch-approve', controller.batchApproveFees)
+
 // ==================== 提单财务路由 ====================
 
 // 获取提单财务汇总
 router.get('/bills/:billId/finance', controller.getBillFinanceSummary)
+
+// ==================== 提单收款确认路由 ====================
+
+// 确认提单收款（锁定费用）
+router.post('/bills/:billId/confirm-payment', controller.confirmBillPayment)
+
+// 取消提单收款确认（解锁费用）
+router.post('/bills/:billId/cancel-payment-confirm', controller.cancelBillPaymentConfirm)
+
+// 获取提单收款确认状态
+router.get('/bills/:billId/payment-status', controller.getBillPaymentStatus)
+
+// 获取提单的主发票号
+router.get('/bills/:billId/primary-invoice', controller.getBillPrimaryInvoiceNumber)
+
+// 获取提单的追加发票列表
+router.get('/bills/:billId/supplement-invoices', controller.getBillSupplementInvoices)
+
+// ==================== 追加发票路由 ====================
+
+// 创建追加发票
+router.post('/invoices/supplement', controller.createSupplementInvoice)
 
 // ==================== 报表路由 ====================
 

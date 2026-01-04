@@ -18,6 +18,9 @@ interface FeeModalProps {
   defaultBillNumber?: string
   defaultCustomerId?: string
   defaultCustomerName?: string
+  // 预填货物信息（用于按KG/CBM自动计算费用）
+  defaultWeight?: number
+  defaultVolume?: number
   // 预设费用类型
   defaultFeeType?: 'receivable' | 'payable'
 }
@@ -221,6 +224,8 @@ export default function FeeModal({
   defaultBillNumber,
   defaultCustomerId,
   defaultCustomerName,
+  defaultWeight,
+  defaultVolume,
   defaultFeeType
 }: FeeModalProps) {
   const [formData, setFormData] = useState({
@@ -369,8 +374,8 @@ export default function FeeModal({
         currency: 'EUR',
         feeDate: new Date().toISOString().split('T')[0],
         description: '',
-        weight: 0,
-        volume: 0,
+        weight: defaultWeight || 0,   // 使用传入的重量数据
+        volume: defaultVolume || 0,   // 使用传入的体积数据
         currentUnit: '',
         unitPrice: 0,
         useFixedAmount: false
@@ -381,7 +386,7 @@ export default function FeeModal({
     // 清空多选费用分类状态
     setSelectedManualCategories([])
     setErrors({})
-  }, [editingFee, visible, defaultBillId, defaultBillNumber, defaultCustomerId, defaultCustomerName, defaultFeeType])
+  }, [editingFee, visible, defaultBillId, defaultBillNumber, defaultCustomerId, defaultCustomerName, defaultWeight, defaultVolume, defaultFeeType])
 
   const loadBills = async () => {
     try {

@@ -388,62 +388,118 @@ export async function getPayments(params = {}) {
     page = 1, pageSize = 20 
   } = params
   
-  let query = 'SELECT * FROM payments WHERE 1=1'
+  // JOIN invoices 表获取 container_numbers（兼容多发票）
+  let query = `
+    SELECT p.*, i.container_numbers AS invoice_container_numbers
+    FROM payments p
+    LEFT JOIN invoices i ON p.invoice_id = i.id
+    WHERE 1=1
+  `
   const queryParams = []
   
   if (type) {
-    query += ' AND payment_type = ?'
+    query += ' AND p.payment_type = ?'
     queryParams.push(type)
   }
   
   if (invoiceId) {
-    query += ' AND invoice_id = ?'
+    query += ' AND p.invoice_id = ?'
     queryParams.push(invoiceId)
   }
   
   if (customerId) {
-    query += ' AND customer_id = ?'
+    query += ' AND p.customer_id = ?'
     queryParams.push(customerId)
   }
   
   if (method) {
-    query += ' AND payment_method = ?'
+    query += ' AND p.payment_method = ?'
     queryParams.push(method)
   }
   
   if (status) {
-    query += ' AND status = ?'
+    query += ' AND p.status = ?'
     queryParams.push(status)
   }
   
   if (startDate) {
-    query += ' AND payment_date >= ?'
+    query += ' AND p.payment_date >= ?'
     queryParams.push(startDate)
   }
   
   if (endDate) {
-    query += ' AND payment_date <= ?'
+    query += ' AND p.payment_date <= ?'
     queryParams.push(endDate)
   }
   
   if (search) {
-    query += ` AND (payment_number LIKE ? OR customer_name LIKE ? OR description LIKE ?)`
+    query += ` AND (p.payment_number LIKE ? OR p.customer_name LIKE ? OR p.description LIKE ? OR i.container_numbers LIKE ?)`
     const searchPattern = `%${search}%`
-    queryParams.push(searchPattern, searchPattern, searchPattern)
+    queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern)
   }
   
   // 获取总数
-  const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total')
+  const countQuery = query.replace(/SELECT p\.\*, i\.container_numbers AS invoice_container_numbers/i, 'SELECT COUNT(*) as total')
   const totalResult = await db.prepare(countQuery).get(...queryParams)
   
   // 分页
-  query += ' ORDER BY payment_date DESC, created_at DESC LIMIT ? OFFSET ?'
+  query += ' ORDER BY p.payment_date DESC, p.created_at DESC LIMIT ? OFFSET ?'
   queryParams.push(pageSize, (page - 1) * pageSize)
   
   const list = await db.prepare(query).all(...queryParams)
   
+  // 转换为 camelCase，并添加发票数量信息和所有关联发票详情
+  const convertedList = await Promise.all(list.map(async (payment) => {
+    const converted = convertPaymentToCamelCase(payment)
+    
+    // 如果有 invoice_ids，获取所有关联发票的信息
+    if (payment.invoice_ids) {
+      try {
+        const invoiceIds = JSON.parse(payment.invoice_ids)
+        if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
+          converted.invoiceCount = invoiceIds.length
+          
+          // 获取所有关联发票的详细信息
+          const invoicesData = []
+          const allContainerNumbers = []  // 不去重，保留所有集装箱号
+          
+          for (const invId of invoiceIds) {
+            const invoice = await getInvoiceById(invId)
+            if (invoice) {
+              invoicesData.push({
+                id: invoice.id,
+                invoiceNumber: invoice.invoiceNumber,
+                customerName: invoice.customerName,
+                totalAmount: invoice.totalAmount,
+                paidAmount: invoice.paidAmount,
+                currency: invoice.currency,
+                status: invoice.status,
+                containerNumbers: invoice.containerNumbers || []
+              })
+              // 收集所有集装箱号（不去重）
+              if (invoice.containerNumbers && Array.isArray(invoice.containerNumbers)) {
+                allContainerNumbers.push(...invoice.containerNumbers)
+              }
+            }
+          }
+          
+          converted.invoices = invoicesData
+          converted.containerNumbers = allContainerNumbers
+        } else {
+          converted.invoiceCount = payment.invoice_id ? 1 : 0
+        }
+      } catch {
+        converted.invoiceCount = payment.invoice_id ? 1 : 0
+      }
+    } else {
+      converted.invoiceCount = payment.invoice_id ? 1 : 0
+    }
+    
+    return converted
+  }))
+  
   return {
-    list: list.map(convertPaymentToCamelCase),
+    list: convertedList,
     total: totalResult.total,
     page,
     pageSize
@@ -503,16 +559,200 @@ export async function getPaymentStats(params = {}) {
 }
 
 /**
- * 根据ID获取付款记录
+ * 根据ID获取付款记录（包含关联信息）
+ * 支持多发票关联
  */
 export async function getPaymentById(id) {
   const db = getDatabase()
-  const payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(id)
-  return payment ? convertPaymentToCamelCase(payment) : null
+  
+  // 获取付款基本记录和客户信息
+  const payment = await db.prepare(`
+    SELECT 
+      p.*,
+      c.company_name AS customer_company_name,
+      c.contact_person AS customer_contact_name,
+      c.contact_phone AS customer_phone,
+      c.contact_email AS customer_email,
+      c.address AS customer_address
+    FROM payments p
+    LEFT JOIN customers c ON p.customer_id = c.id
+    WHERE p.id = ?
+  `).get(id)
+  
+  if (!payment) return null
+  
+  // 解析关联的多个发票ID
+  let invoiceIds = []
+  if (payment.invoice_ids) {
+    try {
+      invoiceIds = JSON.parse(payment.invoice_ids)
+    } catch (e) {
+      invoiceIds = []
+    }
+  }
+  // 兼容旧数据：如果没有 invoice_ids 但有 invoice_id
+  if (invoiceIds.length === 0 && payment.invoice_id) {
+    invoiceIds = [payment.invoice_id]
+  }
+  
+  // 获取所有关联发票的详细信息
+  let invoices = []
+  let allInvoiceItems = []
+  let allContainerNumbers = []
+  let billInfoList = []
+  
+  for (const invoiceId of invoiceIds) {
+    const invoice = await db.prepare(`
+      SELECT 
+        i.*,
+        b.id AS bill_id,
+        b.bill_number,
+        b.container_number,
+        b.customer_name AS bill_customer_name,
+        b.consignee,
+        b.port_of_loading,
+        b.port_of_discharge,
+        b.eta,
+        b.ata,
+        b.delivery_status,
+        b.status AS bill_status
+      FROM invoices i
+      LEFT JOIN bills_of_lading b ON i.bill_id = b.id
+      WHERE i.id = ?
+    `).get(invoiceId)
+    
+    if (invoice) {
+      // 解析发票明细
+      let items = []
+      if (invoice.items) {
+        try {
+          items = JSON.parse(invoice.items)
+        } catch (e) {
+          items = []
+        }
+      }
+      allInvoiceItems = allInvoiceItems.concat(items)
+      
+      // 解析集装箱号
+      let containerNums = []
+      if (invoice.container_numbers) {
+        try {
+          containerNums = JSON.parse(invoice.container_numbers)
+        } catch (e) {
+          containerNums = []
+        }
+      }
+      allContainerNumbers = allContainerNumbers.concat(containerNums)
+      
+      // 构建发票对象
+      invoices.push({
+        id: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        invoiceType: invoice.invoice_type,
+        totalAmount: Number(invoice.total_amount || 0),
+        paidAmount: Number(invoice.paid_amount || 0),
+        status: invoice.status,
+        dueDate: invoice.due_date,
+        items: items,
+        containerNumbers: containerNums,
+        billId: invoice.bill_id,
+        billNumber: invoice.bill_number
+      })
+      
+      // 收集提单信息
+      if (invoice.bill_id) {
+        billInfoList.push({
+          id: invoice.bill_id,
+          billNumber: invoice.bill_number,
+          containerNumber: invoice.container_number,
+          customerName: invoice.bill_customer_name,
+          consignee: invoice.consignee,
+          portOfLoading: invoice.port_of_loading,
+          portOfDischarge: invoice.port_of_discharge,
+          eta: invoice.eta,
+          ata: invoice.ata,
+          deliveryStatus: invoice.delivery_status,
+          status: invoice.bill_status
+        })
+      }
+    }
+  }
+  
+  // 去重集装箱号
+  allContainerNumbers = [...new Set(allContainerNumbers)]
+  
+  // 去重提单（按ID）
+  const uniqueBillInfoMap = new Map()
+  billInfoList.forEach(bill => {
+    if (bill.id && !uniqueBillInfoMap.has(bill.id)) {
+      uniqueBillInfoMap.set(bill.id, bill)
+    }
+  })
+  const uniqueBillInfoList = Array.from(uniqueBillInfoMap.values())
+  
+  // 获取银行账户信息
+  let bankAccountInfo = null
+  if (payment.bank_account) {
+    bankAccountInfo = await db.prepare(`
+      SELECT id, account_name, bank_name, account_number, iban, swift_code, currency
+      FROM bank_accounts
+      WHERE account_name = ?
+    `).get(payment.bank_account)
+    
+    if (bankAccountInfo) {
+      bankAccountInfo = {
+        id: bankAccountInfo.id,
+        accountName: bankAccountInfo.account_name,
+        bankName: bankAccountInfo.bank_name,
+        accountNumber: bankAccountInfo.account_number,
+        iban: bankAccountInfo.iban,
+        swiftCode: bankAccountInfo.swift_code,
+        currency: bankAccountInfo.currency
+      }
+    }
+  }
+  
+  // 兼容旧格式：如果只有一张发票，保留原有字段
+  const primaryInvoice = invoices.length > 0 ? invoices[0] : null
+  
+  return {
+    ...convertPaymentToCamelCase(payment),
+    // 多发票列表（新格式）
+    invoices,
+    invoiceCount: invoices.length,
+    // 汇总信息
+    containerNumbers: allContainerNumbers,
+    invoiceItems: allInvoiceItems,
+    billInfoList: uniqueBillInfoList,
+    // 兼容旧格式（主发票信息）
+    invoiceType: primaryInvoice?.invoiceType,
+    invoiceTotalAmount: primaryInvoice?.totalAmount,
+    invoicePaidAmount: primaryInvoice?.paidAmount,
+    invoiceStatus: primaryInvoice?.status,
+    invoiceDueDate: primaryInvoice?.dueDate,
+    billInfo: uniqueBillInfoList.length > 0 ? uniqueBillInfoList[0] : null,
+    // 客户详细信息
+    customerCompanyName: payment.customer_company_name,
+    customerContactName: payment.customer_contact_name,
+    customerPhone: payment.customer_phone,
+    customerEmail: payment.customer_email,
+    customerAddress: payment.customer_address,
+    // 银行账户信息
+    bankAccountInfo
+  }
 }
 
 /**
  * 创建付款记录
+ * @param {Object} data - 付款数据
+ * @param {string[]} data.invoiceIds - 多发票ID数组（批量核销）
+ * @param {string} data.invoiceId - 单发票ID（单独核销）
+ * 
+ * 批量核销逻辑：创建1条付款记录，关联多张发票
+ * - 1个收款单号
+ * - 金额 = 所有发票未付金额之和
+ * - invoice_ids 存储所有发票ID的JSON数组
+ * - 每张发票的 paid_amount 更新为各自的 total_amount（全额核销）
  */
 export async function createPayment(data) {
   const db = getDatabase()
@@ -521,25 +761,59 @@ export async function createPayment(data) {
   // 生成付款单号
   const paymentNumber = await generatePaymentNumber(data.paymentType)
   
+  // 处理多发票关联
+  let invoiceIds = []
+  if (data.invoiceIds && Array.isArray(data.invoiceIds) && data.invoiceIds.length > 0) {
+    invoiceIds = data.invoiceIds
+  } else if (data.invoiceId) {
+    invoiceIds = [data.invoiceId]
+  }
+  
+  // 第一张发票作为主发票（兼容旧逻辑）
+  const primaryInvoiceId = invoiceIds.length > 0 ? invoiceIds[0] : null
+  const invoiceIdsJson = invoiceIds.length > 1 ? JSON.stringify(invoiceIds) : null
+  
+  // 收集所有发票信息，计算总金额
+  const invoiceNumbers = []
+  let totalAmount = 0
+  const invoiceAmounts = [] // 记录每张发票的未付金额
+  
+  for (const invId of invoiceIds) {
+    const invoice = await getInvoiceById(invId)
+    if (invoice) {
+      invoiceNumbers.push(invoice.invoiceNumber)
+      const unpaidAmount = invoice.totalAmount - invoice.paidAmount
+      totalAmount += unpaidAmount
+      invoiceAmounts.push({ invoiceId: invId, amount: unpaidAmount })
+    }
+  }
+  
+  // 发票号显示：多张时逗号分隔
+  const invoiceNumber = invoiceNumbers.join(', ')
+  
+  // 使用计算的总金额，如果前端传了 amount 则用前端的
+  const finalAmount = data.amount || totalAmount
+  
   const result = await db.prepare(`
     INSERT INTO payments (
       id, payment_number, payment_type, payment_date, payment_method,
-      invoice_id, invoice_number, customer_id, customer_name,
+      invoice_id, invoice_ids, invoice_number, customer_id, customer_name,
       amount, currency, exchange_rate, bank_account, reference_number,
       description, notes, status, created_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     paymentNumber,
     data.paymentType || 'income',
     data.paymentDate || new Date().toISOString().split('T')[0],
     data.paymentMethod || 'bank_transfer',
-    data.invoiceId || null,
-    data.invoiceNumber || '',
+    primaryInvoiceId,
+    invoiceIdsJson,
+    invoiceNumber,
     data.customerId || null,
     data.customerName || '',
-    data.amount,
+    finalAmount,
     data.currency || 'EUR',
     data.exchangeRate || 1,
     data.bankAccount || '',
@@ -550,12 +824,47 @@ export async function createPayment(data) {
     data.createdBy || null
   )
   
-  // 如果关联发票，更新发票付款金额
-  if (data.invoiceId && data.status === 'completed') {
-    await updateInvoicePaidAmount(data.invoiceId)
+  // 更新所有关联发票的付款金额
+  // 每张发票按各自的未付金额更新，实现全额核销
+  if (data.status === 'completed') {
+    for (const { invoiceId: invId, amount: invAmount } of invoiceAmounts) {
+      await updateInvoicePaidAmountDirect(invId, invAmount)
+    }
   }
   
-  return { id, paymentNumber }
+  return { id, paymentNumber, invoiceCount: invoiceIds.length }
+}
+
+/**
+ * 直接更新发票的已付金额（增量更新）
+ * @param {string} invoiceId - 发票ID
+ * @param {number} amount - 本次付款金额
+ */
+async function updateInvoicePaidAmountDirect(invoiceId, amount) {
+  const db = getDatabase()
+  
+  // 获取发票当前信息
+  const invoice = await getInvoiceById(invoiceId)
+  if (!invoice) return
+  
+  // 计算新的已付金额
+  const newPaidAmount = Number(invoice.paidAmount) + Number(amount)
+  
+  // 确定新状态
+  let newStatus = 'pending'
+  if (newPaidAmount >= invoice.totalAmount) {
+    newStatus = 'paid'
+  } else if (newPaidAmount > 0) {
+    newStatus = 'partial'
+  }
+  
+  await db.prepare(`
+    UPDATE invoices SET 
+      paid_amount = ?,
+      status = ?,
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(newPaidAmount, newStatus, invoiceId)
 }
 
 /**
@@ -1059,6 +1368,7 @@ async function generateFeeNumber() {
 
 /**
  * 创建费用
+ * 支持追加费用相关字段
  */
 export async function createFee(data) {
   const db = getDatabase()
@@ -1071,8 +1381,11 @@ export async function createFee(data) {
       supplier_id, supplier_name, fee_type,
       category, fee_name, amount, currency, exchange_rate,
       fee_date, description, notes, created_by,
+      is_supplementary, approval_status, 
+      approval_submitted_at, approval_submitted_by, approval_submitted_by_name,
+      approved_at, approved_by, approved_by_name,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     feeNumber,
@@ -1091,7 +1404,15 @@ export async function createFee(data) {
     data.feeDate || new Date().toISOString().split('T')[0],
     data.description || '',
     data.notes || '',
-    data.createdBy || null
+    data.createdBy || null,
+    data.isSupplementary || 0,
+    data.approvalStatus || 'approved',
+    data.approvalSubmittedAt || null,
+    data.approvalSubmittedBy || null,
+    data.approvalSubmittedByName || null,
+    data.approvedAt || null,
+    data.approvedBy || null,
+    data.approvedByName || null
   )
   
   return { id, feeNumber }
@@ -1518,11 +1839,25 @@ export function convertInvoiceToCamelCase(row) {
     excelGeneratedAt: row.excel_generated_at,
     createdBy: row.created_by,
     createTime: row.created_at,
-    updateTime: row.updated_at
+    updateTime: row.updated_at,
+    // 追加发票相关字段
+    parentInvoiceNumber: row.parent_invoice_number,
+    supplementSeq: row.supplement_seq || 0,
+    isSupplementInvoice: !!row.parent_invoice_number
   }
 }
 
 export function convertPaymentToCamelCase(row) {
+  // 解析集装箱号 (来自关联的 invoices 表)
+  let containerNumbers = []
+  if (row.invoice_container_numbers) {
+    try {
+      containerNumbers = JSON.parse(row.invoice_container_numbers)
+    } catch (e) {
+      containerNumbers = []
+    }
+  }
+  
   return {
     id: row.id,
     paymentNumber: row.payment_number,
@@ -1533,6 +1868,7 @@ export function convertPaymentToCamelCase(row) {
     invoiceNumber: row.invoice_number,
     customerId: row.customer_id,
     customerName: row.customer_name,
+    containerNumbers: containerNumbers,  // 集装箱号数组
     amount: row.amount,
     currency: row.currency,
     exchangeRate: row.exchange_rate,
@@ -1572,7 +1908,20 @@ export function convertFeeToCamelCase(row) {
     notes: row.notes,
     createdBy: row.created_by,
     createTime: row.created_at,
-    updateTime: row.updated_at
+    updateTime: row.updated_at,
+    // 锁定与审批相关字段
+    isLocked: row.is_locked === 1,
+    lockedAt: row.locked_at,
+    lockedBy: row.locked_by,
+    isSupplementary: row.is_supplementary === 1,
+    approvalStatus: row.approval_status || 'approved',
+    approvalSubmittedAt: row.approval_submitted_at,
+    approvalSubmittedBy: row.approval_submitted_by,
+    approvalSubmittedByName: row.approval_submitted_by_name,
+    approvedAt: row.approved_at,
+    approvedBy: row.approved_by,
+    approvedByName: row.approved_by_name,
+    rejectionReason: row.rejection_reason
   }
 }
 
@@ -2349,5 +2698,304 @@ export async function getFinancialReportById(id) {
     createdByName: row.created_by_name,
     createdAt: row.created_at
   }
+}
+
+// ==================== 提单收款确认 ====================
+
+/**
+ * 确认提单收款
+ * @param {string} billId - 提单ID
+ * @param {Object} data - 确认数据
+ */
+export async function confirmBillPayment(billId, data) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  await db.prepare(`
+    UPDATE bills_of_lading SET
+      payment_confirmed = 1,
+      payment_confirmed_at = $1,
+      payment_confirmed_by = $2,
+      payment_confirmed_by_name = $3,
+      primary_invoice_number = $4,
+      updated_at = $5
+    WHERE id = $6
+  `).run(
+    now,
+    data.confirmedBy,
+    data.confirmedByName,
+    data.primaryInvoiceNumber,
+    now,
+    billId
+  )
+  
+  return true
+}
+
+/**
+ * 取消提单收款确认
+ * @param {string} billId - 提单ID
+ */
+export async function cancelBillPaymentConfirm(billId) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  await db.prepare(`
+    UPDATE bills_of_lading SET
+      payment_confirmed = 0,
+      payment_confirmed_at = NULL,
+      payment_confirmed_by = NULL,
+      payment_confirmed_by_name = NULL,
+      updated_at = $1
+    WHERE id = $2
+  `).run(now, billId)
+  
+  return true
+}
+
+/**
+ * 锁定提单费用
+ * @param {string} billId - 提单ID
+ * @param {string} lockedBy - 锁定人ID
+ * @returns {number} 锁定的费用数量
+ */
+export async function lockBillFees(billId, lockedBy) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  // 锁定该提单所有已审批通过的费用
+  const result = await db.prepare(`
+    UPDATE fees SET
+      is_locked = 1,
+      locked_at = $1,
+      locked_by = $2,
+      updated_at = $1
+    WHERE bill_id = $3 
+      AND approval_status = 'approved'
+      AND is_locked = 0
+  `).run(now, lockedBy, billId)
+  
+  return result.changes || 0
+}
+
+/**
+ * 解锁提单费用
+ * @param {string} billId - 提单ID
+ * @returns {number} 解锁的费用数量
+ */
+export async function unlockBillFees(billId) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  const result = await db.prepare(`
+    UPDATE fees SET
+      is_locked = 0,
+      locked_at = NULL,
+      locked_by = NULL,
+      updated_at = $1
+    WHERE bill_id = $2 AND is_locked = 1
+  `).run(now, billId)
+  
+  return result.changes || 0
+}
+
+// ==================== 追加费用审批 ====================
+
+/**
+ * 获取待审批的追加费用列表
+ */
+export async function getPendingApprovalFees(params = {}) {
+  const db = getDatabase()
+  const { page = 1, pageSize = 20, search } = params
+  
+  let whereConditions = ["approval_status = 'pending'"]
+  const queryParams = []
+  let paramIndex = 1
+  
+  if (search) {
+    whereConditions.push(`(
+      bill_number LIKE $${paramIndex} OR 
+      customer_name LIKE $${paramIndex} OR 
+      fee_name LIKE $${paramIndex} OR
+      approval_submitted_by_name LIKE $${paramIndex}
+    )`)
+    queryParams.push(`%${search}%`)
+    paramIndex++
+  }
+  
+  const whereClause = whereConditions.join(' AND ')
+  
+  // 获取总数
+  const countResult = await db.prepare(`
+    SELECT COUNT(*) as total FROM fees WHERE ${whereClause}
+  `).get(...queryParams)
+  
+  // 获取分页数据
+  const offset = (page - 1) * pageSize
+  const list = await db.prepare(`
+    SELECT * FROM fees 
+    WHERE ${whereClause}
+    ORDER BY approval_submitted_at DESC
+    LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+  `).all(...queryParams, pageSize, offset)
+  
+  return {
+    list: list.map(convertFeeToCamelCase),
+    total: parseInt(countResult?.total || 0),
+    page: parseInt(page),
+    pageSize: parseInt(pageSize)
+  }
+}
+
+/**
+ * 审批通过费用
+ */
+export async function approveFee(id, approvedBy, approvedByName) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  await db.prepare(`
+    UPDATE fees SET
+      approval_status = 'approved',
+      approved_at = $1,
+      approved_by = $2,
+      approved_by_name = $3,
+      updated_at = $1
+    WHERE id = $4
+  `).run(now, approvedBy, approvedByName, id)
+  
+  return true
+}
+
+/**
+ * 审批拒绝费用
+ */
+export async function rejectFee(id, approvedBy, approvedByName, reason) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  await db.prepare(`
+    UPDATE fees SET
+      approval_status = 'rejected',
+      approved_at = $1,
+      approved_by = $2,
+      approved_by_name = $3,
+      rejection_reason = $4,
+      updated_at = $1
+    WHERE id = $5
+  `).run(now, approvedBy, approvedByName, reason, id)
+  
+  return true
+}
+
+/**
+ * 检查提单是否已确认收款
+ */
+export async function isBillPaymentConfirmed(billId) {
+  const db = getDatabase()
+  const result = await db.prepare(`
+    SELECT payment_confirmed FROM bills_of_lading WHERE id = $1
+  `).get(billId)
+  
+  return result?.payment_confirmed === 1
+}
+
+// ==================== 追加发票编号生成 ====================
+
+/**
+ * 生成追加发票编号
+ * 格式：主发票号-N（如 INV20250000001-1）
+ * @param {string} primaryInvoiceNumber - 主发票号
+ * @returns {string} 追加发票号
+ */
+export async function generateSupplementInvoiceNumber(primaryInvoiceNumber) {
+  const db = getDatabase()
+  
+  // 查询该主发票号已有的追加发票数量
+  const result = await db.prepare(`
+    SELECT COUNT(*) as count FROM invoices 
+    WHERE parent_invoice_number = $1
+  `).get(primaryInvoiceNumber)
+  
+  const seq = (parseInt(result?.count) || 0) + 1
+  
+  return `${primaryInvoiceNumber}-${seq}`
+}
+
+/**
+ * 获取提单的主发票号
+ * @param {string} billId - 提单ID
+ * @returns {string|null} 主发票号
+ */
+export async function getBillPrimaryInvoiceNumber(billId) {
+  const db = getDatabase()
+  const result = await db.prepare(`
+    SELECT primary_invoice_number FROM bills_of_lading WHERE id = $1
+  `).get(billId)
+  
+  return result?.primary_invoice_number || null
+}
+
+/**
+ * 创建追加发票
+ * @param {Object} data - 发票数据
+ * @returns {Object} 创建结果
+ */
+export async function createSupplementInvoice(data) {
+  const db = getDatabase()
+  const id = generateId()
+  
+  // 生成追加发票号
+  const invoiceNumber = await generateSupplementInvoiceNumber(data.parentInvoiceNumber)
+  
+  // 获取追加序号
+  const seqResult = await db.prepare(`
+    SELECT COALESCE(MAX(supplement_seq), 0) + 1 as next_seq FROM invoices 
+    WHERE parent_invoice_number = $1
+  `).get(data.parentInvoiceNumber)
+  const supplementSeq = seqResult?.next_seq || 1
+  
+  // 处理集装箱号数组
+  const containerNumbers = Array.isArray(data.containerNumbers) 
+    ? JSON.stringify(data.containerNumbers) 
+    : JSON.stringify([])
+  
+  await db.prepare(`
+    INSERT INTO invoices (
+      id, invoice_number, invoice_type, invoice_date, due_date,
+      customer_id, customer_name, bill_id, bill_number, container_numbers,
+      subtotal, tax_amount, total_amount, paid_amount,
+      currency, exchange_rate, description, notes,
+      status, language, created_by,
+      parent_invoice_number, supplement_seq,
+      created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW())
+  `).run(
+    id,
+    invoiceNumber,
+    data.invoiceType || 'sales',
+    data.invoiceDate || new Date().toISOString().split('T')[0],
+    data.dueDate || null,
+    data.customerId || null,
+    data.customerName || '',
+    data.billId || null,
+    data.billNumber || '',
+    containerNumbers,
+    data.subtotal || 0,
+    data.taxAmount || 0,
+    data.totalAmount || data.subtotal || 0,
+    0, // paid_amount starts at 0
+    data.currency || 'EUR',
+    data.exchangeRate || 1,
+    data.description || '',
+    data.notes || '',
+    data.status || 'issued',
+    data.language || 'en',
+    data.createdBy || null,
+    data.parentInvoiceNumber,
+    supplementSeq
+  )
+  
+  return { id, invoiceNumber, supplementSeq }
 }
 

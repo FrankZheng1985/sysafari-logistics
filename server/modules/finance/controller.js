@@ -336,34 +336,51 @@ export async function getPaymentById(req, res) {
 
 /**
  * 创建付款记录
+ * 支持多发票批量核销
  */
 export async function createPayment(req, res) {
   try {
-    const { amount, paymentType } = req.body
+    const { amount, paymentType, invoiceIds, invoiceId } = req.body
     
-    if (!amount || amount <= 0) {
-      return badRequest(res, '付款金额必须大于0')
+    // 支持多发票核销
+    const allInvoiceIds = invoiceIds && Array.isArray(invoiceIds) && invoiceIds.length > 0 
+      ? invoiceIds 
+      : (invoiceId ? [invoiceId] : [])
+    
+    // 检查所有发票是否存在
+    for (const invId of allInvoiceIds) {
+      const invoice = await model.getInvoiceById(invId)
+      if (!invoice) {
+        return badRequest(res, `关联的发票 ${invId} 不存在`)
+      }
     }
     
-    // 如果关联发票，检查发票是否存在
-    if (req.body.invoiceId) {
-      const invoice = await model.getInvoiceById(req.body.invoiceId)
-      if (!invoice) {
-        return badRequest(res, '关联的发票不存在')
-      }
-      
-      // 检查是否超额付款
-      const remainingAmount = invoice.totalAmount - invoice.paidAmount
-      if (amount > remainingAmount) {
-        return badRequest(res, `付款金额不能超过未付金额 ${remainingAmount}`)
+    // 单张发票核销时检查金额
+    if (allInvoiceIds.length === 1 && amount) {
+      const invoice = await model.getInvoiceById(allInvoiceIds[0])
+      const remaining = invoice.totalAmount - invoice.paidAmount
+      if (amount > remaining) {
+        return badRequest(res, `付款金额 ${amount} 超过发票未付金额 ${remaining.toFixed(2)}`)
       }
     }
     
     const result = await model.createPayment({
       ...req.body,
+      invoiceIds: allInvoiceIds,
       createdBy: req.user?.id
     })
     
+    // 批量核销返回批次信息
+    if (result.batchId) {
+      return success(res, {
+        batchId: result.batchId,
+        invoiceCount: result.invoiceCount,
+        totalAmount: result.totalAmount,
+        payments: result.payments
+      }, `成功批量核销 ${result.invoiceCount} 张发票，总金额 ${result.totalAmount.toFixed(2)}`)
+    }
+    
+    // 单张发票核销返回付款记录
     const newPayment = await model.getPaymentById(result.id)
     return success(res, newPayment, '创建成功')
   } catch (error) {
@@ -584,10 +601,16 @@ export async function getFeeById(req, res) {
 
 /**
  * 创建费用
+ * 支持追加费用逻辑：
+ * - 如果提单已确认收款，标记为追加费用
+ * - 非财务人员录入追加费用需要审批
+ * - 财务人员录入追加费用直接生效
  */
 export async function createFee(req, res) {
   try {
-    const { feeName, amount } = req.body
+    const { feeName, amount, billId } = req.body
+    const userId = req.user?.id
+    const userName = req.user?.name || req.user?.username || 'system'
     
     if (!feeName) {
       return badRequest(res, '费用名称为必填项')
@@ -598,13 +621,53 @@ export async function createFee(req, res) {
       return badRequest(res, '费用金额不能为负数')
     }
     
-    const result = await model.createFee({
+    // 准备费用数据
+    const feeData = {
       ...req.body,
-      createdBy: req.user?.id
-    })
+      createdBy: userId
+    }
+    
+    // 检查提单是否已确认收款（追加费用逻辑）
+    if (billId) {
+      const isConfirmed = await model.isBillPaymentConfirmed(billId)
+      
+      if (isConfirmed) {
+        // 标记为追加费用
+        feeData.isSupplementary = 1
+        feeData.approvalSubmittedAt = new Date().toISOString()
+        feeData.approvalSubmittedBy = userId
+        feeData.approvalSubmittedByName = userName
+        
+        // 判断是否有财务权限
+        const userPermissions = req.user?.permissions || []
+        const hasFinancePermission = userPermissions.includes('finance:manage') || 
+                                     userPermissions.includes('finance:fee_manage') ||
+                                     req.user?.role === 'admin'
+        
+        if (hasFinancePermission) {
+          // 财务人员：直接生效
+          feeData.approvalStatus = 'approved'
+          feeData.approvedAt = new Date().toISOString()
+          feeData.approvedBy = userId
+          feeData.approvedByName = userName
+        } else {
+          // 非财务人员：待审批
+          feeData.approvalStatus = 'pending'
+        }
+      }
+    }
+    
+    const result = await model.createFee(feeData)
     
     const newFee = await model.getFeeById(result.id)
-    return success(res, newFee, '创建成功')
+    
+    // 返回不同的消息
+    let message = '创建成功'
+    if (feeData.isSupplementary === 1 && feeData.approvalStatus === 'pending') {
+      message = '追加费用已提交审批'
+    }
+    
+    return success(res, newFee, message)
   } catch (error) {
     console.error('创建费用失败:', error)
     return serverError(res, '创建费用失败')
@@ -613,14 +676,34 @@ export async function createFee(req, res) {
 
 /**
  * 更新费用
+ * 添加锁定检查：已锁定的费用不能修改
  */
 export async function updateFee(req, res) {
   try {
     const { id } = req.params
+    const userId = req.user?.id
     
     const existing = await model.getFeeById(id)
     if (!existing) {
       return notFound(res, '费用记录不存在')
+    }
+    
+    // 检查费用是否已锁定
+    if (existing.isLocked) {
+      return badRequest(res, '该费用已锁定，无法修改')
+    }
+    
+    // 检查待审批费用：只有提交人或财务可以修改
+    if (existing.approvalStatus === 'pending') {
+      const userPermissions = req.user?.permissions || []
+      const hasFinancePermission = userPermissions.includes('finance:manage') || 
+                                   userPermissions.includes('finance:fee_manage') ||
+                                   req.user?.role === 'admin'
+      const isSubmitter = existing.approvalSubmittedBy === userId
+      
+      if (!hasFinancePermission && !isSubmitter) {
+        return badRequest(res, '待审批费用仅提交人或财务可修改')
+      }
     }
     
     const updated = await model.updateFee(id, req.body)
@@ -638,14 +721,34 @@ export async function updateFee(req, res) {
 
 /**
  * 删除费用
+ * 添加锁定检查：已锁定的费用不能删除
  */
 export async function deleteFee(req, res) {
   try {
     const { id } = req.params
+    const userId = req.user?.id
     
     const existing = await model.getFeeById(id)
     if (!existing) {
       return notFound(res, '费用记录不存在')
+    }
+    
+    // 检查费用是否已锁定
+    if (existing.isLocked) {
+      return badRequest(res, '该费用已锁定，无法删除')
+    }
+    
+    // 检查待审批费用：只有提交人或财务可以删除
+    if (existing.approvalStatus === 'pending') {
+      const userPermissions = req.user?.permissions || []
+      const hasFinancePermission = userPermissions.includes('finance:manage') || 
+                                   userPermissions.includes('finance:fee_manage') ||
+                                   req.user?.role === 'admin'
+      const isSubmitter = existing.approvalSubmittedBy === userId
+      
+      if (!hasFinancePermission && !isSubmitter) {
+        return badRequest(res, '待审批费用仅提交人或财务可删除')
+      }
     }
     
     model.deleteFee(id)
@@ -1424,6 +1527,336 @@ export async function getCarrierSettlementItems(req, res) {
   } catch (error) {
     console.error('获取结算明细失败:', error)
     return serverError(res, '获取结算明细失败')
+  }
+}
+
+// ==================== 提单收款确认 ====================
+
+/**
+ * 确认提单收款
+ * 1. 更新提单 payment_confirmed = 1
+ * 2. 记录主发票号
+ * 3. 锁定该提单所有已生效的费用
+ */
+export async function confirmBillPayment(req, res) {
+  try {
+    const { billId } = req.params
+    const userId = req.user?.id
+    const userName = req.user?.name || req.user?.username || 'system'
+    
+    // 1. 获取提单信息
+    const bill = await orderModel.getBillById(billId)
+    if (!bill) {
+      return notFound(res, '提单不存在')
+    }
+    
+    // 检查是否已确认
+    if (bill.paymentConfirmed === 1) {
+      return badRequest(res, '该提单收款已确认，无需重复确认')
+    }
+    
+    // 2. 获取该提单的第一张发票号作为主发票号
+    const invoices = await model.getInvoices({ 
+      billId: billId,
+      pageSize: 1 
+    })
+    const primaryInvoiceNumber = invoices.list?.[0]?.invoiceNumber || null
+    
+    // 3. 更新提单收款确认状态
+    await model.confirmBillPayment(billId, {
+      confirmedBy: userId,
+      confirmedByName: userName,
+      primaryInvoiceNumber
+    })
+    
+    // 4. 锁定该提单所有已生效的费用（approval_status = 'approved'）
+    const lockedCount = await model.lockBillFees(billId, userId)
+    
+    return success(res, {
+      billId,
+      primaryInvoiceNumber,
+      lockedFeesCount: lockedCount
+    }, '提单收款确认成功，已锁定相关费用')
+  } catch (error) {
+    console.error('确认提单收款失败:', error)
+    return serverError(res, '确认提单收款失败')
+  }
+}
+
+/**
+ * 取消提单收款确认
+ * 解锁费用，恢复可编辑状态
+ */
+export async function cancelBillPaymentConfirm(req, res) {
+  try {
+    const { billId } = req.params
+    
+    // 1. 获取提单信息
+    const bill = await orderModel.getBillById(billId)
+    if (!bill) {
+      return notFound(res, '提单不存在')
+    }
+    
+    // 检查是否已确认
+    if (bill.paymentConfirmed !== 1) {
+      return badRequest(res, '该提单收款未确认')
+    }
+    
+    // 2. 取消确认状态
+    await model.cancelBillPaymentConfirm(billId)
+    
+    // 3. 解锁费用
+    const unlockedCount = await model.unlockBillFees(billId)
+    
+    return success(res, {
+      billId,
+      unlockedFeesCount: unlockedCount
+    }, '已取消收款确认，费用已解锁')
+  } catch (error) {
+    console.error('取消提单收款确认失败:', error)
+    return serverError(res, '取消提单收款确认失败')
+  }
+}
+
+/**
+ * 获取提单收款确认状态
+ */
+export async function getBillPaymentStatus(req, res) {
+  try {
+    const { billId } = req.params
+    
+    const bill = await orderModel.getBillById(billId)
+    if (!bill) {
+      return notFound(res, '提单不存在')
+    }
+    
+    return success(res, {
+      billId,
+      paymentConfirmed: bill.paymentConfirmed === 1,
+      paymentConfirmedAt: bill.paymentConfirmedAt,
+      paymentConfirmedBy: bill.paymentConfirmedBy,
+      paymentConfirmedByName: bill.paymentConfirmedByName,
+      primaryInvoiceNumber: bill.primaryInvoiceNumber
+    })
+  } catch (error) {
+    console.error('获取提单收款状态失败:', error)
+    return serverError(res, '获取提单收款状态失败')
+  }
+}
+
+// ==================== 追加费用审批 ====================
+
+/**
+ * 获取待审批的追加费用列表
+ */
+export async function getPendingApprovalFees(req, res) {
+  try {
+    const { page = 1, pageSize = 20, search } = req.query
+    
+    const result = await model.getPendingApprovalFees({
+      page: parseInt(page),
+      pageSize: parseInt(pageSize),
+      search
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取待审批费用列表失败:', error)
+    return serverError(res, '获取待审批费用列表失败')
+  }
+}
+
+/**
+ * 审批通过追加费用
+ */
+export async function approveFee(req, res) {
+  try {
+    const { id } = req.params
+    const userId = req.user?.id
+    const userName = req.user?.name || req.user?.username || 'system'
+    
+    // 获取费用信息
+    const fee = await model.getFeeById(id)
+    if (!fee) {
+      return notFound(res, '费用不存在')
+    }
+    
+    if (fee.approvalStatus !== 'pending') {
+      return badRequest(res, '该费用不在待审批状态')
+    }
+    
+    // 更新审批状态
+    await model.approveFee(id, userId, userName)
+    
+    return success(res, { id }, '审批通过')
+  } catch (error) {
+    console.error('审批费用失败:', error)
+    return serverError(res, '审批费用失败')
+  }
+}
+
+/**
+ * 审批拒绝追加费用
+ */
+export async function rejectFee(req, res) {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    const userId = req.user?.id
+    const userName = req.user?.name || req.user?.username || 'system'
+    
+    if (!reason) {
+      return badRequest(res, '请填写拒绝原因')
+    }
+    
+    // 获取费用信息
+    const fee = await model.getFeeById(id)
+    if (!fee) {
+      return notFound(res, '费用不存在')
+    }
+    
+    if (fee.approvalStatus !== 'pending') {
+      return badRequest(res, '该费用不在待审批状态')
+    }
+    
+    // 更新审批状态
+    await model.rejectFee(id, userId, userName, reason)
+    
+    return success(res, { id }, '已拒绝')
+  } catch (error) {
+    console.error('拒绝费用失败:', error)
+    return serverError(res, '拒绝费用失败')
+  }
+}
+
+/**
+ * 批量审批通过
+ */
+export async function batchApproveFees(req, res) {
+  try {
+    const { ids } = req.body
+    const userId = req.user?.id
+    const userName = req.user?.name || req.user?.username || 'system'
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return badRequest(res, '请选择要审批的费用')
+    }
+    
+    let successCount = 0
+    let failCount = 0
+    
+    for (const id of ids) {
+      try {
+        const fee = await model.getFeeById(id)
+        if (fee && fee.approvalStatus === 'pending') {
+          await model.approveFee(id, userId, userName)
+          successCount++
+        } else {
+          failCount++
+        }
+      } catch (err) {
+        failCount++
+      }
+    }
+    
+    return success(res, { successCount, failCount }, `批量审批完成：${successCount}条通过，${failCount}条失败`)
+  } catch (error) {
+    console.error('批量审批失败:', error)
+    return serverError(res, '批量审批失败')
+  }
+}
+
+// ==================== 追加发票 ====================
+
+/**
+ * 获取提单的主发票号
+ */
+export async function getBillPrimaryInvoiceNumber(req, res) {
+  try {
+    const { billId } = req.params
+    
+    const primaryInvoiceNumber = await model.getBillPrimaryInvoiceNumber(billId)
+    
+    if (!primaryInvoiceNumber) {
+      return notFound(res, '该提单尚未确认收款或没有主发票')
+    }
+    
+    return success(res, { billId, primaryInvoiceNumber })
+  } catch (error) {
+    console.error('获取主发票号失败:', error)
+    return serverError(res, '获取主发票号失败')
+  }
+}
+
+/**
+ * 创建追加发票
+ */
+export async function createSupplementInvoice(req, res) {
+  try {
+    const { parentInvoiceNumber, billId } = req.body
+    const userId = req.user?.id
+    
+    if (!parentInvoiceNumber) {
+      return badRequest(res, '主发票号为必填项')
+    }
+    
+    // 验证主发票是否存在
+    const parentInvoice = await model.getInvoices({ search: parentInvoiceNumber, pageSize: 1 })
+    if (!parentInvoice.list || parentInvoice.list.length === 0) {
+      return notFound(res, '主发票不存在')
+    }
+    
+    const result = await model.createSupplementInvoice({
+      ...req.body,
+      parentInvoiceNumber,
+      createdBy: userId
+    })
+    
+    const newInvoice = await model.getInvoiceById(result.id)
+    return success(res, newInvoice, `追加发票创建成功：${result.invoiceNumber}`)
+  } catch (error) {
+    console.error('创建追加发票失败:', error)
+    return serverError(res, '创建追加发票失败')
+  }
+}
+
+/**
+ * 获取提单的追加发票列表
+ */
+export async function getBillSupplementInvoices(req, res) {
+  try {
+    const { billId } = req.params
+    
+    // 先获取主发票号
+    const primaryInvoiceNumber = await model.getBillPrimaryInvoiceNumber(billId)
+    
+    if (!primaryInvoiceNumber) {
+      return success(res, { list: [], primaryInvoiceNumber: null })
+    }
+    
+    // 获取所有追加发票
+    const invoices = await model.getInvoices({ 
+      search: primaryInvoiceNumber,
+      pageSize: 100 
+    })
+    
+    // 过滤出追加发票（parent_invoice_number = 主发票号）
+    const supplementInvoices = invoices.list.filter(inv => 
+      inv.parentInvoiceNumber === primaryInvoiceNumber
+    )
+    
+    return success(res, { 
+      list: supplementInvoices, 
+      primaryInvoiceNumber,
+      count: supplementInvoices.length
+    })
+  } catch (error) {
+    console.error('获取追加发票列表失败:', error)
+    return serverError(res, '获取追加发票列表失败')
   }
 }
 

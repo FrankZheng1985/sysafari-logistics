@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
-  Search, ArrowUpRight, ArrowDownRight, Trash2,
-  CreditCard, Building2, Banknote, Wallet, X, FileText, Loader2, CheckSquare, Square
+  Search, ArrowUpRight, ArrowDownRight, Trash2, Eye,
+  CreditCard, Building2, Banknote, Wallet, X, FileText, Loader2, CheckSquare, Square,
+  ChevronDown, ChevronRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
@@ -10,6 +11,18 @@ import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
+
+// 关联发票信息
+interface LinkedInvoice {
+  id: string
+  invoiceNumber: string
+  customerName: string
+  totalAmount: number
+  paidAmount: number
+  currency: string
+  status: string
+  containerNumbers: string[]
+}
 
 interface Payment {
   id: string
@@ -21,6 +34,9 @@ interface Payment {
   invoiceNumber: string
   customerId: string | null
   customerName: string
+  containerNumbers: string[]  // 集装箱号数组（所有关联发票的合并）
+  invoiceCount?: number  // 关联发票数量（支持多发票核销）
+  invoices?: LinkedInvoice[]  // 关联发票列表（展开显示用）
   amount: number
   currency: string
   bankAccount: string
@@ -67,6 +83,22 @@ export default function FinancePayments() {
     description: ''
   })
   const [batchPaymentLoading, setBatchPaymentLoading] = useState(false)
+  
+  // 展开行状态（显示关联发票）
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  
+  // 切换展开/收起
+  const toggleRowExpand = (paymentId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev)
+      if (next.has(paymentId)) {
+        next.delete(paymentId)
+      } else {
+        next.add(paymentId)
+      }
+      return next
+    })
+  }
 
   const tabs = [
     { label: '财务概览', path: '/finance' },
@@ -300,14 +332,40 @@ export default function FinancePayments() {
     {
       key: 'paymentNumber',
       label: '付款单号',
-      width: 150,
+      width: 180,
       sorter: true,
-      render: (_value, record) => (
-        <div>
-          <div className="font-medium text-gray-900">{record.paymentNumber}</div>
-          <div className="text-xs text-gray-400">{record.paymentDate}</div>
-        </div>
-      )
+      render: (_value, record) => {
+        const hasMultipleInvoices = record.invoiceCount && record.invoiceCount > 1
+        const isExpanded = expandedRows.has(record.id)
+        
+        return (
+          <div className="flex items-center gap-2">
+            {/* 展开按钮 - 只在有多张发票时显示 */}
+            {hasMultipleInvoices ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleRowExpand(record.id)
+                }}
+                className="p-0.5 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600 transition-colors"
+                title={isExpanded ? '收起发票' : '展开发票'}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </button>
+            ) : (
+              <div className="w-5" /> // 占位符保持对齐
+            )}
+            <div>
+              <div className="font-medium text-gray-900">{record.paymentNumber}</div>
+              <div className="text-xs text-gray-400">{record.paymentDate}</div>
+            </div>
+          </div>
+        )
+      }
     },
     {
       key: 'paymentType',
@@ -343,10 +401,42 @@ export default function FinancePayments() {
         <div>
           <div className="text-sm text-gray-900">{record.customerName || '-'}</div>
           {record.invoiceNumber && (
-            <div className="text-xs text-gray-400">发票: {record.invoiceNumber}</div>
+            <div className="text-xs text-gray-400">
+              发票: {record.invoiceNumber}
+              {record.invoiceCount && record.invoiceCount > 1 && (
+                <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                  共{record.invoiceCount}张
+                </span>
+              )}
+            </div>
           )}
         </div>
       )
+    },
+    {
+      key: 'containerNumbers',
+      label: '集装箱号',
+      width: 140,
+      render: (_value, record) => {
+        const containers = record.containerNumbers || []
+        if (containers.length === 0) {
+          return <span className="text-xs text-gray-400">-</span>
+        }
+        // 只显示第一个，其他用 +N 表示，鼠标悬停显示全部
+        const allContainersText = containers.join(', ')
+        return (
+          <div className="max-w-[130px] cursor-default" title={allContainersText}>
+            <div className="text-xs text-gray-900 truncate">
+              {containers[0]}
+            </div>
+            {containers.length > 1 && (
+              <div className="text-xs text-blue-600 font-medium">
+                +{containers.length - 1} 个
+              </div>
+            )}
+          </div>
+        )
+      }
     },
     {
       key: 'amount',
@@ -398,9 +488,16 @@ export default function FinancePayments() {
     {
       key: 'actions',
       label: '操作',
-      width: 80,
+      width: 100,
       render: (_value, record) => (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center justify-center gap-1">
+          <button
+            onClick={() => navigate(`/finance/payments/${record.id}`)}
+            className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+            title="查看详情"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={() => handleDelete(record.id)}
             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -412,7 +509,7 @@ export default function FinancePayments() {
       )
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [])
+  ], [expandedRows])
 
   return (
     <div className="p-4 space-y-4">
@@ -538,6 +635,57 @@ export default function FinancePayments() {
           data={payments}
           loading={loading}
           rowKey="id"
+          expandable={{
+            expandedRowKeys: Array.from(expandedRows),
+            expandedRowRender: (record) => {
+              if (!record.invoices || record.invoices.length <= 1) return null
+              
+              return (
+                <div className="pl-8 pr-4">
+                  <div className="text-xs font-medium text-gray-500 mb-2">
+                    关联发票 ({record.invoices.length}张)
+                  </div>
+                  <div className="space-y-2">
+                    {record.invoices.map((inv: LinkedInvoice) => (
+                      <div key={inv.id} className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-3 py-2">
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-4 h-4 text-gray-400" />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{inv.invoiceNumber}</div>
+                            <div className="text-xs text-gray-500">{inv.customerName || '-'}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          {/* 集装箱号 */}
+                          {inv.containerNumbers && inv.containerNumbers.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {inv.containerNumbers.map((cn, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
+                                >
+                                  {cn}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {/* 金额 */}
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-gray-900">
+                              {Number(inv.totalAmount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, '.')} €
+                            </div>
+                            <div className={`text-xs ${inv.status === 'paid' ? 'text-green-600' : 'text-amber-600'}`}>
+                              {inv.status === 'paid' ? '已核销' : '部分核销'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            }
+          }}
         />
       </div>
 

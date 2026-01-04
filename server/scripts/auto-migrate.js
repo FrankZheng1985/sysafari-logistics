@@ -276,6 +276,27 @@ export async function runMigrations() {
       await client.query(`ALTER TABLE payments ADD COLUMN receipt_url TEXT`)
       console.log('  ✅ payments.receipt_url 字段已添加')
     }
+    
+    // 添加 invoice_ids 字段支持多发票关联（已弃用，保留兼容）
+    const paymentInvoiceIdsColumn = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'payments' AND column_name = 'invoice_ids'
+    `)
+    if (paymentInvoiceIdsColumn.rows.length === 0) {
+      await client.query(`ALTER TABLE payments ADD COLUMN invoice_ids TEXT`)
+      console.log('  ✅ payments.invoice_ids 字段已添加')
+    }
+    
+    // 添加 payment_batch_id 字段支持批量核销分组
+    const paymentBatchIdColumn = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'payments' AND column_name = 'payment_batch_id'
+    `)
+    if (paymentBatchIdColumn.rows.length === 0) {
+      await client.query(`ALTER TABLE payments ADD COLUMN payment_batch_id TEXT`)
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_batch_id ON payments(payment_batch_id)`)
+      console.log('  ✅ payments.payment_batch_id 字段已添加（支持批量核销分组）')
+    }
     console.log('  ✅ payments 表字段就绪')
 
     // ==================== 7. 创建 messages 消息表 ====================
@@ -2699,6 +2720,82 @@ export async function runMigrations() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_customers_assigned_operator ON customers(assigned_operator)`)
       console.log('  ✅ customers.assigned_operator 字段已添加 (跟单员分配)')
     }
+
+    // ==================== 提单收款确认相关字段迁移 ====================
+    // bills_of_lading 表添加收款确认字段
+    const paymentConfirmedFields = [
+      { name: 'payment_confirmed', type: 'INTEGER DEFAULT 0', comment: '收款确认状态' },
+      { name: 'payment_confirmed_at', type: 'TIMESTAMP', comment: '确认时间' },
+      { name: 'payment_confirmed_by', type: 'TEXT', comment: '确认人ID' },
+      { name: 'payment_confirmed_by_name', type: 'TEXT', comment: '确认人姓名' },
+      { name: 'primary_invoice_number', type: 'TEXT', comment: '主发票号' }
+    ]
+    
+    for (const field of paymentConfirmedFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'bills_of_lading' AND column_name = $1
+      `, [field.name])
+      if (colCheck.rows.length === 0) {
+        await client.query(`ALTER TABLE bills_of_lading ADD COLUMN ${field.name} ${field.type}`)
+        console.log(`    + bills_of_lading.${field.name} 字段已添加 (${field.comment})`)
+      }
+    }
+    console.log('  ✅ 提单收款确认字段就绪')
+
+    // ==================== 费用审批与锁定字段迁移 ====================
+    // fees 表添加锁定和审批相关字段
+    const feeApprovalFields = [
+      { name: 'is_locked', type: 'INTEGER DEFAULT 0', comment: '锁定状态' },
+      { name: 'locked_at', type: 'TIMESTAMP', comment: '锁定时间' },
+      { name: 'locked_by', type: 'TEXT', comment: '锁定人' },
+      { name: 'is_supplementary', type: 'INTEGER DEFAULT 0', comment: '是否追加费用' },
+      { name: 'approval_status', type: "TEXT DEFAULT 'approved'", comment: '审批状态' },
+      { name: 'approval_submitted_at', type: 'TIMESTAMP', comment: '提交审批时间' },
+      { name: 'approval_submitted_by', type: 'TEXT', comment: '提交人ID' },
+      { name: 'approval_submitted_by_name', type: 'TEXT', comment: '提交人姓名' },
+      { name: 'approved_at', type: 'TIMESTAMP', comment: '审批时间' },
+      { name: 'approved_by', type: 'TEXT', comment: '审批人ID' },
+      { name: 'approved_by_name', type: 'TEXT', comment: '审批人姓名' },
+      { name: 'rejection_reason', type: 'TEXT', comment: '拒绝原因' }
+    ]
+    
+    for (const field of feeApprovalFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'fees' AND column_name = $1
+      `, [field.name])
+      if (colCheck.rows.length === 0) {
+        await client.query(`ALTER TABLE fees ADD COLUMN ${field.name} ${field.type}`)
+        console.log(`    + fees.${field.name} 字段已添加 (${field.comment})`)
+      }
+    }
+    // 创建审批状态索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_approval_status ON fees(approval_status)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_is_locked ON fees(is_locked)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fees_is_supplementary ON fees(is_supplementary)`)
+    console.log('  ✅ 费用审批与锁定字段就绪')
+
+    // ==================== 发票追加关联字段迁移 ====================
+    // invoices 表添加追加发票关联字段
+    const invoiceSupplementFields = [
+      { name: 'parent_invoice_number', type: 'TEXT', comment: '父发票号' },
+      { name: 'supplement_seq', type: 'INTEGER DEFAULT 0', comment: '追加序号' }
+    ]
+    
+    for (const field of invoiceSupplementFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'invoices' AND column_name = $1
+      `, [field.name])
+      if (colCheck.rows.length === 0) {
+        await client.query(`ALTER TABLE invoices ADD COLUMN ${field.name} ${field.type}`)
+        console.log(`    + invoices.${field.name} 字段已添加 (${field.comment})`)
+      }
+    }
+    // 创建父发票号索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_invoices_parent_invoice ON invoices(parent_invoice_number)`)
+    console.log('  ✅ 发票追加关联字段就绪')
 
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）

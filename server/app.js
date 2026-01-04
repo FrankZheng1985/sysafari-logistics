@@ -125,8 +125,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 // XSS防护
 app.use(xssProtection())
 
-// API速率限制（全局，每分钟100请求）
-app.use('/api', rateLimit({ maxRequests: 100, windowMs: 60000 }))
+// API速率限制（开发环境1000/分钟，生产环境300/分钟）
+const isDev = process.env.NODE_ENV !== 'production'
+const apiRateLimit = isDev ? 1000 : 300
+app.use('/api', rateLimit({ maxRequests: apiRateLimit, windowMs: 60000 }))
 
 // 登录接口更严格的速率限制
 app.use('/api/auth/login', loginRateLimit())

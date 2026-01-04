@@ -51,6 +51,11 @@ export interface DataTableProps<T> {
   // 筛选状态持久化支持
   initialFilters?: Record<string, string[]> // 初始筛选状态
   onFilterChange?: (filters: Record<string, string[]>) => void // 筛选状态变化回调
+  // 展开行支持
+  expandable?: {
+    expandedRowKeys?: string[]  // 展开的行 keys
+    expandedRowRender?: (record: T) => ReactNode  // 展开行内容渲染
+  }
 }
 
 export default function DataTable<T extends Record<string, any>>({
@@ -67,6 +72,7 @@ export default function DataTable<T extends Record<string, any>>({
   compact = false,
   initialFilters,
   onFilterChange,
+  expandable,
 }: DataTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>(null)
@@ -692,44 +698,55 @@ export default function DataTable<T extends Record<string, any>>({
               const key = getRowKey(item, index)
               const isSelected = selectedRowKeys.includes(key)
               const rowProps = onRow?.(item, index) || {}
+              const isExpanded = expandable?.expandedRowKeys?.includes(key)
+              const colCount = visibleCols.length + (rowSelection ? 1 : 0)
 
               return (
-                <tr
-                  key={key}
-                  className={`hover:bg-gray-50 transition-colors ${
-                    isSelected ? 'bg-primary-50' : ''
-                  } ${rowProps.className || ''}`}
-                  onClick={rowProps.onClick}
-                >
-                  {/* Selection cell */}
-                  {rowSelection && (
-                    <td className={`${compact ? 'px-2 py-1.5' : 'px-4 py-4'} whitespace-nowrap`}>
-                      <input
-                        type={rowSelection.type || 'checkbox'}
-                        checked={isSelected}
-                        onChange={() => handleSelectRow(key, item)}
-                        className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} text-primary-600 border-gray-300 rounded focus:ring-primary-500`}
-                        title="选择此行"
-                      />
-                    </td>
-                  )}
+                <React.Fragment key={key}>
+                  <tr
+                    className={`hover:bg-gray-50 transition-colors ${
+                      isSelected ? 'bg-primary-50' : ''
+                    } ${rowProps.className || ''}`}
+                    onClick={rowProps.onClick}
+                  >
+                    {/* Selection cell */}
+                    {rowSelection && (
+                      <td className={`${compact ? 'px-2 py-1.5' : 'px-4 py-4'} whitespace-nowrap`}>
+                        <input
+                          type={rowSelection.type || 'checkbox'}
+                          checked={isSelected}
+                          onChange={() => handleSelectRow(key, item)}
+                          className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} text-primary-600 border-gray-300 rounded focus:ring-primary-500`}
+                          title="选择此行"
+                        />
+                      </td>
+                    )}
 
-                  {/* Data cells */}
-                  {visibleCols.map((column) => (
-                    <td
-                      key={column.key}
-                      className={`${compact ? 'px-2 py-1.5' : 'px-6 py-4'} whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} text-gray-900 ${
-                        column.align === 'center'
-                          ? 'text-center'
-                          : column.align === 'right'
-                          ? 'text-right'
-                          : ''
-                      }`}
-                    >
-                      {column.render ? column.render(item[column.key], item) : item[column.key]}
-                    </td>
-                  ))}
-                </tr>
+                    {/* Data cells */}
+                    {visibleCols.map((column) => (
+                      <td
+                        key={column.key}
+                        className={`${compact ? 'px-2 py-1.5' : 'px-6 py-4'} whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} text-gray-900 ${
+                          column.align === 'center'
+                            ? 'text-center'
+                            : column.align === 'right'
+                            ? 'text-right'
+                            : ''
+                        }`}
+                      >
+                        {column.render ? column.render(item[column.key], item) : item[column.key]}
+                      </td>
+                    ))}
+                  </tr>
+                  {/* 展开行 */}
+                  {isExpanded && expandable?.expandedRowRender && (
+                    <tr className="bg-gray-50">
+                      <td colSpan={colCount} className="px-4 py-3">
+                        {expandable.expandedRowRender(item)}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               )
             })}
           </tbody>

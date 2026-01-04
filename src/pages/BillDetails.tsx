@@ -2314,7 +2314,7 @@ export default function BillDetails() {
                       {billFees.map((fee) => (
                         <div key={fee.id} className={`px-3 py-2.5 hover:bg-gray-50 ${
                           fee.feeType === 'payable' ? 'border-l-2 border-l-orange-400' : 'border-l-2 border-l-blue-400'
-                        }`}>
+                        } ${fee.approvalStatus === 'pending' ? 'bg-amber-50/50' : ''} ${fee.approvalStatus === 'rejected' ? 'bg-red-50/50' : ''}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
                               <span className={`inline-flex items-center px-1 py-0.5 rounded text-[9px] font-medium ${
@@ -2323,6 +2323,27 @@ export default function BillDetails() {
                                 {fee.feeType === 'payable' ? '付' : '收'}
                               </span>
                               <span className="text-xs font-medium text-gray-900">{fee.feeName}</span>
+                              {/* 锁定图标 */}
+                              {fee.isLocked && (
+                                <Lock className="w-3 h-3 text-gray-400" title="已锁定" />
+                              )}
+                              {/* 追加费用标记 */}
+                              {fee.isSupplementary && (
+                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-medium bg-purple-100 text-purple-600">
+                                  追加
+                                </span>
+                              )}
+                              {/* 审批状态标签 */}
+                              {fee.approvalStatus === 'pending' && (
+                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-medium bg-amber-100 text-amber-700">
+                                  待审批
+                                </span>
+                              )}
+                              {fee.approvalStatus === 'rejected' && (
+                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-medium bg-red-100 text-red-700" title={fee.rejectionReason || '已拒绝'}>
+                                  已拒绝
+                                </span>
+                              )}
                             </div>
                             <span className={`text-xs font-semibold ${
                               fee.feeType === 'payable' ? 'text-orange-600' : 'text-blue-600'
@@ -2345,6 +2366,12 @@ export default function BillDetails() {
                               {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
                             </span>
                           </div>
+                          {/* 显示拒绝原因 */}
+                          {fee.approvalStatus === 'rejected' && fee.rejectionReason && (
+                            <div className="mt-1 ml-6 text-[10px] text-red-500">
+                              拒绝原因：{fee.rejectionReason}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2800,6 +2827,8 @@ export default function BillDetails() {
         defaultBillNumber={billDetail?.billNumber}
         defaultCustomerId={billDetail?.customerId}
         defaultCustomerName={billDetail?.customerName}
+        defaultWeight={billDetail?.weight ? Number(billDetail.weight) : 0}
+        defaultVolume={billDetail?.volume ? Number(billDetail.volume) : 0}
         defaultFeeType={currentFeeType}
       />
 

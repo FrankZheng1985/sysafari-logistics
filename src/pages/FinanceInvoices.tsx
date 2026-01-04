@@ -226,38 +226,50 @@ export default function FinanceInvoices() {
       const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.includes(inv.id))
       const selectedBank = bankAccounts.find(a => String(a.id) === batchPaymentData.bankAccountId)
       
-      for (const invoice of selectedInvoices) {
-        const unpaidAmount = Number(invoice.totalAmount) - Number(invoice.paidAmount)
-        
-        const paymentData = {
-          paymentType: invoice.invoiceType === 'sales' ? 'income' : 'expense',
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          customerName: invoice.customerName,
-          customerId: invoice.customerId,
-          amount: unpaidAmount,
-          currency: invoice.currency || 'EUR',
-          paymentMethod: batchPaymentData.paymentMethod,
-          paymentDate: batchPaymentData.paymentDate,
-          referenceNumber: batchPaymentData.referenceNumber,
-          bankAccount: selectedBank ? `${selectedBank.accountName} (${selectedBank.bankName})` : '',
-          description: batchPaymentData.description || `核销发票 ${invoice.invoiceNumber}`,
-          status: 'completed'
-        }
-        
-        const response = await fetch(`${API_BASE}/api/payments`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(paymentData)
-        })
-        
-        const data = await response.json()
-        if (data.errCode !== 200) {
-          throw new Error(`发票 ${invoice.invoiceNumber} 核销失败: ${data.msg}`)
-        }
+      // 计算合并后的总金额
+      const totalAmount = selectedInvoices.reduce((sum, inv) => {
+        return sum + (Number(inv.totalAmount) - Number(inv.paidAmount))
+      }, 0)
+      
+      // 获取第一张发票的基础信息
+      const firstInvoice = selectedInvoices[0]
+      
+      // 收集所有发票ID和发票号
+      const invoiceIds = selectedInvoices.map(inv => inv.id)
+      const invoiceNumbers = selectedInvoices.map(inv => inv.invoiceNumber)
+      
+      // 创建一条合并的收款记录
+      const paymentData = {
+        paymentType: firstInvoice.invoiceType === 'sales' ? 'income' : 'expense',
+        // 主发票ID（用于兼容旧数据）
+        invoiceId: firstInvoice.id,
+        invoiceNumber: invoiceNumbers.join(', '),
+        // 多发票支持
+        invoiceIds: invoiceIds,
+        customerName: firstInvoice.customerName,
+        customerId: firstInvoice.customerId,
+        amount: totalAmount,
+        currency: firstInvoice.currency || 'EUR',
+        paymentMethod: batchPaymentData.paymentMethod,
+        paymentDate: batchPaymentData.paymentDate,
+        referenceNumber: batchPaymentData.referenceNumber,
+        bankAccount: selectedBank ? `${selectedBank.accountName} (${selectedBank.bankName})` : '',
+        description: batchPaymentData.description || `批量核销 ${selectedInvoices.length} 张发票`,
+        status: 'completed'
       }
       
-      alert(`成功核销 ${selectedInvoiceIds.length} 张发票`)
+      const response = await fetch(`${API_BASE}/api/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paymentData)
+      })
+      
+      const data = await response.json()
+      if (data.errCode !== 200) {
+        throw new Error(`批量核销失败: ${data.msg}`)
+      }
+      
+      alert(`成功核销 ${selectedInvoiceIds.length} 张发票，合计金额: ${totalAmount.toLocaleString('de-DE', { style: 'currency', currency: firstInvoice.currency || 'EUR' })}`)
       setShowBatchPayment(false)
       setSelectedInvoiceIds([])
       fetchInvoices()

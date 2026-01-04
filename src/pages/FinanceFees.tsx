@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   Search, Edit2, Trash2, Receipt,
   Truck, Shield, Building2, FileText, Package, Settings,
-  Loader2, Copy,
+  Loader2, Copy, Lock, Clock, AlertCircle,
   Anchor, Calculator, Briefcase, Box, DollarSign,
   ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronRight
 } from 'lucide-react'
@@ -34,6 +34,11 @@ interface Fee {
   description: string
   createTime: string
   invoiceStatus?: string
+  // 锁定和审批状态
+  isLocked?: boolean
+  isSupplementary?: boolean
+  approvalStatus?: 'pending' | 'approved' | 'rejected'
+  rejectionReason?: string
 }
 
 // 按订单分组的数据结构
@@ -762,11 +767,30 @@ export default function FinanceFees() {
                             key={fee.id}
                             className={`flex items-center w-full px-3 py-2 hover:bg-white transition-colors ${
                               feeIndex < group.fees.length - 1 ? 'border-b border-gray-100' : ''
-                            }`}
+                            } ${fee.approvalStatus === 'pending' ? 'bg-amber-50/50' : ''} ${fee.approvalStatus === 'rejected' ? 'bg-red-50/50' : ''}`}
                           >
                             <div className="w-8 flex-shrink-0"></div>
                             <div className="w-[140px] flex-shrink-0 pl-4">
-                              <div className="text-xs font-medium text-gray-900 truncate" title={fee.feeName}>{fee.feeName}</div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs font-medium text-gray-900 truncate" title={fee.feeName}>{fee.feeName}</span>
+                                {/* 锁定图标 */}
+                                {fee.isLocked && (
+                                  <Lock className="w-3 h-3 text-gray-400 flex-shrink-0" title="已锁定" />
+                                )}
+                                {/* 追加费用标记 */}
+                                {fee.isSupplementary && (
+                                  <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-medium bg-purple-100 text-purple-600 flex-shrink-0">
+                                    追加
+                                  </span>
+                                )}
+                                {/* 审批状态 */}
+                                {fee.approvalStatus === 'pending' && (
+                                  <Clock className="w-3 h-3 text-amber-500 flex-shrink-0" title="待审批" />
+                                )}
+                                {fee.approvalStatus === 'rejected' && (
+                                  <AlertCircle className="w-3 h-3 text-red-500 flex-shrink-0" title={fee.rejectionReason || '已拒绝'} />
+                                )}
+                              </div>
                             </div>
                             <div className="w-[70px] flex-shrink-0">
                               <div className="flex items-center justify-center">
@@ -811,23 +835,32 @@ export default function FinanceFees() {
                             </div>
                             <div className="w-[70px] flex-shrink-0">
                               <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => {
-                                    setEditingFee(fee)
-                                    setModalVisible(true)
-                                  }}
-                                  className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                                  title="编辑"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(fee.id)}
-                                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                  title="删除"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                {/* 锁定的费用不能编辑/删除 */}
+                                {fee.isLocked ? (
+                                  <span className="text-[10px] text-gray-400">已锁定</span>
+                                ) : fee.approvalStatus === 'rejected' ? (
+                                  <span className="text-[10px] text-red-400">已拒绝</span>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setEditingFee(fee)
+                                        setModalVisible(true)
+                                      }}
+                                      className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                                      title="编辑"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDelete(fee.id)}
+                                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="删除"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
