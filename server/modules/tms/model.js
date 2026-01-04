@@ -35,7 +35,7 @@ export const EXCEPTION_STATUS = {
  * 获取CMR管理列表
  * 
  * 订单流转规则:
- * - undelivered（待派送）: 已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为待派送
+ * - undelivered（待派送）: 已到港 + 派送状态为待派送
  * - delivering（派送中）: 派送状态为派送中
  * - exception（订单异常）: 派送状态为订单异常或异常关闭
  * - archived（已归档）: 派送状态为已送达或已完成
@@ -51,11 +51,9 @@ export async function getCMRList(params = {}) {
   switch (type) {
     case 'undelivered':
     case 'pending':
-      // 待派送: 必须已到港 + 清关放行 + 查验通过（无查验或已放行）+ 派送状态为待派送
+      // 待派送: 已到港 + 派送状态为待派送或空值（不要求清关放行和查验通过）
       query += ` AND ship_status = '已到港' 
-                 AND customs_status = '已放行' 
-                 AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-                 AND delivery_status = '待派送'`
+                 AND (delivery_status = '待派送' OR delivery_status IS NULL OR delivery_status = '')`
       break
     case 'delivering':
       // 派送中
@@ -74,11 +72,9 @@ export async function getCMRList(params = {}) {
       // 所有订单（用于搜索等场景）
       break
     default:
-      // 默认显示待派送
+      // 默认显示待派送（已到港 + 待派送或空值）
       query += ` AND ship_status = '已到港' 
-                 AND customs_status = '已放行' 
-                 AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-                 AND delivery_status = '待派送'`
+                 AND (delivery_status = '待派送' OR delivery_status IS NULL OR delivery_status = '')`
   }
   
   // 搜索
@@ -114,7 +110,7 @@ export async function getCMRList(params = {}) {
  * 获取CMR统计数据
  * 
  * 统计规则（遵循订单流转规则）:
- * - undelivered: 已到港 + 清关放行 + 查验通过 + 待派送
+ * - undelivered: 已到港 + 待派送或空值（不要求清关放行和查验通过）
  * - delivering: 派送中
  * - exception: 订单异常 + 异常关闭
  * - archived: 已送达 + 已完成
@@ -126,9 +122,7 @@ export async function getCMRStats() {
     SELECT 
       SUM(CASE 
         WHEN ship_status = '已到港' 
-             AND customs_status = '已放行' 
-             AND (inspection = '-' OR inspection = '已放行' OR inspection IS NULL)
-             AND delivery_status = '待派送'
+             AND (delivery_status = '待派送' OR delivery_status IS NULL OR delivery_status = '')
              AND (is_void = 0 OR is_void IS NULL)
              AND status != '草稿'
         THEN 1 ELSE 0 END) as undelivered,

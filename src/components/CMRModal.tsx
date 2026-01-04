@@ -72,8 +72,8 @@ interface CMRModalProps {
   }) => Promise<void>
 }
 
-// 步骤定义
-type CMRStep = 'pickup' | 'delivering' | 'arrival' | 'delivered' | 'unloading' | 'confirm'
+// 步骤定义（简化为3步流程）
+type CMRStep = 'pickup' | 'arrival' | 'confirm'
 type ModalMode = 'normal' | 'exception' | 'exception_handle'
 
 export default function CMRModal({
@@ -144,7 +144,7 @@ export default function CMRModal({
       setDeliveryAddress(defaultDeliveryAddress)
     }
     
-    // 根据当前状态设置模式和步骤
+    // 根据当前状态设置模式和步骤（简化为3步流程：提货 → 到达 → 确认）
     if (currentStatus === '订单异常') {
       setMode('exception_handle')
     } else {
@@ -154,18 +154,18 @@ export default function CMRModal({
         setStep('pickup')
       } else if (currentStatus === '派送中') {
         // 根据已完成的数据判断下一步
-        if (cmrDetail?.unloadingCompleteTime) {
-          // 卸货已完成，进入确认步骤
+        if (cmrDetail?.confirmedTime || cmrDetail?.unloadingCompleteTime) {
+          // 已确认或卸货完成，进入确认步骤
           setStep('confirm')
         } else if (cmrDetail?.actualArrivalTime) {
-          // 已送达，进入卸货步骤
-          setStep('unloading')
-        } else if (cmrDetail?.deliveryAddress && cmrDetail?.estimatedArrivalTime) {
-          // 已有到达信息，进入送达步骤
-          setStep('delivered')
-        } else {
-          // 刚开始派送，进入到达步骤
+          // 已到达，进入确认步骤
+          setStep('confirm')
+        } else if (cmrDetail?.estimatedPickupTime && cmrDetail?.serviceProvider) {
+          // 已有提货信息，进入到达步骤
           setStep('arrival')
+        } else {
+          // 刚开始派送，从提货步骤开始
+          setStep('pickup')
         }
       } else if (currentStatus === '已送达') {
         // 已完成

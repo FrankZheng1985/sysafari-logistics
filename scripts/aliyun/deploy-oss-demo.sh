@@ -71,7 +71,8 @@ ossutil cp -r dist/assets/ oss://${OSS_BUCKET}/assets/ \
 
 # 上传其他静态文件
 echo "  上传其他静态文件..."
-for file in dist/*.{js,css,ico,svg,png,jpg,jpeg,gif,woff,woff2,ttf,eot} 2>/dev/null; do
+shopt -s nullglob 2>/dev/null || true
+for file in dist/*.js dist/*.css dist/*.ico dist/*.svg dist/*.png dist/*.jpg dist/*.jpeg dist/*.gif dist/*.woff dist/*.woff2 dist/*.ttf dist/*.eot; do
     if [ -f "$file" ]; then
         filename=$(basename "$file")
         ossutil cp "$file" oss://${OSS_BUCKET}/${filename} \
@@ -80,6 +81,7 @@ for file in dist/*.{js,css,ico,svg,png,jpg,jpeg,gif,woff,woff2,ttf,eot} 2>/dev/n
             2>/dev/null || true
     fi
 done
+shopt -u nullglob 2>/dev/null || true
 
 # 单独处理 index.html（不缓存）
 echo "  上传 index.html（无缓存）..."
