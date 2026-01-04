@@ -273,7 +273,7 @@ export async function createBill(data) {
       customer_id, customer_name, customer_code,
       container_type, bill_type, transport_arrangement, consignee_type,
       container_return, full_container_transport, last_mile_transport,
-      devanning, t1_declaration, is_void,
+      devanning, t1_declaration, reference_list, is_void,
       create_time, created_at, updated_at
     ) VALUES (
       ?, ?, ?, ?, ?, ?, ?,
@@ -285,7 +285,7 @@ export async function createBill(data) {
       ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
-      ?, ?, 0,
+      ?, ?, ?, 0,
       NOW(), NOW(), NOW()
     )
   `).run(
@@ -328,7 +328,9 @@ export async function createBill(data) {
     data.fullContainerTransport || null,
     data.lastMileTransport || null,
     data.devanning || null,
-    data.t1Declaration || null
+    data.t1Declaration || null,
+    // Reference List
+    data.referenceList ? JSON.stringify(data.referenceList) : null
   )
   
   return { id, changes: result.changes }
@@ -391,13 +393,20 @@ export async function updateBill(id, data) {
     serviceType: 'service_type',
     cargoValue: 'cargo_value',
     documentsSentDate: 'documents_sent_date',
-    cmrSentDate: 'cmr_sent_date'
+    cmrSentDate: 'cmr_sent_date',
+    // Reference List（参考号相关信息）
+    referenceList: 'reference_list'
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
     if (data[jsField] !== undefined) {
       fields.push(`${dbField} = ?`)
-      values.push(data[jsField])
+      // referenceList 需要 JSON 序列化
+      if (jsField === 'referenceList' && typeof data[jsField] !== 'string') {
+        values.push(JSON.stringify(data[jsField]))
+      } else {
+        values.push(data[jsField])
+      }
     }
   })
   
@@ -1037,7 +1046,9 @@ export function convertBillToCamelCase(row, includeFeeAmount = false) {
     // 导入者追踪字段
     importedBy: row.imported_by,
     importedByName: row.imported_by_name,
-    importTime: row.import_time
+    importTime: row.import_time,
+    // Reference List（参考号相关信息）
+    referenceList: row.reference_list ? (typeof row.reference_list === 'string' ? JSON.parse(row.reference_list) : row.reference_list) : []
   }
   
   // 如果包含费用金额字段，添加到结果中
