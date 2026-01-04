@@ -163,10 +163,13 @@ interface InvoiceInfo {
   billId: string
   billNumber: string
   containerNumber?: string
+  containerNumbers?: string[]
+  customerId?: string
   customerName: string
   totalAmount: number
   paidAmount: number
   status: string
+  currency?: string
 }
 
 interface BillInfo {
@@ -174,6 +177,7 @@ interface BillInfo {
   billNumber: string
   orderNumber?: string
   containerNumber?: string
+  containerNumbers?: string[]
   customerName: string
   customerId?: string
   paymentConfirmed: boolean
@@ -273,7 +277,35 @@ export default function SupplementFee() {
       const data = await response.json()
       
       if (data.errCode === 200 && data.data) {
-        setInvoice(data.data)
+        // 处理 containerNumbers - API 可能返回 JSON 字符串或数组
+        let containerNumbers: string[] = []
+        if (data.data.containerNumbers) {
+          if (typeof data.data.containerNumbers === 'string') {
+            try {
+              containerNumbers = JSON.parse(data.data.containerNumbers)
+            } catch {
+              containerNumbers = [data.data.containerNumbers]
+            }
+          } else if (Array.isArray(data.data.containerNumbers)) {
+            containerNumbers = data.data.containerNumbers
+          }
+        }
+        
+        setInvoice({
+          id: data.data.id,
+          invoiceNumber: data.data.invoiceNumber,
+          invoiceType: data.data.invoiceType,
+          billId: data.data.billId,
+          billNumber: data.data.billNumber,
+          containerNumber: data.data.containerNumber,
+          containerNumbers: containerNumbers,
+          customerId: data.data.customerId,
+          customerName: data.data.customerName,
+          totalAmount: data.data.totalAmount,
+          paidAmount: data.data.paidAmount,
+          status: data.data.status,
+          currency: data.data.currency
+        })
         
         if (data.data.billId) {
           await fetchBillInfo(data.data.billId)
@@ -293,11 +325,28 @@ export default function SupplementFee() {
       const data = await response.json()
       
       if (data.errCode === 200 && data.data) {
+        // 处理 containerNumbers - API 可能返回 JSON 字符串或数组
+        let containerNumbers: string[] = []
+        if (data.data.containerNumbers) {
+          if (typeof data.data.containerNumbers === 'string') {
+            try {
+              containerNumbers = JSON.parse(data.data.containerNumbers)
+            } catch {
+              containerNumbers = [data.data.containerNumbers]
+            }
+          } else if (Array.isArray(data.data.containerNumbers)) {
+            containerNumbers = data.data.containerNumbers
+          }
+        } else if (data.data.containerNumber) {
+          containerNumbers = [data.data.containerNumber]
+        }
+        
         setBill({
           id: data.data.id,
           billNumber: data.data.billNumber,
           orderNumber: data.data.orderNumber,
           containerNumber: data.data.containerNumber,
+          containerNumbers: containerNumbers,
           customerName: data.data.customerName,
           customerId: data.data.customerId,
           paymentConfirmed: data.data.paymentConfirmed === 1,
@@ -719,21 +768,31 @@ export default function SupplementFee() {
       
       // 第二步：如果有成功创建的费用，直接创建追加发票
       if (createdFeeIds.length > 0) {
+        // 优先从原发票获取信息，如果原发票没有才从提单获取
+        const customerId = invoice.customerId || bill?.customerId
+        const customerName = invoice.customerName || bill?.customerName || ''
+        const containerNumbers = (invoice.containerNumbers && invoice.containerNumbers.length > 0) 
+          ? invoice.containerNumbers 
+          : (bill?.containerNumbers || [])
+        const billId = invoice.billId || bill?.id
+        const billNumber = invoice.billNumber || bill?.billNumber || ''
+        const currency = invoice.currency || pendingFeeItems[0]?.currency || 'EUR'
+        
         const supplementInvoiceData = {
           parentInvoiceNumber: invoice.invoiceNumber,
-          billId: bill?.id,
-          billNumber: bill?.billNumber,
-          customerId: bill?.customerId,
-          customerName: bill?.customerName,
-          containerNumbers: bill?.containerNumbers || [],
+          billId: billId,
+          billNumber: billNumber,
+          customerId: customerId,
+          customerName: customerName,
+          containerNumbers: containerNumbers,
           invoiceDate: feeDate,
           feeIds: createdFeeIds,
           items: invoiceItems,
           subtotal: totalAmount,
           totalAmount: totalAmount,
-          currency: pendingFeeItems[0]?.currency || 'EUR',
-          invoiceType: 'sales',
-          status: 'issued',
+          currency: currency,
+          invoiceType: invoice.invoiceType || 'sales',
+          status: 'pending',
           description: `追加费用 - 原发票: ${invoice.invoiceNumber}`
         }
         
