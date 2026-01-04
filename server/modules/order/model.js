@@ -271,6 +271,7 @@ export async function createBill(data) {
       etd, eta, status, ship_status, customs_status,
       inspection, delivery_status, remark, operator, creator,
       customer_id, customer_name, customer_code,
+      seal_number, container_size,
       container_type, bill_type, transport_arrangement, consignee_type,
       container_return, full_container_transport, last_mile_transport,
       devanning, t1_declaration, reference_list, is_void,
@@ -283,6 +284,7 @@ export async function createBill(data) {
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?,
+      ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, 0,
@@ -319,6 +321,9 @@ export async function createBill(data) {
     data.customerId || null,
     data.customerName || null,
     data.customerCode || null,
+    // 集装箱信息
+    data.sealNumber || null,       // 封号
+    data.containerSize || null,    // 柜型（20GP, 40HQ等）
     // 附加属性字段
     data.containerType || null,
     data.billType || null,
@@ -379,6 +384,9 @@ export async function updateBill(id, data) {
     customerId: 'customer_id',
     customerName: 'customer_name',
     customerCode: 'customer_code',
+    // 集装箱信息
+    sealNumber: 'seal_number',           // 封号
+    containerSize: 'container_size',     // 柜型（20GP, 40HQ等）
     // 附加属性字段
     containerType: 'container_type',
     billType: 'bill_type',
@@ -969,7 +977,9 @@ export function convertBillToCamelCase(row, includeFeeAmount = false) {
     voyage: row.voyage,
     shippingCompany: row.shipping_company,
     transportMethod: row.transport_method,
-    containerSize: row.container_type,  // 柜型 (40HQ, 20GP等)
+    // 集装箱信息
+    sealNumber: row.seal_number,          // 封号
+    containerSize: row.container_size,    // 柜型 (20GP, 40HQ等)
     shipper: row.shipper,
     consignee: row.consignee,
     notifyParty: row.notify_party,
