@@ -3995,12 +3995,26 @@ export default function CreateBillModal({
                                           addr => (addr.companyName || addr.address) === value
                                         )
                                         if (selectedAddr) {
-                                          const details = [
-                                            selectedAddr.address,
-                                            selectedAddr.city,
-                                            selectedAddr.postalCode,
-                                            selectedAddr.country
-                                          ].filter(Boolean).join(', ')
+                                          // 智能拼接地址，避免重复
+                                          // 如果 address 字段已经包含邮编或城市信息，说明是完整地址，直接使用
+                                          const addr = selectedAddr.address || ''
+                                          const city = selectedAddr.city || ''
+                                          const postalCode = selectedAddr.postalCode || ''
+                                          const country = selectedAddr.country || ''
+                                          
+                                          // 检查 address 是否已经包含城市或邮编（说明是完整地址）
+                                          const addressContainsCity = city && addr.toLowerCase().includes(city.toLowerCase())
+                                          const addressContainsPostalCode = postalCode && addr.includes(postalCode)
+                                          
+                                          let details = ''
+                                          if (addressContainsCity || addressContainsPostalCode) {
+                                            // address 已经是完整地址，直接使用
+                                            details = addr
+                                          } else {
+                                            // address 是街道地址，需要拼接其他字段
+                                            details = [addr, city, postalCode, country].filter(Boolean).join(', ')
+                                          }
+                                          
                                           handleReferenceChange(row.id, 'consigneeAddressDetails', details)
                                         } else {
                                           handleReferenceChange(row.id, 'consigneeAddressDetails', '')

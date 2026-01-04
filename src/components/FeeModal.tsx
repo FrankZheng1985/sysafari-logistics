@@ -284,6 +284,17 @@ export default function FeeModal({
   // 分组后的费用分类
   const [feeCategoryGroups, setFeeCategoryGroups] = useState<FeeCategoryGroup[]>([])
   
+  // 手动录入时的多选费用分类状态
+  const [selectedManualCategories, setSelectedManualCategories] = useState<Array<{
+    id: string
+    value: string
+    label: string
+    feeName: string
+    amount: string
+    currency: string
+    description: string
+  }>>([])
+  
   // 供应商报价搜索和多选
   const [supplierPriceSearch, setSupplierPriceSearch] = useState('')
   const [selectedPriceIds, setSelectedPriceIds] = useState<number[]>([])
@@ -367,6 +378,8 @@ export default function FeeModal({
       // 清空供应商报价
       setSupplierPrices([])
     }
+    // 清空多选费用分类状态
+    setSelectedManualCategories([])
     setErrors({})
   }, [editingFee, visible, defaultBillId, defaultBillNumber, defaultCustomerId, defaultCustomerName, defaultFeeType])
 
@@ -779,6 +792,103 @@ export default function FeeModal({
   }
 
   const handleSubmit = async () => {
+    // 多选费用分类时的批量提交
+    if (isManualEntry && selectedManualCategories.length > 1) {
+      // 验证多选费用项
+      const invalidItems = selectedManualCategories.filter(item => !item.feeName || !item.amount || parseFloat(item.amount) <= 0)
+      if (invalidItems.length > 0) {
+        alert(`请填写完整所有费用项的名称和金额`)
+        return
+      }
+      
+      // 检查必填项：应付费用必须选择供应商，应收费用必须选择客户
+      if (formData.feeType === 'payable' && !formData.supplierId) {
+        alert('请先选择供应商')
+        return
+      }
+      if (formData.feeType === 'receivable' && !formData.customerId) {
+        alert('请先选择客户')
+        return
+      }
+      
+      setSubmitting(true)
+      let successCount = 0
+      let failCount = 0
+      
+      try {
+        for (const item of selectedManualCategories) {
+          try {
+            const description = `[手动录入-待审批] ${item.description || ''}`.trim()
+            const response = await fetch(`${API_BASE}/api/fees`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                billId: formData.billId || null,
+                billNumber: formData.billNumber || '',
+                customerId: formData.feeType === 'receivable' ? (formData.customerId || null) : null,
+                customerName: formData.feeType === 'receivable' ? (formData.customerName || '') : '',
+                supplierId: formData.feeType === 'payable' ? (formData.supplierId || null) : null,
+                supplierName: formData.feeType === 'payable' ? (formData.supplierName || '') : '',
+                feeType: formData.feeType,
+                category: item.value,
+                feeName: item.feeName,
+                amount: parseFloat(item.amount),
+                currency: item.currency,
+                feeDate: formData.feeDate,
+                description: description,
+                feeSource: 'manual',
+                needApproval: true
+              })
+            })
+            const data = await response.json()
+            if (data.errCode === 200) {
+              successCount++
+              // 创建审批申请
+              try {
+                await fetch(`${API_BASE}/api/fee-item-approvals`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    feeId: data.data?.id,
+                    feeName: item.feeName,
+                    category: item.value,
+                    amount: parseFloat(item.amount),
+                    currency: item.currency,
+                    supplierId: formData.supplierId || null,
+                    supplierName: formData.supplierName || '',
+                    description: item.description,
+                    status: 'pending'
+                  })
+                })
+              } catch (err) {
+                console.log('创建审批记录失败:', err)
+              }
+            } else {
+              failCount++
+            }
+          } catch (err) {
+            failCount++
+          }
+        }
+        
+        if (successCount > 0) {
+          setSelectedManualCategories([])
+          onSuccess?.()
+          onClose()
+        }
+        
+        if (failCount > 0) {
+          alert(`成功 ${successCount} 条，失败 ${failCount} 条`)
+        }
+      } catch (error) {
+        console.error('批量提交失败:', error)
+        alert('批量提交失败')
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
+    
     if (!validateForm()) return
     
     setSubmitting(true)
@@ -853,6 +963,8 @@ export default function FeeModal({
           }
         }
         
+        // 清空多选状态
+        setSelectedManualCategories([])
         onSuccess?.()
         onClose()
       } else {
@@ -1378,7 +1490,7 @@ export default function FeeModal({
                   })()}
                 </div>
               ) : (
-                /* 手动录入或未选择费用时，显示分类选择（按父子级分组） */
+                /* 手动录入或未选择费用时，显示分类选择（按父子级分组，支持多选） */
                 <div className="max-h-[280px] overflow-y-auto space-y-3">
                   {feeCategoryGroups.length > 0 ? (
                     feeCategoryGroups.map(group => (
@@ -1391,29 +1503,51 @@ export default function FeeModal({
                           })()}
                           <span>{group.parent.label}</span>
                         </div>
-                        {/* 二级分类按钮 */}
+                        {/* 二级分类按钮 - 支持多选 */}
                         <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pl-2">
                           {group.children.map(cat => {
                             const canSelect = isManualEntry
+                            const isSelected = selectedManualCategories.some(s => s.value === cat.value)
                             return (
                               <button
                                 key={cat.value}
                                 type="button"
                                 onClick={() => {
                                   if (canSelect) {
-                                    setFormData(prev => ({ ...prev, category: cat.value }))
+                                    if (isSelected) {
+                                      // 取消选择
+                                      setSelectedManualCategories(prev => prev.filter(s => s.value !== cat.value))
+                                    } else {
+                                      // 添加选择，费用名称自动填写为分类名称
+                                      setSelectedManualCategories(prev => [...prev, {
+                                        id: `manual-${cat.value}-${Date.now()}`,
+                                        value: cat.value,
+                                        label: cat.label,
+                                        feeName: cat.label,  // 自动填写费用名称
+                                        amount: '',
+                                        currency: 'EUR',
+                                        description: ''
+                                      }])
+                                    }
+                                    // 同时更新单选状态（兼容）
+                                    setFormData(prev => ({ 
+                                      ...prev, 
+                                      category: cat.value,
+                                      feeName: cat.label  // 自动填写费用名称
+                                    }))
                                   }
                                 }}
                                 disabled={!canSelect}
                                 className={`flex items-center justify-center px-2 py-1.5 rounded border text-xs transition-all truncate ${
-                                  formData.category === cat.value
-                                    ? `${cat.bg} ${cat.color} border-current font-medium`
+                                  isSelected
+                                    ? `${cat.bg} ${cat.color} border-current font-medium ring-2 ring-offset-1 ring-current`
                                     : !canSelect
                                       ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
                                       : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                                 }`}
-                                title={cat.label}
+                                title={`${cat.label}${isSelected ? ' (已选择)' : ''}`}
                               >
+                                {isSelected && <Check className="w-3 h-3 mr-1 flex-shrink-0" />}
                                 {cat.label}
                               </button>
                             )
@@ -1427,24 +1561,43 @@ export default function FeeModal({
                       {feeCategories.filter(c => c.level === 2 || !c.parentId).map(cat => {
                         const Icon = cat.icon
                         const canSelect = isManualEntry
+                        const isSelected = selectedManualCategories.some(s => s.value === cat.value)
                         return (
                           <button
                             key={cat.value}
                             type="button"
                             onClick={() => {
                               if (canSelect) {
-                                setFormData(prev => ({ ...prev, category: cat.value }))
+                                if (isSelected) {
+                                  setSelectedManualCategories(prev => prev.filter(s => s.value !== cat.value))
+                                } else {
+                                  setSelectedManualCategories(prev => [...prev, {
+                                    id: `manual-${cat.value}-${Date.now()}`,
+                                    value: cat.value,
+                                    label: cat.label,
+                                    feeName: cat.label,
+                                    amount: '',
+                                    currency: 'EUR',
+                                    description: ''
+                                  }])
+                                }
+                                setFormData(prev => ({ 
+                                  ...prev, 
+                                  category: cat.value,
+                                  feeName: cat.label
+                                }))
                               }
                             }}
                             disabled={!canSelect}
                             className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all ${
-                              formData.category === cat.value
-                                ? `${cat.bg} ${cat.color} border-current`
+                              isSelected
+                                ? `${cat.bg} ${cat.color} border-current ring-2 ring-offset-1 ring-current`
                                 : !canSelect
                                   ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
                                   : 'border-gray-200 text-gray-600 hover:border-gray-300'
                             }`}
                           >
+                            {isSelected && <Check className="w-3 h-3 flex-shrink-0" />}
                             <Icon className="w-3.5 h-3.5 flex-shrink-0" />
                             <span className="truncate">{cat.label}</span>
                           </button>
@@ -1464,170 +1617,282 @@ export default function FeeModal({
 
           {/* 费用名称和金额 - 仅在无批量费用时显示 */}
           {pendingFeeItems.length === 0 && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  费用名称 <span className="text-red-500">*</span>
-                  {isManualEntry && formData.feeName && (
-                    <span className="ml-2 text-amber-500 text-xs font-normal">
-                      (手动录入·需审批)
-                    </span>
-                  )}
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={formData.feeName}
-                    onChange={(e) => {
-                      setFormData(prev => ({ ...prev, feeName: e.target.value }))
-                      // 用户手动输入费用名称时，标记为手动录入
-                      if (e.target.value && feeSource !== 'product' && feeSource !== 'supplier_price') {
-                        setIsManualEntry(true)
-                      }
-                    }}
-                    placeholder={isManualEntry ? "请输入费用名称（新费用项需审批）" : "请输入费用名称"}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                      errors.feeName ? 'border-red-500' : 'border-gray-300'
-                    } ${isManualEntry && formData.feeName ? 'border-amber-300 bg-amber-50' : ''}`}
-                  />
-                  {isManualEntry && formData.feeName && (
-                    <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
-                  )}
-                </div>
-                {errors.feeName && <p className="mt-1 text-xs text-red-500">{errors.feeName}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  金额 <span className="text-red-500">*</span>
-                </label>
-                
-                {/* 当选择了费用项时，显示计费方式选择 */}
-                {formData.feeName && (
-                  <div className="mb-2 flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                    <span className="text-xs text-gray-600">计费方式：</span>
-                    {/* 按量计费（KG/CBM）显示自动计算选项 */}
-                    {formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && (
-                      <label className="inline-flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="amountType"
-                          checked={!formData.useFixedAmount}
-                          onChange={() => {
-                            // 切换为自动计算，重新计算金额
-                            const weight = formData.weight || 0
-                            const volume = formData.volume || 0
-                            const unitPrice = formData.unitPrice || 0
-                            let calculatedAmount = unitPrice
-                            if (formData.currentUnit.toUpperCase() === 'KG' && weight > 0) {
-                              calculatedAmount = unitPrice * weight
-                            } else if (formData.currentUnit.toUpperCase() === 'CBM' && volume > 0) {
-                              calculatedAmount = unitPrice * volume
-                            }
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              useFixedAmount: false,
-                              amount: calculatedAmount > 0 ? calculatedAmount.toFixed(2) : prev.amount
-                            }))
-                          }}
-                          className="mr-1"
-                        />
-                        <span className={`text-xs ${!formData.useFixedAmount ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
-                          按{formData.currentUnit.toUpperCase()}自动计算
-                        </span>
-                      </label>
-                    )}
-                    {/* 非按量计费时显示标准价格选项 */}
-                    {(!formData.currentUnit || !isQuantityBasedUnit(formData.currentUnit)) && (
-                      <label className="inline-flex items-center cursor-pointer">
-                        <input
-                          type="radio"
-                          name="amountType"
-                          checked={!formData.useFixedAmount}
-                          onChange={() => {
-                            // 切换为标准价格
-                            const unitPrice = formData.unitPrice || 0
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              useFixedAmount: false,
-                              amount: unitPrice > 0 ? unitPrice.toFixed(2) : prev.amount
-                            }))
-                          }}
-                          className="mr-1"
-                        />
-                        <span className={`text-xs ${!formData.useFixedAmount ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
-                          标准价格
-                        </span>
-                      </label>
-                    )}
-                    {/* 固定金额选项始终显示 */}
-                    <label className="inline-flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        name="amountType"
-                        checked={formData.useFixedAmount}
-                        onChange={() => setFormData(prev => ({ ...prev, useFixedAmount: true }))}
-                        className="mr-1"
-                      />
-                      <span className={`text-xs ${formData.useFixedAmount ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
-                        固定金额
-                      </span>
+            <>
+              {/* 多选费用分类时显示多个输入框 */}
+              {isManualEntry && selectedManualCategories.length > 1 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium text-gray-700">
+                      已选择 <span className="text-primary-600 font-bold">{selectedManualCategories.length}</span> 项费用
+                      <span className="ml-2 text-amber-500 text-xs font-normal">(手动录入·需审批)</span>
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedManualCategories([])}
+                      className="text-xs text-gray-500 hover:text-red-500"
+                    >
+                      清空全部
+                    </button>
                   </div>
-                )}
-
-                <div className="flex gap-2">
-                  <select
-                    value={formData.currency}
-                    onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
-                  >
-                    <option value="EUR">EUR</option>
-                    <option value="CNY">CNY</option>
-                    <option value="USD">USD</option>
-                  </select>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value, useFixedAmount: true }))}
-                    placeholder="0.00"
-                    className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                      errors.amount ? 'border-red-500' : 'border-gray-300'
-                    } ${formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && !formData.useFixedAmount ? 'bg-green-50 border-green-300' : ''}`}
-                  />
+                  
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {selectedManualCategories.map((item, index) => {
+                      const catStyle = getCategoryStyle(item.value)
+                      return (
+                        <div key={item.id} className={`p-3 rounded-lg border ${catStyle.bg} border-gray-200`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs font-medium ${catStyle.color}`}>
+                                {index + 1}. {item.label}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedManualCategories(prev => prev.filter(s => s.id !== item.id))}
+                              className="p-1 text-gray-400 hover:text-red-500 rounded"
+                              title="移除"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          
+                          <div className="grid grid-cols-12 gap-2">
+                            {/* 费用名称 */}
+                            <div className="col-span-5">
+                              <input
+                                type="text"
+                                value={item.feeName}
+                                onChange={(e) => {
+                                  setSelectedManualCategories(prev => prev.map(s => 
+                                    s.id === item.id ? { ...s, feeName: e.target.value } : s
+                                  ))
+                                }}
+                                placeholder="费用名称"
+                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                            
+                            {/* 币种 */}
+                            <div className="col-span-2">
+                              <select
+                                value={item.currency}
+                                onChange={(e) => {
+                                  setSelectedManualCategories(prev => prev.map(s => 
+                                    s.id === item.id ? { ...s, currency: e.target.value } : s
+                                  ))
+                                }}
+                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                              >
+                                <option value="EUR">EUR</option>
+                                <option value="CNY">CNY</option>
+                                <option value="USD">USD</option>
+                              </select>
+                            </div>
+                            
+                            {/* 金额 */}
+                            <div className="col-span-3">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.amount}
+                                onChange={(e) => {
+                                  setSelectedManualCategories(prev => prev.map(s => 
+                                    s.id === item.id ? { ...s, amount: e.target.value } : s
+                                  ))
+                                }}
+                                placeholder="0.00"
+                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                            
+                            {/* 说明（可选） */}
+                            <div className="col-span-2">
+                              <input
+                                type="text"
+                                value={item.description}
+                                onChange={(e) => {
+                                  setSelectedManualCategories(prev => prev.map(s => 
+                                    s.id === item.id ? { ...s, description: e.target.value } : s
+                                  ))
+                                }}
+                                placeholder="备注"
+                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-                
-                {/* 显示计算说明 */}
-                {formData.feeName && !formData.useFixedAmount && (
-                  <p className="mt-1 text-xs text-green-600">
-                    {formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && formData.billId && formData.amount && (
-                      <>
-                        {formData.currentUnit.toUpperCase() === 'KG' && formData.weight > 0 && (
-                          <>✓ 自动计算：{formData.unitPrice?.toFixed(4) || '0'} × {formData.weight.toLocaleString('de-DE')} KG = {parseFloat(formData.amount).toFixed(2)}</>
+              ) : (
+                /* 单选或未选择时显示原有的单个输入框 */
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      费用名称 <span className="text-red-500">*</span>
+                      {isManualEntry && formData.feeName && (
+                        <span className="ml-2 text-amber-500 text-xs font-normal">
+                          (手动录入·需审批)
+                        </span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={formData.feeName}
+                        onChange={(e) => {
+                          setFormData(prev => ({ ...prev, feeName: e.target.value }))
+                          // 用户手动输入费用名称时，标记为手动录入
+                          if (e.target.value && feeSource !== 'product' && feeSource !== 'supplier_price') {
+                            setIsManualEntry(true)
+                          }
+                        }}
+                        placeholder={isManualEntry ? "请输入费用名称（新费用项需审批）" : "请输入费用名称"}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                          errors.feeName ? 'border-red-500' : 'border-gray-300'
+                        } ${isManualEntry && formData.feeName ? 'border-amber-300 bg-amber-50' : ''}`}
+                      />
+                      {isManualEntry && formData.feeName && (
+                        <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                      )}
+                    </div>
+                    {errors.feeName && <p className="mt-1 text-xs text-red-500">{errors.feeName}</p>}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      金额 <span className="text-red-500">*</span>
+                    </label>
+                    
+                    {/* 当选择了费用项时，显示计费方式选择 */}
+                    {formData.feeName && (
+                      <div className="mb-2 flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                        <span className="text-xs text-gray-600">计费方式：</span>
+                        {/* 按量计费（KG/CBM）显示自动计算选项 */}
+                        {formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && (
+                          <label className="inline-flex items-center cursor-pointer">
+                            <input
+                              type="radio"
+                              name="amountType"
+                              checked={!formData.useFixedAmount}
+                              onChange={() => {
+                                // 切换为自动计算，重新计算金额
+                                const weight = formData.weight || 0
+                                const volume = formData.volume || 0
+                                const unitPrice = formData.unitPrice || 0
+                                let calculatedAmount = unitPrice
+                                if (formData.currentUnit.toUpperCase() === 'KG' && weight > 0) {
+                                  calculatedAmount = unitPrice * weight
+                                } else if (formData.currentUnit.toUpperCase() === 'CBM' && volume > 0) {
+                                  calculatedAmount = unitPrice * volume
+                                }
+                                setFormData(prev => ({ 
+                                  ...prev, 
+                                  useFixedAmount: false,
+                                  amount: calculatedAmount > 0 ? calculatedAmount.toFixed(2) : prev.amount
+                                }))
+                              }}
+                              className="mr-1"
+                            />
+                            <span className={`text-xs ${!formData.useFixedAmount ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                              按{formData.currentUnit.toUpperCase()}自动计算
+                            </span>
+                          </label>
                         )}
-                        {formData.currentUnit.toUpperCase() === 'CBM' && formData.volume > 0 && (
-                          <>✓ 自动计算：{formData.unitPrice?.toFixed(4) || '0'} × {formData.volume.toLocaleString('de-DE')} CBM = {parseFloat(formData.amount).toFixed(2)}</>
+                        {/* 非按量计费时显示标准价格选项 */}
+                        {(!formData.currentUnit || !isQuantityBasedUnit(formData.currentUnit)) && (
+                          <label className="inline-flex items-center cursor-pointer">
+                            <input
+                              type="radio"
+                              name="amountType"
+                              checked={!formData.useFixedAmount}
+                              onChange={() => {
+                                // 切换为标准价格
+                                const unitPrice = formData.unitPrice || 0
+                                setFormData(prev => ({ 
+                                  ...prev, 
+                                  useFixedAmount: false,
+                                  amount: unitPrice > 0 ? unitPrice.toFixed(2) : prev.amount
+                                }))
+                              }}
+                              className="mr-1"
+                            />
+                            <span className={`text-xs ${!formData.useFixedAmount ? 'text-green-600 font-medium' : 'text-gray-500'}`}>
+                              标准价格
+                            </span>
+                          </label>
                         )}
-                        {((formData.currentUnit.toUpperCase() === 'KG' && formData.weight === 0) || 
-                          (formData.currentUnit.toUpperCase() === 'CBM' && formData.volume === 0)) && (
-                          <span className="text-amber-600">⚠️ 订单缺少{formData.currentUnit.toUpperCase() === 'KG' ? '重量' : '体积'}数据，请选择固定金额</span>
-                        )}
-                      </>
+                        {/* 固定金额选项始终显示 */}
+                        <label className="inline-flex items-center cursor-pointer">
+                          <input
+                            type="radio"
+                            name="amountType"
+                            checked={formData.useFixedAmount}
+                            onChange={() => setFormData(prev => ({ ...prev, useFixedAmount: true }))}
+                            className="mr-1"
+                          />
+                          <span className={`text-xs ${formData.useFixedAmount ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>
+                            固定金额
+                          </span>
+                        </label>
+                      </div>
                     )}
-                    {(!formData.currentUnit || !isQuantityBasedUnit(formData.currentUnit)) && formData.unitPrice > 0 && (
-                      <>✓ 标准价格：{formData.currency} {formData.unitPrice?.toFixed(2)}</>
+
+                    <div className="flex gap-2">
+                      <select
+                        value={formData.currency}
+                        onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
+                      >
+                        <option value="EUR">EUR</option>
+                        <option value="CNY">CNY</option>
+                        <option value="USD">USD</option>
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.amount}
+                        onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value, useFixedAmount: true }))}
+                        placeholder="0.00"
+                        className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                          errors.amount ? 'border-red-500' : 'border-gray-300'
+                        } ${formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && !formData.useFixedAmount ? 'bg-green-50 border-green-300' : ''}`}
+                      />
+                    </div>
+                    
+                    {/* 显示计算说明 */}
+                    {formData.feeName && !formData.useFixedAmount && (
+                      <p className="mt-1 text-xs text-green-600">
+                        {formData.currentUnit && isQuantityBasedUnit(formData.currentUnit) && formData.billId && formData.amount && (
+                          <>
+                            {formData.currentUnit.toUpperCase() === 'KG' && formData.weight > 0 && (
+                              <>✓ 自动计算：{formData.unitPrice?.toFixed(4) || '0'} × {formData.weight.toLocaleString('de-DE')} KG = {parseFloat(formData.amount).toFixed(2)}</>
+                            )}
+                            {formData.currentUnit.toUpperCase() === 'CBM' && formData.volume > 0 && (
+                              <>✓ 自动计算：{formData.unitPrice?.toFixed(4) || '0'} × {formData.volume.toLocaleString('de-DE')} CBM = {parseFloat(formData.amount).toFixed(2)}</>
+                            )}
+                            {((formData.currentUnit.toUpperCase() === 'KG' && formData.weight === 0) || 
+                              (formData.currentUnit.toUpperCase() === 'CBM' && formData.volume === 0)) && (
+                              <span className="text-amber-600">⚠️ 订单缺少{formData.currentUnit.toUpperCase() === 'KG' ? '重量' : '体积'}数据，请选择固定金额</span>
+                            )}
+                          </>
+                        )}
+                        {(!formData.currentUnit || !isQuantityBasedUnit(formData.currentUnit)) && formData.unitPrice > 0 && (
+                          <>✓ 标准价格：{formData.currency} {formData.unitPrice?.toFixed(2)}</>
+                        )}
+                      </p>
                     )}
-                  </p>
-                )}
-                {formData.feeName && formData.useFixedAmount && (
-                  <p className="mt-1 text-xs text-orange-600">
-                    ✓ 使用固定金额（手动输入）
-                  </p>
-                )}
-                {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount}</p>}
-              </div>
-            </div>
+                    {formData.feeName && formData.useFixedAmount && (
+                      <p className="mt-1 text-xs text-orange-600">
+                        ✓ 使用固定金额（手动输入）
+                      </p>
+                    )}
+                    {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount}</p>}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* 费用日期 */}
@@ -1800,6 +2065,11 @@ export default function FeeModal({
                 <Package className="w-4 h-4" />
                 <span>将批量创建 {pendingFeeItems.length} 条费用记录</span>
               </div>
+            ) : isManualEntry && selectedManualCategories.length > 1 ? (
+              <div className="flex items-center gap-2 text-xs text-amber-600">
+                <Package className="w-4 h-4" />
+                <span>将批量创建 {selectedManualCategories.length} 条费用记录（需审批）</span>
+              </div>
             ) : isManualEntry && formData.feeName && !editingFee ? (
               <div className="flex items-center gap-2 text-xs text-amber-600">
                 <AlertCircle className="w-4 h-4" />
@@ -1812,6 +2082,7 @@ export default function FeeModal({
             <button
               onClick={() => {
                 setPendingFeeItems([])
+                setSelectedManualCategories([])
                 onClose()
               }}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1835,6 +2106,25 @@ export default function FeeModal({
                   <>
                     <Check className="w-4 h-4" />
                     批量提交 ({pendingFeeItems.length})
+                  </>
+                )}
+              </button>
+            ) : isManualEntry && selectedManualCategories.length > 1 ? (
+              /* 多选费用分类时的批量保存按钮 */
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || selectedManualCategories.some(item => !item.feeName || !item.amount)}
+                className="px-4 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    提交中...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    批量保存 ({selectedManualCategories.length})
                   </>
                 )}
               </button>
