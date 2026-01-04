@@ -887,6 +887,9 @@ export function convertCMRToCamelCase(row) {
     cmrExceptionStatus: row.cmr_exception_status,
     cmrExceptionRecords: exceptionRecords,
     
+    // Reference List（收货地址详情）
+    referenceList: row.reference_list ? (typeof row.reference_list === 'string' ? JSON.parse(row.reference_list) : row.reference_list) : [],
+    
     // 时间戳
     createTime: row.created_at,
     updateTime: row.updated_at
