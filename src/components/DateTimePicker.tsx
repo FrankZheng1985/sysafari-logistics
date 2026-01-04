@@ -50,16 +50,43 @@ export default function DateTimePicker({
     }
   }, [value])
 
-  // 点击外部关闭
+  // 格式化日期时间显示
+  const formatDisplayDateTime = (): string => {
+    if (!selectedDate) return ''
+    const year = selectedDate.getFullYear()
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
+    const day = String(selectedDate.getDate()).padStart(2, '0')
+    if (showTime) {
+      return `${year}-${month}-${day} ${selectedHour}:${selectedMinute}`
+    }
+    return `${year}-${month}-${day}`
+  }
+
+  // 格式化为 datetime-local 或 date 格式
+  const formatValue = useCallback((date: Date, hour: string, minute: string): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    if (showTime) {
+      return `${year}-${month}-${day}T${hour}:${minute}`
+    }
+    return `${year}-${month}-${day}`
+  }, [showTime])
+
+  // 点击外部关闭 - 如果有选中日期，自动保存
   const handleClickOutside = useCallback((event: MouseEvent) => {
     const target = event.target as Node
     const isInsideTrigger = triggerRef.current?.contains(target)
     const isInsidePopup = popupRef.current?.contains(target)
     
     if (!isInsideTrigger && !isInsidePopup) {
+      // 如果有选中的日期，关闭时自动保存
+      if (selectedDate) {
+        onChange(formatValue(selectedDate, selectedHour, selectedMinute))
+      }
       setIsOpen(false)
     }
-  }, [])
+  }, [selectedDate, selectedHour, selectedMinute, onChange, formatValue])
 
   useEffect(() => {
     if (isOpen) {
@@ -87,29 +114,6 @@ export default function DateTimePicker({
       return () => document.removeEventListener('keydown', handleEsc)
     }
   }, [isOpen])
-
-  // 格式化日期时间显示
-  const formatDisplayDateTime = (): string => {
-    if (!selectedDate) return ''
-    const year = selectedDate.getFullYear()
-    const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
-    const day = String(selectedDate.getDate()).padStart(2, '0')
-    if (showTime) {
-      return `${year}-${month}-${day} ${selectedHour}:${selectedMinute}`
-    }
-    return `${year}-${month}-${day}`
-  }
-
-  // 格式化为 datetime-local 或 date 格式
-  const formatValue = (date: Date, hour: string, minute: string): string => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    if (showTime) {
-      return `${year}-${month}-${day}T${hour}:${minute}`
-    }
-    return `${year}-${month}-${day}`
-  }
 
   // 获取月份的日期
   const getMonthDates = () => {
@@ -145,9 +149,10 @@ export default function DateTimePicker({
   // 选择日期
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date)
-    // 如果不需要选择时间，直接确认并关闭
+    // 自动更新值
+    onChange(formatValue(date, selectedHour, selectedMinute))
+    // 如果不需要选择时间，直接关闭
     if (!showTime) {
-      onChange(formatValue(date, selectedHour, selectedMinute))
       setIsOpen(false)
     }
   }
@@ -367,7 +372,14 @@ export default function DateTimePicker({
                 <div className="flex items-center gap-1">
                   <select
                     value={selectedHour}
-                    onChange={(e) => setSelectedHour(e.target.value)}
+                    onChange={(e) => {
+                      const newHour = e.target.value
+                      setSelectedHour(newHour)
+                      // 如果已选择日期，自动更新值（但不关闭弹窗）
+                      if (selectedDate) {
+                        onChange(formatValue(selectedDate, newHour, selectedMinute))
+                      }
+                    }}
                     title="选择小时"
                     aria-label="选择小时"
                     className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
@@ -379,7 +391,14 @@ export default function DateTimePicker({
                   <span className="text-gray-500">:</span>
                   <select
                     value={selectedMinute}
-                    onChange={(e) => setSelectedMinute(e.target.value)}
+                    onChange={(e) => {
+                      const newMinute = e.target.value
+                      setSelectedMinute(newMinute)
+                      // 如果已选择日期，自动更新值（但不关闭弹窗）
+                      if (selectedDate) {
+                        onChange(formatValue(selectedDate, selectedHour, newMinute))
+                      }
+                    }}
                     title="选择分钟"
                     aria-label="选择分钟"
                     className="px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"

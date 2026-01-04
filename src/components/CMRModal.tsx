@@ -172,7 +172,7 @@ export default function CMRModal({
         setStep('confirm')
       }
     }
-  }, [visible, cmrDetail, currentStatus])
+  }, [visible, cmrDetail, currentStatus, defaultDeliveryAddress])
 
   // 获取服务商列表
   useEffect(() => {
