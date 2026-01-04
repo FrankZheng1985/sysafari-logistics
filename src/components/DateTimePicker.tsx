@@ -145,6 +145,11 @@ export default function DateTimePicker({
   // 选择日期
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date)
+    // 如果不需要选择时间，直接确认并关闭
+    if (!showTime) {
+      onChange(formatValue(date, selectedHour, selectedMinute))
+      setIsOpen(false)
+    }
   }
 
   // 确认选择
