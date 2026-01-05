@@ -243,4 +243,49 @@ router.get('/inspection/type-summary', controller.getInspectionTypeSummaryCtrl)
 // 分析导入批次的综合风险（税率+申报价值+查验）
 router.post('/risk-analysis/full/:importId', controller.analyzeFullRisk)
 
+// ==================== 敏感产品库管理 ====================
+// 获取敏感产品列表
+router.get('/sensitive-products', controller.getSensitiveProductsCtrl)
+
+// 获取敏感产品分类列表
+router.get('/sensitive-products/categories', controller.getSensitiveProductCategoriesCtrl)
+
+// 检查HS编码是否为敏感产品
+router.get('/sensitive-products/check', controller.checkSensitiveProductCtrl)
+
+// 创建敏感产品
+router.post('/sensitive-products', controller.createSensitiveProductCtrl)
+
+// 更新敏感产品
+router.put('/sensitive-products/:id', controller.updateSensitiveProductCtrl)
+
+// 删除敏感产品
+router.delete('/sensitive-products/:id', controller.deleteSensitiveProductCtrl)
+
+// ==================== 查验产品库管理 ====================
+// 获取查验产品列表
+router.get('/inspection-products', controller.getInspectionProductsCtrl)
+
+// 检查HS编码是否为查验产品
+router.get('/inspection-products/check', controller.checkInspectionProductCtrl)
+
+// 创建查验产品
+router.post('/inspection-products', controller.createInspectionProductCtrl)
+
+// 更新查验产品
+router.put('/inspection-products/:id', controller.updateInspectionProductCtrl)
+
+// 删除查验产品
+router.delete('/inspection-products/:id', controller.deleteInspectionProductCtrl)
+
+// ==================== 综合产品风险检测 ====================
+// 综合检测产品风险
+router.get('/product-risk/check', controller.checkProductRiskCtrl)
+
+// 批量检测导入批次的产品风险
+router.post('/product-risk/batch/:importId', controller.batchCheckImportRiskCtrl)
+
+// 获取产品库统计信息
+router.get('/product-risk/stats', controller.getProductLibraryStatsCtrl)
+
 export default router

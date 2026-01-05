@@ -87,6 +87,7 @@ export default function DocumentDashboard() {
     { label: '税费计算', path: '/documents/tax-calc' },
     { label: '数据补充', path: '/documents/supplement' },
     { label: '匹配记录库', path: '/documents/match-records' },
+    { label: '敏感产品库', path: '/documents/sensitive-products' },
   ]
 
   if (loading) {

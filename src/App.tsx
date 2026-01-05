@@ -110,6 +110,7 @@ import DocumentMatching from './pages/DocumentMatching'
 import DocumentTaxCalc from './pages/DocumentTaxCalc'
 import DocumentSupplement from './pages/DocumentSupplement'
 import HSMatchRecords from './pages/HSMatchRecords'
+import SensitiveProducts from './pages/SensitiveProducts'
 // 文档中心模块
 import DocumentCenter from './pages/DocumentCenter'
 // 帮助中心模块
@@ -247,6 +248,7 @@ function AppRoutes() {
         <Route path="/documents/tax-calc" element={<DocumentTaxCalc />} />
         <Route path="/documents/supplement" element={<DocumentSupplement />} />
         <Route path="/documents/match-records" element={<HSMatchRecords />} />
+        <Route path="/documents/sensitive-products" element={<SensitiveProducts />} />
         {/* 文档中心（COS存储） */}
         <Route path="/document-center" element={<DocumentCenter />} />
         {/* 帮助中心 */}

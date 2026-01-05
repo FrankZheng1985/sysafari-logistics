@@ -12,6 +12,7 @@ import * as hsMatchRecords from './hsMatchRecords.js'
 import * as hsOptimizer from './hsOptimizer.js'
 import * as declarationValue from './declarationValue.js'
 import * as inspectionRisk from './inspectionRisk.js'
+import * as sensitiveProducts from './sensitiveProducts.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -1764,17 +1765,19 @@ export async function getInspectionTypeSummaryCtrl(req, res) {
 
 /**
  * 分析导入批次的综合风险
+ * 整合：税率风险、申报价值风险、查验风险、敏感产品库检测
  */
 export async function analyzeFullRisk(req, res) {
   try {
     const { importId } = req.params
     const id = parseInt(importId)
     
-    // 并行执行三种风险分析
-    const [taxRisk, declarationRisk, inspectionRiskResult] = await Promise.all([
+    // 并行执行四种风险分析（新增敏感产品库检测）
+    const [taxRisk, declarationRisk, inspectionRiskResult, productLibraryRisk] = await Promise.all([
       hsOptimizer.batchAnalyzeImportRisk(id),
       declarationValue.batchCheckDeclarationRisk(id),
-      inspectionRisk.analyzeImportInspectionRisk(id)
+      inspectionRisk.analyzeImportInspectionRisk(id),
+      sensitiveProducts.batchCheckImportRisk(id)
     ])
     
     // 计算综合风险评分
@@ -1782,25 +1785,46 @@ export async function analyzeFullRisk(req, res) {
     const declScore = declarationRisk.highRiskCount > 0 ? 80 : (declarationRisk.mediumRiskCount > 0 ? 50 : 20)
     const inspScore = inspectionRiskResult.avgRiskScore || 0
     
-    // 综合评分 (税率风险30% + 申报风险40% + 查验风险30%)
-    const compositeScore = Math.round(taxScore * 0.3 + declScore * 0.4 + inspScore * 0.3)
+    // 敏感产品库风险分数
+    let sensitiveScore = 0
+    if (productLibraryRisk.antiDumpingCount > 0) {
+      sensitiveScore = 90  // 反倾销产品风险最高
+    } else if (productLibraryRisk.sensitiveCount > 0) {
+      sensitiveScore = 70  // 敏感产品
+    } else if (productLibraryRisk.inspectionRiskCount > 0) {
+      sensitiveScore = 50  // 查验产品库命中
+    }
+    
+    // 综合评分 (税率风险25% + 申报风险30% + 查验风险25% + 敏感产品20%)
+    const compositeScore = Math.round(taxScore * 0.25 + declScore * 0.30 + inspScore * 0.25 + sensitiveScore * 0.20)
     
     // 确定综合风险等级
     let overallRiskLevel = 'low'
     if (compositeScore >= 60 || 
         taxRisk.overallRiskLevel === 'high' || 
         declarationRisk.highRiskCount > 0 ||
-        inspectionRiskResult.overallRiskLevel === 'high') {
+        inspectionRiskResult.overallRiskLevel === 'high' ||
+        productLibraryRisk.antiDumpingCount > 0) {
       overallRiskLevel = 'high'
     } else if (compositeScore >= 35 || 
                taxRisk.overallRiskLevel === 'medium' || 
                declarationRisk.mediumRiskCount > 0 ||
-               inspectionRiskResult.overallRiskLevel === 'medium') {
+               inspectionRiskResult.overallRiskLevel === 'medium' ||
+               productLibraryRisk.sensitiveCount > 0) {
       overallRiskLevel = 'medium'
     }
     
     // 汇总风险警告
     const warnings = []
+    if (productLibraryRisk.antiDumpingCount > 0) {
+      warnings.push(`⚠️ ${productLibraryRisk.antiDumpingCount} 个商品命中反倾销产品库`)
+    }
+    if (productLibraryRisk.sensitiveCount > 0) {
+      warnings.push(`⚠️ ${productLibraryRisk.sensitiveCount} 个商品命中高敏感产品库`)
+    }
+    if (productLibraryRisk.inspectionRiskCount > 0) {
+      warnings.push(`📋 ${productLibraryRisk.inspectionRiskCount} 个商品命中海关查验产品库`)
+    }
     if (taxRisk.highRiskCount > 0) {
       warnings.push(`${taxRisk.highRiskCount} 个商品存在高税率/反倾销税风险`)
     }
@@ -1833,6 +1857,14 @@ export async function analyzeFullRisk(req, res) {
         highRiskCount: inspectionRiskResult.highRiskCount,
         items: inspectionRiskResult.riskItems?.slice(0, 5)
       },
+      // 新增：敏感产品库检测结果
+      productLibraryRisk: {
+        score: sensitiveScore,
+        sensitiveCount: productLibraryRisk.sensitiveCount,
+        antiDumpingCount: productLibraryRisk.antiDumpingCount,
+        inspectionRiskCount: productLibraryRisk.inspectionRiskCount,
+        items: productLibraryRisk.riskItems?.slice(0, 10)
+      },
       warnings,
       needsAttention: overallRiskLevel !== 'low',
       analyzedAt: new Date().toISOString()
@@ -1840,6 +1872,247 @@ export async function analyzeFullRisk(req, res) {
   } catch (error) {
     console.error('综合风险分析失败:', error.message, error.stack)
     return serverError(res, `综合风险分析失败: ${error.message}`)
+  }
+}
+
+// ==================== 敏感产品库管理 ====================
+
+/**
+ * 获取敏感产品列表
+ */
+export async function getSensitiveProductsCtrl(req, res) {
+  try {
+    const { page, pageSize, category, productType, riskLevel, search, isActive } = req.query
+    const result = await sensitiveProducts.getSensitiveProducts({
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50,
+      category,
+      productType,
+      riskLevel,
+      search,
+      isActive: isActive === 'false' ? false : isActive === 'all' ? null : true
+    })
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取敏感产品列表失败:', error)
+    return serverError(res, '获取敏感产品列表失败')
+  }
+}
+
+/**
+ * 获取敏感产品分类列表
+ */
+export async function getSensitiveProductCategoriesCtrl(req, res) {
+  try {
+    const categories = await sensitiveProducts.getSensitiveProductCategories()
+    return success(res, categories)
+  } catch (error) {
+    console.error('获取敏感产品分类失败:', error)
+    return serverError(res, '获取敏感产品分类失败')
+  }
+}
+
+/**
+ * 检查HS编码是否为敏感产品
+ */
+export async function checkSensitiveProductCtrl(req, res) {
+  try {
+    const { hsCode, productName } = req.query
+    if (!hsCode && !productName) {
+      return badRequest(res, '请提供HS编码或产品名称')
+    }
+    
+    let result
+    if (hsCode) {
+      result = await sensitiveProducts.checkSensitiveProduct(hsCode)
+    } else {
+      result = await sensitiveProducts.matchSensitiveByName(productName)
+    }
+    return success(res, result)
+  } catch (error) {
+    console.error('检查敏感产品失败:', error)
+    return serverError(res, '检查敏感产品失败')
+  }
+}
+
+/**
+ * 创建敏感产品
+ */
+export async function createSensitiveProductCtrl(req, res) {
+  try {
+    const id = await sensitiveProducts.createSensitiveProduct(req.body)
+    return success(res, { id }, '创建成功')
+  } catch (error) {
+    console.error('创建敏感产品失败:', error)
+    return serverError(res, '创建敏感产品失败')
+  }
+}
+
+/**
+ * 更新敏感产品
+ */
+export async function updateSensitiveProductCtrl(req, res) {
+  try {
+    const { id } = req.params
+    await sensitiveProducts.updateSensitiveProduct(parseInt(id), req.body)
+    return success(res, null, '更新成功')
+  } catch (error) {
+    console.error('更新敏感产品失败:', error)
+    return serverError(res, '更新敏感产品失败')
+  }
+}
+
+/**
+ * 删除敏感产品
+ */
+export async function deleteSensitiveProductCtrl(req, res) {
+  try {
+    const { id } = req.params
+    await sensitiveProducts.deleteSensitiveProduct(parseInt(id))
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除敏感产品失败:', error)
+    return serverError(res, '删除敏感产品失败')
+  }
+}
+
+// ==================== 查验产品库管理 ====================
+
+/**
+ * 获取查验产品列表
+ */
+export async function getInspectionProductsCtrl(req, res) {
+  try {
+    const { page, pageSize, riskLevel, search, isActive } = req.query
+    const result = await sensitiveProducts.getInspectionProducts({
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50,
+      riskLevel,
+      search,
+      isActive: isActive === 'false' ? false : isActive === 'all' ? null : true
+    })
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取查验产品列表失败:', error)
+    return serverError(res, '获取查验产品列表失败')
+  }
+}
+
+/**
+ * 检查HS编码是否为查验产品
+ */
+export async function checkInspectionProductCtrl(req, res) {
+  try {
+    const { hsCode, productName } = req.query
+    if (!hsCode && !productName) {
+      return badRequest(res, '请提供HS编码或产品名称')
+    }
+    
+    let result
+    if (hsCode) {
+      result = await sensitiveProducts.checkInspectionProduct(hsCode)
+    } else {
+      result = await sensitiveProducts.matchInspectionByName(productName)
+    }
+    return success(res, result)
+  } catch (error) {
+    console.error('检查查验产品失败:', error)
+    return serverError(res, '检查查验产品失败')
+  }
+}
+
+/**
+ * 创建查验产品
+ */
+export async function createInspectionProductCtrl(req, res) {
+  try {
+    const id = await sensitiveProducts.createInspectionProduct(req.body)
+    return success(res, { id }, '创建成功')
+  } catch (error) {
+    console.error('创建查验产品失败:', error)
+    return serverError(res, '创建查验产品失败')
+  }
+}
+
+/**
+ * 更新查验产品
+ */
+export async function updateInspectionProductCtrl(req, res) {
+  try {
+    const { id } = req.params
+    await sensitiveProducts.updateInspectionProduct(parseInt(id), req.body)
+    return success(res, null, '更新成功')
+  } catch (error) {
+    console.error('更新查验产品失败:', error)
+    return serverError(res, '更新查验产品失败')
+  }
+}
+
+/**
+ * 删除查验产品
+ */
+export async function deleteInspectionProductCtrl(req, res) {
+  try {
+    const { id } = req.params
+    await sensitiveProducts.deleteInspectionProduct(parseInt(id))
+    return success(res, null, '删除成功')
+  } catch (error) {
+    console.error('删除查验产品失败:', error)
+    return serverError(res, '删除查验产品失败')
+  }
+}
+
+// ==================== 综合产品风险检测 ====================
+
+/**
+ * 综合检测产品风险
+ */
+export async function checkProductRiskCtrl(req, res) {
+  try {
+    const { hsCode, productName } = req.query
+    if (!hsCode && !productName) {
+      return badRequest(res, '请提供HS编码或产品名称')
+    }
+    const result = await sensitiveProducts.checkProductRisk(hsCode, productName)
+    return success(res, result)
+  } catch (error) {
+    console.error('检测产品风险失败:', error)
+    return serverError(res, '检测产品风险失败')
+  }
+}
+
+/**
+ * 批量检测导入批次的产品风险
+ */
+export async function batchCheckImportRiskCtrl(req, res) {
+  try {
+    const { importId } = req.params
+    const result = await sensitiveProducts.batchCheckImportRisk(parseInt(importId))
+    return success(res, result)
+  } catch (error) {
+    console.error('批量检测产品风险失败:', error)
+    return serverError(res, '批量检测产品风险失败')
+  }
+}
+
+/**
+ * 获取产品库统计信息
+ */
+export async function getProductLibraryStatsCtrl(req, res) {
+  try {
+    const stats = await sensitiveProducts.getProductLibraryStats()
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取产品库统计失败:', error)
+    return serverError(res, '获取产品库统计失败')
   }
 }
 
@@ -1929,5 +2202,25 @@ export default {
   getInspectionTypeSummaryCtrl,
   
   // 综合风险分析
-  analyzeFullRisk
+  analyzeFullRisk,
+  
+  // 敏感产品库
+  getSensitiveProductsCtrl,
+  getSensitiveProductCategoriesCtrl,
+  checkSensitiveProductCtrl,
+  createSensitiveProductCtrl,
+  updateSensitiveProductCtrl,
+  deleteSensitiveProductCtrl,
+  
+  // 查验产品库
+  getInspectionProductsCtrl,
+  checkInspectionProductCtrl,
+  createInspectionProductCtrl,
+  updateInspectionProductCtrl,
+  deleteInspectionProductCtrl,
+  
+  // 综合产品风险检测
+  checkProductRiskCtrl,
+  batchCheckImportRiskCtrl,
+  getProductLibraryStatsCtrl
 }

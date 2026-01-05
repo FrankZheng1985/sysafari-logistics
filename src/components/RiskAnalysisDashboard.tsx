@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react'
 import { 
   AlertTriangle, Shield, TrendingDown, BarChart2, Eye, 
   CheckCircle, RefreshCw, ChevronDown, ChevronUp, X,
-  Zap, FileWarning, DollarSign, Search
+  Zap, FileWarning, DollarSign, Search, Package
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 
@@ -33,6 +33,14 @@ interface FullRiskResult {
     score: number
     level: string
     highRiskCount: number
+    items: any[]
+  }
+  // 新增：敏感产品库检测结果
+  productLibraryRisk?: {
+    score: number
+    sensitiveCount: number
+    antiDumpingCount: number
+    inspectionRiskCount: number
     items: any[]
   }
   warnings: string[]
@@ -261,8 +269,8 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
           </div>
         )}
 
-        {/* 三维风险概览 */}
-        <div className="grid grid-cols-3 gap-px bg-gray-200">
+        {/* 四维风险概览 */}
+        <div className="grid grid-cols-4 gap-px bg-gray-200">
           {/* 税率风险 */}
           <div 
             className="bg-white p-4 cursor-pointer hover:bg-gray-50"
@@ -271,17 +279,17 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <TrendingDown className={`w-5 h-5 ${riskColors[result.taxRisk.level as keyof typeof riskColors]}`} />
-                <span className="font-medium">税率风险</span>
+                <span className="font-medium text-sm">税率风险</span>
               </div>
               {expandedSection === 'tax' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </div>
             <div className="flex items-end gap-2">
-              <span className={`text-3xl font-bold ${riskColors[result.taxRisk.level as keyof typeof riskColors]}`}>
+              <span className={`text-2xl font-bold ${riskColors[result.taxRisk.level as keyof typeof riskColors]}`}>
                 {result.taxRisk.score}
               </span>
-              <span className="text-sm text-gray-400 mb-1">/100</span>
+              <span className="text-xs text-gray-400 mb-1">/100</span>
             </div>
-            <div className="mt-2 text-sm text-gray-500">
+            <div className="mt-2 text-xs text-gray-500">
               高风险商品: <span className="font-medium text-red-600">{result.taxRisk.highRiskCount}</span>
             </div>
           </div>
@@ -297,24 +305,21 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
                   result.declarationRisk.highRiskCount > 0 ? 'text-red-600' :
                   result.declarationRisk.mediumRiskCount > 0 ? 'text-amber-600' : 'text-green-600'
                 }`} />
-                <span className="font-medium">申报价值风险</span>
+                <span className="font-medium text-sm">申报价值风险</span>
               </div>
               {expandedSection === 'declaration' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </div>
             <div className="flex items-end gap-2">
-              <span className={`text-3xl font-bold ${
+              <span className={`text-2xl font-bold ${
                 result.declarationRisk.highRiskCount > 0 ? 'text-red-600' :
                 result.declarationRisk.mediumRiskCount > 0 ? 'text-amber-600' : 'text-green-600'
               }`}>
                 {result.declarationRisk.score}
               </span>
-              <span className="text-sm text-gray-400 mb-1">/100</span>
+              <span className="text-xs text-gray-400 mb-1">/100</span>
             </div>
-            <div className="mt-2 text-sm text-gray-500">
+            <div className="mt-2 text-xs text-gray-500">
               价格异常: <span className="font-medium text-red-600">{result.declarationRisk.highRiskCount}</span>
-              {result.declarationRisk.mediumRiskCount > 0 && (
-                <span className="ml-2">偏低: <span className="text-amber-600">{result.declarationRisk.mediumRiskCount}</span></span>
-              )}
             </div>
           </div>
 
@@ -326,18 +331,57 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Eye className={`w-5 h-5 ${riskColors[result.inspectionRisk.level as keyof typeof riskColors]}`} />
-                <span className="font-medium">查验风险</span>
+                <span className="font-medium text-sm">查验风险</span>
               </div>
               {expandedSection === 'inspection' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </div>
             <div className="flex items-end gap-2">
-              <span className={`text-3xl font-bold ${riskColors[result.inspectionRisk.level as keyof typeof riskColors]}`}>
+              <span className={`text-2xl font-bold ${riskColors[result.inspectionRisk.level as keyof typeof riskColors]}`}>
                 {result.inspectionRisk.score}
               </span>
-              <span className="text-sm text-gray-400 mb-1">/100</span>
+              <span className="text-xs text-gray-400 mb-1">/100</span>
             </div>
-            <div className="mt-2 text-sm text-gray-500">
+            <div className="mt-2 text-xs text-gray-500">
               高查验率: <span className="font-medium text-red-600">{result.inspectionRisk.highRiskCount}</span>
+            </div>
+          </div>
+
+          {/* 敏感产品库风险（新增） */}
+          <div 
+            className="bg-white p-4 cursor-pointer hover:bg-gray-50"
+            onClick={() => toggleSection('productLibrary')}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Package className={`w-5 h-5 ${
+                  (result.productLibraryRisk?.antiDumpingCount || 0) > 0 ? 'text-red-600' :
+                  (result.productLibraryRisk?.sensitiveCount || 0) > 0 ? 'text-amber-600' : 'text-green-600'
+                }`} />
+                <span className="font-medium text-sm">产品库风险</span>
+              </div>
+              {expandedSection === 'productLibrary' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
+            <div className="flex items-end gap-2">
+              <span className={`text-2xl font-bold ${
+                (result.productLibraryRisk?.antiDumpingCount || 0) > 0 ? 'text-red-600' :
+                (result.productLibraryRisk?.sensitiveCount || 0) > 0 ? 'text-amber-600' : 'text-green-600'
+              }`}>
+                {result.productLibraryRisk?.score || 0}
+              </span>
+              <span className="text-xs text-gray-400 mb-1">/100</span>
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              {(result.productLibraryRisk?.antiDumpingCount || 0) > 0 && (
+                <span className="text-red-600 font-medium">反倾销: {result.productLibraryRisk?.antiDumpingCount}</span>
+              )}
+              {(result.productLibraryRisk?.sensitiveCount || 0) > 0 && (
+                <span className={`${(result.productLibraryRisk?.antiDumpingCount || 0) > 0 ? 'ml-1' : ''} text-amber-600`}>
+                  敏感: {result.productLibraryRisk?.sensitiveCount}
+                </span>
+              )}
+              {!(result.productLibraryRisk?.antiDumpingCount || 0) && !(result.productLibraryRisk?.sensitiveCount || 0) && (
+                <span className="text-green-600">无命中</span>
+              )}
             </div>
           </div>
         </div>
@@ -535,6 +579,84 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
                     {item.avgDelayDays > 0 && (
                       <div className="mt-2 text-sm text-gray-500">
                         平均延误: {item.avgDelayDays} 天 | 历史记录: {item.historicalShipments} 次
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 敏感产品库风险详情（新增） */}
+          {expandedSection === 'productLibrary' && result.productLibraryRisk?.items && result.productLibraryRisk.items.length > 0 && (
+            <div className="p-6 border-t">
+              <h3 className="font-medium mb-4 flex items-center gap-2">
+                <Package className="w-5 h-5 text-primary-600" />
+                敏感产品库命中 ({result.productLibraryRisk.items.length})
+              </h3>
+              <div className="space-y-3">
+                {result.productLibraryRisk.items.map((item: any, idx: number) => (
+                  <div key={idx} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-mono text-primary-600 font-medium">{item.hsCode}</span>
+                        <span className="ml-2 text-gray-700">{item.productName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {item.isAntiDumping && (
+                          <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-700 font-medium">
+                            反倾销产品
+                          </span>
+                        )}
+                        {item.isSensitive && !item.isAntiDumping && (
+                          <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                            高敏感产品
+                          </span>
+                        )}
+                        {item.isInspectionRisk && (
+                          <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
+                            查验产品
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* 风险警告 */}
+                    {item.warnings && item.warnings.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {item.warnings.map((warning: string, wIdx: number) => (
+                          <div key={wIdx} className="text-sm text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            {warning}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* 匹配的敏感产品信息 */}
+                    {item.sensitiveProducts && item.sensitiveProducts.length > 0 && (
+                      <div className="mt-3 p-3 bg-amber-50 rounded border border-amber-100">
+                        <div className="text-xs font-medium text-amber-800 mb-2">匹配产品库记录：</div>
+                        {item.sensitiveProducts.slice(0, 3).map((sp: any, spIdx: number) => (
+                          <div key={spIdx} className="text-xs text-amber-700 mt-1">
+                            • {sp.category ? `[${sp.category}]` : ''} {sp.product_name} 
+                            {sp.hs_code && <span className="font-mono ml-1">({sp.hs_code})</span>}
+                            {sp.duty_rate && <span className="ml-2">税率: {sp.duty_rate}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* 处理建议 */}
+                    {item.isAntiDumping && (
+                      <div className="mt-3 p-3 bg-red-50 rounded border border-red-100">
+                        <div className="text-xs font-medium text-red-800 mb-2">⚠️ 反倾销产品处理建议：</div>
+                        <ul className="text-xs text-red-700 space-y-1 list-disc list-inside">
+                          <li>核实产品是否确实属于该HS编码分类</li>
+                          <li>检查原产地证明，确认是否适用反倾销税</li>
+                          <li>咨询海关专家确认具体税率</li>
+                          <li>考虑是否有更精确的HS编码可以使用</li>
+                        </ul>
                       </div>
                     )}
                   </div>

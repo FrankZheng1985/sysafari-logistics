@@ -29,7 +29,8 @@ import {
   Upload,
   Calculator,
   FilePlus,
-  Link2
+  Link2,
+  AlertTriangle
 } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import clsx from 'clsx'
@@ -99,6 +100,7 @@ const menuItems: MenuItem[] = [
       { path: '/documents/tax-calc', label: '税费计算', icon: Calculator },
       { path: '/documents/supplement', label: '数据补充', icon: FilePlus },
       { path: '/documents/match-records', label: '匹配记录库', icon: FileCheck },
+      { path: '/documents/sensitive-products', label: '敏感产品库', icon: AlertTriangle },
     ],
   },
   {
