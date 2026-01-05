@@ -269,6 +269,7 @@ export async function getMatchRecordsList(options = {}) {
       material: row.material,
       materialEn: row.material_en,
       originCountry: row.origin_country,
+      originCountryCode: row.origin_country_code,
       avgUnitPrice: parseFloat(row.avg_unit_price) || 0,
       avgKgPrice: parseFloat(row.avg_kg_price) || 0,
       minUnitPrice: parseFloat(row.min_unit_price) || 0,
@@ -287,7 +288,11 @@ export async function getMatchRecordsList(options = {}) {
       isVerified: row.is_verified === 1,
       status: row.status,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      // 新增字段
+      minDeclarationValueRange: row.min_declaration_value_range,
+      refWeightRange: row.ref_weight_range,
+      usageScenario: row.usage_scenario
     }))
   }
 }
@@ -343,6 +348,10 @@ export async function getMatchRecordDetail(id) {
     status: record.status,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
+    // 新增字段
+    minDeclarationValueRange: record.min_declaration_value_range,
+    refWeightRange: record.ref_weight_range,
+    usageScenario: record.usage_scenario,
     history: (history || []).map(h => ({
       id: h.id,
       importId: h.import_id,
