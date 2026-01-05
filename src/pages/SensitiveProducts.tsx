@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   AlertTriangle, Shield, Plus, Edit2, Trash2, Search, Filter,
   Eye, RefreshCw, Download, Upload, ChevronDown, X, Check, Package
@@ -60,6 +61,7 @@ const RISK_LEVEL_CONFIG = {
 }
 
 export default function SensitiveProducts() {
+  const navigate = useNavigate()
   const { showToast } = useToast()
   
   // Tab状态
@@ -260,6 +262,8 @@ export default function SensitiveProducts() {
         description="管理高敏感/反倾销产品和海关查验产品，辅助风险评估"
         icon={<AlertTriangle className="w-6 h-6" />}
         tabs={tabs}
+        activeTab="/documents/sensitive-products"
+        onTabChange={(path) => navigate(path)}
       />
 
       {/* 统计卡片 */}

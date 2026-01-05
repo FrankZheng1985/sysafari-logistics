@@ -51,6 +51,7 @@ const routeTitleMap: Record<string, string> = {
   '/documents/tax-calc': '单证管理 - 税费计算',
   '/documents/supplement': '单证管理 - 数据补充',
   '/documents/match-records': '单证管理 - 匹配记录库',
+  '/documents/sensitive-products': '单证管理 - 敏感产品库',
   '/document-center': '单证管理 - 文档中心',
   // 查验管理
   '/inspection': '查验管理 - 查验概览',
