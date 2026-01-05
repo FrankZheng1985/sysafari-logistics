@@ -55,6 +55,9 @@ router.get('/tariff-rates/query', controller.queryTariffRate)
 // 获取国家增值税率
 router.get('/vat-rates/:countryCode', controller.getCountryVatRate)
 
+// 获取实时汇率（基于欧元）
+router.get('/exchange-rates', controller.getExchangeRates)
+
 // ==================== 受保护接口（需要认证） ====================
 
 // 应用认证中间件到所有后续路由

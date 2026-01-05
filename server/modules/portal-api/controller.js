@@ -800,6 +800,60 @@ export async function getCountryVatRate(req, res) {
   }
 }
 
+/**
+ * 获取实时汇率（基于欧元）
+ * 返回各主要货币兑欧元的汇率
+ */
+export async function getExchangeRates(req, res) {
+  try {
+    // 使用 exchangerate-api.com 免费 API 获取欧元汇率
+    const response = await fetch('https://api.exchangerate-api.com/v4/latest/EUR')
+    
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    
+    if (data && data.rates) {
+      // 只返回常用货币的汇率（相对于1欧元）
+      const rates = {
+        EUR: 1,
+        USD: data.rates.USD ? 1 / data.rates.USD : 0.92,  // 1 USD = ? EUR
+        CNY: data.rates.CNY ? 1 / data.rates.CNY : 0.13,  // 1 CNY = ? EUR
+        GBP: data.rates.GBP ? 1 / data.rates.GBP : 1.17,  // 1 GBP = ? EUR
+        JPY: data.rates.JPY ? 1 / data.rates.JPY : 0.006, // 1 JPY = ? EUR
+      }
+      
+      return success(res, {
+        base: 'EUR',
+        rates,
+        timestamp: data.time_last_updated || Date.now(),
+        source: 'exchangerate-api.com'
+      })
+    }
+    
+    throw new Error('汇率数据格式错误')
+  } catch (error) {
+    console.error('获取汇率失败:', error.message)
+    
+    // 返回备用汇率
+    return success(res, {
+      base: 'EUR',
+      rates: {
+        EUR: 1,
+        USD: 0.92,
+        CNY: 0.13,
+        GBP: 1.17,
+        JPY: 0.006
+      },
+      timestamp: Date.now(),
+      source: 'fallback',
+      warning: '使用备用汇率，实时汇率获取失败'
+    })
+  }
+}
+
 export default {
   // 认证
   login,
@@ -846,6 +900,7 @@ export default {
   searchTariffRates,
   queryTariffRate,
   getCountryVatRate,
+  getExchangeRates,
   
   // 中间件
   authMiddleware
