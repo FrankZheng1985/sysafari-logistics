@@ -794,6 +794,237 @@ export async function getCustomerOrderStats(customerId) {
 }
 
 /**
+ * 获取客户订单趋势统计（按月/年维度）
+ * 同时统计两个日期维度：创建时间(create_time)和清关完成时间(customs_release_time)
+ * 注意：create_time 是 TEXT 类型，需要转换为日期
+ * @param {string} customerId - 客户ID
+ * @param {string} dimension - 统计维度：'month' 或 'year'
+ * @param {number} limit - 返回记录数，月度默认12，年度默认5
+ */
+export async function getCustomerOrderTrend(customerId, dimension = 'month', limit = null) {
+  const db = getDatabase()
+  
+  // 验证客户存在
+  const customer = await getCustomerById(customerId)
+  if (!customer) return null
+  
+  // 设置默认limit
+  if (!limit) {
+    limit = dimension === 'month' ? 12 : 5
+  }
+  
+  // 构建两个查询：一个按创建时间(create_time)，一个按清关完成时间(customs_release_time)
+  // create_time 是 TEXT 类型，格式可能是 '2024-10-15' 或 ISO 格式
+  let createdQuery, clearedQuery
+  
+  if (dimension === 'month') {
+    // 按创建时间 - 月度统计 (使用 create_time 字段，TEXT类型需要转换)
+    createdQuery = `
+      SELECT 
+        TO_CHAR(create_time::date, 'YYYY-MM') as period,
+        EXTRACT(YEAR FROM create_time::date)::text as year,
+        LPAD(EXTRACT(MONTH FROM create_time::date)::text, 2, '0') as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE (is_void = 0 OR is_void IS NULL)
+        AND customer_id = $1
+        AND create_time IS NOT NULL
+        AND create_time != ''
+        AND create_time::date >= CURRENT_DATE - INTERVAL '${limit} months'
+      GROUP BY TO_CHAR(create_time::date, 'YYYY-MM'), EXTRACT(YEAR FROM create_time::date), EXTRACT(MONTH FROM create_time::date)
+      ORDER BY period ASC
+    `
+    
+    // 按清关完成时间 - 月度统计
+    clearedQuery = `
+      SELECT 
+        TO_CHAR(customs_release_time::timestamp, 'YYYY-MM') as period,
+        EXTRACT(YEAR FROM customs_release_time::timestamp)::text as year,
+        LPAD(EXTRACT(MONTH FROM customs_release_time::timestamp)::text, 2, '0') as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE (is_void = 0 OR is_void IS NULL)
+        AND customer_id = $1
+        AND customs_release_time IS NOT NULL
+        AND customs_release_time != ''
+        AND customs_release_time::timestamp >= CURRENT_DATE - INTERVAL '${limit} months'
+      GROUP BY TO_CHAR(customs_release_time::timestamp, 'YYYY-MM'), EXTRACT(YEAR FROM customs_release_time::timestamp), EXTRACT(MONTH FROM customs_release_time::timestamp)
+      ORDER BY period ASC
+    `
+  } else {
+    // 按创建时间 - 年度统计 (使用 create_time 字段)
+    createdQuery = `
+      SELECT 
+        EXTRACT(YEAR FROM create_time::date)::text as period,
+        EXTRACT(YEAR FROM create_time::date)::text as year,
+        '00' as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE (is_void = 0 OR is_void IS NULL)
+        AND customer_id = $1
+        AND create_time IS NOT NULL
+        AND create_time != ''
+        AND create_time::date >= CURRENT_DATE - INTERVAL '${limit} years'
+      GROUP BY EXTRACT(YEAR FROM create_time::date)
+      ORDER BY period ASC
+    `
+    
+    // 按清关完成时间 - 年度统计
+    clearedQuery = `
+      SELECT 
+        EXTRACT(YEAR FROM customs_release_time::timestamp)::text as period,
+        EXTRACT(YEAR FROM customs_release_time::timestamp)::text as year,
+        '00' as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE (is_void = 0 OR is_void IS NULL)
+        AND customer_id = $1
+        AND customs_release_time IS NOT NULL
+        AND customs_release_time != ''
+        AND customs_release_time::timestamp >= CURRENT_DATE - INTERVAL '${limit} years'
+      GROUP BY EXTRACT(YEAR FROM customs_release_time::timestamp)
+      ORDER BY period ASC
+    `
+  }
+  
+  // 执行查询
+  const createdRows = await db.prepare(createdQuery).all(customerId)
+  const clearedRows = await db.prepare(clearedQuery).all(customerId)
+  
+  // 格式化创建时间数据
+  const createdData = createdRows.map(row => ({
+    period: row.period,
+    year: row.year,
+    month: row.month !== '00' ? row.month : null,
+    label: dimension === 'month' 
+      ? `${row.year}-${row.month}`
+      : `${row.year}年`,
+    orderCount: Number(row.order_count || 0),
+    totalWeight: Number(row.total_weight || 0),
+    totalVolume: Number(row.total_volume || 0)
+  }))
+  
+  // 格式化清关完成时间数据
+  const clearedData = clearedRows.map(row => ({
+    period: row.period,
+    year: row.year,
+    month: row.month !== '00' ? row.month : null,
+    label: dimension === 'month' 
+      ? `${row.year}-${row.month}`
+      : `${row.year}年`,
+    orderCount: Number(row.order_count || 0),
+    totalWeight: Number(row.total_weight || 0),
+    totalVolume: Number(row.total_volume || 0)
+  }))
+  
+  // 如果是月度，补充缺失的月份（确保连续性）
+  if (dimension === 'month') {
+    const filledCreated = []
+    const filledCleared = []
+    const now = new Date()
+    
+    for (let i = limit - 1; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const year = date.getFullYear().toString()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const period = `${year}-${month}`
+      
+      // 创建时间数据
+      const existingCreated = createdData.find(d => d.period === period)
+      if (existingCreated) {
+        filledCreated.push(existingCreated)
+      } else {
+        filledCreated.push({
+          period,
+          year,
+          month,
+          label: `${year}-${month}`,
+          orderCount: 0,
+          totalWeight: 0,
+          totalVolume: 0
+        })
+      }
+      
+      // 清关完成时间数据
+      const existingCleared = clearedData.find(d => d.period === period)
+      if (existingCleared) {
+        filledCleared.push(existingCleared)
+      } else {
+        filledCleared.push({
+          period,
+          year,
+          month,
+          label: `${year}-${month}`,
+          orderCount: 0,
+          totalWeight: 0,
+          totalVolume: 0
+        })
+      }
+    }
+    
+    return {
+      created: filledCreated,
+      cleared: filledCleared
+    }
+  }
+  
+  // 年度统计，补充缺失的年份
+  const filledCreated = []
+  const filledCleared = []
+  const currentYear = new Date().getFullYear()
+  
+  for (let i = limit - 1; i >= 0; i--) {
+    const year = (currentYear - i).toString()
+    const period = year
+    
+    // 创建时间数据
+    const existingCreated = createdData.find(d => d.period === period)
+    if (existingCreated) {
+      filledCreated.push(existingCreated)
+    } else {
+      filledCreated.push({
+        period,
+        year,
+        month: null,
+        label: `${year}年`,
+        orderCount: 0,
+        totalWeight: 0,
+        totalVolume: 0
+      })
+    }
+    
+    // 清关完成时间数据
+    const existingCleared = clearedData.find(d => d.period === period)
+    if (existingCleared) {
+      filledCleared.push(existingCleared)
+    } else {
+      filledCleared.push({
+        period,
+        year,
+        month: null,
+        label: `${year}年`,
+        orderCount: 0,
+        totalWeight: 0,
+        totalVolume: 0
+      })
+    }
+  }
+  
+  return {
+    created: filledCreated,
+    cleared: filledCleared
+  }
+}
+
+/**
  * 获取客户相关订单列表
  * 只使用 customer_id 精确匹配，避免名称模糊匹配导致数据混淆
  */
@@ -3593,6 +3824,7 @@ export default {
   
   // 客户订单
   getCustomerOrderStats,
+  getCustomerOrderTrend,
   getCustomerOrders,
   
   // 客户地址

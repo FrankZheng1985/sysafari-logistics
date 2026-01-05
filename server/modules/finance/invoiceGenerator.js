@@ -202,6 +202,30 @@ function getFeeNameEnglish(chineseName, feeNameEn = null) {
   return chineseName // 没有匹配则返回原名
 }
 
+// 根据语言获取费用名称
+// language: 'en' = 英文, 'zh' = 中文
+function getFeeNameByLanguage(chineseName, feeNameEn = null, language = 'en') {
+  if (language === 'zh') {
+    // 中文：优先显示中文名称
+    if (chineseName && chineseName.trim()) {
+      return chineseName.trim()
+    }
+    // 如果没有中文名，尝试从英文映射回中文
+    if (feeNameEn) {
+      for (const [cn, en] of Object.entries(FEE_NAME_MAP)) {
+        if (en === feeNameEn) {
+          return cn
+        }
+      }
+      return feeNameEn // 没有映射则返回英文名
+    }
+    return '其他费用'
+  } else {
+    // 英文：使用已有的英文获取逻辑
+    return getFeeNameEnglish(chineseName, feeNameEn)
+  }
+}
+
 // 格式化日期为简单格式
 function formatExcelDate(dateStr) {
   if (!dateStr) return ''
@@ -218,6 +242,14 @@ function formatExcelDate(dateStr) {
 
 /**
  * 生成Excel明细（Statement of Account）
+ * @param {Object} data - 数据对象
+ * @param {string} data.customerName - 客户名称
+ * @param {string} data.date - 日期
+ * @param {Array} data.items - 费用项目列表
+ * @param {number} data.total - 总金额
+ * @param {string} data.currency - 货币类型，默认 EUR
+ * @param {string} data.containerNo - 集装箱号
+ * @param {string} data.language - 语言，'en' = 英文（默认），'zh' = 中文
  */
 export async function generateExcel(data) {
   const {
@@ -226,44 +258,68 @@ export async function generateExcel(data) {
     items,
     total,
     currency = 'EUR',
-    containerNo = ''  // 集装箱号
+    containerNo = '',  // 集装箱号
+    language = 'en'    // 语言，默认英文，与发票保持一致
   } = data
   
   const formattedDate = formatExcelDate(date)
+  
+  // 根据语言定义标签文本
+  const labels = language === 'zh' ? {
+    title: '对 账 单',
+    sheetName: '对账单',
+    customer: '客户',
+    date: '日期',
+    containerNo: '集装箱号',
+    billNo: '提单号',
+    feeType: '费用类型',
+    amount: `金额 ${currency}`,
+    total: '合计:'
+  } : {
+    title: 'STATEMENT OF ACCOUNT',
+    sheetName: 'Statement of Account',
+    customer: 'Customer',
+    date: 'Date',
+    containerNo: 'CONTAINER NO',
+    billNo: 'BILL NO',
+    feeType: 'FEE TYPE',
+    amount: `Amount ${currency}`,
+    total: 'Total:'
+  }
   
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Xianfeng International Logistics'
   workbook.created = new Date()
   
-  const worksheet = workbook.addWorksheet('Statement of Account')
+  const worksheet = workbook.addWorksheet(labels.sheetName)
   
   // 设置列宽
   worksheet.columns = [
-    { header: 'CONTAINER NO', key: 'containerNo', width: 20 },
-    { header: 'BILL NO', key: 'billNo', width: 20 },
-    { header: 'FEE TYPE', key: 'feeType', width: 30 },
-    { header: `Amount ${currency}`, key: 'amount', width: 15 }
+    { header: labels.containerNo, key: 'containerNo', width: 20 },
+    { header: labels.billNo, key: 'billNo', width: 20 },
+    { header: labels.feeType, key: 'feeType', width: 30 },
+    { header: labels.amount, key: 'amount', width: 15 }
   ]
   
   // 标题行
   worksheet.mergeCells('A1:D1')
   const titleCell = worksheet.getCell('A1')
-  titleCell.value = 'STATEMENT OF ACCOUNT'
+  titleCell.value = labels.title
   titleCell.font = { bold: true, size: 16 }
   titleCell.alignment = { horizontal: 'center' }
   
   // 客户信息行
   worksheet.mergeCells('A3:B3')
-  worksheet.getCell('A3').value = `Customer: ${customerName}`
+  worksheet.getCell('A3').value = `${labels.customer}: ${customerName}`
   worksheet.getCell('A3').font = { bold: true }
   
   worksheet.mergeCells('C3:D3')
-  worksheet.getCell('C3').value = `Date: ${formattedDate}`
+  worksheet.getCell('C3').value = `${labels.date}: ${formattedDate}`
   worksheet.getCell('C3').font = { bold: true }
   
   // 表头行
   const headerRow = worksheet.getRow(5)
-  headerRow.values = ['CONTAINER NO', 'BILL NO', 'FEE TYPE', `Amount ${currency}`]
+  headerRow.values = [labels.containerNo, labels.billNo, labels.feeType, labels.amount]
   headerRow.font = { bold: true }
   headerRow.eachCell(cell => {
     cell.fill = {
@@ -297,13 +353,17 @@ export async function generateExcel(data) {
     if (showContainerNo) currentContainerNo = itemContainerNo
     if (showBillNo) currentBillNo = item.billNumber
     
-    // 获取英文费用名称（优先使用 fee_name_en 字段）
-    const feeNameEn = getFeeNameEnglish(item.feeName || item.fee_name, item.fee_name_en || item.feeNameEn)
+    // 根据语言获取费用名称
+    const feeName = getFeeNameByLanguage(
+      item.feeName || item.fee_name, 
+      item.fee_name_en || item.feeNameEn, 
+      language
+    )
 
     row.values = [
       showContainerNo ? itemContainerNo : '',
       showBillNo ? item.billNumber : '',
-      feeNameEn,
+      feeName,
       parseFloat(item.amount) || 0
     ]
     
@@ -326,7 +386,7 @@ export async function generateExcel(data) {
   
   // 合计行
   const totalRow = worksheet.getRow(rowIndex)
-  totalRow.values = ['', '', 'Total:', total]
+  totalRow.values = ['', '', labels.total, total]
   totalRow.font = { bold: true }
   totalRow.getCell(3).alignment = { horizontal: 'right' }
   totalRow.getCell(4).alignment = { horizontal: 'right' }
@@ -442,6 +502,9 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
   const pdfBuffer = await generatePDF(pdfData)
 
   // 4. 生成Excel
+  // 获取发票语言设置（从 options 或使用默认英文）
+  const invoiceLanguage = options.language || 'en'
+  
   const excelData = {
     customerName: invoiceData.customer.name,
     date: invoiceDate,
@@ -449,10 +512,12 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
       containerNumber: f.container_number,
       billNumber: f.bill_number,
       feeName: f.fee_name,
+      feeNameEn: f.fee_name_en,
       amount: f.amount
     })),
     total: invoiceData.total,
-    currency: invoiceData.currency
+    currency: invoiceData.currency,
+    language: invoiceLanguage  // 账单语言与发票保持一致
   }
   
   const excelBuffer = await generateExcel(excelData)
@@ -831,10 +896,11 @@ export async function regenerateInvoiceFiles(invoiceId) {
     date: invoice.invoice_date,
     items: excelItems,
     total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
-    currency: invoice.currency || 'EUR'
+    currency: invoice.currency || 'EUR',
+    language: invoice.language || 'en'  // 账单语言与发票保持一致
   }
 
-  console.log(`[regenerateInvoiceFiles] 开始生成 Excel, 客户全称: ${customerFullName}`)
+  console.log(`[regenerateInvoiceFiles] 开始生成 Excel, 客户全称: ${customerFullName}, 语言: ${excelData.language}`)
   const excelBuffer = await generateExcel(excelData)
   console.log(`[regenerateInvoiceFiles] Excel 生成成功, 大小: ${excelBuffer?.length || 0} bytes`)
 
@@ -1151,13 +1217,14 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       containerNo: excelContainerNo,
       items: excelItems,
       total: parseFloat(invoice.total_amount) || 0,
-      currency: invoice.currency || 'EUR'
+      currency: invoice.currency || 'EUR',
+      language: invoiceLanguage  // 账单语言与发票保持一致
     }
 
     // 生成Excel
     let excelBuffer = null
     try {
-      console.log('[发票文件生成] 正在生成Excel...')
+      console.log(`[发票文件生成] 正在生成Excel, 语言: ${invoiceLanguage}...`)
       excelBuffer = await generateExcel(excelData)
       console.log('[发票文件生成] Excel生成成功，大小:', excelBuffer?.length || 0, 'bytes')
     } catch (excelError) {

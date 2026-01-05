@@ -2,13 +2,13 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Calendar, ChevronLeft, ChevronsLeft, ChevronRight, ChevronsRight, X, Clock } from 'lucide-react'
 
 interface DateTimePickerProps {
-  value: string // YYYY-MM-DD 或 YYYY-MM-DDTHH:mm 格式
+  value: string // YYYY-MM-DD 格式（输入）
   onChange: (value: string) => void
   placeholder?: string
   className?: string
   id?: string
   title?: string
-  showTime?: boolean // 是否显示时间选择，默认 true
+  showTime?: boolean // 是否显示时间选择，默认 false
 }
 
 export default function DateTimePicker({
@@ -18,7 +18,7 @@ export default function DateTimePicker({
   className = '',
   id,
   title,
-  showTime = true,
+  showTime = false,
 }: DateTimePickerProps) {
   const defaultPlaceholder = showTime ? '请选择日期时间' : '请选择日期'
   const [isOpen, setIsOpen] = useState(false)
@@ -50,10 +50,10 @@ export default function DateTimePicker({
     }
   }, [value])
 
-  // 格式化日期时间显示
+  // 格式化日期时间显示（使用 YY-MM-DD 格式）
   const formatDisplayDateTime = (): string => {
     if (!selectedDate) return ''
-    const year = selectedDate.getFullYear()
+    const year = String(selectedDate.getFullYear()).slice(-2)
     const month = String(selectedDate.getMonth() + 1).padStart(2, '0')
     const day = String(selectedDate.getDate()).padStart(2, '0')
     if (showTime) {

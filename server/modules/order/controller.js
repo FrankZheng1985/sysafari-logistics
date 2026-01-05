@@ -998,6 +998,20 @@ export async function getBillStats(req, res) {
 }
 
 /**
+ * 获取全公司订单趋势统计
+ */
+export async function getOrderTrend(req, res) {
+  try {
+    const { dimension = 'month', limit } = req.query
+    const trendData = await model.getOrderTrend(dimension, limit ? Number(limit) : null)
+    return success(res, trendData)
+  } catch (error) {
+    console.error('获取订单趋势统计失败:', error)
+    return serverError(res, '获取订单趋势统计失败')
+  }
+}
+
+/**
  * 获取CMR管理列表
  */
 export async function getCMRList(req, res) {

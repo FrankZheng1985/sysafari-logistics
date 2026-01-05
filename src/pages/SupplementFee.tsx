@@ -359,6 +359,17 @@ export default function SupplementFee() {
         if (data.data.customerId) {
           loadCustomerQuotations(data.data.customerId)
         }
+        
+        // 如果有主发票号，获取发票信息（用于追加费用时创建追加发票）
+        if (data.data.primaryInvoiceNumber) {
+          await fetchInvoiceByNumber(data.data.primaryInvoiceNumber, {
+            billId: data.data.id,
+            billNumber: data.data.billNumber,
+            containerNumbers: containerNumbers,
+            customerId: data.data.customerId,
+            customerName: data.data.customerName
+          })
+        }
       }
     } catch (error) {
       console.error('获取提单信息失败:', error)
@@ -366,6 +377,63 @@ export default function SupplementFee() {
       if (!invoiceId) {
         setLoading(false)
       }
+    }
+  }
+  
+  // 根据发票号获取发票信息
+  const fetchInvoiceByNumber = async (invoiceNumber: string, billData: {
+    billId: string
+    billNumber: string
+    containerNumbers: string[]
+    customerId?: string
+    customerName: string
+  }) => {
+    try {
+      // 通过搜索 API 精确匹配发票号
+      const response = await fetch(`${API_BASE}/api/invoices?search=${encodeURIComponent(invoiceNumber)}&pageSize=10`)
+      const data = await response.json()
+      
+      if (data.errCode === 200 && data.data?.list) {
+        // 精确匹配发票号
+        const matchedInvoice = data.data.list.find((inv: any) => inv.invoiceNumber === invoiceNumber)
+        
+        if (matchedInvoice) {
+          // 处理 containerNumbers
+          let invoiceContainerNumbers: string[] = []
+          if (matchedInvoice.containerNumbers) {
+            if (typeof matchedInvoice.containerNumbers === 'string') {
+              try {
+                invoiceContainerNumbers = JSON.parse(matchedInvoice.containerNumbers)
+              } catch {
+                invoiceContainerNumbers = [matchedInvoice.containerNumbers]
+              }
+            } else if (Array.isArray(matchedInvoice.containerNumbers)) {
+              invoiceContainerNumbers = matchedInvoice.containerNumbers
+            }
+          }
+          
+          setInvoice({
+            id: matchedInvoice.id,
+            invoiceNumber: matchedInvoice.invoiceNumber,
+            invoiceType: matchedInvoice.invoiceType,
+            billId: matchedInvoice.billId || billData.billId,
+            billNumber: matchedInvoice.billNumber || billData.billNumber,
+            containerNumber: matchedInvoice.containerNumber,
+            containerNumbers: invoiceContainerNumbers.length > 0 ? invoiceContainerNumbers : billData.containerNumbers,
+            customerId: matchedInvoice.customerId || billData.customerId,
+            customerName: matchedInvoice.customerName || billData.customerName,
+            totalAmount: matchedInvoice.totalAmount,
+            paidAmount: matchedInvoice.paidAmount,
+            status: matchedInvoice.status,
+            currency: matchedInvoice.currency
+          })
+          console.log('成功获取原发票信息:', matchedInvoice.invoiceNumber)
+        } else {
+          console.warn('未找到匹配的发票:', invoiceNumber)
+        }
+      }
+    } catch (error) {
+      console.error('根据发票号获取发票信息失败:', error)
     }
   }
 

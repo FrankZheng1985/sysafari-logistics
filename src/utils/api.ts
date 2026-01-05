@@ -4702,6 +4702,79 @@ export async function getCustomerOrderStats(customerId: string): Promise<ApiResp
   }
 }
 
+/**
+ * 客户订单趋势数据项
+ */
+export interface OrderTrendItem {
+  period: string
+  year: string
+  month: string | null
+  label: string
+  orderCount: number
+  totalWeight: number
+  totalVolume: number
+}
+
+/**
+ * 客户订单趋势统计结果（包含创建时间和清关完成时间两个维度）
+ */
+export interface OrderTrendData {
+  created: OrderTrendItem[]  // 按创建时间统计
+  cleared: OrderTrendItem[]  // 按清关完成时间统计
+}
+
+/**
+ * 获取客户订单趋势统计（按月/年维度）
+ * 同时返回两个日期维度的统计：创建时间和清关完成时间
+ * @param customerId 客户ID
+ * @param dimension 统计维度：'month' 或 'year'
+ * @param limit 返回记录数，月度默认12，年度默认5
+ */
+export async function getCustomerOrderTrend(
+  customerId: string, 
+  dimension: 'month' | 'year' = 'month',
+  limit?: number
+): Promise<ApiResponse<OrderTrendData>> {
+  try {
+    const params = new URLSearchParams({ dimension })
+    if (limit) params.append('limit', limit.toString())
+    
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/order-trend?${params}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取客户订单趋势失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取全公司订单趋势统计（按月/年维度）
+ * 同时返回两个日期维度的统计：创建时间和清关完成时间
+ * @param dimension 统计维度：'month' 或 'year'
+ * @param limit 返回记录数，月度默认12，年度默认5
+ */
+export async function getCompanyOrderTrend(
+  dimension: 'month' | 'year' = 'month',
+  limit?: number
+): Promise<ApiResponse<OrderTrendData>> {
+  try {
+    const params = new URLSearchParams({ dimension })
+    if (limit) params.append('limit', limit.toString())
+    
+    const response = await fetch(`${API_BASE_URL}/api/bills/order-trend?${params}`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取公司订单趋势失败:', error)
+    throw error
+  }
+}
+
 
 // ==================== 客户地址 API 接口 ====================
 

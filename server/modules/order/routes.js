@@ -38,6 +38,9 @@ const upload = multer({
 // 获取提单统计数据
 router.get('/bills/stats', controller.getBillStats)
 
+// 获取全公司订单趋势统计
+router.get('/bills/order-trend', controller.getOrderTrend)
+
 // ==================== CMR管理 ====================
 // 注意: CMR列表API已移至 tms/routes.js，使用 tmsRoutes 中的实现
 

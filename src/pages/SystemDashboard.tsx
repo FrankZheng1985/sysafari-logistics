@@ -4,10 +4,10 @@ import {
   LayoutDashboard, Package, Truck, Users, DollarSign,
   FileText, TrendingUp, Clock, CheckCircle,
   AlertTriangle, ArrowUpRight, RefreshCw,
-  ChevronRight, Activity, BarChart3, Lock
+  ChevronRight, Activity, BarChart3, Lock, Calendar
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getCompanyOrderTrend, type OrderTrendData, type OrderTrendItem } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -66,6 +66,12 @@ export default function SystemDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
   const [currentTime, setCurrentTime] = useState(new Date())
+  
+  // 订单趋势统计状态
+  const [orderTrend, setOrderTrend] = useState<OrderTrendData | null>(null)
+  const [trendDimension, setTrendDimension] = useState<'month' | 'year'>('month')
+  const [trendDateType, setTrendDateType] = useState<'created' | 'cleared'>('created')
+  const [trendLoading, setTrendLoading] = useState(false)
 
   // 检查模块访问权限
   const canAccessModule = (module: keyof typeof MODULE_PERMISSIONS): boolean => {
@@ -80,8 +86,30 @@ export default function SystemDashboard() {
     }
   }
 
+  // 加载订单趋势数据
+  const loadOrderTrend = async (dimension: 'month' | 'year') => {
+    setTrendLoading(true)
+    try {
+      const response = await getCompanyOrderTrend(dimension)
+      if (response.errCode === 200 && response.data) {
+        setOrderTrend(response.data)
+      }
+    } catch (error) {
+      console.error('加载订单趋势统计失败:', error)
+    } finally {
+      setTrendLoading(false)
+    }
+  }
+
+  // 处理时间维度切换
+  const handleTrendDimensionChange = (dimension: 'month' | 'year') => {
+    setTrendDimension(dimension)
+    loadOrderTrend(dimension)
+  }
+
   useEffect(() => {
     fetchDashboardData()
+    loadOrderTrend(trendDimension)
     
     // 更新时间
     const timer = setInterval(() => {
@@ -474,6 +502,197 @@ export default function SystemDashboard() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* 订单量趋势图表 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-medium text-gray-900 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-gray-500" />
+            订单量趋势
+          </h3>
+          <div className="flex items-center gap-3">
+            {/* 日期类型切换 */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setTrendDateType('created')}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  trendDateType === 'created'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                创建时间
+              </button>
+              <button
+                onClick={() => setTrendDateType('cleared')}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  trendDateType === 'cleared'
+                    ? 'bg-white text-green-600 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                清关完成
+              </button>
+            </div>
+            {/* 时间维度切换 */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => handleTrendDimensionChange('month')}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  trendDimension === 'month'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Calendar className="w-3 h-3 inline-block mr-1" />月
+              </button>
+              <button
+                onClick={() => handleTrendDimensionChange('year')}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  trendDimension === 'year'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Calendar className="w-3 h-3 inline-block mr-1" />年
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {trendLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+          </div>
+        ) : orderTrend && (trendDateType === 'created' ? orderTrend.created : orderTrend.cleared)?.length > 0 ? (
+          <div className="space-y-4">
+            {/* 图表区域 - CSS柱状图 */}
+            {(() => {
+              const currentData = trendDateType === 'created' ? orderTrend.created : orderTrend.cleared
+              const maxCount = Math.max(...currentData.map(d => d.orderCount), 1)
+              // 计算一个合适的Y轴最大值
+              const yAxisMax = maxCount <= 10 ? Math.ceil(maxCount / 5) * 5 || 5
+                : maxCount <= 50 ? Math.ceil(maxCount / 10) * 10
+                : maxCount <= 100 ? Math.ceil(maxCount / 20) * 20
+                : maxCount <= 500 ? Math.ceil(maxCount / 50) * 50
+                : Math.ceil(maxCount / 100) * 100
+              const yAxisValues = [yAxisMax, Math.round(yAxisMax * 0.75), Math.round(yAxisMax * 0.5), Math.round(yAxisMax * 0.25), 0]
+              const chartHeight = 200 // 像素高度
+              
+              return (
+                <div className="relative">
+                  {/* Y轴参考线和数值 */}
+                  <div className="absolute left-0 top-0 bottom-6 w-10 flex flex-col justify-between text-right pr-2">
+                    {yAxisValues.map((val, i) => (
+                      <span key={i} className="text-[10px] text-gray-400 leading-none">{val}</span>
+                    ))}
+                  </div>
+                  
+                  {/* 图表主体 */}
+                  <div className="ml-10 relative" style={{ height: `${chartHeight}px` }}>
+                    {/* 背景参考线 */}
+                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                      {yAxisValues.map((_, i) => (
+                        <div key={i} className="border-t border-gray-100 border-dashed" />
+                      ))}
+                    </div>
+                    
+                    {/* 柱状图 */}
+                    <div className="flex items-end justify-between h-full gap-1 relative z-10 px-1">
+                      {currentData.map((item, index) => {
+                        // 计算柱子高度（基于像素）
+                        const heightPercent = item.orderCount > 0 ? (item.orderCount / yAxisMax) * 100 : 0
+                        const barHeight = Math.max(heightPercent > 0 ? (chartHeight * heightPercent / 100) : 0, item.orderCount > 0 ? 8 : 2)
+                        
+                        return (
+                          <div key={index} className="flex-1 flex flex-col items-center justify-end h-full group">
+                            {/* 数值标签 */}
+                            {item.orderCount > 0 && (
+                              <span className="text-[10px] font-medium text-gray-600 mb-1">
+                                {item.orderCount}
+                              </span>
+                            )}
+                            {/* 柱子 */}
+                            <div
+                              className={`w-full max-w-[40px] rounded-t-sm transition-all duration-300 cursor-pointer group-hover:opacity-80 ${
+                                trendDateType === 'created' 
+                                  ? 'bg-gradient-to-t from-blue-500 to-blue-400 shadow-sm shadow-blue-200' 
+                                  : 'bg-gradient-to-t from-green-500 to-green-400 shadow-sm shadow-green-200'
+                              } ${item.orderCount === 0 ? 'bg-gray-200' : ''}`}
+                              style={{ height: `${barHeight}px` }}
+                              title={`${item.label}: ${item.orderCount}单, ${item.totalWeight.toFixed(0)}kg, ${item.totalVolume.toFixed(1)}cbm`}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* X轴标签 */}
+                  <div className="ml-10 flex justify-between mt-2 px-1">
+                    {currentData.map((item, index) => (
+                      <div key={index} className="flex-1 text-center">
+                        <span className="text-[10px] text-gray-500">
+                          {trendDimension === 'month' 
+                            ? item.month?.replace(/^0/, '') + '月'
+                            : item.year?.slice(-2) + '年'
+                          }
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+            
+            {/* 汇总数据 */}
+            {(() => {
+              const currentData = trendDateType === 'created' ? orderTrend.created : orderTrend.cleared
+              const totalOrders = currentData.reduce((sum, d) => sum + d.orderCount, 0)
+              const totalWeight = currentData.reduce((sum, d) => sum + d.totalWeight, 0)
+              const totalVolume = currentData.reduce((sum, d) => sum + d.totalVolume, 0)
+              
+              return (
+                <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+                  <div className={`rounded-lg p-3 text-center ${trendDateType === 'created' ? 'bg-blue-50' : 'bg-green-50'}`}>
+                    <div className={`text-xl font-bold ${trendDateType === 'created' ? 'text-blue-700' : 'text-green-700'}`}>
+                      {totalOrders.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {trendDimension === 'month' ? '近12月订单' : '近5年订单'}
+                    </div>
+                  </div>
+                  <div className="bg-orange-50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-orange-700">
+                      {totalWeight >= 1000000 
+                        ? `${(totalWeight / 1000000).toFixed(1)}M` 
+                        : totalWeight >= 1000 
+                          ? `${(totalWeight / 1000).toFixed(0)}K`
+                          : totalWeight.toFixed(0)
+                      }
+                    </div>
+                    <div className="text-xs text-gray-500">累计重量 (kg)</div>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-purple-700">
+                      {totalVolume >= 10000 
+                        ? `${(totalVolume / 1000).toFixed(1)}K` 
+                        : totalVolume.toFixed(1)
+                      }
+                    </div>
+                    <div className="text-xs text-gray-500">累计体积 (cbm)</div>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+            <BarChart3 className="w-10 h-10 mb-2" />
+            <p className="text-sm">暂无订单趋势数据</p>
+          </div>
+        )}
       </div>
 
       {/* 底部提示 */}

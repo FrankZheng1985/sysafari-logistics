@@ -599,6 +599,28 @@ export async function getCustomerOrderStats(req, res) {
 }
 
 /**
+ * 获取客户订单趋势统计（按月/年维度）
+ */
+export async function getCustomerOrderTrend(req, res) {
+  try {
+    const { customerId } = req.params
+    const { dimension = 'month', limit } = req.query
+
+    const customer = await model.getCustomerById(customerId)
+    if (!customer) {
+      return notFound(res, '客户不存在')
+    }
+
+    const parsedLimit = limit ? parseInt(limit, 10) : null
+    const trend = await model.getCustomerOrderTrend(customerId, dimension, parsedLimit)
+    return success(res, trend)
+  } catch (error) {
+    console.error('获取客户订单趋势失败:', error)
+    return serverError(res, '获取客户订单趋势失败')
+  }
+}
+
+/**
  * 获取客户最新报价单PDF
  */
 export async function getCustomerQuotationPdf(req, res) {

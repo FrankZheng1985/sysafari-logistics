@@ -835,6 +835,181 @@ export async function getBillStats() {
 }
 
 /**
+ * 获取全公司订单趋势统计（按月/年维度）
+ * 同时统计两个日期维度：创建时间和清关完成时间
+ * @param {string} dimension - 统计维度：'month' 或 'year'
+ * @param {number} limit - 返回记录数，月度默认12，年度默认5
+ */
+export async function getOrderTrend(dimension = 'month', limit = null) {
+  const db = getDatabase()
+  
+  // 设置默认limit
+  if (!limit) {
+    limit = dimension === 'month' ? 12 : 5
+  }
+  
+  // 构建两个查询：一个按创建时间，一个按清关完成时间
+  let createdQuery, clearedQuery
+  
+  if (dimension === 'month') {
+    // 按创建时间 - 月度统计 (使用 create_time TEXT 字段)
+    createdQuery = `
+      SELECT 
+        TO_CHAR(create_time::date, 'YYYY-MM') as period,
+        TO_CHAR(create_time::date, 'YYYY') as year,
+        TO_CHAR(create_time::date, 'MM') as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE is_void = 0
+        AND create_time IS NOT NULL
+        AND create_time != ''
+      GROUP BY TO_CHAR(create_time::date, 'YYYY-MM'), TO_CHAR(create_time::date, 'YYYY'), TO_CHAR(create_time::date, 'MM')
+      ORDER BY period ASC
+    `
+    
+    // 按清关完成时间 - 月度统计 (customs_release_time 是 TEXT 类型，需要转换)
+    clearedQuery = `
+      SELECT 
+        TO_CHAR(customs_release_time::timestamp, 'YYYY-MM') as period,
+        TO_CHAR(customs_release_time::timestamp, 'YYYY') as year,
+        TO_CHAR(customs_release_time::timestamp, 'MM') as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE is_void = 0
+        AND customs_release_time IS NOT NULL
+        AND customs_release_time != ''
+      GROUP BY TO_CHAR(customs_release_time::timestamp, 'YYYY-MM'), TO_CHAR(customs_release_time::timestamp, 'YYYY'), TO_CHAR(customs_release_time::timestamp, 'MM')
+      ORDER BY period ASC
+    `
+  } else {
+    // 按创建时间 - 年度统计
+    createdQuery = `
+      SELECT 
+        EXTRACT(YEAR FROM create_time::date)::text as period,
+        EXTRACT(YEAR FROM create_time::date)::text as year,
+        '00' as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE is_void = 0
+        AND create_time IS NOT NULL
+        AND create_time != ''
+      GROUP BY EXTRACT(YEAR FROM create_time::date)
+      ORDER BY period ASC
+    `
+    
+    // 按清关完成时间 - 年度统计 (customs_release_time 是 TEXT 类型，需要转换)
+    clearedQuery = `
+      SELECT 
+        EXTRACT(YEAR FROM customs_release_time::timestamp)::text as period,
+        EXTRACT(YEAR FROM customs_release_time::timestamp)::text as year,
+        '00' as month,
+        COUNT(*) as order_count,
+        COALESCE(SUM(weight), 0) as total_weight,
+        COALESCE(SUM(volume), 0) as total_volume
+      FROM bills_of_lading
+      WHERE is_void = 0
+        AND customs_release_time IS NOT NULL
+        AND customs_release_time != ''
+      GROUP BY EXTRACT(YEAR FROM customs_release_time::timestamp)
+      ORDER BY period ASC
+    `
+  }
+  
+  // 执行查询
+  const [createdRows, clearedRows] = await Promise.all([
+    db.prepare(createdQuery).all(),
+    db.prepare(clearedQuery).all()
+  ])
+  
+  // 格式化数据
+  const formatData = (rows) => rows.map(row => ({
+    period: row.period?.toString() || '',
+    year: row.year?.toString() || '',
+    month: row.month !== '00' ? row.month?.toString() : null,
+    label: dimension === 'month' 
+      ? `${row.year}-${row.month}`
+      : `${row.year}年`,
+    orderCount: Number(row.order_count || 0),
+    totalWeight: Number(row.total_weight || 0),
+    totalVolume: Number(row.total_volume || 0)
+  }))
+  
+  let createdData = formatData(createdRows)
+  let clearedData = formatData(clearedRows)
+  
+  // 如果是月度，补充缺失的月份（确保连续性，取最近limit个月）
+  if (dimension === 'month') {
+    const fillMonthlyData = (data) => {
+      const filledData = []
+      const now = new Date()
+      for (let i = limit - 1; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const year = date.getFullYear().toString()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const period = `${year}-${month}`
+        
+        const existing = data.find(d => d.period === period)
+        if (existing) {
+          filledData.push(existing)
+        } else {
+          filledData.push({
+            period,
+            year,
+            month,
+            label: `${year}-${month}`,
+            orderCount: 0,
+            totalWeight: 0,
+            totalVolume: 0
+          })
+        }
+      }
+      return filledData
+    }
+    
+    createdData = fillMonthlyData(createdData)
+    clearedData = fillMonthlyData(clearedData)
+  } else {
+    // 年度：取最近limit年
+    const fillYearlyData = (data) => {
+      const filledData = []
+      const currentYear = new Date().getFullYear()
+      for (let i = limit - 1; i >= 0; i--) {
+        const year = (currentYear - i).toString()
+        const existing = data.find(d => d.period === year)
+        if (existing) {
+          filledData.push(existing)
+        } else {
+          filledData.push({
+            period: year,
+            year,
+            month: null,
+            label: `${year}年`,
+            orderCount: 0,
+            totalWeight: 0,
+            totalVolume: 0
+          })
+        }
+      }
+      return filledData
+    }
+    
+    createdData = fillYearlyData(createdData)
+    clearedData = fillYearlyData(clearedData)
+  }
+  
+  return {
+    created: createdData,
+    cleared: clearedData
+  }
+}
+
+/**
  * 获取CMR管理列表（按派送状态分类）
  * 
  * CMR管理显示规则：
@@ -1058,7 +1233,11 @@ export function convertBillToCamelCase(row, includeFeeAmount = false) {
     importedByName: row.imported_by_name,
     importTime: row.import_time,
     // Reference List（参考号相关信息）
-    referenceList: row.reference_list ? (typeof row.reference_list === 'string' ? JSON.parse(row.reference_list) : row.reference_list) : []
+    referenceList: row.reference_list ? (typeof row.reference_list === 'string' ? JSON.parse(row.reference_list) : row.reference_list) : [],
+    // 主发票号（财务确认收款后记录）
+    primaryInvoiceNumber: row.primary_invoice_number,
+    // 财务确认相关
+    paymentConfirmed: row.payment_confirmed
   }
   
   // 如果包含费用金额字段，添加到结果中
@@ -1416,6 +1595,7 @@ export default {
   
   // 统计和列表
   getBillStats,
+  getOrderTrend,
   getCMRList,
   getInspectionList,
   

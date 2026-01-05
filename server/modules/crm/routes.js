@@ -95,6 +95,9 @@ router.delete('/follow-ups/:followUpId', controller.deleteFollowUp)
 // 获取客户订单统计
 router.get('/customers/:customerId/order-stats', controller.getCustomerOrderStats)
 
+// 获取客户订单趋势统计（按月/年维度）
+router.get('/customers/:customerId/order-trend', controller.getCustomerOrderTrend)
+
 // 获取客户订单列表
 router.get('/customers/:customerId/orders', controller.getCustomerOrders)
 
