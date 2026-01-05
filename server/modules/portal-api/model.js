@@ -277,11 +277,13 @@ export async function getCustomerOrderStats(customerId) {
 
 /**
  * 获取客户的账单列表
+ * 只返回已出账的发票（pdf_url 不为空，表示财务已正式出账）
  */
 export async function getCustomerInvoices(customerId, params = {}) {
   const db = getDatabase()
   const { status, startDate, endDate, page = 1, pageSize = 20 } = params
   
+  // 只显示已出账的发票（pdf_url IS NOT NULL）
   let sql = `
     SELECT 
       i.id, i.invoice_number, i.invoice_date, i.due_date,
@@ -295,6 +297,7 @@ export async function getCustomerInvoices(customerId, params = {}) {
     FROM invoices i
     LEFT JOIN bills_of_lading b ON i.bill_id = b.id
     WHERE i.customer_id = ?
+      AND i.pdf_url IS NOT NULL
   `
   const conditions = [customerId]
   
@@ -320,6 +323,8 @@ export async function getCustomerInvoices(customerId, params = {}) {
   conditions.push(pageSize, (page - 1) * pageSize)
   
   const rows = await db.prepare(sql).all(...conditions)
+  
+  console.log(`[账单查询] 客户ID: ${customerId}, 已出账发票数量: ${countResult?.total || 0}`)
   
   return {
     list: rows.map(convertInvoiceToCamelCase),
@@ -358,62 +363,31 @@ export async function getCustomerInvoiceById(customerId, invoiceId) {
 
 /**
  * 获取客户的应付账款汇总
- * 同时从 fees 表（应收费用）和 invoices 表（发票）获取数据
- * 优先使用 fees 表数据，因为它包含更完整的费用记录
+ * 只统计已出账的发票（pdf_url 不为空，表示财务已正式出账）
+ * 核销后（status = 'paid'）的发票不计入待付余额，但计入总金额和已付金额
  */
 export async function getCustomerPayables(customerId) {
   const db = getDatabase()
   
-  // 1. 从 fees 表获取应收费用汇总（主要数据源）
-  // fee_type = 'receivable' 表示应收款（客户应付给我们的）
-  const feeSummary = await db.prepare(`
-    SELECT
-      COUNT(*) as total_count,
-      COALESCE(SUM(amount), 0) as total_amount,
-      COALESCE(SUM(paid_amount), 0) as paid_amount,
-      COALESCE(SUM(amount - COALESCE(paid_amount, 0)), 0) as balance,
-      COUNT(CASE WHEN payment_status IN ('unpaid', '未付款', '待付款') THEN 1 END) as unpaid_count,
-      COUNT(CASE WHEN payment_status IN ('partial', '部分付款') THEN 1 END) as partial_count,
-      COUNT(CASE WHEN due_date < CURRENT_DATE AND payment_status NOT IN ('paid', '已付清', '已结清') THEN 1 END) as overdue_count,
-      COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE AND payment_status NOT IN ('paid', '已付清', '已结清') THEN amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as overdue_amount
-    FROM fees
-    WHERE customer_id = ? 
-      AND fee_type = 'receivable'
-      AND payment_status NOT IN ('cancelled', '已取消')
-  `).get(customerId)
-  
-  // 2. 从 invoices 表获取发票汇总（备用数据源，用于已开发票的情况）
+  // 只统计已出账的发票（pdf_url IS NOT NULL）
   const invoiceSummary = await db.prepare(`
     SELECT
       COUNT(*) as total_invoices,
       COALESCE(SUM(total_amount), 0) as total_amount,
       COALESCE(SUM(paid_amount), 0) as paid_amount,
       COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as balance,
-      COUNT(CASE WHEN status IN ('unpaid', '未付款', 'pending', 'issued') THEN 1 END) as unpaid_count,
+      COUNT(CASE WHEN status IN ('pending', 'unpaid', '未付款', '待付款') THEN 1 END) as unpaid_count,
       COUNT(CASE WHEN status IN ('partial', '部分付款') THEN 1 END) as partial_count,
       COUNT(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', '已付款', 'cancelled', '已取消') THEN 1 END) as overdue_count,
       COALESCE(SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', '已付款', 'cancelled', '已取消') THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as overdue_amount
     FROM invoices
     WHERE customer_id = ? 
       AND invoice_type = 'sales'
-      AND status NOT IN ('cancelled', '已取消', 'draft')
+      AND pdf_url IS NOT NULL
+      AND status NOT IN ('cancelled', '已取消')
   `).get(customerId)
   
-  // 3. 账龄分析 - 优先从 fees 表获取
-  const feeAging = await db.prepare(`
-    SELECT
-      COALESCE(SUM(CASE WHEN COALESCE(due_date, created_at::date) >= CURRENT_DATE THEN amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as current,
-      COALESCE(SUM(CASE WHEN COALESCE(due_date, created_at::date) < CURRENT_DATE AND COALESCE(due_date, created_at::date) >= CURRENT_DATE - INTERVAL '30 days' THEN amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_1_30,
-      COALESCE(SUM(CASE WHEN COALESCE(due_date, created_at::date) < CURRENT_DATE - INTERVAL '30 days' AND COALESCE(due_date, created_at::date) >= CURRENT_DATE - INTERVAL '60 days' THEN amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_31_60,
-      COALESCE(SUM(CASE WHEN COALESCE(due_date, created_at::date) < CURRENT_DATE - INTERVAL '60 days' AND COALESCE(due_date, created_at::date) >= CURRENT_DATE - INTERVAL '90 days' THEN amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_61_90,
-      COALESCE(SUM(CASE WHEN COALESCE(due_date, created_at::date) < CURRENT_DATE - INTERVAL '90 days' THEN amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as days_over_90
-    FROM fees
-    WHERE customer_id = ? 
-      AND fee_type = 'receivable'
-      AND payment_status NOT IN ('paid', '已付清', '已结清', 'cancelled', '已取消')
-  `).get(customerId)
-  
-  // 4. 备用：从 invoices 表获取账龄（如果 fees 表没有数据）
+  // 账龄分析 - 只统计未付款的已出账发票
   const invoiceAging = await db.prepare(`
     SELECT
       COALESCE(SUM(CASE WHEN due_date >= CURRENT_DATE OR due_date IS NULL THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as current,
@@ -424,40 +398,32 @@ export async function getCustomerPayables(customerId) {
     FROM invoices
     WHERE customer_id = ? 
       AND invoice_type = 'sales'
-      AND status NOT IN ('paid', '已付款', 'cancelled', '已取消', 'draft')
+      AND pdf_url IS NOT NULL
+      AND status NOT IN ('paid', '已付款', 'cancelled', '已取消')
   `).get(customerId)
   
-  // 5. 选择有数据的来源（优先 fees 表，其次 invoices 表）
-  const hasFeeData = parseFloat(feeSummary?.total_amount || 0) > 0
-  const hasInvoiceData = parseFloat(invoiceSummary?.total_amount || 0) > 0
-  
-  // 使用 fees 表数据作为主要数据源，如果没有则使用 invoices 表
-  const summary = hasFeeData ? feeSummary : invoiceSummary
-  const aging = hasFeeData ? feeAging : invoiceAging
-  
   // 记录日志便于调试
-  console.log(`[应付账款查询] 客户ID: ${customerId}, 费用表数据: ${hasFeeData}, 发票表数据: ${hasInvoiceData}`)
+  console.log(`[应付账款查询] 客户ID: ${customerId}, 已出账发票数量: ${invoiceSummary?.total_invoices || 0}, 待付余额: ${invoiceSummary?.balance || 0}`)
   
   return {
     summary: {
-      totalInvoices: parseInt(summary?.total_count || summary?.total_invoices) || 0,
-      totalAmount: parseFloat(summary?.total_amount || 0),
-      paidAmount: parseFloat(summary?.paid_amount || 0),
-      balance: parseFloat(summary?.balance || 0),
-      unpaidCount: parseInt(summary?.unpaid_count) || 0,
-      partialCount: parseInt(summary?.partial_count) || 0,
-      overdueCount: parseInt(summary?.overdue_count) || 0,
-      overdueAmount: parseFloat(summary?.overdue_amount || 0)
+      totalInvoices: parseInt(invoiceSummary?.total_invoices) || 0,
+      totalAmount: parseFloat(invoiceSummary?.total_amount || 0),
+      paidAmount: parseFloat(invoiceSummary?.paid_amount || 0),
+      balance: parseFloat(invoiceSummary?.balance || 0),
+      unpaidCount: parseInt(invoiceSummary?.unpaid_count) || 0,
+      partialCount: parseInt(invoiceSummary?.partial_count) || 0,
+      overdueCount: parseInt(invoiceSummary?.overdue_count) || 0,
+      overdueAmount: parseFloat(invoiceSummary?.overdue_amount || 0)
     },
     aging: {
-      current: parseFloat(aging?.current || 0),
-      days1To30: parseFloat(aging?.days_1_30 || 0),
-      days31To60: parseFloat(aging?.days_31_60 || 0),
-      days61To90: parseFloat(aging?.days_61_90 || 0),
-      daysOver90: parseFloat(aging?.days_over_90 || 0)
+      current: parseFloat(invoiceAging?.current || 0),
+      days1To30: parseFloat(invoiceAging?.days_1_30 || 0),
+      days31To60: parseFloat(invoiceAging?.days_31_60 || 0),
+      days61To90: parseFloat(invoiceAging?.days_61_90 || 0),
+      daysOver90: parseFloat(invoiceAging?.days_over_90 || 0)
     },
-    // 额外信息：数据来源
-    _dataSource: hasFeeData ? 'fees' : (hasInvoiceData ? 'invoices' : 'none')
+    _dataSource: 'invoices'
   }
 }
 
