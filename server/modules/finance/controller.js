@@ -9,6 +9,7 @@ import { success, successWithPagination, badRequest, notFound, serverError } fro
 import * as model from './model.js'
 import * as orderModel from '../order/model.js'
 import * as invoiceGenerator from './invoiceGenerator.js'
+import * as messageModel from '../message/model.js'
 import { getBOCExchangeRate } from '../../utils/exchangeRate.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -640,9 +641,23 @@ export async function createFee(req, res) {
         
         // 判断是否有财务权限
         const userPermissions = req.user?.permissions || []
+        const userRole = req.user?.role
+        
+        // 调试日志 - 检查用户角色和权限
+        console.log('[createFee] 追加费用权限检查:', {
+          userId,
+          userName,
+          userRole,
+          userPermissions: userPermissions.slice(0, 10), // 只打印前10个权限
+          hasFinanceManage: userPermissions.includes('finance:manage'),
+          hasFeeMange: userPermissions.includes('finance:fee_manage')
+        })
+        
         const hasFinancePermission = userPermissions.includes('finance:manage') || 
                                      userPermissions.includes('finance:fee_manage') ||
-                                     req.user?.role === 'admin'
+                                     ['admin', 'boss', 'finance_manager', 'finance', 'finance_director'].includes(userRole)
+        
+        console.log('[createFee] 财务权限判断结果:', hasFinancePermission)
         
         if (hasFinancePermission) {
           // 财务人员：直接生效
@@ -650,14 +665,35 @@ export async function createFee(req, res) {
           feeData.approvedAt = new Date().toISOString()
           feeData.approvedBy = userId
           feeData.approvedByName = userName
+          console.log('[createFee] 财务人员创建，直接生效')
         } else {
           // 非财务人员：待审批
           feeData.approvalStatus = 'pending'
+          console.log('[createFee] 非财务人员创建，需要审批')
         }
       }
     }
     
     const result = await model.createFee(feeData)
+    
+    // 如果需要审批，同时在 approvals 表创建审批记录
+    if (feeData.isSupplementary === 1 && feeData.approvalStatus === 'pending') {
+      try {
+        await messageModel.createApproval({
+          approvalType: 'fee',
+          businessId: result.id,
+          title: `追加费用审批 - ${feeName}`,
+          content: `${userName} 在提单 ${req.body.billNumber || ''} 上追加了费用「${feeName}」，金额 ${amount} ${req.body.currency || 'EUR'}，请审批。`,
+          amount: amount,
+          applicantId: userId,
+          applicantName: userName
+        })
+        console.log('[createFee] 已创建审批记录')
+      } catch (approvalError) {
+        console.error('[createFee] 创建审批记录失败:', approvalError)
+        // 不阻断主流程
+      }
+    }
     
     const newFee = await model.getFeeById(result.id)
     
@@ -696,9 +732,10 @@ export async function updateFee(req, res) {
     // 检查待审批费用：只有提交人或财务可以修改
     if (existing.approvalStatus === 'pending') {
       const userPermissions = req.user?.permissions || []
+      const userRole = req.user?.role
       const hasFinancePermission = userPermissions.includes('finance:manage') || 
                                    userPermissions.includes('finance:fee_manage') ||
-                                   req.user?.role === 'admin'
+                                   ['admin', 'boss', 'finance_manager', 'finance', 'finance_director'].includes(userRole)
       const isSubmitter = existing.approvalSubmittedBy === userId
       
       if (!hasFinancePermission && !isSubmitter) {
@@ -727,11 +764,23 @@ export async function deleteFee(req, res) {
   try {
     const { id } = req.params
     const userId = req.user?.id
+    const userRole = req.user?.role
+    const userPermissions = req.user?.permissions || []
     
     const existing = await model.getFeeById(id)
     if (!existing) {
       return notFound(res, '费用记录不存在')
     }
+    
+    // 调试日志
+    console.log('[deleteFee] 删除费用权限检查:', {
+      feeId: id,
+      userId,
+      userRole,
+      approvalStatus: existing.approvalStatus,
+      approvalSubmittedBy: existing.approvalSubmittedBy,
+      isLocked: existing.isLocked
+    })
     
     // 检查费用是否已锁定
     if (existing.isLocked) {
@@ -740,18 +789,42 @@ export async function deleteFee(req, res) {
     
     // 检查待审批费用：只有提交人或财务可以删除
     if (existing.approvalStatus === 'pending') {
-      const userPermissions = req.user?.permissions || []
       const hasFinancePermission = userPermissions.includes('finance:manage') || 
                                    userPermissions.includes('finance:fee_manage') ||
-                                   req.user?.role === 'admin'
-      const isSubmitter = existing.approvalSubmittedBy === userId
+                                   ['admin', 'boss', 'finance_manager', 'finance', 'finance_director'].includes(userRole)
+      // 使用 == 进行宽松比较，避免类型不匹配问题
+      const isSubmitter = existing.approvalSubmittedBy == userId
+      
+      console.log('[deleteFee] 权限判断结果:', {
+        hasFinancePermission,
+        isSubmitter,
+        submittedById: existing.approvalSubmittedBy,
+        submittedByType: typeof existing.approvalSubmittedBy,
+        userIdType: typeof userId
+      })
       
       if (!hasFinancePermission && !isSubmitter) {
         return badRequest(res, '待审批费用仅提交人或财务可删除')
       }
     }
     
-    model.deleteFee(id)
+    await model.deleteFee(id)
+    
+    // 如果有关联的审批记录，也要删除
+    try {
+      const approval = await messageModel.getApprovalByBusinessId(id)
+      if (approval) {
+        await messageModel.processApproval(approval.id, {
+          status: 'cancelled',
+          approverId: userId,
+          approverName: req.user?.name || 'system',
+          remark: '费用已删除'
+        })
+      }
+    } catch (approvalErr) {
+      console.error('[deleteFee] 更新审批记录失败:', approvalErr)
+    }
+    
     return success(res, null, '删除成功')
   } catch (error) {
     console.error('删除费用失败:', error)
@@ -1689,8 +1762,24 @@ export async function approveFee(req, res) {
       return badRequest(res, '该费用不在待审批状态')
     }
     
-    // 更新审批状态
+    // 更新费用表审批状态
     await model.approveFee(id, userId, userName)
+    
+    // 同时更新 approvals 表中的审批记录
+    try {
+      const approval = await messageModel.getApprovalByBusinessId(id)
+      if (approval) {
+        await messageModel.processApproval(approval.id, {
+          status: 'approved',
+          approverId: userId,
+          approverName: userName,
+          remark: '审批通过'
+        })
+      }
+    } catch (approvalErr) {
+      console.error('[approveFee] 更新审批记录失败:', approvalErr)
+      // 不阻断主流程
+    }
     
     return success(res, { id }, '审批通过')
   } catch (error) {
@@ -1723,8 +1812,24 @@ export async function rejectFee(req, res) {
       return badRequest(res, '该费用不在待审批状态')
     }
     
-    // 更新审批状态
+    // 更新费用表审批状态
     await model.rejectFee(id, userId, userName, reason)
+    
+    // 同时更新 approvals 表中的审批记录
+    try {
+      const approval = await messageModel.getApprovalByBusinessId(id)
+      if (approval) {
+        await messageModel.processApproval(approval.id, {
+          status: 'rejected',
+          approverId: userId,
+          approverName: userName,
+          rejectReason: reason
+        })
+      }
+    } catch (approvalErr) {
+      console.error('[rejectFee] 更新审批记录失败:', approvalErr)
+      // 不阻断主流程
+    }
     
     return success(res, { id }, '已拒绝')
   } catch (error) {
