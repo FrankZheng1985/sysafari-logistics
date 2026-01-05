@@ -1142,6 +1142,8 @@ export async function getLocations(type, search) {
 export async function searchTariffRates(hsCode, origin, limit = 20) {
   const db = getDatabase()
   
+  // 修改查询逻辑：优先匹配特定原产国，同时也返回通用税率（origin_country_code 为空的记录）
+  // 这样可以确保即使没有针对特定国家的税率，也能返回默认税率
   let sql = `
     SELECT 
       id, hs_code, hs_code_10, goods_description, goods_description_cn,
@@ -1155,14 +1157,23 @@ export async function searchTariffRates(hsCode, origin, limit = 20) {
   const params = [`${hsCode}%`, `%${hsCode}%`]
   let paramIndex = 3
   
+  // 原产国过滤：匹配特定国家 OR 通用税率（origin_country_code 为空或为 ERGA OMNES）
   if (origin) {
-    sql += ` AND (origin_country_code = $${paramIndex} OR geographical_area = $${paramIndex})`
+    sql += ` AND (origin_country_code = $${paramIndex} OR origin_country_code IS NULL OR geographical_area = $${paramIndex} OR geographical_area = '1011' OR geographical_area IS NULL)`
     params.push(origin)
     paramIndex++
   }
   
-  sql += ` ORDER BY hs_code ASC LIMIT $${paramIndex}`
-  params.push(parseInt(limit))
+  // 按优先级排序：特定原产国的数据排在前面，通用数据排在后面
+  sql += ` ORDER BY 
+    CASE 
+      WHEN origin_country_code = $${paramIndex} THEN 0
+      WHEN origin_country_code IS NOT NULL AND origin_country_code != '' THEN 1
+      ELSE 2
+    END,
+    hs_code ASC 
+    LIMIT $${paramIndex + 1}`
+  params.push(origin || '', parseInt(limit))
   
   const rows = await db.prepare(sql).all(...params)
   

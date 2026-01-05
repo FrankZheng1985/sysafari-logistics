@@ -275,17 +275,22 @@ export async function lookupHsCodeRealtime(req, res) {
         const { getDatabase } = await import('../../config/database.js')
         const db = getDatabase()
         
-        // 检查是否已存在
+        // 使用10位HS编码进行查询和存储（与数据库保持一致）
+        const hsCodeForDb = result.hsCode10 || result.hsCode
+        
+        // 检查是否已存在（同时匹配8位和10位）
         const existing = await db.prepare(`
           SELECT id FROM tariff_rates 
-          WHERE hs_code = ? AND COALESCE(origin_country_code, '') = ?
-        `).get(result.hsCode, result.originCountryCode || '')
+          WHERE (hs_code = ? OR hs_code = ?) AND COALESCE(origin_country_code, '') = ?
+        `).get(hsCodeForDb, result.hsCode, result.originCountryCode || '')
         
         if (existing) {
           // 更新
           await db.prepare(`
             UPDATE tariff_rates SET
               hs_code_10 = COALESCE(?, hs_code_10),
+              goods_description = COALESCE(?, goods_description),
+              goods_description_cn = COALESCE(?, goods_description_cn),
               third_country_duty = COALESCE(?, third_country_duty),
               duty_rate = COALESCE(?, duty_rate),
               anti_dumping_rate = COALESCE(?, anti_dumping_rate),
@@ -299,6 +304,8 @@ export async function lookupHsCodeRealtime(req, res) {
             WHERE id = ?
           `).run(
             result.hsCode10 || null,
+            result.goodsDescription || result.formattedDescription || null,
+            result.goodsDescriptionCn || null,
             result.thirdCountryDuty ?? null,
             result.dutyRate ?? null,
             result.antiDumpingRate ?? null,
@@ -310,19 +317,22 @@ export async function lookupHsCodeRealtime(req, res) {
           )
           result.savedToDb = 'updated'
         } else {
-          // 插入新记录
+          // 插入新记录（使用10位HS编码）
           await db.prepare(`
             INSERT INTO tariff_rates (
               hs_code, hs_code_10, origin_country_code,
+              goods_description, goods_description_cn,
               third_country_duty, duty_rate, vat_rate,
               anti_dumping_rate, countervailing_rate,
               has_quota, requires_license, requires_sps,
               api_source, last_api_sync, data_source, is_active
-            ) VALUES (?, ?, ?, ?, ?, 19, ?, ?, ?, ?, ?, 'taric_api', NOW(), 'taric', 1)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 19, ?, ?, ?, ?, ?, 'taric_api', NOW(), 'taric', 1)
           `).run(
-            result.hsCode,
+            hsCodeForDb,  // 使用10位HS编码
             result.hsCode10 || null,
             result.originCountryCode || null,
+            result.goodsDescription || result.formattedDescription || 'No description',
+            result.goodsDescriptionCn || null,
             result.thirdCountryDuty ?? null,
             result.dutyRate ?? null,
             result.antiDumpingRate ?? null,
@@ -748,11 +758,14 @@ export async function lookupHsCodeUk(req, res) {
         const { getDatabase } = await import('../../config/database.js')
         const db = getDatabase()
         
-        // 检查是否已存在
+        // 使用10位HS编码进行查询和存储（与数据库保持一致）
+        const hsCodeForDb = result.hsCode10 || result.hsCode
+        
+        // 检查是否已存在（同时匹配8位和10位）
         const existing = await db.prepare(`
           SELECT id FROM tariff_rates 
-          WHERE hs_code = ? AND COALESCE(origin_country_code, '') = ? AND data_source = ?
-        `).get(result.hsCode, result.originCountryCode || '', result.dataSource)
+          WHERE (hs_code = ? OR hs_code = ?) AND COALESCE(origin_country_code, '') = ? AND data_source = ?
+        `).get(hsCodeForDb, result.hsCode, result.originCountryCode || '', result.dataSource)
         
         if (existing) {
           // 更新
@@ -760,6 +773,7 @@ export async function lookupHsCodeUk(req, res) {
             UPDATE tariff_rates SET
               hs_code_10 = COALESCE(?, hs_code_10),
               goods_description = COALESCE(?, goods_description),
+              goods_description_cn = COALESCE(?, goods_description_cn),
               third_country_duty = COALESCE(?, third_country_duty),
               duty_rate = COALESCE(?, duty_rate),
               anti_dumping_rate = COALESCE(?, anti_dumping_rate),
@@ -770,7 +784,8 @@ export async function lookupHsCodeUk(req, res) {
             WHERE id = ?
           `).run(
             result.hsCode10 || null,
-            result.goodsDescription || null,
+            result.goodsDescription || result.formattedDescription || null,
+            result.goodsDescriptionCn || null,
             result.thirdCountryDuty ?? null,
             result.dutyRate ?? null,
             result.antiDumpingRate ?? null,
@@ -780,18 +795,20 @@ export async function lookupHsCodeUk(req, res) {
           )
           result.savedToDb = 'updated'
         } else {
-          // 插入新记录
+          // 插入新记录（使用10位HS编码）
           await db.prepare(`
             INSERT INTO tariff_rates (
               hs_code, hs_code_10, origin_country_code,
-              goods_description, third_country_duty, duty_rate, vat_rate,
+              goods_description, goods_description_cn,
+              third_country_duty, duty_rate, vat_rate,
               anti_dumping_rate, api_source, last_api_sync, data_source, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)
           `).run(
-            result.hsCode,
+            hsCodeForDb,  // 使用10位HS编码
             result.hsCode10 || null,
             result.originCountryCode || null,
-            result.goodsDescription || null,
+            result.goodsDescription || result.formattedDescription || 'No description',
+            result.goodsDescriptionCn || null,
             result.thirdCountryDuty ?? null,
             result.dutyRate ?? null,
             result.vatRate ?? null,
@@ -950,11 +967,14 @@ export async function lookupHsCodeUnified(req, res) {
         
         const dataSourceValue = result.dataSource || (source === 'uk' ? 'uk_api' : 'taric_api')
         
-        // 检查是否已存在
+        // 使用10位HS编码进行查询和存储（与数据库保持一致）
+        const hsCodeForDb = result.hsCode10 || result.hsCode
+        
+        // 检查是否已存在（同时匹配8位和10位）
         const existing = await db.prepare(`
           SELECT id FROM tariff_rates 
-          WHERE hs_code = ? AND COALESCE(origin_country_code, '') = ?
-        `).get(result.hsCode, result.originCountryCode || '')
+          WHERE (hs_code = ? OR hs_code = ?) AND COALESCE(origin_country_code, '') = ?
+        `).get(hsCodeForDb, result.hsCode, result.originCountryCode || '')
         
         if (existing) {
           // 更新
@@ -962,6 +982,7 @@ export async function lookupHsCodeUnified(req, res) {
             UPDATE tariff_rates SET
               hs_code_10 = COALESCE(?, hs_code_10),
               goods_description = COALESCE(?, goods_description),
+              goods_description_cn = COALESCE(?, goods_description_cn),
               third_country_duty = COALESCE(?, third_country_duty),
               duty_rate = COALESCE(?, duty_rate),
               anti_dumping_rate = COALESCE(?, anti_dumping_rate),
@@ -972,7 +993,8 @@ export async function lookupHsCodeUnified(req, res) {
             WHERE id = ?
           `).run(
             result.hsCode10 || null,
-            result.goodsDescription || null,
+            result.goodsDescription || result.formattedDescription || null,
+            result.goodsDescriptionCn || null,
             result.thirdCountryDuty ?? null,
             result.dutyRate ?? null,
             result.antiDumpingRate ?? null,
@@ -982,18 +1004,20 @@ export async function lookupHsCodeUnified(req, res) {
           )
           result.savedToDb = 'updated'
         } else {
-          // 插入新记录
+          // 插入新记录（使用10位HS编码）
           await db.prepare(`
             INSERT INTO tariff_rates (
               hs_code, hs_code_10, origin_country_code,
-              goods_description, third_country_duty, duty_rate, vat_rate,
+              goods_description, goods_description_cn,
+              third_country_duty, duty_rate, vat_rate,
               anti_dumping_rate, api_source, last_api_sync, data_source, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)
           `).run(
-            result.hsCode,
+            hsCodeForDb,  // 使用10位HS编码
             result.hsCode10 || null,
             result.originCountryCode || null,
-            result.goodsDescription || null,
+            result.goodsDescription || result.formattedDescription || 'No description',
+            result.goodsDescriptionCn || null,
             result.thirdCountryDuty ?? null,
             result.dutyRate ?? null,
             result.vatRate ?? null,
