@@ -252,9 +252,10 @@ export default function SupplementFee() {
   // 供应商搜索防抖
   const supplierSearchRef = useRef<NodeJS.Timeout | null>(null)
   
-  // 判断是否有财务权限
+  // 判断是否有财务权限（与后端保持一致）
   const hasFinancePermission = hasPermission('finance:manage') || 
                                hasPermission('finance:fee_manage') ||
+                               hasPermission('finance:payment_approve') ||
                                user?.role === 'admin'
 
   useEffect(() => {
@@ -771,6 +772,7 @@ export default function SupplementFee() {
       }> = []
       let totalAmount = 0
       let failCount = 0
+      let hasPendingApproval = false // 标记是否有待审批的费用
       
       // 第一步：创建费用记录
       for (const fee of pendingFeeItems) {
@@ -799,6 +801,11 @@ export default function SupplementFee() {
         const result = await response.json()
         
         if (result.errCode === 200 && result.data?.id) {
+          // 检查费用的审批状态
+          if (result.data.approvalStatus === 'pending') {
+            hasPendingApproval = true
+          }
+          
           createdFeeIds.push(result.data.id)
           invoiceItems.push({
             feeName: fee.feeName,
@@ -834,63 +841,80 @@ export default function SupplementFee() {
         }
       }
       
-      // 第二步：如果有成功创建的费用，直接创建追加发票
-      if (createdFeeIds.length > 0) {
-        // 优先从原发票获取信息，如果原发票没有才从提单获取
-        const customerId = invoice.customerId || bill?.customerId
-        const customerName = invoice.customerName || bill?.customerName || ''
-        const containerNumbers = (invoice.containerNumbers && invoice.containerNumbers.length > 0) 
-          ? invoice.containerNumbers 
-          : (bill?.containerNumbers || [])
-        const billId = invoice.billId || bill?.id
-        const billNumber = invoice.billNumber || bill?.billNumber || ''
-        const currency = invoice.currency || pendingFeeItems[0]?.currency || 'EUR'
-        
-        const supplementInvoiceData = {
-          parentInvoiceNumber: invoice.invoiceNumber,
-          billId: billId,
-          billNumber: billNumber,
-          customerId: customerId,
-          customerName: customerName,
-          containerNumbers: containerNumbers,
-          invoiceDate: feeDate,
-          feeIds: createdFeeIds,
-          items: invoiceItems,
-          subtotal: totalAmount,
-          totalAmount: totalAmount,
-          currency: currency,
-          invoiceType: invoice.invoiceType || 'sales',
-          status: 'pending',
-          description: `追加费用 - 原发票: ${invoice.invoiceNumber}`
-        }
-        
-        const invoiceResponse = await fetch(`${API_BASE}/api/invoices/supplement`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(supplementInvoiceData)
-        })
-        
-        const invoiceResult = await invoiceResponse.json()
-        
-        if (invoiceResult.errCode === 200 && invoiceResult.data?.id) {
-          // 追加发票创建成功，跳转到新发票详情页
-          const successMessage = failCount > 0 
-            ? `追加发票创建成功！发票号：${invoiceResult.data.invoiceNumber}\n（${failCount} 条费用创建失败）`
-            : `追加发票创建成功！发票号：${invoiceResult.data.invoiceNumber}`
-          
-          alert(successMessage)
-          navigate(`/finance/invoices/${invoiceResult.data.id}`)
-        } else {
-          // 费用创建成功但发票创建失败
-          alert(`费用已创建成功，但追加发票创建失败：${invoiceResult.errMsg || '未知错误'}\n请到发票管理中手动创建发票。`)
-          if (bill?.id) {
-            navigate(`/bookings/bill/${bill.id}`)
-          } else {
-            navigate('/finance/fees')
-          }
-        }
-      } else {
+      // 检查是否所有费用都创建失败
+      if (createdFeeIds.length === 0) {
         alert('费用创建失败，请稍后重试')
+        return
+      }
+      
+      // 第二步：根据审批状态决定是否创建发票
+      // 如果有待审批的费用，不创建发票，提示用户等待审批
+      if (hasPendingApproval) {
+        const successCount = createdFeeIds.length
+        alert(`追加费用已提交！\n\n✅ 成功提交 ${successCount} 笔费用\n⏳ 费用需要财务部门审批\n\n审批通过后，财务人员会为您创建追加发票。`)
+        
+        // 返回提单详情页
+        if (bill?.id) {
+          navigate(`/bookings/bill/${bill.id}`)
+        } else {
+          navigate('/finance/fees')
+        }
+        return
+      }
+      
+      // 财务人员：费用已直接生效，创建追加发票
+      // 优先从原发票获取信息，如果原发票没有才从提单获取
+      const customerId = invoice.customerId || bill?.customerId
+      const customerName = invoice.customerName || bill?.customerName || ''
+      const containerNumbers = (invoice.containerNumbers && invoice.containerNumbers.length > 0) 
+        ? invoice.containerNumbers 
+        : (bill?.containerNumbers || [])
+      const billId = invoice.billId || bill?.id
+      const billNumber = invoice.billNumber || bill?.billNumber || ''
+      const currency = invoice.currency || pendingFeeItems[0]?.currency || 'EUR'
+      
+      const supplementInvoiceData = {
+        parentInvoiceNumber: invoice.invoiceNumber,
+        billId: billId,
+        billNumber: billNumber,
+        customerId: customerId,
+        customerName: customerName,
+        containerNumbers: containerNumbers,
+        invoiceDate: feeDate,
+        feeIds: createdFeeIds,
+        items: invoiceItems,
+        subtotal: totalAmount,
+        totalAmount: totalAmount,
+        currency: currency,
+        invoiceType: invoice.invoiceType || 'sales',
+        status: 'pending',
+        description: `追加费用 - 原发票: ${invoice.invoiceNumber}`
+      }
+      
+      const invoiceResponse = await fetch(`${API_BASE}/api/invoices/supplement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(supplementInvoiceData)
+      })
+      
+      const invoiceResult = await invoiceResponse.json()
+      
+      if (invoiceResult.errCode === 200 && invoiceResult.data?.id) {
+        // 追加发票创建成功，跳转到新发票详情页
+        const successMessage = failCount > 0 
+          ? `追加发票创建成功！发票号：${invoiceResult.data.invoiceNumber}\n（${failCount} 条费用创建失败）`
+          : `追加发票创建成功！发票号：${invoiceResult.data.invoiceNumber}`
+        
+        alert(successMessage)
+        navigate(`/finance/invoices/${invoiceResult.data.id}`)
+      } else {
+        // 费用创建成功但发票创建失败
+        alert(`费用已创建成功，但追加发票创建失败：${invoiceResult.errMsg || '未知错误'}\n请到发票管理中手动创建发票。`)
+        if (bill?.id) {
+          navigate(`/bookings/bill/${bill.id}`)
+        } else {
+          navigate('/finance/fees')
+        }
       }
     } catch (error) {
       console.error('提交追加费用失败:', error)
