@@ -15,6 +15,39 @@ import { getBOCExchangeRate } from '../../utils/exchangeRate.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// ==================== 辅助函数 ====================
+
+/**
+ * 判断用户是否有财务权限
+ * 财务权限判断逻辑：
+ * 1. admin 角色始终有权限
+ * 2. 用户拥有 finance:fee_manage 或 finance:manage 权限
+ * 3. 用户拥有 finance:payment_approve 权限（财务审批权限）
+ * 
+ * 注意：财务角色应该在用户管理中配置，并分配相应的权限
+ * 而不是硬编码角色名称
+ */
+function hasFinancePermission(user) {
+  if (!user) return false
+  
+  const userRole = user.role
+  const userPermissions = user.permissions || []
+  
+  // admin 角色始终有权限
+  if (userRole === 'admin') {
+    return true
+  }
+  
+  // 检查财务相关权限
+  const financePermissions = [
+    'finance:fee_manage',      // 费用管理权限
+    'finance:manage',          // 财务管理权限（通用）
+    'finance:payment_approve'  // 财务审批权限
+  ]
+  
+  return financePermissions.some(perm => userPermissions.includes(perm))
+}
+
 // ==================== 发票管理 ====================
 
 /**
@@ -639,27 +672,19 @@ export async function createFee(req, res) {
         feeData.approvalSubmittedBy = userId
         feeData.approvalSubmittedByName = userName
         
-        // 判断是否有财务权限
-        const userPermissions = req.user?.permissions || []
-        const userRole = req.user?.role
+        // 判断是否有财务权限（基于用户管理中配置的权限）
+        const isFinance = hasFinancePermission(req.user)
         
-        // 调试日志 - 检查用户角色和权限
+        // 调试日志
         console.log('[createFee] 追加费用权限检查:', {
           userId,
           userName,
-          userRole,
-          userPermissions: userPermissions.slice(0, 10), // 只打印前10个权限
-          hasFinanceManage: userPermissions.includes('finance:manage'),
-          hasFeeMange: userPermissions.includes('finance:fee_manage')
+          userRole: req.user?.role,
+          permissions: (req.user?.permissions || []).filter(p => p.startsWith('finance:')),
+          isFinance
         })
         
-        const hasFinancePermission = userPermissions.includes('finance:manage') || 
-                                     userPermissions.includes('finance:fee_manage') ||
-                                     ['admin', 'boss', 'finance_manager', 'finance', 'finance_director'].includes(userRole)
-        
-        console.log('[createFee] 财务权限判断结果:', hasFinancePermission)
-        
-        if (hasFinancePermission) {
+        if (isFinance) {
           // 财务人员：直接生效
           feeData.approvalStatus = 'approved'
           feeData.approvedAt = new Date().toISOString()
@@ -731,14 +756,10 @@ export async function updateFee(req, res) {
     
     // 检查待审批费用：只有提交人或财务可以修改
     if (existing.approvalStatus === 'pending') {
-      const userPermissions = req.user?.permissions || []
-      const userRole = req.user?.role
-      const hasFinancePermission = userPermissions.includes('finance:manage') || 
-                                   userPermissions.includes('finance:fee_manage') ||
-                                   ['admin', 'boss', 'finance_manager', 'finance', 'finance_director'].includes(userRole)
-      const isSubmitter = existing.approvalSubmittedBy === userId
+      const isFinance = hasFinancePermission(req.user)
+      const isSubmitter = existing.approvalSubmittedBy == userId  // 宽松比较避免类型问题
       
-      if (!hasFinancePermission && !isSubmitter) {
+      if (!isFinance && !isSubmitter) {
         return badRequest(res, '待审批费用仅提交人或财务可修改')
       }
     }
@@ -789,21 +810,18 @@ export async function deleteFee(req, res) {
     
     // 检查待审批费用：只有提交人或财务可以删除
     if (existing.approvalStatus === 'pending') {
-      const hasFinancePermission = userPermissions.includes('finance:manage') || 
-                                   userPermissions.includes('finance:fee_manage') ||
-                                   ['admin', 'boss', 'finance_manager', 'finance', 'finance_director'].includes(userRole)
+      const isFinance = hasFinancePermission(req.user)
       // 使用 == 进行宽松比较，避免类型不匹配问题
       const isSubmitter = existing.approvalSubmittedBy == userId
       
       console.log('[deleteFee] 权限判断结果:', {
-        hasFinancePermission,
+        isFinance,
         isSubmitter,
-        submittedById: existing.approvalSubmittedBy,
-        submittedByType: typeof existing.approvalSubmittedBy,
-        userIdType: typeof userId
+        userRole,
+        financePermissions: userPermissions.filter(p => p.startsWith('finance:'))
       })
       
-      if (!hasFinancePermission && !isSubmitter) {
+      if (!isFinance && !isSubmitter) {
         return badRequest(res, '待审批费用仅提交人或财务可删除')
       }
     }
