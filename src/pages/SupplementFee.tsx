@@ -21,7 +21,7 @@ const useSafeGoBack = (navigate: ReturnType<typeof useNavigate>, invoiceId?: str
       navigate(`/finance/invoices/${invoiceId}`)
     } else if (billId) {
       // 如果有订单ID，返回订单详情页
-      navigate(`/bill/${billId}`)
+      navigate(`/bookings/bill/${billId}`)
     } else {
       // 默认返回费用管理页面
       navigate('/finance/fees')
@@ -884,7 +884,7 @@ export default function SupplementFee() {
           // 费用创建成功但发票创建失败
           alert(`费用已创建成功，但追加发票创建失败：${invoiceResult.errMsg || '未知错误'}\n请到发票管理中手动创建发票。`)
           if (bill?.id) {
-            navigate(`/bill/${bill.id}`)
+            navigate(`/bookings/bill/${bill.id}`)
           } else {
             navigate('/finance/fees')
           }
