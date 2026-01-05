@@ -953,7 +953,7 @@ export async function getAirPorts(country, search) {
 export async function getCountries(region, search) {
   const db = getDatabase()
   let sql = `
-    SELECT id, country_code, country_name_cn, country_name_en, region, currency, timezone, status
+    SELECT id, country_code, country_name_cn, country_name_en, region, currency_code, timezone, status
     FROM countries
     WHERE status = 'active'
   `
@@ -979,7 +979,7 @@ export async function getCountries(region, search) {
     nameCn: row.country_name_cn,
     nameEn: row.country_name_en,
     region: row.region,
-    currency: row.currency,
+    currency: row.currency_code,
     timezone: row.timezone,
     label: `${row.country_name_cn} (${row.country_code})`
   }))

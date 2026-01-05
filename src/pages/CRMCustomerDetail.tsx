@@ -727,8 +727,8 @@ export default function CRMCustomerDetail() {
           )}
         </div>
         
-        {/* 订单量趋势图 */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        {/* 订单量趋势图 - 大屏幕占满整行 */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-3">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-gray-400" />
