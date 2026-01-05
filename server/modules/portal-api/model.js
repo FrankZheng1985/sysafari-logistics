@@ -277,13 +277,14 @@ export async function getCustomerOrderStats(customerId) {
 
 /**
  * 获取客户的账单列表
- * 只返回已出账的发票（pdf_url 不为空，表示财务已正式出账）
+ * 显示所有已创建的发票（不管有没有生成 PDF）
+ * 前端根据 pdf_url 是否为空来显示下载按钮或提示
  */
 export async function getCustomerInvoices(customerId, params = {}) {
   const db = getDatabase()
   const { status, startDate, endDate, page = 1, pageSize = 20 } = params
   
-  // 只显示已出账的发票（pdf_url IS NOT NULL）
+  // 显示所有已创建的发票（排除已取消的）
   let sql = `
     SELECT 
       i.id, i.invoice_number, i.invoice_date, i.due_date,
@@ -297,7 +298,7 @@ export async function getCustomerInvoices(customerId, params = {}) {
     FROM invoices i
     LEFT JOIN bills_of_lading b ON i.bill_id = b.id
     WHERE i.customer_id = ?
-      AND i.pdf_url IS NOT NULL
+      AND i.status NOT IN ('cancelled', '已取消')
   `
   const conditions = [customerId]
   
@@ -363,13 +364,13 @@ export async function getCustomerInvoiceById(customerId, invoiceId) {
 
 /**
  * 获取客户的应付账款汇总
- * 只统计已出账的发票（pdf_url 不为空，表示财务已正式出账）
+ * 统计所有已创建的发票（不管有没有生成 PDF）
  * 核销后（status = 'paid'）的发票不计入待付余额，但计入总金额和已付金额
  */
 export async function getCustomerPayables(customerId) {
   const db = getDatabase()
   
-  // 只统计已出账的发票（pdf_url IS NOT NULL）
+  // 统计所有已创建的发票（排除已取消的）
   const invoiceSummary = await db.prepare(`
     SELECT
       COUNT(*) as total_invoices,
@@ -383,11 +384,10 @@ export async function getCustomerPayables(customerId) {
     FROM invoices
     WHERE customer_id = ? 
       AND invoice_type = 'sales'
-      AND pdf_url IS NOT NULL
       AND status NOT IN ('cancelled', '已取消')
   `).get(customerId)
   
-  // 账龄分析 - 只统计未付款的已出账发票
+  // 账龄分析 - 统计未付款的发票
   const invoiceAging = await db.prepare(`
     SELECT
       COALESCE(SUM(CASE WHEN due_date >= CURRENT_DATE OR due_date IS NULL THEN total_amount - COALESCE(paid_amount, 0) ELSE 0 END), 0) as current,
@@ -398,7 +398,6 @@ export async function getCustomerPayables(customerId) {
     FROM invoices
     WHERE customer_id = ? 
       AND invoice_type = 'sales'
-      AND pdf_url IS NOT NULL
       AND status NOT IN ('paid', '已付款', 'cancelled', '已取消')
   `).get(customerId)
   
