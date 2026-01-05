@@ -602,12 +602,12 @@ export default function DataTable<T extends Record<string, any>>({
   return (
     <div className="flex flex-col h-full" onClick={handleClickOutside}>
       <div className="flex-1 overflow-auto border border-gray-200 rounded-lg shadow-sm">
-        <table className="w-full divide-y divide-gray-200 table-fixed">
+        <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               {/* Selection column */}
               {rowSelection && (
-                <th className={`${compact ? 'px-2 py-1.5' : 'px-3 py-3.5'} text-left ${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-700 uppercase tracking-wider border-b border-gray-200 w-10`}>
+                <th className={`${compact ? 'px-2 py-1.5' : 'px-4 py-3.5'} text-left ${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-700 uppercase tracking-wider border-b border-gray-200`}>
                   {rowSelection.type === 'checkbox' ? (
                     <input
                       type="checkbox"
@@ -637,14 +637,14 @@ export default function DataTable<T extends Record<string, any>>({
                 return (
                   <th
                     key={column.key}
-                    className={`${compact ? 'px-2 py-1.5' : 'px-3 py-3.5'} text-left ${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-700 uppercase tracking-wider border-b border-gray-200 relative ${
+                    className={`${compact ? 'px-2 py-1.5' : 'px-6 py-3.5'} text-left ${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-700 uppercase tracking-wider border-b border-gray-200 relative ${
                       column.align === 'center'
                         ? 'text-center'
                         : column.align === 'right'
                         ? 'text-right'
                         : ''
                     }`}
-                    style={column.width ? { width: column.width, minWidth: column.width } : undefined}
+                    style={column.width ? { width: column.width } : undefined}
                   >
                     <div className={`flex items-center ${compact ? 'gap-1' : 'gap-2'}`}>
                       <span>{column.label || column.title}</span>
@@ -711,7 +711,7 @@ export default function DataTable<T extends Record<string, any>>({
                   >
                     {/* Selection cell */}
                     {rowSelection && (
-                      <td className={`${compact ? 'px-2 py-1.5' : 'px-3 py-4'} whitespace-nowrap w-10`}>
+                      <td className={`${compact ? 'px-2 py-1.5' : 'px-4 py-4'} whitespace-nowrap`}>
                         <input
                           type={rowSelection.type || 'checkbox'}
                           checked={isSelected}
@@ -726,13 +726,13 @@ export default function DataTable<T extends Record<string, any>>({
                     {visibleCols.map((column) => (
                       <td
                         key={column.key}
-                        className={`${compact ? 'px-2 py-1.5' : 'px-3 py-4'} ${compact ? 'text-xs' : 'text-sm'} text-gray-900 ${
+                        className={`${compact ? 'px-2 py-1.5' : 'px-6 py-4'} whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} text-gray-900 ${
                           column.align === 'center'
                             ? 'text-center'
                             : column.align === 'right'
                             ? 'text-right'
                             : ''
-                        } overflow-hidden text-ellipsis`}
+                        }`}
                       >
                         {column.render ? column.render(item[column.key], item) : item[column.key]}
                       </td>
