@@ -22,6 +22,7 @@ interface MatchRecord {
   material: string
   materialEn: string
   originCountry: string
+  originCountryCode: string
   avgUnitPrice: number
   avgKgPrice: number
   minUnitPrice: number
@@ -41,6 +42,10 @@ interface MatchRecord {
   status: string
   createdAt: string
   updatedAt: string
+  // 新增字段
+  minDeclarationValueRange?: string
+  refWeightRange?: string
+  usageScenario?: string
 }
 
 interface DeclarationHistory {
@@ -375,13 +380,24 @@ export default function HSMatchRecords() {
                 records.map((record) => (
                   <tr key={record.id} className="border-b hover:bg-gray-50">
                     <td className="px-3 py-2">
-                      <div className="max-w-[150px]">
+                      <div className="max-w-[180px]">
                         <div className="font-medium text-gray-900 truncate" title={record.productName}>
                           {record.productName}
                         </div>
                         {record.productNameEn && (
                           <div className="text-gray-400 truncate" title={record.productNameEn}>
                             {record.productNameEn}
+                          </div>
+                        )}
+                        {/* 显示参考价格和重量区间 */}
+                        {(record.minDeclarationValueRange || record.refWeightRange) && (
+                          <div className="flex gap-2 mt-0.5 text-xs text-gray-400">
+                            {record.minDeclarationValueRange && (
+                              <span title="申报价格区间 (EUR/件)">💰{record.minDeclarationValueRange}</span>
+                            )}
+                            {record.refWeightRange && (
+                              <span title="参考重量区间 (kg)">⚖️{record.refWeightRange}</span>
+                            )}
                           </div>
                         )}
                       </div>
