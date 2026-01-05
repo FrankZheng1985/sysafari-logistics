@@ -353,8 +353,11 @@ export async function updateInvoicePaidAmount(id) {
   
   const paidAmount = result.total_paid
   
-  // 获取发票总金额
-  const invoice = await db.prepare('SELECT total_amount FROM invoices WHERE id = ?').get(id)
+  // 获取发票信息（包含 bill_id 和 invoice_number）
+  const invoice = await db.prepare(`
+    SELECT total_amount, bill_id, invoice_number, invoice_type 
+    FROM invoices WHERE id = ?
+  `).get(id)
   if (!invoice) return false
   
   // 确定状态
@@ -371,6 +374,28 @@ export async function updateInvoicePaidAmount(id) {
     SET paid_amount = ?, status = ?, updated_at = NOW()
     WHERE id = ?
   `).run(paidAmount, status, id)
+  
+  // 如果发票变为已付清状态，且是销售发票，自动更新关联订单的主发票号
+  if (status === 'paid' && invoice.invoice_type === 'sales' && invoice.bill_id && invoice.invoice_number) {
+    // 处理多订单关联的情况（bill_id 可能是逗号分隔的多个ID）
+    const billIds = invoice.bill_id.split(',').map(id => id.trim()).filter(id => id)
+    
+    for (const billId of billIds) {
+      // 只有当订单还没有主发票号时才更新
+      const bill = await db.prepare(`
+        SELECT primary_invoice_number FROM bills_of_lading WHERE id = ?
+      `).get(billId)
+      
+      if (bill && !bill.primary_invoice_number) {
+        await db.prepare(`
+          UPDATE bills_of_lading 
+          SET primary_invoice_number = ?, payment_confirmed = 1, updated_at = NOW()
+          WHERE id = ?
+        `).run(invoice.invoice_number, billId)
+        console.log(`[Auto] 订单 ${billId} 主发票号已自动设置为 ${invoice.invoice_number}`)
+      }
+    }
+  }
   
   return true
 }

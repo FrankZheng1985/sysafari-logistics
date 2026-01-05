@@ -755,7 +755,7 @@ export default function SupplementFee() {
     
     // 必须有原发票信息
     if (!invoice?.invoiceNumber) {
-      alert('无法获取原发票信息，请确认发票存在')
+      alert('该订单尚未关联主发票号，无法创建追加发票。\n\n请先为该订单创建销售发票并确认收款，之后即可添加追加费用。')
       return
     }
     
@@ -985,7 +985,14 @@ export default function SupplementFee() {
               </div>
               <div>
                 <div className="text-xs text-gray-500">主发票号</div>
-                <div className="text-sm text-gray-900">{bill.primaryInvoiceNumber || '-'}</div>
+                {bill.primaryInvoiceNumber ? (
+                  <div className="text-sm font-medium text-green-600">{bill.primaryInvoiceNumber}</div>
+                ) : (
+                  <div className="flex items-center gap-1 text-sm text-amber-600">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    未关联
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1035,25 +1042,53 @@ export default function SupplementFee() {
         )}
       </div>
 
-      {/* 追加发票说明 */}
-      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-            <FileText className="w-4 h-4 text-purple-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-sm font-medium text-purple-900 mb-1">追加发票说明</h3>
-            <p className="text-xs text-purple-700">
-              追加费用将自动创建一张新的销售发票（追加发票），发票号格式为：原发票号-1、原发票号-2 依此类推。
-            </p>
-            {invoice?.invoiceNumber && (
+      {/* 追加发票说明 - 根据是否有原发票显示不同内容 */}
+      {invoice?.invoiceNumber ? (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+              <FileText className="w-4 h-4 text-purple-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-purple-900 mb-1">追加发票说明</h3>
+              <p className="text-xs text-purple-700">
+                追加费用将自动创建一张新的销售发票（追加发票），发票号格式为：原发票号-1、原发票号-2 依此类推。
+              </p>
               <p className="text-xs text-purple-600 mt-1">
                 原发票号：<span className="font-medium">{invoice.invoiceNumber}</span>
               </p>
-            )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-amber-900 mb-1">无法添加追加费用</h3>
+              <p className="text-xs text-amber-700">
+                该订单尚未关联主发票号，无法创建追加发票。请先完成以下操作：
+              </p>
+              <ol className="text-xs text-amber-700 mt-2 list-decimal list-inside space-y-1">
+                <li>前往【发票管理】为该订单创建销售发票</li>
+                <li>确认发票收款后，系统会自动关联主发票号</li>
+                <li>之后即可为该订单添加追加费用</li>
+              </ol>
+              {bill?.billNumber && (
+                <button
+                  onClick={() => navigate(`/finance/invoices?billNumber=${bill.billNumber}`)}
+                  className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  查看发票
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 费用来源选择 */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
@@ -1440,7 +1475,8 @@ export default function SupplementFee() {
         </button>
         <button
           onClick={handleSubmit}
-          disabled={submitting || pendingFeeItems.length === 0}
+          disabled={submitting || pendingFeeItems.length === 0 || !invoice?.invoiceNumber}
+          title={!invoice?.invoiceNumber ? '请先为该订单创建并确认主发票' : undefined}
           className="flex items-center gap-2 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting ? (
