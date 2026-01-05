@@ -7,6 +7,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { type BillOfLading, getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -162,7 +163,7 @@ export default function CMRExceptionManage() {
       },
       render: (_value, record) => (
         <span className="text-gray-600 text-sm">
-          {record.cmrExceptionTime ? new Date(record.cmrExceptionTime).toLocaleString('zh-CN') : '-'}
+          {record.cmrExceptionTime ? formatDateTime(record.cmrExceptionTime) : '-'}
         </span>
       )
     },

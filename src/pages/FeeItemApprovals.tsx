@@ -11,6 +11,7 @@ import {
   Receipt, User, Calendar, Check, X, RefreshCw
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -201,14 +202,7 @@ export default function FeeItemApprovals() {
 
   // 格式化日期
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return formatDateTime(dateStr)
   }
 
   return (

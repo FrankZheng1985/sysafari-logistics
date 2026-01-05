@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import Timeline, { TimelineItem } from '../components/Timeline'
 import InspectionModal, { type InspectionDetail } from '../components/InspectionModal'
+import { formatDateTime } from '../utils/dateFormat'
 import { 
   getBillById, 
   getBillOperationLogs, 
@@ -252,12 +253,7 @@ export default function InspectionBillDetails() {
   
   // 格式化时间
   const formatTime = (time?: string) => {
-    if (!time) return '-'
-    try {
-      return new Date(time).toLocaleString('zh-CN')
-    } catch {
-      return time
-    }
+    return formatDateTime(time)
   }
   
   if (loading) {
@@ -611,11 +607,7 @@ export default function InspectionBillDetails() {
                   }
                   
                   const formatLogTime = (time: string) => {
-                    try {
-                      return new Date(time).toLocaleString('zh-CN')
-                    } catch {
-                      return time
-                    }
+                    return formatDateTime(time)
                   }
                   
                   return (

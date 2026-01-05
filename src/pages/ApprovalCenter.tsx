@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { useAuth } from '../contexts/AuthContext'
+import { formatDateTime } from '../utils/dateFormat'
 
 // API 基础地址
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
@@ -361,7 +362,7 @@ export default function ApprovalCenter() {
       },
       render: (_value: unknown, record: ApprovalRequest) => (
         <span className="text-xs text-gray-600">
-          {new Date(record.createdAt).toLocaleString('zh-CN')}
+          {formatDateTime(record.createdAt)}
         </span>
       )
     },
@@ -621,7 +622,7 @@ export default function ApprovalCenter() {
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">申请时间</label>
-                  <p className="text-sm">{new Date(selectedRequest.createdAt).toLocaleString('zh-CN')}</p>
+                  <p className="text-sm">{formatDateTime(selectedRequest.createdAt)}</p>
                 </div>
                 {selectedRequest.approverName && (
                   <>
@@ -632,7 +633,7 @@ export default function ApprovalCenter() {
                     <div>
                       <label className="text-xs text-gray-500">审批时间</label>
                       <p className="text-sm">
-                        {selectedRequest.approvedAt ? new Date(selectedRequest.approvedAt).toLocaleString('zh-CN') : '-'}
+                        {selectedRequest.approvedAt ? formatDateTime(selectedRequest.approvedAt) : '-'}
                       </p>
                     </div>
                   </>
@@ -673,7 +674,7 @@ export default function ApprovalCenter() {
                           <span className="font-medium">{h.actionName}</span>
                           <span className="text-gray-400">by {h.operatorName}</span>
                           <span className="text-gray-400">
-                            {new Date(h.createdAt).toLocaleString('zh-CN')}
+                            {formatDateTime(h.createdAt)}
                           </span>
                         </div>
                         {h.comment && <p className="text-gray-600 mt-0.5">{h.comment}</p>}

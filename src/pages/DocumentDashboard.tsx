@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -288,7 +289,7 @@ export default function DocumentDashboard() {
                       </td>
                       <td className="py-2 px-2 text-center">{getStatusBadge(item.status)}</td>
                       <td className="py-2 px-2 text-gray-500 whitespace-nowrap">
-                        {item.createdAt ? new Date(item.createdAt).toLocaleDateString('zh-CN') : '-'}
+                        {item.createdAt ? formatDate(item.createdAt) : '-'}
                       </td>
                     </tr>
                   ))

@@ -1465,7 +1465,7 @@ export default function BillDetails() {
                               )}
                             </div>
                             <span className="text-xs text-gray-400">
-                              {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                              {fee.feeDate ? formatDate(fee.feeDate) : '-'}
                             </span>
                           </div>
                           {fee.description && (
@@ -1522,7 +1522,7 @@ export default function BillDetails() {
                               )}
                             </div>
                             <span className="text-xs text-gray-400">
-                              {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                              {fee.feeDate ? formatDate(fee.feeDate) : '-'}
                             </span>
                           </div>
                           {fee.description && (
@@ -1575,19 +1575,7 @@ export default function BillDetails() {
                   
                   // 格式化时间
                   const formatTime = (time: string) => {
-                    try {
-                      const date = new Date(time)
-                      return date.toLocaleString('zh-CN', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })
-                    } catch {
-                      return time
-                    }
+                    return formatDateTime(time)
                   }
                   
                   return (
@@ -1986,7 +1974,7 @@ export default function BillDetails() {
                           }`}>{billDetail.docSwapStatus || '未换单'}</span>
                           {billDetail.docSwapTime && (
                             <span className="ml-1 text-gray-400">
-                              ({new Date(billDetail.docSwapTime).toLocaleDateString()})
+                              ({formatDate(billDetail.docSwapTime)})
                             </span>
                           )}
                         </div>
@@ -2113,7 +2101,7 @@ export default function BillDetails() {
                           }`}>{billDetail.customsStatus || '未放行'}</span>
                           {billDetail.customsReleaseTime && (
                             <span className="ml-1 text-gray-400">
-                              ({new Date(billDetail.customsReleaseTime).toLocaleDateString()})
+                              ({formatDate(billDetail.customsReleaseTime)})
                             </span>
                           )}
                         </div>
@@ -2376,7 +2364,7 @@ export default function BillDetails() {
                               )}
                             </div>
                             <span className="text-[10px] text-gray-400">
-                              {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                              {fee.feeDate ? formatDate(fee.feeDate) : '-'}
                             </span>
                           </div>
                           {/* 显示拒绝原因 */}
@@ -2543,7 +2531,7 @@ export default function BillDetails() {
                 <div className="p-2 bg-amber-50 rounded-lg border border-amber-200">
                   <p className="text-xs text-amber-700">
                     <span className="font-medium">当前设置：</span>
-                    {new Date(billDetail.cmrEstimatedPickupTime).toLocaleDateString('zh-CN')}
+                    {formatDate(billDetail.cmrEstimatedPickupTime)}
                   </p>
                 </div>
               )}

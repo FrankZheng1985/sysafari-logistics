@@ -17,6 +17,7 @@ import {
   type Role 
 } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
+import { formatDateTime } from '../utils/dateFormat'
 
 
 // 上级用户类型
@@ -642,7 +643,7 @@ export default function UserManage() {
         const dateB = b.lastLoginTime ? new Date(b.lastLoginTime).getTime() : 0
         return dateA - dateB
       },
-      render: (_value: unknown, record: UserType) => record.lastLoginTime ? new Date(record.lastLoginTime).toLocaleString('zh-CN') : '-'
+      render: (_value: unknown, record: UserType) => record.lastLoginTime ? formatDateTime(record.lastLoginTime) : '-'
     },
     {
       key: 'actions',

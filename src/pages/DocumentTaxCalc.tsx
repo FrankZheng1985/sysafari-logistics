@@ -10,6 +10,7 @@ import { getApiBaseUrl, getCustomers, getCustomerTaxNumbers, type Customer, type
 import { useToast } from '../components/Toast'
 import { useDownload } from '../hooks/useDownload'
 import RiskAnalysisDashboard from '../components/RiskAnalysisDashboard'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -1484,7 +1485,7 @@ export default function DocumentTaxCalc() {
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-sm">客户已确认</span>
                     <span className="text-xs text-gray-500">
-                      ({taxDetails.batch.customerConfirmedAt ? new Date(taxDetails.batch.customerConfirmedAt).toLocaleString('zh-CN') : '-'})
+                      ({taxDetails.batch.customerConfirmedAt ? formatDateTime(taxDetails.batch.customerConfirmedAt) : '-'})
                     </span>
                   </div>
                 ) : (

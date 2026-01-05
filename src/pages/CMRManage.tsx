@@ -483,7 +483,7 @@ export default function CMRManage() {
             navigate(path)
           }
         }}
-        searchPlaceholder="提单号或集装箱编号..."
+        searchPlaceholder="订单号、提单号、集装箱号、客户名..."
         defaultSearchValue={searchValue}
         onSearch={setSearchValue}
         summary={<div>{getTabTitle()}: {total}</div>}
@@ -510,7 +510,7 @@ export default function CMRManage() {
             data={bills}
             loading={loading}
             searchValue={searchValue}
-            searchableColumns={['billNumber', 'containerNumber', 'vessel']}
+            searchableColumns={['orderNumber', 'billNumber', 'containerNumber', 'vessel', 'customerName']}
             compact={true}
             pagination={{
               pageSize: 20,

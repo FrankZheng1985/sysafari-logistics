@@ -13,6 +13,7 @@ import {
   Plus, Search, Edit2, Trash2, Eye, RefreshCw, Loader2,
   Building2, CheckCircle, XCircle, Database, Globe, Calendar
 } from 'lucide-react'
+import { formatDate } from '../utils/dateFormat'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
 
@@ -285,10 +286,6 @@ export default function BusinessInfoManage() {
     }
   }
 
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('zh-CN')
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">

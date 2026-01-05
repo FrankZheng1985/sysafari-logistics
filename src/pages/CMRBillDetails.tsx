@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import Timeline, { TimelineItem } from '../components/Timeline'
 import CMRModal, { type CMRDetail } from '../components/CMRModal'
+import { formatDateTime } from '../utils/dateFormat'
 import { 
   getBillById, 
   getBillOperationLogs, 
@@ -254,12 +255,7 @@ export default function CMRBillDetails() {
   
   // 格式化时间
   const formatTime = (time?: string) => {
-    if (!time) return '-'
-    try {
-      return new Date(time).toLocaleString('zh-CN')
-    } catch {
-      return time
-    }
+    return formatDateTime(time)
   }
   
   if (loading) {
@@ -631,7 +627,7 @@ export default function CMRBillDetails() {
                         <div>
                           <p className="text-xs font-medium text-gray-900">{file.fileName}</p>
                           <p className="text-[10px] text-gray-400">
-                            {formatFileSize(file.originalSize)} | {new Date(file.uploadTime).toLocaleString()}
+                            {formatFileSize(file.originalSize)} | {formatDateTime(file.uploadTime)}
                           </p>
                         </div>
                       </div>
@@ -684,11 +680,7 @@ export default function CMRBillDetails() {
                   }
                   
                   const formatLogTime = (time: string) => {
-                    try {
-                      return new Date(time).toLocaleString('zh-CN')
-                    } catch {
-                      return time
-                    }
+                    return formatDateTime(time)
                   }
                   
                   return (

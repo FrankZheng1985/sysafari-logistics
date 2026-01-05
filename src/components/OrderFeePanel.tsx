@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Receipt, FileText, Loader2, ArrowDownCircle, ArrowUpCircle, Lock } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -252,7 +253,7 @@ export default function OrderFeePanel({
                     {fee.currency || '€'}{fee.amount?.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-3 py-2 text-gray-500">
-                    {fee.feeDate ? new Date(fee.feeDate).toLocaleDateString() : '-'}
+                    {fee.feeDate ? formatDate(fee.feeDate) : '-'}
                   </td>
                 </tr>
               ))}

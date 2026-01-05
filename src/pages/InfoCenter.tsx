@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { formatDateTime } from '../utils/dateFormat'
 import { 
   MessageCircle, 
   Bell, 
@@ -326,12 +327,7 @@ export default function InfoCenter() {
     if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
     
-    return date.toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return formatDateTime(dateStr)
   }
 
   // 渲染聊天页

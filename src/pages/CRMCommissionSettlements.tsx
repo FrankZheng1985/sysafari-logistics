@@ -9,7 +9,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
-import { formatDateTime } from '../utils/dateFormat'
+import { formatDate, formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -1218,7 +1218,7 @@ export default function CRMCommissionSettlements() {
                               {penalty.incidentDescription}
                             </td>
                             <td className="px-3 py-2 text-xs text-gray-500">
-                              {penalty.incidentDate ? new Date(penalty.incidentDate).toLocaleDateString('zh-CN') : '-'}
+                              {penalty.incidentDate ? formatDate(penalty.incidentDate) : '-'}
                             </td>
                             <td className="px-3 py-2 text-xs text-gray-600 text-right">
                               {formatCurrency(penalty.supervisorPenalty || 0)}

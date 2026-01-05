@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatDateTime } from '../utils/dateFormat'
 import { 
   AlertTriangle, 
   Bell, 
@@ -309,14 +310,7 @@ export default function AlertDashboard() {
 
   // 格式化时间
   const formatTime = (dateStr: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return formatDateTime(dateStr)
   }
 
   const totalPages = Math.ceil(total / pageSize)

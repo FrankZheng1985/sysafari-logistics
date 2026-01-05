@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react'
 import { RefreshCw, Plus, MapPin, X, Loader2, ChevronDown, Ship, Plane, Train, Truck, CheckCircle, AlertCircle } from 'lucide-react'
 import DateTimePicker from './DateTimePicker'
 import TrackingTimeline from './TrackingTimeline'
+import { formatDateTime } from '../utils/dateFormat'
 import { 
   getBillTracking, 
   addTrackingNode, 
@@ -259,7 +260,7 @@ export default function TrackingPanel({
                 <div className="flex items-center gap-1 mt-1 text-xs text-primary-500">
                   <Clock className="w-3 h-3" />
                   <span>
-                    {new Date(trackingInfo.latestStatus.eventTime).toLocaleString('zh-CN')}
+                    {formatDateTime(trackingInfo.latestStatus.eventTime)}
                   </span>
                 </div>
               </div>

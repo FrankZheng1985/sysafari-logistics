@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -393,7 +394,7 @@ export default function CRMDashboard() {
                   <td className="py-2 text-center">{customer.opportunityCount}</td>
                   <td className="py-2 text-center">{customer.contractCount}</td>
                   <td className="py-2 text-gray-500">
-                    {customer.lastFollowUpTime ? new Date(customer.lastFollowUpTime).toLocaleDateString() : '-'}
+                    {customer.lastFollowUpTime ? formatDate(customer.lastFollowUpTime) : '-'}
                   </td>
                 </tr>
               )) : (

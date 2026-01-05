@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -438,7 +439,7 @@ export default function CRMContracts() {
             <div>
               <div className="text-gray-700">{record.signedByName || '-'}</div>
               <div className="text-[10px] text-gray-400">
-                {record.signedAt ? new Date(record.signedAt).toLocaleDateString('zh-CN') : '-'}
+                {record.signedAt ? formatDate(record.signedAt) : '-'}
               </div>
             </div>
           ) : (
@@ -890,7 +891,7 @@ export default function CRMContracts() {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-gray-900">{h.actionName}</span>
                         <span className="text-[10px] text-gray-400">
-                          {new Date(h.createTime).toLocaleString('zh-CN')}
+                          {formatDate(h.createTime)}
                         </span>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-gray-600">

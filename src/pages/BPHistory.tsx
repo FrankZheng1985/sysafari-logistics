@@ -365,7 +365,7 @@ export default function BPHistory() {
             navigate(path)
           }
         }}
-        searchPlaceholder="提单号或者集装箱编号..."
+        searchPlaceholder="订单号、提单号、集装箱号、客户名..."
         onSearch={setSearchValue}
         onSettingsClick={handleSettingsClick}
         summary={<div className="text-xs text-gray-500">历史记录: <span className="font-medium text-gray-900">{total}</span></div>}
@@ -392,7 +392,7 @@ export default function BPHistory() {
             data={bills}
             loading={loading}
             searchValue={searchValue}
-            searchableColumns={['billNumber', 'containerNumber', 'vessel']}
+            searchableColumns={['orderNumber', 'billNumber', 'containerNumber', 'vessel', 'customerName']}
             visibleColumns={visibleColumns}
             compact={true}
             pagination={{

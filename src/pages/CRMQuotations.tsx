@@ -11,6 +11,7 @@ import DatePicker from '../components/DatePicker'
 import TransportQuoteCalculator from '../components/TransportQuoteCalculator'
 import { getApiBaseUrl } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -309,15 +310,6 @@ export default function CRMQuotations() {
     return statusMap[status] || statusMap.pending
   }
 
-  // 格式化时间
-  const formatDateTime = (dateStr: string | null) => {
-    if (!dateStr) return '-'
-    const date = new Date(dateStr)
-    return date.toLocaleString('zh-CN', { 
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit'
-    })
-  }
 
   // 加载产品费用项
   const loadProductFeeItems = async (productId: string): Promise<ProductFeeItem[]> => {

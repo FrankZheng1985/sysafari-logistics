@@ -864,7 +864,7 @@ export default function FinancialStatements() {
                   : `${formatDate(report.periodStart)} - ${formatDate(report.periodEnd)}`}
               </td>
               <td className="px-4 py-3 text-gray-600">{report.createdByName || '-'}</td>
-              <td className="px-4 py-3 text-gray-500 text-sm">{new Date(report.createdAt).toLocaleString('zh-CN')}</td>
+              <td className="px-4 py-3 text-gray-500 text-sm">{formatDateTime(report.createdAt)}</td>
               <td className="px-4 py-3 text-center">
                 {report.pdfUrl && (
                   <button

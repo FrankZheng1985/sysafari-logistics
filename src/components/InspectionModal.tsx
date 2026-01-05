@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Package, ClipboardCheck, CheckCircle } from 'lucide-react'
 import DateTimePicker from './DateTimePicker'
+import { formatDateTime } from '../utils/dateFormat'
 
 // 查验货物项
 export interface InspectionItem {
@@ -480,7 +481,7 @@ export default function InspectionModal({
                   {estimatedTime && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">预计查验时间：</span>
-                      <span className="font-medium">{new Date(estimatedTime).toLocaleString('zh-CN')}</span>
+                      <span className="font-medium">{formatDateTime(estimatedTime)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -490,7 +491,7 @@ export default function InspectionModal({
                   {releaseTime && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">放行时间：</span>
-                      <span className="font-medium">{new Date(releaseTime).toLocaleString('zh-CN')}</span>
+                      <span className="font-medium">{formatDateTime(releaseTime)}</span>
                     </div>
                   )}
                 </div>

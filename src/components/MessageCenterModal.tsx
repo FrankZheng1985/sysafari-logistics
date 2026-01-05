@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { formatDate } from '../utils/dateFormat'
 import { 
   X,
   MessageCircle, 
@@ -284,7 +285,7 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
     if (diff < 60000) return '刚刚'
     if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-    return date.toLocaleDateString()
+    return formatDate(dateStr)
   }
 
   if (!visible) return null

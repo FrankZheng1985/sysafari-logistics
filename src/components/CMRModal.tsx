@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Truck, Clock, MapPin, Package, CheckCircle, AlertTriangle, ChevronDown, Calendar } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 import DateTimePicker from './DateTimePicker'
 
 const API_BASE = getApiBaseUrl()
@@ -565,7 +566,7 @@ export default function CMRModal({
                         </span>
                         <div className="flex-1">
                           <p className="text-gray-700">{record.note}</p>
-                          <p className="text-[10px] text-gray-400">{new Date(record.time).toLocaleString('zh-CN')}</p>
+                          <p className="text-[10px] text-gray-400">{formatDateTime(record.time)}</p>
                         </div>
                       </div>
                     ))}
@@ -882,7 +883,7 @@ export default function CMRModal({
                       {estimatedPickupTime && (
                         <div className="flex justify-between">
                           <span className="text-gray-600">提货时间：</span>
-                          <span className="font-medium">{new Date(estimatedPickupTime).toLocaleString('zh-CN')}</span>
+                          <span className="font-medium">{formatDateTime(estimatedPickupTime)}</span>
                         </div>
                       )}
                       {deliveryAddress && (
@@ -894,7 +895,7 @@ export default function CMRModal({
                       {actualArrivalTime && (
                         <div className="flex justify-between">
                           <span className="text-gray-600">到达时间：</span>
-                          <span className="font-medium text-green-600">{new Date(actualArrivalTime).toLocaleString('zh-CN')}</span>
+                          <span className="font-medium text-green-600">{formatDateTime(actualArrivalTime)}</span>
                         </div>
                       )}
                     </div>

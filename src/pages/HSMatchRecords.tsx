@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -418,7 +419,7 @@ export default function HSMatchRecords() {
                       </div>
                     </td>
                     <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                      {record.lastMatchTime ? new Date(record.lastMatchTime).toLocaleDateString('zh-CN') : '-'}
+                      {record.lastMatchTime ? formatDate(record.lastMatchTime) : '-'}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-center gap-1">
@@ -624,7 +625,7 @@ export default function HSMatchRecords() {
                               <td className="px-2 py-1.5 text-right">€{h.unitPrice.toFixed(2)}</td>
                               <td className="px-2 py-1.5 text-right text-amber-600">€{h.totalTax.toFixed(2)}</td>
                               <td className="px-2 py-1.5 text-gray-500">
-                                {h.declaredAt ? new Date(h.declaredAt).toLocaleDateString('zh-CN') : '-'}
+                                {h.declaredAt ? formatDate(h.declaredAt) : '-'}
                               </td>
                             </tr>
                           ))}

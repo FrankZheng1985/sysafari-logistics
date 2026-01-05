@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { formatDate } from '../utils/dateFormat'
 import { 
   Bell, 
   MessageSquare, 
@@ -215,7 +216,7 @@ export default function NotificationBell() {
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
     if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
     
-    return date.toLocaleDateString()
+    return formatDate(dateStr)
   }
 
   // 获取消息类型图标和颜色

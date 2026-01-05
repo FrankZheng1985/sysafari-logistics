@@ -7,6 +7,7 @@ import {
 import PageHeader from '../../components/PageHeader'
 import DataTable, { Column } from '../../components/DataTable'
 import { getApiBaseUrl } from '../../utils/api'
+import { formatDateTime } from '../../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -444,12 +445,7 @@ export default function LastMileShipments() {
       },
       render: (record: Shipment) => (
         <span className="text-sm text-gray-600">
-          {record.createdAt ? new Date(record.createdAt).toLocaleString('zh-CN', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-          }) : '-'}
+          {record.createdAt ? formatDateTime(record.createdAt) : '-'}
         </span>
       )
     },
@@ -1054,7 +1050,7 @@ export default function LastMileShipments() {
                           <div className="text-sm font-medium">{event.eventDescription}</div>
                           <div className="text-xs text-gray-500">
                             {event.eventLocation && <span>{event.eventLocation} · </span>}
-                            {new Date(event.eventTime).toLocaleString('zh-CN')}
+                            {formatDateTime(event.eventTime)}
                           </div>
                         </div>
                       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { UserPlus, Link2, RefreshCw, Check, X, User, Mail, Clock } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { formatDateTime } from '../utils/dateFormat'
 
 interface PendingUser {
   id: number
@@ -151,8 +152,7 @@ export default function Auth0UserBinding() {
 
   // 格式化时间
   const formatTime = (timeStr: string) => {
-    if (!timeStr) return '-'
-    return new Date(timeStr).toLocaleString('zh-CN')
+    return formatDateTime(timeStr)
   }
 
   // 获取未绑定的系统用户

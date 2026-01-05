@@ -18,6 +18,7 @@ import {
   ChevronUp,
   Loader2
 } from 'lucide-react'
+import { formatDateTime } from '../utils/dateFormat'
 import { getApiBaseUrl } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
@@ -179,8 +180,7 @@ export default function TaricSyncPanel() {
 
   // 格式化时间
   const formatTime = (timeStr: string) => {
-    if (!timeStr) return '-'
-    return new Date(timeStr).toLocaleString('zh-CN')
+    return formatDateTime(timeStr)
   }
 
   return (

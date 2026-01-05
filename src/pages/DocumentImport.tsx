@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getCustomers, getCustomerTaxNumbers, getBillsList, type Customer, type CustomerTaxNumber, type BillOfLading } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -1045,7 +1046,7 @@ export default function DocumentImport() {
                     </td>
                     <td className="px-3 py-2 text-center">{getStatusBadge(item.status)}</td>
                     <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
-                      {item.createdAt ? new Date(item.createdAt).toLocaleString('zh-CN') : '-'}
+                      {item.createdAt ? formatDateTime(item.createdAt) : '-'}
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-center gap-1">

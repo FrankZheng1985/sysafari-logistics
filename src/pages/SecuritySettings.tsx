@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { useAuth } from '../contexts/AuthContext'
+import { formatDateTime } from '../utils/dateFormat'
 
 // API 基础地址 - 根据域名自动选择（阿里云部署）
 function getApiBaseUrl(): string {
@@ -334,7 +335,7 @@ export default function SecuritySettings() {
     { 
       key: 'loginTime', 
       label: '登录时间',
-      render: (_value: unknown, record: LoginLog) => new Date(record.loginTime).toLocaleString('zh-CN')
+      render: (_value: unknown, record: LoginLog) => formatDateTime(record.loginTime)
     },
     { key: 'username', label: '用户名' },
     { key: 'ipAddress', label: 'IP地址' },

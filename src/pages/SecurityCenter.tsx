@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { useAuth } from '../contexts/AuthContext'
+import { formatDateTime } from '../utils/dateFormat'
 
 // API 基础地址
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
@@ -596,7 +597,7 @@ export default function SecurityCenter() {
                     </span>
                   </div>
                   <span className="text-xs text-gray-500">
-                    {new Date(u.lastAttempt).toLocaleString('zh-CN')}
+                    {formatDateTime(u.lastAttempt)}
                   </span>
                 </div>
               ))}
@@ -630,7 +631,7 @@ export default function SecurityCenter() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">时间</span>
                 <span className="text-sm text-gray-900">
-                  {new Date(overview.lastBackup.time).toLocaleString('zh-CN')}
+                  {formatDateTime(overview.lastBackup.time)}
                 </span>
               </div>
             </div>
@@ -723,7 +724,7 @@ export default function SecurityCenter() {
       key: 'createdAt', 
       label: '时间',
       sorter: (a: AuditLog, b: AuditLog) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      render: (_value: unknown, record: AuditLog) => new Date(record.createdAt).toLocaleString('zh-CN')
+      render: (_value: unknown, record: AuditLog) => formatDateTime(record.createdAt)
     },
     { key: 'username', label: '用户', sorter: true },
     { key: 'actionName', label: '操作', sorter: true },
@@ -753,7 +754,7 @@ export default function SecurityCenter() {
       key: 'blockedAt', 
       label: '封禁时间',
       sorter: (a: IpBlacklistItem, b: IpBlacklistItem) => new Date(a.blockedAt).getTime() - new Date(b.blockedAt).getTime(),
-      render: (_value: unknown, record: IpBlacklistItem) => new Date(record.blockedAt).toLocaleString('zh-CN')
+      render: (_value: unknown, record: IpBlacklistItem) => formatDateTime(record.blockedAt)
     },
     { 
       key: 'expiresAt', 
@@ -764,7 +765,7 @@ export default function SecurityCenter() {
         return timeA - timeB
       },
       render: (_value: unknown, record: IpBlacklistItem) => record.expiresAt 
-        ? new Date(record.expiresAt).toLocaleString('zh-CN') 
+        ? formatDateTime(record.expiresAt) 
         : '永久'
     },
     { 
@@ -804,13 +805,13 @@ export default function SecurityCenter() {
       key: 'loginTime', 
       label: '登录时间',
       sorter: (a: ActiveSession, b: ActiveSession) => new Date(a.loginTime).getTime() - new Date(b.loginTime).getTime(),
-      render: (_value: unknown, record: ActiveSession) => new Date(record.loginTime).toLocaleString('zh-CN')
+      render: (_value: unknown, record: ActiveSession) => formatDateTime(record.loginTime)
     },
     { 
       key: 'lastActivity', 
       label: '最后活动',
       sorter: (a: ActiveSession, b: ActiveSession) => new Date(a.lastActivity).getTime() - new Date(b.lastActivity).getTime(),
-      render: (_value: unknown, record: ActiveSession) => new Date(record.lastActivity).toLocaleString('zh-CN')
+      render: (_value: unknown, record: ActiveSession) => formatDateTime(record.lastActivity)
     },
     {
       key: 'actions',
@@ -911,7 +912,7 @@ export default function SecurityCenter() {
       },
       render: (_value: unknown, record: BackupRecord) => (
         <span className="text-xs text-gray-600">
-          {record.createdAt ? new Date(record.createdAt).toLocaleString('zh-CN') : '-'}
+          {record.createdAt ? formatDateTime(record.createdAt) : '-'}
         </span>
       )
     },
@@ -1286,7 +1287,7 @@ export default function SecurityCenter() {
               
               <div className="space-y-2 text-sm">
                 <p><span className="text-gray-500">备份名称：</span>{restoreTarget.fileName || restoreTarget.backupName}</p>
-                <p><span className="text-gray-500">备份时间：</span>{restoreTarget.createdAt ? new Date(restoreTarget.createdAt).toLocaleString('zh-CN') : '-'}</p>
+                <p><span className="text-gray-500">备份时间：</span>{restoreTarget.createdAt ? formatDateTime(restoreTarget.createdAt) : '-'}</p>
                 <p><span className="text-gray-500">备份大小：</span>{formatFileSize(restoreTarget.backupSize)}</p>
                 <p><span className="text-gray-500">数据来源：</span>{restoreTarget.isCloudSynced ? '腾讯云 COS' : '本地存储'}</p>
               </div>

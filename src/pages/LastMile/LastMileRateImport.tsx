@@ -7,6 +7,7 @@ import {
 import PageHeader from '../../components/PageHeader'
 import DateTimePicker from '../../components/DateTimePicker'
 import { getApiBaseUrl } from '../../utils/api'
+import { formatDate, formatDateTime } from '../../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -293,7 +294,7 @@ export default function LastMileRateImport() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          rateCardName: rateCardName || `${carriers.find(c => c.id === selectedCarrier)?.carrierName || ''}-费率卡-${new Date().toLocaleDateString()}`,
+          rateCardName: rateCardName || `${carriers.find(c => c.id === selectedCarrier)?.carrierName || ''}-费率卡-${formatDate(new Date().toISOString())}`,
           validFrom,
           validUntil: validUntil || null,
           tiers
@@ -920,7 +921,7 @@ export default function LastMileRateImport() {
                       {log.successRows}/{log.totalRows}
                     </td>
                     <td className="px-4 py-3 text-gray-500">
-                      {new Date(log.createdAt).toLocaleString('zh-CN')}
+                      {formatDateTime(log.createdAt)}
                     </td>
                   </tr>
                 ))

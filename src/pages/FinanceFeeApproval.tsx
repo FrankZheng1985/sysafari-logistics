@@ -7,6 +7,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate, formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -192,15 +193,6 @@ export default function FinanceFeeApproval() {
     }).format(amount)
   }
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('zh-CN')
-  }
-
-  const formatDateTime = (dateStr: string) => {
-    if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString('zh-CN')
-  }
 
   const columns: Column<PendingFee>[] = useMemo(() => [
     {

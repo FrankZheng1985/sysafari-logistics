@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Search, Plus, Upload, Download, Edit2, Trash2, RefreshCw, X, Check, AlertCircle, Globe, Zap, Shield, FileWarning, Ban } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import TaricSyncPanel from '../components/TaricSyncPanel'
+import { formatDateTime } from '../utils/dateFormat'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import {
   getTariffRates,
@@ -852,7 +853,7 @@ function RealtimeLookupModal({
                   )}
                 </div>
                 <span className="text-[10px] text-gray-400">
-                  查询时间: {new Date(result.queryTime).toLocaleString('zh-CN')}
+                  查询时间: {formatDateTime(result.queryTime)}
                 </span>
               </div>
 

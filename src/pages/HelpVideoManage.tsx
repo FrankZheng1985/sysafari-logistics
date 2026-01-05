@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { helpModules, helpItems, HelpItem, HelpModule } from '../data/helpData'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -568,7 +569,7 @@ export default function HelpVideoManage() {
                             <p className="text-sm text-gray-500 mt-1 line-clamp-1">{video.description}</p>
                           )}
                           <p className="text-xs text-gray-400 mt-2">
-                            上传于 {new Date(video.createdAt).toLocaleString('zh-CN')}
+                            上传于 {formatDateTime(video.createdAt)}
                           </p>
                         </div>
                       </div>
