@@ -55,9 +55,9 @@ router.get('/', async (req, res) => {
       paramIndex += 2
     }
     
-    // HS编码前缀筛选
+    // HS编码前缀筛选（同时支持8位和10位编码）
     if (hsCode) {
-      query += ` AND hs_code LIKE $${paramIndex}`
+      query += ` AND (hs_code LIKE $${paramIndex} OR hs_code_10 LIKE $${paramIndex})`
       params.push(`${hsCode}%`)
       paramIndex++
     }
