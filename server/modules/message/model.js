@@ -234,8 +234,8 @@ export function canApprove(userRole, approvalType) {
     return true
   }
   
-  // 财务经理可以审批财务相关
-  if (userRole === 'finance_manager' && ['payment', 'fee', 'void'].includes(approvalType)) {
+  // 财务角色（finance_manager, finance）可以审批财务相关
+  if (['finance_manager', 'finance'].includes(userRole) && ['payment', 'fee', 'void'].includes(approvalType)) {
     return true
   }
   
@@ -252,7 +252,7 @@ export function canApprove(userRole, approvalType) {
  * @returns {string[]} 有审批权限的角色
  */
 export function getApproverRoles() {
-  return ['admin', 'boss', 'finance_manager', 'czjl', 'manager']
+  return ['admin', 'boss', 'finance_manager', 'finance', 'czjl', 'manager']
 }
 
 /**
@@ -351,11 +351,11 @@ export async function getPendingApprovalCount(approverId, userRole) {
   const effectiveRole = userRole || 'operator'
   
   // 只有有审批权限的角色才能看到待审批数量
-  // admin, boss, finance_manager, czjl, manager 有审批权限
-  const approverRoles = ['admin', 'boss', 'finance_manager', 'czjl', 'manager']
+  // admin, boss, finance_manager, finance, czjl, manager 有审批权限
+  const approverRoles = ['admin', 'boss', 'finance_manager', 'finance', 'czjl', 'manager']
   
   if (!approverRoles.includes(effectiveRole)) {
-    // 普通用户（如 do、operator、finance）没有审批权限，返回0
+    // 普通用户（如 do、operator）没有审批权限，返回0
     return 0
   }
   
