@@ -442,7 +442,7 @@ export default function Sidebar() {
           )}
           <div>
             <div className="text-xs font-semibold text-gray-900">BP Logistics</div>
-            <div className="text-[10px] text-gray-500">V1.0.0</div>
+            <div className="text-[10px] text-gray-500">V{__APP_VERSION__}</div>
           </div>
         </div>
       </div>

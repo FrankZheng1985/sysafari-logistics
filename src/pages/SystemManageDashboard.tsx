@@ -74,7 +74,7 @@ const systemModules: SystemCard[] = [
 
 // 系统状态信息
 const systemStatus = [
-  { label: '系统版本', value: 'V1.0.0', icon: Server, color: 'text-blue-600' },
+  { label: '系统版本', value: `V${__APP_VERSION__}`, icon: Server, color: 'text-blue-600' },
   { label: '活跃用户', value: '5', icon: Users, color: 'text-green-600' },
   { label: '安全状态', value: '正常', icon: Lock, color: 'text-green-600' },
 ]

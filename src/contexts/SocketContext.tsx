@@ -154,15 +154,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     // 创建 Socket 连接
     const socketUrl = getSocketUrl()
     const newSocket = io(socketUrl, {
-      // 先用 polling 建立连接，然后自动升级到 websocket（官方推荐，更稳定）
-      transports: ['polling', 'websocket'],
-      upgrade: true,  // 允许从 polling 升级到 websocket
+      // 优先使用 websocket，polling 作为备用
+      transports: ['websocket', 'polling'],
+      upgrade: true,
       reconnection: true,
-      reconnectionAttempts: import.meta.env.DEV ? 3 : 10,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 10000,
-      timeout: 10000,
+      reconnectionAttempts: import.meta.env.DEV ? 3 : 5,  // 减少重试次数
+      reconnectionDelay: 5000,  // 增加重连间隔到5秒
+      reconnectionDelayMax: 30000,  // 最大30秒
+      timeout: 20000,
       autoConnect: true,
+      // 生产环境添加路径前缀
+      path: '/socket.io/',
     })
 
     // 连接成功
@@ -183,11 +185,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setIsConnected(false)
     })
 
-    // 连接错误 - 开发环境静默处理，避免控制台噪音
-    newSocket.on('connect_error', (error) => {
-      if (import.meta.env.PROD) {
-        console.error('[Socket] 连接错误:', error.message)
-      }
+    // 连接错误 - 静默处理，避免控制台噪音
+    newSocket.on('connect_error', () => {
+      // 静默处理连接错误，不打印到控制台
       setIsConnected(false)
     })
 
