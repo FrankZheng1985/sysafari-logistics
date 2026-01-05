@@ -619,11 +619,38 @@ export async function getMyApiLogs(req, res) {
 
 // ==================== 认证中间件 ====================
 
+// 内部 API Key（用于客户门户后端调用）
+const PORTAL_INTERNAL_API_KEY = process.env.PORTAL_INTERNAL_API_KEY || 'portal_internal_key'
+
 /**
  * 客户门户认证中间件
+ * 支持两种认证方式：
+ * 1. JWT Token（客户端直接访问）
+ * 2. 内部 API Key（客户门户后端转发请求）
  */
 export function authMiddleware(req, res, next) {
   try {
+    // 方式1: 内部 API Key 认证（优先检查，用于门户后端转发）
+    const apiKey = req.headers['x-api-key']
+    const portalCustomerId = req.headers['x-portal-customer']
+    
+    if (apiKey && portalCustomerId) {
+      if (apiKey === PORTAL_INTERNAL_API_KEY) {
+        // 内部调用，信任门户后端传递的客户信息
+        req.customer = {
+          customerId: portalCustomerId,
+          type: 'customer',
+          isInternalCall: true
+        }
+        console.log(`[Portal API] 内部调用认证成功, 客户ID: ${portalCustomerId}`)
+        return next()
+      } else {
+        console.log(`[Portal API] 内部调用认证失败, 无效的API Key`)
+        return forbidden(res, '无效的内部API密钥')
+      }
+    }
+    
+    // 方式2: JWT Token 认证（客户端直接访问）
     const authHeader = req.headers.authorization
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return unauthorized(res, '请先登录')
