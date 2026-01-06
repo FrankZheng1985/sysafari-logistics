@@ -787,14 +787,13 @@ export default function ApiIntegrations() {
         </div>
       )}
       
-      {/* HERE API 使用统计卡片 */}
-      <div className="px-4 py-2">
-        <HereApiUsageCard />
-      </div>
-      
-      
       {/* API列表 */}
       <div className="flex-1 overflow-auto px-4 py-2">
+        {/* HERE API 使用统计卡片 */}
+        <div className="mb-4">
+          <HereApiUsageCard />
+        </div>
+        
         <div className="space-y-4">
           {categoryOrder.map(cat => {
             const categoryApis = groupedApis[cat]
