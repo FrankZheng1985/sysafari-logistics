@@ -706,7 +706,7 @@ export async function createFee(req, res) {
     if (feeData.isSupplementary === 1 && feeData.approvalStatus === 'pending') {
       try {
         // 使用统一审批服务创建审批记录
-        await unifiedApprovalService.createApproval({
+        const approvalResult = await unifiedApprovalService.createApproval({
           operationCode: 'FEE_SUPPLEMENT',
           category: 'business',
           title: `追加费用审批 - ${feeName}`,
@@ -720,9 +720,14 @@ export async function createFee(req, res) {
           applicantRole: req.user?.role,
           requestData: { fee: feeData, billNumber: req.body.billNumber }
         })
-        console.log('[createFee] 已创建统一审批记录')
+        
+        if (approvalResult.success) {
+          console.log('[createFee] 已创建统一审批记录:', approvalResult.approval?.approval_no)
+        } else {
+          console.error('[createFee] 创建统一审批记录失败:', approvalResult.error)
+        }
       } catch (approvalError) {
-        console.error('[createFee] 创建审批记录失败:', approvalError)
+        console.error('[createFee] 创建审批记录异常:', approvalError)
         // 不阻断主流程
       }
     }

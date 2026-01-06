@@ -5,6 +5,7 @@
 import express from 'express'
 import multer from 'multer'
 import * as controller from './controller.js'
+import { authenticate } from '../../middleware/auth.js'
 
 const router = express.Router()
 
@@ -110,23 +111,23 @@ router.get('/fees', controller.getFees)
 // 获取费用详情
 router.get('/fees/:id', controller.getFeeById)
 
-// 创建费用
-router.post('/fees', controller.createFee)
+// 创建费用（需要认证以获取用户信息）
+router.post('/fees', authenticate, controller.createFee)
 
-// 更新费用
-router.put('/fees/:id', controller.updateFee)
+// 更新费用（需要认证）
+router.put('/fees/:id', authenticate, controller.updateFee)
 
-// 删除费用
-router.delete('/fees/:id', controller.deleteFee)
+// 删除费用（需要认证）
+router.delete('/fees/:id', authenticate, controller.deleteFee)
 
-// 审批通过费用
-router.post('/fees/:id/approve', controller.approveFee)
+// 审批通过费用（需要认证）
+router.post('/fees/:id/approve', authenticate, controller.approveFee)
 
-// 审批拒绝费用
-router.post('/fees/:id/reject', controller.rejectFee)
+// 审批拒绝费用（需要认证）
+router.post('/fees/:id/reject', authenticate, controller.rejectFee)
 
-// 批量审批通过
-router.post('/fees/batch-approve', controller.batchApproveFees)
+// 批量审批通过（需要认证）
+router.post('/fees/batch-approve', authenticate, controller.batchApproveFees)
 
 // ==================== 提单财务路由 ====================
 
