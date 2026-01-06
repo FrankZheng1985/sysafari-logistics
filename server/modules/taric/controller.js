@@ -967,14 +967,18 @@ export async function lookupHsCodeUnified(req, res) {
         
         const dataSourceValue = result.dataSource || (source === 'uk' ? 'uk_api' : 'taric_api')
         
-        // 使用10位HS编码进行查询和存储（与数据库保持一致）
-        const hsCodeForDb = result.hsCode10 || result.hsCode
+        // 优先使用用户原始查询的编码，这样搜索时能匹配到用户输入
+        // originalHsCode: 用户输入的原始编码（如 3920109090）
+        // hsCode10: 系统匹配到的10位编码（如 3920102300）
+        const originalCode = result.originalHsCode || hsCode  // 用户原始查询编码
+        const matchedCode10 = result.hsCode10 || result.hsCode  // 系统匹配的10位编码
         
-        // 检查是否已存在（同时匹配8位和10位）
+        // 检查是否已存在（同时匹配原始编码和系统匹配编码）
         const existing = await db.prepare(`
           SELECT id FROM tariff_rates 
-          WHERE (hs_code = ? OR hs_code = ?) AND COALESCE(origin_country_code, '') = ?
-        `).get(hsCodeForDb, result.hsCode, result.originCountryCode || '')
+          WHERE (hs_code = ? OR hs_code = ? OR hs_code_10 = ?) 
+            AND COALESCE(origin_country_code, '') = ?
+        `).get(originalCode, matchedCode10, matchedCode10, result.originCountryCode || '')
         
         if (existing) {
           // 更新
@@ -992,7 +996,7 @@ export async function lookupHsCodeUnified(req, res) {
               updated_at = NOW()
             WHERE id = ?
           `).run(
-            result.hsCode10 || null,
+            matchedCode10 || null,
             result.goodsDescription || result.formattedDescription || null,
             result.goodsDescriptionCn || null,
             result.thirdCountryDuty ?? null,
@@ -1004,7 +1008,9 @@ export async function lookupHsCodeUnified(req, res) {
           )
           result.savedToDb = 'updated'
         } else {
-          // 插入新记录（使用10位HS编码）
+          // 插入新记录
+          // hs_code 保存用户原始查询编码（便于搜索）
+          // hs_code_10 保存系统匹配的10位编码（标准编码）
           await db.prepare(`
             INSERT INTO tariff_rates (
               hs_code, hs_code_10, origin_country_code,
@@ -1013,8 +1019,8 @@ export async function lookupHsCodeUnified(req, res) {
               anti_dumping_rate, api_source, last_api_sync, data_source, is_active
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)
           `).run(
-            hsCodeForDb,  // 使用10位HS编码
-            result.hsCode10 || null,
+            originalCode,  // 使用用户原始查询编码，便于搜索
+            matchedCode10 || null,  // 系统匹配的10位标准编码
             result.originCountryCode || null,
             result.goodsDescription || result.formattedDescription || 'No description',
             result.goodsDescriptionCn || null,
