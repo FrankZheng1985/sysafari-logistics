@@ -359,28 +359,60 @@ export async function getPendingApprovalCount(approverId, userRole) {
     return 0
   }
   
-  // 根据角色获取可见的审批类型
-  const visibleTypes = getVisibleApprovalTypes(effectiveRole)
+  // 同时查询旧审批表和新统一审批表的待审批数量
+  let oldCount = 0
+  let newCount = 0
   
-  let sql = `SELECT COUNT(*) as count FROM approvals WHERE status = 'pending'`
-  const params = []
-  let paramIndex = 1
-  
-  // 添加类型过滤（admin 和 boss 可以看所有类型）
-  if (!['admin', 'boss'].includes(effectiveRole) && visibleTypes.length > 0) {
-    const typePlaceholders = visibleTypes.map((_, i) => `$${paramIndex++}`).join(', ')
-    sql += ` AND approval_type IN (${typePlaceholders})`
-    params.push(...visibleTypes)
+  // 1. 查询旧审批表 (approvals)
+  try {
+    const visibleTypes = getVisibleApprovalTypes(effectiveRole)
+    let sql = `SELECT COUNT(*) as count FROM approvals WHERE status = 'pending'`
+    const params = []
+    let paramIndex = 1
+    
+    if (!['admin', 'boss'].includes(effectiveRole) && visibleTypes.length > 0) {
+      const typePlaceholders = visibleTypes.map((_, i) => `$${paramIndex++}`).join(', ')
+      sql += ` AND approval_type IN (${typePlaceholders})`
+      params.push(...visibleTypes)
+    }
+    
+    if (approverId && !['admin', 'boss'].includes(userRole)) {
+      sql += ` AND (approver_id = $${paramIndex++} OR approver_id IS NULL)`
+      params.push(approverId)
+    }
+    
+    const result = await db.prepare(sql).get(...params)
+    oldCount = parseInt(result?.count || 0)
+  } catch (e) {
+    console.warn('查询旧审批表失败:', e.message)
   }
   
-  // 对于非管理员角色，只能看到分配给自己或未分配审批人的审批
-  if (approverId && !['admin', 'boss'].includes(userRole)) {
-    sql += ` AND (approver_id = $${paramIndex++} OR approver_id IS NULL)`
-    params.push(approverId)
+  // 2. 查询新统一审批表 (unified_approvals)
+  try {
+    let sql = `
+      SELECT COUNT(*) as count FROM unified_approvals ua
+      WHERE ua.status = 'pending'
+    `
+    const params = []
+    let paramIndex = 1
+    
+    // 非 admin/boss 需要根据角色过滤
+    if (!['admin', 'boss'].includes(effectiveRole)) {
+      sql += ` AND EXISTS (
+        SELECT 1 FROM sensitive_operations so 
+        WHERE so.operation_code = ua.approval_type 
+        AND $${paramIndex++} = ANY(so.approver_roles)
+      )`
+      params.push(effectiveRole)
+    }
+    
+    const result = await db.prepare(sql).get(...params)
+    newCount = parseInt(result?.count || 0)
+  } catch (e) {
+    console.warn('查询统一审批表失败:', e.message)
   }
   
-  const result = await db.prepare(sql).get(...params)
-  return parseInt(result.count)
+  return oldCount + newCount
 }
 
 /**
