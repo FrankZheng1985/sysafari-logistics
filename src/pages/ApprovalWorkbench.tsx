@@ -89,7 +89,7 @@ const APPROVAL_STATUS: Record<string, { label: string; color: string; icon: Reac
 }
 
 // 有审批权限的角色
-const APPROVER_ROLES = ['admin', 'boss', 'finance_manager', 'czjl', 'manager']
+const APPROVER_ROLES = ['admin', 'boss', 'finance_manager', 'finance', 'czjl', 'manager']
 
 // 根据用户角色获取可见的审批类型
 function getVisibleApprovalTypes(userRole: string | undefined): string[] {
@@ -118,13 +118,21 @@ function getVisibleApprovalTypes(userRole: string | undefined): string[] {
 
 // 检查用户是否有审批权限
 function canApprove(userRole: string | undefined, approvalType: string): boolean {
-  // admin 和 boss 可以审批所有类型
-  if (['admin', 'boss'].includes(userRole || '')) {
+  // 财务相关审批类型（包括新的统一审批类型）
+  const financeApprovalTypes = ['payment', 'fee', 'void', 'FEE_SUPPLEMENT']
+  
+  // 财务角色（包括 finance 和 finance_manager）可以审批财务相关
+  if (['finance', 'finance_manager'].includes(userRole || '') && financeApprovalTypes.includes(approvalType)) {
     return true
   }
   
-  // 财务经理可以审批财务相关
-  if (userRole === 'finance_manager' && ['payment', 'fee', 'void'].includes(approvalType)) {
+  // admin 可以审批所有类型
+  if (userRole === 'admin') {
+    return true
+  }
+  
+  // boss 可以审批非财务日常的审批（追加费用等由财务处理）
+  if (userRole === 'boss' && !['FEE_SUPPLEMENT'].includes(approvalType)) {
     return true
   }
   
