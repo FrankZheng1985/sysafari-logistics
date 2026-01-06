@@ -21,7 +21,11 @@ export async function getSubscriptions(req, res) {
       pageSize: parseInt(pageSize)
     })
     
-    return successWithPagination(res, result.items, result.total, result.page, result.pageSize)
+    return successWithPagination(res, result.items, { 
+      total: result.total, 
+      page: result.page, 
+      pageSize: result.pageSize 
+    })
   } catch (error) {
     console.error('获取订阅列表失败:', error)
     return serverError(res, '获取订阅列表失败')
