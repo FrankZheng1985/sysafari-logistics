@@ -122,14 +122,13 @@ export default function SubscriptionManagement() {
         api.get('/api/subscriptions/statistics')
       ])
       
-      // 调试日志
-      console.log('订阅API响应:', JSON.stringify(subsRes.data, null, 2))
-      
       // API 返回格式: { errCode: 200, data: { list: [...] } }
-      const items = subsRes.data?.data?.list || subsRes.data?.data?.items || subsRes.data?.data || []
-      console.log('解析后的items:', items?.length || 0, '条')
+      // axios 自动解析后 subsRes.data 就是后端返回的整个JSON
+      // 所以 subsRes.data.data.list 才是数据数组
+      const responseData = subsRes.data?.data || subsRes.data
+      const items = responseData?.list || responseData?.items || (Array.isArray(responseData) ? responseData : [])
       setSubscriptions(Array.isArray(items) ? items : [])
-      setStatistics(statsRes.data?.data || null)
+      setStatistics(statsRes.data?.data || statsRes.data || null)
     } catch (error) {
       console.error('加载订阅数据失败:', error)
     } finally {
