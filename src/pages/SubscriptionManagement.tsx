@@ -122,8 +122,12 @@ export default function SubscriptionManagement() {
         api.get('/api/subscriptions/statistics')
       ])
       
+      // 调试日志
+      console.log('订阅API响应:', JSON.stringify(subsRes.data, null, 2))
+      
       // API 返回格式: { errCode: 200, data: { list: [...] } }
       const items = subsRes.data?.data?.list || subsRes.data?.data?.items || subsRes.data?.data || []
+      console.log('解析后的items:', items?.length || 0, '条')
       setSubscriptions(Array.isArray(items) ? items : [])
       setStatistics(statsRes.data?.data || null)
     } catch (error) {
