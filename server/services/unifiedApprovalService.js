@@ -4,6 +4,7 @@
  */
 
 import { getDatabase } from '../config/database.js'
+import { generateId } from '../utils/id.js'
 
 // ==================== 检查是否需要审批 ====================
 
@@ -550,22 +551,25 @@ async function notifyApprovers(approval, trigger) {
     // 创建消息通知（如果有消息模块）
     for (const user of usersResult.rows) {
       try {
+        const messageId = generateId('msg')
         await db.pool.query(`
           INSERT INTO messages (
-            type, title, content, sender_id, sender_name,
+            id, type, title, content, sender_id, sender_name,
             receiver_id, receiver_name, related_type, related_id
           ) VALUES (
-            'approval', '新的审批待处理',
-            $1, $2, $3, $4, $5, 'unified_approval', $6
+            $1, 'approval', '新的审批待处理',
+            $2, $3, $4, $5, $6, 'unified_approval', $7
           )
         `, [
+          messageId,
           `${approval.applicant_name || '用户'} 提交了 "${approval.title}"，请及时处理。`,
-          approval.applicant_id,
+          approval.applicant_id?.toString(),
           approval.applicant_name,
-          user.id,
+          user.id?.toString(),
           user.name,
-          approval.id
+          approval.id?.toString()
         ])
+        console.log(`✅ 审批通知已发送给 ${user.name} (ID: ${user.id})`)
       } catch (e) {
         // 消息创建失败不影响主流程
         console.warn('创建审批通知失败:', e.message)
@@ -588,22 +592,25 @@ async function notifyApplicant(approval, status, comment) {
       ? `您的审批申请 "${approval.title}" 已通过。${comment ? `审批意见：${comment}` : ''}`
       : `您的审批申请 "${approval.title}" 已被拒绝。原因：${comment || '无'}`
     
+    const messageId = generateId('msg')
     await db.pool.query(`
       INSERT INTO messages (
-        type, title, content, sender_id, sender_name,
+        id, type, title, content, sender_id, sender_name,
         receiver_id, receiver_name, related_type, related_id
       ) VALUES (
-        'approval', '审批结果通知',
-        $1, $2, $3, $4, $5, 'unified_approval', $6
+        $1, 'approval', '审批结果通知',
+        $2, $3, $4, $5, $6, 'unified_approval', $7
       )
     `, [
+      messageId,
       content,
-      approval.approver_id,
+      approval.approver_id?.toString(),
       approval.approver_name,
-      approval.applicant_id,
+      approval.applicant_id?.toString(),
       approval.applicant_name,
-      approval.id
+      approval.id?.toString()
     ])
+    console.log(`✅ 审批结果通知已发送给 ${approval.applicant_name}`)
   } catch (error) {
     console.error('通知申请人失败:', error)
   }

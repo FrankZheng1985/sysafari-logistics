@@ -1143,13 +1143,19 @@ export async function getFees(params = {}) {
 
 /**
  * 简单费用查询（按 billId 精确查询时使用，避免分组导致的重复问题）
+ * 默认过滤掉待审批的费用，如需显示请设置 includePending = true
  */
 async function getFeesSimple(params = {}) {
   const db = getDatabase()
-  const { billId, category, feeName, feeType, startDate, endDate, page = 1, pageSize = 20 } = params
+  const { billId, category, feeName, feeType, startDate, endDate, page = 1, pageSize = 20, includePending = false } = params
   
   let whereClause = 'WHERE f.bill_id = ?'
   const queryParams = [billId]
+  
+  // 默认过滤掉待审批的费用（追加费用需要审批通过后才计入）
+  if (!includePending) {
+    whereClause += " AND (f.approval_status IS NULL OR f.approval_status != 'pending')"
+  }
   
   if (feeType) {
     whereClause += ' AND f.fee_type = ?'
@@ -1225,12 +1231,14 @@ async function getFeesSimple(params = {}) {
 /**
  * 获取费用统计（按类别）
  * 按照服务费分类的父级进行聚合
+ * 注意：只统计已审批通过的费用，待审批的费用不计入总额
  */
 export async function getFeeStats(params = {}) {
   const db = getDatabase()
   const { billId, startDate, endDate, feeType } = params
   
-  let whereClause = 'WHERE 1=1'
+  // 只统计已审批通过的费用（过滤掉待审批的追加费用）
+  let whereClause = "WHERE (f.approval_status IS NULL OR f.approval_status != 'pending')"
   const queryParams = []
   
   if (billId) {
