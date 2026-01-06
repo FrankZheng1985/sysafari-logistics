@@ -7,7 +7,7 @@ import {
   Truck, Building2, Shield, ChevronDown
 } from 'lucide-react'
 import DatePicker from '../components/DatePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE = getApiBaseUrl()
@@ -794,7 +794,10 @@ export default function SupplementFee() {
         
         const response = await fetch(`${API_BASE}/api/fees`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          },
           body: JSON.stringify(feeData)
         })
         
@@ -821,7 +824,10 @@ export default function SupplementFee() {
             try {
               await fetch(`${API_BASE}/api/fee-item-approvals`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  ...getAuthHeaders()
+                },
                 body: JSON.stringify({
                   feeId: result.data.id,
                   feeName: fee.feeName,
@@ -893,7 +899,10 @@ export default function SupplementFee() {
       
       const invoiceResponse = await fetch(`${API_BASE}/api/invoices/supplement`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify(supplementInvoiceData)
       })
       
