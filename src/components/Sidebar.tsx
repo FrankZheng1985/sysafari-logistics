@@ -51,13 +51,18 @@ const MENU_PERMISSIONS: Record<string, string[]> = {
   '/bookings/packages': ['bill:view'],
   '/bookings/declarations': ['bill:view'],
   '/documents': ['document:view', 'document:import', 'document:match'],
+  '/documents/sensitive-products': ['document:sensitive_products'],
   '/inspection': ['inspection:view', 'inspection:operate'],
   '/tms': ['cmr:view', 'cmr:operate'],
   '/crm': ['crm:view', 'crm:customer_manage', 'crm:opportunity_manage'],
+  '/crm/business-info': ['crm:business_info'],
   '/suppliers': ['supplier:view', 'supplier:manage'],
   '/finance': ['finance:view', 'finance:invoice_view', 'finance:payment_view'],
+  '/finance/commission': ['finance:commission_manage'],
+  '/finance/carrier-settlement': ['finance:carrier_settlement'],
   '/tools': ['product:view', 'system:tariff_rate'],
   '/system': ['system:user', 'system:menu', 'system:basic_data', 'system:security'],
+  '/system/approval-settings': ['system:approval_settings'],
 }
 
 interface MenuItem {

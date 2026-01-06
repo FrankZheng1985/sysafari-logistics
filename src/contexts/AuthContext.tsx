@@ -467,6 +467,7 @@ export const PERMISSIONS = {
   CRM_QUOTATION_MANAGE: 'crm:quotation_manage',
   CRM_CONTRACT_MANAGE: 'crm:contract_manage',
   CRM_FEEDBACK_MANAGE: 'crm:feedback_manage',
+  CRM_BUSINESS_INFO: 'crm:business_info',
   // 供应商管理
   SUPPLIER_VIEW: 'supplier:view',
   SUPPLIER_MANAGE: 'supplier:manage',
@@ -488,6 +489,8 @@ export const PERMISSIONS = {
   FINANCE_FEE_MANAGE: 'finance:fee_manage',
   FINANCE_BANK_MANAGE: 'finance:bank_manage',
   FINANCE_STATEMENTS: 'finance:statements',
+  FINANCE_COMMISSION_MANAGE: 'finance:commission_manage',
+  FINANCE_CARRIER_SETTLEMENT: 'finance:carrier_settlement',
   // 单证管理
   DOCUMENT_VIEW: 'document:view',
   DOCUMENT_CREATE: 'document:create',
@@ -499,6 +502,7 @@ export const PERMISSIONS = {
   DOCUMENT_TAX_CALC: 'document:tax_calc',
   DOCUMENT_SUPPLEMENT: 'document:supplement',
   DOCUMENT_MATCH_RECORDS: 'document:match_records',
+  DOCUMENT_SENSITIVE_PRODUCTS: 'document:sensitive_products',
   // 产品定价
   PRODUCT_VIEW: 'product:view',
   PRODUCT_MANAGE: 'product:manage',
@@ -522,6 +526,7 @@ export const PERMISSIONS = {
   SYSTEM_DATA_IMPORT: 'system:data_import',
   SYSTEM_SECURITY: 'system:security',
   SYSTEM_API_INTEGRATIONS: 'system:api_integrations',
+  SYSTEM_APPROVAL_SETTINGS: 'system:approval_settings',
   // 审批管理
   APPROVAL_VIEW: 'approval:view',
   APPROVAL_SUBMIT: 'approval:submit',
