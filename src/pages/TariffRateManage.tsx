@@ -597,6 +597,11 @@ function RealtimeLookupModal({
   // 数据源选择
   const [dataSource, setDataSource] = useState<TaricDataSource>('eu')
   const [ukRegion, setUkRegion] = useState<UkRegion>('uk')
+  // 国家搜索
+  const [countrySearch, setCountrySearch] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+  const countryInputRef = useRef<HTMLInputElement>(null)
+  const countryDropdownRef = useRef<HTMLDivElement>(null)
 
   // 加载国家代码
   useEffect(() => {
@@ -610,6 +615,42 @@ function RealtimeLookupModal({
     setResult(null)
     setError(null)
   }, [dataSource, ukRegion])
+
+  // 点击外部关闭国家下拉框
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        countryDropdownRef.current &&
+        !countryDropdownRef.current.contains(event.target as Node) &&
+        countryInputRef.current &&
+        !countryInputRef.current.contains(event.target as Node)
+      ) {
+        setShowCountryDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // 过滤国家列表
+  const filteredCountries = countries.filter((c) => {
+    if (!countrySearch) return true
+    const search = countrySearch.toUpperCase()
+    return c.code.toUpperCase().includes(search) || c.name.toUpperCase().includes(search)
+  })
+
+  // 选择国家
+  const handleSelectCountry = (code: string, name: string) => {
+    setOriginCountry(code)
+    setCountrySearch(code ? `${code} - ${name}` : '')
+    setShowCountryDropdown(false)
+  }
+
+  // 清除国家选择
+  const handleClearCountry = () => {
+    setOriginCountry('')
+    setCountrySearch('')
+  }
 
   const loadCountries = async () => {
     setLoadingCountries(true)
@@ -780,21 +821,66 @@ function RealtimeLookupModal({
                 className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
-            <div className="w-48">
+            <div className="w-48 relative">
               <label className="block text-xs text-gray-600 mb-1">原产国 (可选)</label>
-              <select
-                value={originCountry}
-                onChange={(e) => setOriginCountry(e.target.value)}
-                disabled={loadingCountries}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="">全部国家</option>
-                {countries.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.code} - {c.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  ref={countryInputRef}
+                  type="text"
+                  value={countrySearch}
+                  onChange={(e) => {
+                    setCountrySearch(e.target.value)
+                    setShowCountryDropdown(true)
+                    // 如果清空输入，也清空选择
+                    if (!e.target.value) {
+                      setOriginCountry('')
+                    }
+                  }}
+                  onFocus={() => setShowCountryDropdown(true)}
+                  placeholder={loadingCountries ? '加载中...' : '输入国家代码或名称'}
+                  disabled={loadingCountries}
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                {countrySearch && (
+                  <button
+                    type="button"
+                    onClick={handleClearCountry}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {/* 国家下拉列表 */}
+              {showCountryDropdown && !loadingCountries && (
+                <div
+                  ref={countryDropdownRef}
+                  className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto"
+                >
+                  <div
+                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm text-gray-500"
+                    onClick={() => handleSelectCountry('', '')}
+                  >
+                    全部国家
+                  </div>
+                  {filteredCountries.length > 0 ? (
+                    filteredCountries.slice(0, 50).map((c) => (
+                      <div
+                        key={c.code}
+                        className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm ${
+                          originCountry === c.code ? 'bg-blue-100 text-blue-700' : ''
+                        }`}
+                        onClick={() => handleSelectCountry(c.code, c.name)}
+                      >
+                        <span className="font-medium">{c.code}</span>
+                        <span className="text-gray-500 ml-1">- {c.name}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-gray-400">无匹配结果</div>
+                  )}
+                </div>
+              )}
             </div>
             <button
               onClick={handleLookup}
