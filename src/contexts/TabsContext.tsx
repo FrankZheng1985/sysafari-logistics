@@ -147,6 +147,7 @@ const routeTitleMap: Record<string, string> = {
   '/system/tariff-rates': '系统管理 - HS Code数据库',
   '/system/approvals': '系统管理 - 审批工作台',
   '/system/approval-center': '系统管理 - 审批中心',
+  '/system/approval-settings': '系统管理 - 审批权限设置',
   '/system/messages': '系统管理 - 消息中心',
   '/system/alerts': '系统管理 - 预警管理',
   '/system/api-integrations': '系统管理 - API对接管理',

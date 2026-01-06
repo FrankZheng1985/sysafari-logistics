@@ -96,6 +96,7 @@ import ApiIntegrations from './pages/ApiIntegrations'
 import MessageCenter from './pages/MessageCenter'
 import ApprovalWorkbench from './pages/ApprovalWorkbench'
 import ApprovalCenter from './pages/ApprovalCenter'
+import ApprovalSettings from './pages/ApprovalSettings'
 import AlertDashboard from './pages/AlertDashboard'
 import InfoCenter from './pages/InfoCenter'
 import DataImportCenter from './pages/DataImportCenter'
@@ -206,6 +207,7 @@ function AppRoutes() {
         <Route path="/system/tariff-rates" element={<TariffRateManage />} />
         <Route path="/system/approvals" element={<ApprovalWorkbench />} />
         <Route path="/system/approval-center" element={<ApprovalCenter />} />
+        <Route path="/system/approval-settings" element={<ApprovalSettings />} />
         <Route path="/system/messages" element={<MessageCenter />} />
         <Route path="/system/alerts" element={<AlertDashboard />} />
         <Route path="/system/info-center" element={<InfoCenter />} />

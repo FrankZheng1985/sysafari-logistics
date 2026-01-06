@@ -637,18 +637,26 @@ function RealtimeLookupModal({
 
     try {
       if (dataSource === 'uk') {
-        // 使用 UK Trade Tariff API
-        const response = await lookupUkTaricRealtime(hsCode, originCountry || undefined, ukRegion, false)
+        // 使用 UK Trade Tariff API，查询完成后自动保存到数据库
+        const response = await lookupUkTaricRealtime(hsCode, originCountry || undefined, ukRegion, true)
         if (response.errCode === 200 && response.data) {
           setResult(response.data)
+          // 自动保存成功后刷新列表
+          if (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated') {
+            onSaveSuccess()
+          }
         } else {
           setError(response.msg || '查询失败')
         }
       } else {
-        // 使用 EU TARIC API
-        const response = await lookupTaricRealtime(hsCode, originCountry || undefined, false)
+        // 使用 EU TARIC API，查询完成后自动保存到数据库
+        const response = await lookupTaricRealtime(hsCode, originCountry || undefined, true)
         if (response.errCode === 200 && response.data) {
           setResult(response.data)
+          // 自动保存成功后刷新列表
+          if (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated') {
+            onSaveSuccess()
+          }
         } else {
           setError(response.msg || '查询失败')
         }
@@ -1023,7 +1031,7 @@ function RealtimeLookupModal({
               <li>• 输入 HS 编码（8-10位）进行实时查询</li>
               <li>• 选择原产国可获取针对特定国家的税率（如反倾销税）</li>
               <li>• 查询结果会缓存24小时，避免重复请求</li>
-              <li>• 点击"保存到数据库"可将查询结果保存到本地税率库</li>
+              <li>• <strong>查询结果会自动保存到本地税率库</strong></li>
               {dataSource === 'uk' ? (
                 <>
                   <li>• <strong>🇬🇧 UK Trade Tariff</strong>: 免费官方 API，脱欧后英国独立关税数据</li>
@@ -1040,22 +1048,25 @@ function RealtimeLookupModal({
         </div>
 
         <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+          {/* 显示自动保存状态 */}
+          {result && result.savedToDb && (
+            <span className={`px-3 py-1.5 rounded text-xs flex items-center gap-1 ${
+              result.savedToDb === 'inserted' ? 'bg-green-100 text-green-700' :
+              result.savedToDb === 'updated' ? 'bg-blue-100 text-blue-700' :
+              'bg-gray-100 text-gray-600'
+            }`}>
+              <Check className="w-3 h-3" />
+              {result.savedToDb === 'inserted' ? '✓ 已保存到数据库' :
+               result.savedToDb === 'updated' ? '✓ 已更新数据库' :
+               '保存失败'}
+            </span>
+          )}
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800"
           >
             关闭
           </button>
-          {result && (
-            <button
-              onClick={handleSaveToDb}
-              disabled={saving}
-              className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-            >
-              {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-              {saving ? '保存中...' : '保存到数据库'}
-            </button>
-          )}
         </div>
       </div>
     </div>
