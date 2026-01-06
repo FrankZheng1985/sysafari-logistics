@@ -118,8 +118,8 @@ export default function SubscriptionManagement() {
       if (filters.search) params.append('search', filters.search)
       
       const [subsRes, statsRes] = await Promise.all([
-        api.get(`/subscriptions?${params.toString()}`),
-        api.get('/subscriptions/statistics')
+        api.get(`/api/subscriptions?${params.toString()}`),
+        api.get('/api/subscriptions/statistics')
       ])
       
       setSubscriptions(subsRes.data.data || [])
@@ -135,7 +135,7 @@ export default function SubscriptionManagement() {
   const handleRefreshStatus = async () => {
     try {
       setRefreshing(true)
-      await api.post('/subscriptions/check-status')
+      await api.post('/api/subscriptions/check-status')
       await loadData()
     } catch (error) {
       console.error('刷新状态失败:', error)
@@ -169,9 +169,9 @@ export default function SubscriptionManagement() {
     try {
       setSaving(true)
       if (editingItem) {
-        await api.put(`/subscriptions/${editingItem.id}`, formData)
+        await api.put(`/api/subscriptions/${editingItem.id}`, formData)
       } else {
-        await api.post('/subscriptions', formData)
+        await api.post('/api/subscriptions', formData)
       }
       setShowModal(false)
       await loadData()
@@ -186,7 +186,7 @@ export default function SubscriptionManagement() {
   // 删除
   const handleDelete = async (id: number) => {
     try {
-      await api.delete(`/subscriptions/${id}`)
+      await api.delete(`/api/subscriptions/${id}`)
       setDeleteConfirm(null)
       await loadData()
     } catch (error) {
