@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Search, Plus, Upload, Download, Edit2, Trash2, RefreshCw, X, Check, AlertCircle, Globe, Zap, Shield, FileWarning, Ban } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import TaricSyncPanel from '../components/TaricSyncPanel'
+import { useAuth } from '../contexts/AuthContext'
 import { formatDateTime } from '../utils/dateFormat'
 // UI components available if needed: PageContainer, ContentCard, LoadingSpinner, EmptyState
 import {
@@ -1167,6 +1168,11 @@ export default function TariffRateManage() {
   const location = useLocation() // reserved for future use
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const navigate = useNavigate() // reserved for future use
+  const { isAdmin, hasPermission } = useAuth()
+  
+  // 权限检查：同步和导入功能仅管理员可用
+  const canSync = isAdmin() || hasPermission('system:tariff_rate_sync')
+  const canImport = isAdmin() || hasPermission('system:tariff_rate_import')
   
   const [rates, setRates] = useState<TariffRate[]>([])
   const [loading, setLoading] = useState(false)
@@ -1273,10 +1279,12 @@ export default function TariffRateManage() {
         ]}
       />
 
-      {/* TARIC 同步面板 */}
-      <div className="px-4 pt-4">
-        <TaricSyncPanel />
-      </div>
+      {/* TARIC 同步面板 - 仅管理员可见 */}
+      {canSync && (
+        <div className="px-4 pt-4">
+          <TaricSyncPanel />
+        </div>
+      )}
 
       {/* 统计卡片 */}
       {stats && (
@@ -1428,13 +1436,15 @@ export default function TariffRateManage() {
               <Globe className="w-3 h-3" />
               实时查询
             </button>
-            <button
-              onClick={() => setImportModalVisible(true)}
-              className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs hover:bg-gray-50 hover:border-gray-400 flex items-center gap-1 transition-all whitespace-nowrap"
-            >
-              <Upload className="w-3 h-3" />
-              导入
-            </button>
+            {canImport && (
+              <button
+                onClick={() => setImportModalVisible(true)}
+                className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs hover:bg-gray-50 hover:border-gray-400 flex items-center gap-1 transition-all whitespace-nowrap"
+              >
+                <Upload className="w-3 h-3" />
+                导入
+              </button>
+            )}
             <button
               onClick={handleAdd}
               className="px-2.5 py-1.5 bg-primary-600 text-white rounded-md text-xs hover:bg-primary-700 flex items-center gap-1 shadow-sm transition-all hover:shadow whitespace-nowrap"

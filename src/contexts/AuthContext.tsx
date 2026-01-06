@@ -520,6 +520,8 @@ export const PERMISSIONS = {
   SYSTEM_MENU: 'system:menu',
   SYSTEM_BASIC_DATA: 'system:basic_data',
   SYSTEM_TARIFF_RATE: 'system:tariff_rate',
+  SYSTEM_TARIFF_RATE_SYNC: 'system:tariff_rate_sync',
+  SYSTEM_TARIFF_RATE_IMPORT: 'system:tariff_rate_import',
   SYSTEM_LOGO: 'system:logo',
   SYSTEM_ACTIVITY_LOG: 'system:activity_log',
   SYSTEM_MESSAGE: 'system:message',
