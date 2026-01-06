@@ -4,9 +4,10 @@ import {
   FileText, Ship, HardDrive, Languages, Calculator, BadgeCheck,
   ShieldCheck, Globe, ExternalLink, Plus, AlertTriangle, 
   CheckCircle, XCircle, Clock, Loader2, TrendingUp, Wallet,
-  ChevronRight, Info, Download, X, Building2
+  ChevronRight, Info, Download, X, Building2, MapPin
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
+import HereApiUsageCard from '../components/HereApiUsageCard'
 
 const API_BASE = getApiBaseUrl()
 
@@ -21,6 +22,7 @@ const categoryIcons: Record<string, React.ElementType> = {
   validation: BadgeCheck,
   business_info: Building2,
   infrastructure: Server,
+  geocoding: MapPin,
   other: Link2
 }
 
@@ -35,6 +37,7 @@ const categoryNames: Record<string, string> = {
   validation: '号码验证',
   business_info: '工商信息',
   infrastructure: '基础设施',
+  geocoding: '地图服务',
   other: '其他'
 }
 
@@ -182,7 +185,7 @@ function parseCosStorage(configJson?: string): CosStorageInfo | null {
   }
 }
 
-// API卡片组件
+// API卡片组件 - 与 HereApiUsageCard 样式一致
 function ApiCard({ 
   api, 
   onHealthCheck, 
@@ -222,9 +225,9 @@ function ApiCard({
   }
   
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
-      {/* 顶部：名称和状态指示灯 */}
-      <div className="flex items-start justify-between mb-3">
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+      {/* 头部 - 与 HereApiUsageCard 一致 */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <div className="p-2 bg-gray-100 rounded-lg">
             <CategoryIcon className="w-4 h-4 text-gray-600" />
@@ -244,149 +247,141 @@ function ApiCard({
         />
       </div>
       
-      {/* 描述 */}
-      {api.description && (
-        <p className="text-xs text-gray-500 mb-3 line-clamp-2">{api.description}</p>
-      )}
-      
-      {/* 统计数据 */}
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        <div className="bg-gray-50 rounded p-2">
-          <div className="text-[10px] text-gray-500">本月调用</div>
-          <div className="text-sm font-semibold text-gray-900">
-            {Number(api.month_calls || 0) > 0 ? (
-              <span>{Number(api.month_calls).toLocaleString()}</span>
-            ) : canSync && Number(api.month_cost || 0) > 0 ? (
-              <span className="text-xs text-gray-500">费用很小</span>
-            ) : canSync ? (
-              <span className="text-xs text-gray-400">点击同步</span>
-            ) : '0'}
+      {/* 内容区域 */}
+      <div className="p-4">
+        {/* 描述 */}
+        {api.description && (
+          <p className="text-xs text-gray-500 mb-3 line-clamp-2">{api.description}</p>
+        )}
+        
+        {/* 统计数据 - 4列网格与 HereApiUsageCard 一致 */}
+        <div className="grid grid-cols-4 gap-3 mb-3">
+          <div className="text-center p-2 bg-gray-50 rounded-lg">
+            <div className="text-lg font-semibold text-gray-900">
+              {Number(api.month_calls || 0) > 0 ? (
+                Number(api.month_calls).toLocaleString()
+              ) : canSync ? (
+                <span className="text-sm text-gray-400">-</span>
+              ) : '0'}
+            </div>
+            <div className="text-[10px] text-gray-500">本月调用</div>
           </div>
-          {canSync && Number(api.month_calls || 0) === 0 && (
-            <a 
-              href={api.api_code === 'tencent_ocr' 
-                ? 'https://console.cloud.tencent.com/ocr/stats' 
-                : 'https://console.cloud.tencent.com/cos5/bucket'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] text-blue-500 hover:text-blue-600 mt-0.5 inline-block"
-            >
-              查看控制台详情
-            </a>
+          {api.pricing_model !== 'free' ? (
+            <div className={`text-center p-2 rounded-lg ${isLowBalance ? 'bg-red-50' : 'bg-green-50'}`}>
+              <div className={`text-lg font-semibold ${isLowBalance ? 'text-red-600' : 'text-green-600'}`}>
+                {balance.toFixed(2)}
+              </div>
+              <div className="text-[10px] text-gray-500">当前余额</div>
+            </div>
+          ) : (
+            <div className="text-center p-2 bg-green-50 rounded-lg">
+              <div className="text-lg font-semibold text-green-600">免费</div>
+              <div className="text-[10px] text-gray-500">计费模式</div>
+            </div>
           )}
+          <div className="text-center p-2 bg-blue-50 rounded-lg">
+            <div className="text-lg font-semibold text-blue-600">
+              {canSync && Number(api.month_cost || 0) > 0 
+                ? `¥${Number(api.month_cost).toFixed(0)}` 
+                : '-'}
+            </div>
+            <div className="text-[10px] text-gray-500">本月费用</div>
+          </div>
+          <div className="text-center p-2 bg-purple-50 rounded-lg">
+            <div className="text-lg font-semibold text-purple-600">
+              {api.response_time_ms ? `${api.response_time_ms}ms` : '-'}
+            </div>
+            <div className="text-[10px] text-gray-500">响应时间</div>
+          </div>
         </div>
-        {api.pricing_model !== 'free' ? (
-          <div className={`rounded p-2 ${isLowBalance ? 'bg-red-50' : 'bg-gray-50'}`}>
-            <div className="text-[10px] text-gray-500">当前余额</div>
-            <div className={`text-sm font-semibold ${isLowBalance ? 'text-red-600' : 'text-gray-900'}`}>
-              {api.currency} {balance.toFixed(2)}
+        
+        {/* COS存储空间使用情况（仅COS显示） */}
+        {api.api_code === 'tencent_cos' && cosStorage && cosStorage.usedGB > 0 && (
+          <div className="bg-purple-50 rounded-lg p-3 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-600 font-medium">
+                存储空间 {cosStorage.estimated && <span className="text-amber-500">(估算)</span>}
+              </span>
+              <span className="text-sm font-semibold text-purple-600">
+                {formatStorageSize(cosStorage.usedGB)}
+              </span>
+            </div>
+            {/* 存储进度条 */}
+            <div className="h-2 bg-purple-200 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all ${
+                  parseFloat(cosStorage.usagePercent) > 80 
+                    ? 'bg-red-500' 
+                    : parseFloat(cosStorage.usagePercent) > 50 
+                      ? 'bg-amber-500' 
+                      : 'bg-purple-500'
+                }`}
+                style={{ width: `${Math.min(parseFloat(cosStorage.usagePercent), 100)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[10px] text-gray-400">
+                {cosStorage.bucket}
+              </span>
+              <span className="text-[10px] text-gray-400">
+                配额: {formatStorageSize(cosStorage.quotaGB)}
+              </span>
             </div>
           </div>
-        ) : (
-          <div className="bg-green-50 rounded p-2">
-            <div className="text-[10px] text-gray-500">计费模式</div>
-            <div className="text-sm font-semibold text-green-600">免费</div>
+        )}
+        
+        {/* COS存储桶信息（未同步时显示提示） */}
+        {api.api_code === 'tencent_cos' && (!cosStorage || cosStorage.usedGB === 0) && (
+          <div className="bg-gray-50 rounded-lg p-3 mb-3">
+            <div className="flex items-center gap-1.5">
+              <HardDrive className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs text-gray-500">点击同步获取存储空间使用情况</span>
+            </div>
           </div>
         )}
-      </div>
-      
-      {/* 本月费用（仅当有费用时显示） */}
-      {canSync && Number(api.month_cost || 0) > 0 && (
-        <div className="bg-blue-50 rounded p-2 mb-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-500">本月费用</span>
-            <span className="text-sm font-semibold text-blue-600">
-              ¥{Number(api.month_cost).toFixed(2)}
-            </span>
+        
+        {/* 同步时间提示 */}
+        {canSync && api.last_sync_time && (
+          <div className="text-[10px] text-gray-400 mb-3 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            上次同步: {formatSyncTime(api.last_sync_time)}
           </div>
-        </div>
-      )}
-      
-      {/* COS存储空间使用情况（仅COS显示） */}
-      {api.api_code === 'tencent_cos' && cosStorage && cosStorage.usedGB > 0 && (
-        <div className="bg-purple-50 rounded p-2 mb-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-gray-500">
-              存储空间 {cosStorage.estimated && <span className="text-amber-500">(估算)</span>}
-            </span>
-            <span className="text-xs font-medium text-purple-600">
-              {formatStorageSize(cosStorage.usedGB)}
-            </span>
+        )}
+        
+        {/* 底部操作 - 与 HereApiUsageCard 一致 */}
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <div className="flex items-center gap-1 text-[10px] text-gray-400">
+            <Info className="w-3 h-3" />
+            <span>{categoryNames[api.category] || api.category}</span>
           </div>
-          {/* 存储进度条 */}
-          <div className="h-1.5 bg-purple-200 rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all ${
-                parseFloat(cosStorage.usagePercent) > 80 
-                  ? 'bg-red-500' 
-                  : parseFloat(cosStorage.usagePercent) > 50 
-                    ? 'bg-amber-500' 
-                    : 'bg-purple-500'
-              }`}
-              style={{ width: `${Math.min(parseFloat(cosStorage.usagePercent), 100)}%` }}
-            />
+          <div className="flex items-center gap-3">
+            {/* 同步按钮 - 仅对支持同步的API显示 */}
+            {canSync && onSync && (
+              <button
+                onClick={() => onSync(api.api_code)}
+                disabled={syncing}
+                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 disabled:opacity-50"
+                title="从腾讯云同步余额"
+              >
+                {syncing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                同步
+              </button>
+            )}
+            {api.recharge_url && api.pricing_model !== 'free' && (
+              <a
+                href={api.recharge_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1"
+              >
+                充值 <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-[10px] text-gray-400">
-              {cosStorage.bucket}
-            </span>
-            <span className="text-[10px] text-gray-400">
-              参考配额: {formatStorageSize(cosStorage.quotaGB)}
-            </span>
-          </div>
-        </div>
-      )}
-      
-      {/* COS存储桶信息（未同步时显示提示） */}
-      {api.api_code === 'tencent_cos' && (!cosStorage || cosStorage.usedGB === 0) && (
-        <div className="bg-gray-50 rounded p-2 mb-3">
-          <div className="flex items-center gap-1.5">
-            <HardDrive className="w-3 h-3 text-gray-400" />
-            <span className="text-[10px] text-gray-500">点击同步获取存储空间使用情况</span>
-          </div>
-        </div>
-      )}
-      
-      {/* 同步时间提示 */}
-      {canSync && api.last_sync_time && (
-        <div className="text-[10px] text-gray-400 mb-2 flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          上次同步: {formatSyncTime(api.last_sync_time)}
-        </div>
-      )}
-      
-      {/* 底部操作 */}
-      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-        <span className="text-[10px] text-gray-400">
-          {categoryNames[api.category] || api.category}
-        </span>
-        <div className="flex items-center gap-2">
-          {/* 同步按钮 - 仅对支持同步的API显示 */}
-          {canSync && onSync && (
-            <button
-              onClick={() => onSync(api.api_code)}
-              disabled={syncing}
-              className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-0.5 disabled:opacity-50"
-              title="从腾讯云同步余额"
-            >
-              {syncing ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Download className="w-3 h-3" />
-              )}
-              同步
-            </button>
-          )}
-          {api.recharge_url && api.pricing_model !== 'free' && (
-            <a
-              href={api.recharge_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-0.5"
-            >
-              充值 <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
         </div>
       </div>
     </div>
@@ -543,18 +538,12 @@ export default function ApiIntegrations() {
   const [checkingAll, setCheckingAll] = useState(false)
   const [checkingApi, setCheckingApi] = useState<string | null>(null)
   const [syncingApi, setSyncingApi] = useState<string | null>(null)
-  const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [statsModalType, setStatsModalType] = useState<StatsModalType>(null)
   
   // 加载API列表
   const loadApis = useCallback(async () => {
     try {
-      const params = new URLSearchParams()
-      if (selectedCategory !== 'all') {
-        params.append('category', selectedCategory)
-      }
-      
-      const res = await fetch(`${API_BASE}/api/api-integrations?${params}`)
+      const res = await fetch(`${API_BASE}/api/api-integrations`)
       const data = await res.json()
       
       if (data.errCode === 200) {
@@ -566,7 +555,7 @@ export default function ApiIntegrations() {
     } finally {
       setLoading(false)
     }
-  }, [selectedCategory])
+  }, [])
   
   useEffect(() => {
     loadApis()
@@ -658,7 +647,7 @@ export default function ApiIntegrations() {
   }, {} as Record<string, ApiIntegration[]>)
   
   // 分类顺序
-  const categoryOrder = ['tracking', 'ocr', 'storage', 'finance', 'translation', 'tariff', 'validation', 'business_info', 'infrastructure', 'other']
+  const categoryOrder = ['tracking', 'ocr', 'storage', 'finance', 'translation', 'tariff', 'validation', 'business_info', 'geocoding', 'infrastructure', 'other']
   
   if (loading) {
     return (
@@ -798,95 +787,43 @@ export default function ApiIntegrations() {
         </div>
       )}
       
-      {/* 分类筛选 */}
+      {/* HERE API 使用统计卡片 */}
       <div className="px-4 py-2">
-        <div className="flex items-center gap-2 overflow-x-auto">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap transition-colors ${
-              selectedCategory === 'all'
-                ? 'bg-primary-600 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-            }`}
-          >
-            全部
-          </button>
-          {categoryOrder.map(cat => {
-            const count = groupedApis[cat]?.length || 0
-            // 只在"全部"模式下且该分类无数据时隐藏按钮
-            if (count === 0 && selectedCategory === 'all') return null
-            const Icon = categoryIcons[cat]
-            return (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full whitespace-nowrap transition-colors ${
-                  selectedCategory === cat
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <Icon className="w-3 h-3" />
-                {categoryNames[cat]}
-                {(count > 0 || selectedCategory === cat) && (
-                  <span className={`text-[10px] ${selectedCategory === cat ? 'text-white/80' : 'text-gray-400'}`}>
-                    ({count})
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
+        <HereApiUsageCard />
       </div>
+      
       
       {/* API列表 */}
       <div className="flex-1 overflow-auto px-4 py-2">
-        {selectedCategory === 'all' ? (
-          // 分组显示
-          <div className="space-y-4">
-            {categoryOrder.map(cat => {
-              const categoryApis = groupedApis[cat]
-              if (!categoryApis || categoryApis.length === 0) return null
-              
-              const Icon = categoryIcons[cat]
-              return (
-                <div key={cat}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Icon className="w-4 h-4 text-gray-500" />
-                    <h2 className="text-sm font-semibold text-gray-700">{categoryNames[cat]}</h2>
-                    <span className="text-xs text-gray-400">({categoryApis.length})</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {categoryApis.map(api => (
-                      <ApiCard
-                        key={api.api_code}
-                        api={api}
-                        onHealthCheck={handleHealthCheck}
-                        checking={checkingApi === api.api_code}
-                        onSync={handleSyncData}
-                        syncing={syncingApi === api.api_code}
-                      />
-                    ))}
-                  </div>
+        <div className="space-y-4">
+          {categoryOrder.map(cat => {
+            const categoryApis = groupedApis[cat]
+            if (!categoryApis || categoryApis.length === 0) return null
+            
+            const Icon = categoryIcons[cat]
+            return (
+              <div key={cat}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="w-4 h-4 text-gray-500" />
+                  <h2 className="text-sm font-semibold text-gray-700">{categoryNames[cat]}</h2>
+                  <span className="text-xs text-gray-400">({categoryApis.length})</span>
                 </div>
-              )
-            })}
-          </div>
-        ) : (
-          // 单分类显示
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {apis.map(api => (
-              <ApiCard
-                key={api.api_code}
-                api={api}
-                onHealthCheck={handleHealthCheck}
-                checking={checkingApi === api.api_code}
-                onSync={handleSyncData}
-                syncing={syncingApi === api.api_code}
-              />
-            ))}
-          </div>
-        )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {categoryApis.map(api => (
+                    <ApiCard
+                      key={api.api_code}
+                      api={api}
+                      onHealthCheck={handleHealthCheck}
+                      checking={checkingApi === api.api_code}
+                      onSync={handleSyncData}
+                      syncing={syncingApi === api.api_code}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
         
         {apis.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-gray-500">

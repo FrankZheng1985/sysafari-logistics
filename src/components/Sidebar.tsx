@@ -30,7 +30,8 @@ import {
   Calculator,
   FilePlus,
   Link2,
-  AlertTriangle
+  AlertTriangle,
+  CalendarClock
 } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import clsx from 'clsx'
@@ -206,6 +207,7 @@ const menuItems: MenuItem[] = [
       { path: '/system/basic-data', label: '基础数据管理', icon: Database },
       { path: '/system/tariff-rates', label: 'HS Code数据库', icon: FileText },
       { path: '/system/api-integrations', label: 'API对接管理', icon: Link2 },
+      { path: '/system/subscriptions', label: '服务订阅管理', icon: CalendarClock },
     ],
   },
 ]

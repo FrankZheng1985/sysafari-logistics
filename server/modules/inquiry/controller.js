@@ -742,7 +742,12 @@ export default {
   searchAddressCache,
   addAddressToCache,
   deleteAddressCache,
-  cleanupAddressCache
+  cleanupAddressCache,
+  
+  // HERE API 使用量监控
+  getHereApiUsageStats,
+  getHereApiUsageHistory,
+  syncHereApiCallCount
 }
 
 /**
@@ -875,6 +880,69 @@ export async function cleanupAddressCache(req, res) {
   } catch (error) {
     console.error('清理地址缓存失败:', error)
     return serverError(res, '清理地址缓存失败')
+  }
+}
+
+// ==================== HERE API 使用量监控 ====================
+
+/**
+ * 获取 HERE API 使用统计
+ */
+export async function getHereApiUsageStats(req, res) {
+  try {
+    const stats = await hereService.getApiUsageStats()
+    return success(res, stats)
+  } catch (error) {
+    console.error('获取 HERE API 使用统计失败:', error)
+    return serverError(res, '获取 HERE API 使用统计失败')
+  }
+}
+
+/**
+ * 获取 HERE API 使用历史
+ */
+export async function getHereApiUsageHistory(req, res) {
+  try {
+    const { months = 6 } = req.query
+    const history = await hereService.getApiUsageHistory(parseInt(months))
+    return success(res, history)
+  } catch (error) {
+    console.error('获取 HERE API 使用历史失败:', error)
+    return serverError(res, '获取 HERE API 使用历史失败')
+  }
+}
+
+/**
+ * 同步 HERE API 调用次数
+ * 用于从 HERE 控制台同步实际使用量
+ */
+export async function syncHereApiCallCount(req, res) {
+  try {
+    const { apiType, count } = req.body
+    
+    if (!apiType || count === undefined) {
+      return badRequest(res, '请提供 API 类型和调用次数')
+    }
+    
+    const validTypes = ['autosuggest', 'geocoding', 'routing', 'matrix_routing']
+    if (!validTypes.includes(apiType)) {
+      return badRequest(res, `无效的 API 类型，支持: ${validTypes.join(', ')}`)
+    }
+    
+    if (count < 0) {
+      return badRequest(res, '调用次数不能为负数')
+    }
+    
+    const result = await hereService.syncApiCallCount(apiType, count)
+    
+    if (result) {
+      return success(res, { apiType, count }, '调用次数已同步')
+    } else {
+      return serverError(res, '同步失败')
+    }
+  } catch (error) {
+    console.error('同步 HERE API 调用次数失败:', error)
+    return serverError(res, '同步 HERE API 调用次数失败')
   }
 }
 

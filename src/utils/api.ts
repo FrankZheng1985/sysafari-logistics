@@ -138,6 +138,31 @@ async function request<T>(
   return response.json()
 }
 
+// fetchApi 是 request 的别名，用于保持向后兼容
+const fetchApi = request
+
+// ==================== 便捷 API 对象 ====================
+// 提供 api.get(), api.post() 等便捷方法
+
+const api = {
+  get: <T>(endpoint: string) => request<T>(endpoint, { method: 'GET' }),
+  post: <T>(endpoint: string, data?: unknown) => request<T>(endpoint, {
+    method: 'POST',
+    body: data ? JSON.stringify(data) : undefined
+  }),
+  put: <T>(endpoint: string, data?: unknown) => request<T>(endpoint, {
+    method: 'PUT',
+    body: data ? JSON.stringify(data) : undefined
+  }),
+  delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
+  patch: <T>(endpoint: string, data?: unknown) => request<T>(endpoint, {
+    method: 'PATCH',
+    body: data ? JSON.stringify(data) : undefined
+  })
+}
+
+export default api
+
 // ==================== 用户管理 API 接口 ====================
 
 export interface User {

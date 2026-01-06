@@ -151,6 +151,7 @@ const routeTitleMap: Record<string, string> = {
   '/system/messages': '系统管理 - 消息中心',
   '/system/alerts': '系统管理 - 预警管理',
   '/system/api-integrations': '系统管理 - API对接管理',
+  '/system/subscriptions': '系统管理 - 服务订阅管理',
 }
 
 // 模块前缀映射（用于动态路由的回退）

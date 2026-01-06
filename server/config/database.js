@@ -424,11 +424,31 @@ export async function testConnection() {
   }
 }
 
+/**
+ * 直接执行 SQL 查询
+ * @param {string} sql - SQL 语句（使用 $1, $2... 占位符）
+ * @param {Array} params - 参数数组
+ * @returns {Promise<{rows: Array, rowCount: number}>}
+ */
+export async function query(sql, params = []) {
+  // 确保连接池已初始化
+  getDatabase()
+  try {
+    const result = await pgPool.query(sql, params)
+    return result
+  } catch (error) {
+    console.error('❌ SQL 查询错误:', error.message)
+    console.error('   SQL:', sql)
+    throw error
+  }
+}
+
 export default {
   getDatabase,
   closeDatabase,
   transaction,
   generateId,
   testConnection,
-  isUsingPostgres
+  isUsingPostgres,
+  query
 }

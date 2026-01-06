@@ -99,5 +99,16 @@ router.delete('/address-cache/:id', authenticate, controller.deleteAddressCache)
 // 清理过期缓存
 router.post('/address-cache/cleanup', authenticate, controller.cleanupAddressCache)
 
+// ==================== HERE API 使用量监控 ====================
+
+// 获取 HERE API 使用统计（无需认证，用于显示在API对接管理页面）
+router.get('/here-api/usage', controller.getHereApiUsageStats)
+
+// 获取 HERE API 使用历史（无需认证）
+router.get('/here-api/usage/history', controller.getHereApiUsageHistory)
+
+// 同步 HERE API 调用次数（需要认证，写操作）
+router.post('/here-api/usage/sync', authenticate, controller.syncHereApiCallCount)
+
 export default router
 

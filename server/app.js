@@ -61,6 +61,7 @@ import portalApiRoutes from './modules/portal-api/routes.js'
 import openApiRoutes from './modules/open-api/routes.js'
 import businessInfoRoutes from './modules/business-info/routes.js'
 import inquiryRoutes from './modules/inquiry/routes.js'
+import subscriptionRoutes from './modules/subscription/routes.js'
 import { initSocketServer } from './modules/chat/socket.js'
 
 // 供应商模块初始化
@@ -74,6 +75,7 @@ import { startScheduler as startAlertScheduler } from './jobs/alertScheduler.js'
 import { startBackupScheduler } from './jobs/backupScheduler.js'
 import { startTaxValidationScheduler } from './modules/crm/taxScheduler.js'
 import { startScheduler as startTaricScheduler } from './modules/taric/scheduler.js'
+import { initSubscriptionScheduler } from './jobs/subscriptionScheduler.js'
 
 // 自动迁移脚本
 import { runMigrations } from './scripts/auto-migrate.js'
@@ -239,6 +241,9 @@ app.use('/api/business-info', businessInfoRoutes)
 // 客户询价模块
 app.use('/api/inquiry', inquiryRoutes)
 
+// 服务订阅管理模块
+app.use('/api/subscriptions', subscriptionRoutes)
+
 // ==================== 错误处理 ====================
 
 // 错误日志
@@ -291,6 +296,9 @@ async function initializeDatabase() {
   
   // 启动TARIC同步定时任务
   startTaricScheduler()
+  
+  // 启动服务订阅检查定时任务
+  initSubscriptionScheduler()
   
   console.log('📦 数据库和定时任务初始化完成')
   return db

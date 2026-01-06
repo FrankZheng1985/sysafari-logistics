@@ -8,10 +8,16 @@
  * 1. 输入地址时，先从本地地址缓存库查找匹配
  * 2. 如果缓存没有，再调用 HERE API 获取
  * 3. HERE API 返回的结果会自动保存到缓存库
+ * 
+ * API 配额管理：
+ * - 每次 API 调用前检查配额
+ * - 调用后记录使用量
+ * - 接近限额时发出警告，达到限额时阻止调用
  */
 
 import fetch from 'node-fetch'
 import * as addressCache from './addressCacheModel.js'
+import * as hereApiUsage from './hereApiUsageService.js'
 
 // HERE API 配置
 const HERE_API_KEY = process.env.HERE_API_KEY || ''
@@ -61,6 +67,8 @@ export async function autosuggestAddress(query, limit = 5, forceApi = false) {
             addressCache.updateHitCount(result.id)
           }
         }
+        // 记录缓存命中（不消耗配额）
+        hereApiUsage.recordApiCall('autosuggest', true, true).catch(() => {})
         return cachedResults
       }
       console.log(`[AddressCache] 缓存未命中: "${query}", 调用 HERE API`)
@@ -69,7 +77,17 @@ export async function autosuggestAddress(query, limit = 5, forceApi = false) {
     }
   }
   
-  // 2. 调用 HERE API
+  // 2. 检查 API 配额
+  const quotaCheck = await hereApiUsage.checkCanCall('autosuggest')
+  if (!quotaCheck.allowed) {
+    console.error('[HereService] Autosuggest API 配额已用尽')
+    throw new Error(quotaCheck.reason)
+  }
+  if (quotaCheck.warning) {
+    console.warn('[HereService]', quotaCheck.reason)
+  }
+  
+  // 3. 调用 HERE API
   if (!HERE_API_KEY) {
     console.error('HERE API Key 未配置')
     throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
@@ -80,6 +98,9 @@ export async function autosuggestAddress(query, limit = 5, forceApi = false) {
     const url = `${HERE_AUTOSUGGEST_URL}?q=${encodeURIComponent(query)}&apiKey=${HERE_API_KEY}&limit=${limit}&at=50.1109,8.6821&in=countryCode:DEU,FRA,NLD,BEL,ITA,ESP,POL,AUT,CHE,CZE,GBR&lang=en`
     const response = await fetch(url)
     const data = await response.json()
+    
+    // 记录 API 调用成功
+    hereApiUsage.recordApiCall('autosuggest', true, false).catch(() => {})
     
     if (data.items && data.items.length > 0) {
       const results = data.items
@@ -95,7 +116,7 @@ export async function autosuggestAddress(query, limit = 5, forceApi = false) {
           lng: item.position?.lng
         }))
       
-      // 3. 保存到缓存（异步，不阻塞返回）
+      // 4. 保存到缓存（异步，不阻塞返回）
       if (ENABLE_ADDRESS_CACHE && results.length > 0) {
         addressCache.saveAutosuggestCache(query, results).catch(err => {
           console.error('[AddressCache] 保存缓存失败:', err)
@@ -107,6 +128,8 @@ export async function autosuggestAddress(query, limit = 5, forceApi = false) {
     
     return []
   } catch (error) {
+    // 记录 API 调用失败
+    hereApiUsage.recordApiCall('autosuggest', false, false).catch(() => {})
     console.error('地址自动补全失败:', error)
     throw error
   }
@@ -128,6 +151,8 @@ export async function geocodeAddress(address, forceApi = false) {
         if (cachedResult.id) {
           addressCache.updateHitCount(cachedResult.id)
         }
+        // 记录缓存命中（不消耗配额）
+        hereApiUsage.recordApiCall('geocoding', true, true).catch(() => {})
         return cachedResult
       }
       console.log(`[AddressCache] 地理编码缓存未命中: "${address}", 调用 HERE API`)
@@ -136,7 +161,17 @@ export async function geocodeAddress(address, forceApi = false) {
     }
   }
   
-  // 2. 调用 HERE API
+  // 2. 检查 API 配额
+  const quotaCheck = await hereApiUsage.checkCanCall('geocoding')
+  if (!quotaCheck.allowed) {
+    console.error('[HereService] Geocoding API 配额已用尽')
+    throw new Error(quotaCheck.reason)
+  }
+  if (quotaCheck.warning) {
+    console.warn('[HereService]', quotaCheck.reason)
+  }
+  
+  // 3. 调用 HERE API
   if (!HERE_API_KEY) {
     console.error('HERE API Key 未配置')
     throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
@@ -146,6 +181,9 @@ export async function geocodeAddress(address, forceApi = false) {
     const url = `${HERE_GEOCODING_URL}?q=${encodeURIComponent(address)}&apiKey=${HERE_API_KEY}`
     const response = await fetch(url)
     const data = await response.json()
+    
+    // 记录 API 调用成功
+    hereApiUsage.recordApiCall('geocoding', true, false).catch(() => {})
     
     if (data.items && data.items.length > 0) {
       const item = data.items[0]
@@ -158,7 +196,7 @@ export async function geocodeAddress(address, forceApi = false) {
         postalCode: item.address.postalCode
       }
       
-      // 3. 保存到缓存（异步，不阻塞返回）
+      // 4. 保存到缓存（异步，不阻塞返回）
       if (ENABLE_ADDRESS_CACHE) {
         addressCache.saveGeocodeCache(address, result).catch(err => {
           console.error('[AddressCache] 保存地理编码缓存失败:', err)
@@ -170,6 +208,8 @@ export async function geocodeAddress(address, forceApi = false) {
     
     return null
   } catch (error) {
+    // 记录 API 调用失败
+    hereApiUsage.recordApiCall('geocoding', false, false).catch(() => {})
     console.error('地理编码失败:', error)
     throw error
   }
@@ -191,7 +231,17 @@ export async function calculateTruckRoute(params) {
     throw new Error('HERE API Key 未配置，请在系统设置中配置 HERE_API_KEY')
   }
   
-  // 处理地址到坐标的转换
+  // 检查 Routing API 配额
+  const quotaCheck = await hereApiUsage.checkCanCall('routing')
+  if (!quotaCheck.allowed) {
+    console.error('[HereService] Routing API 配额已用尽')
+    throw new Error(quotaCheck.reason)
+  }
+  if (quotaCheck.warning) {
+    console.warn('[HereService]', quotaCheck.reason)
+  }
+  
+  // 处理地址到坐标的转换（这会消耗 Geocoding 配额，已在 geocodeAddress 中处理）
   let originCoords = origin.lat ? origin : await geocodeAddress(origin.address)
   let destCoords = destination.lat ? destination : await geocodeAddress(destination.address)
   
@@ -254,6 +304,9 @@ export async function calculateTruckRoute(params) {
     const response = await fetch(url)
     const data = await response.json()
     
+    // 记录 Routing API 调用成功
+    hereApiUsage.recordApiCall('routing', true, false).catch(() => {})
+    
     // 记录 API 返回的路段数量
     if (data.routes && data.routes.length > 0) {
       const route = data.routes[0]
@@ -274,6 +327,8 @@ export async function calculateTruckRoute(params) {
     
     throw new Error('未找到可用路线')
   } catch (error) {
+    // 记录 API 调用失败
+    hereApiUsage.recordApiCall('routing', false, false).catch(() => {})
     console.error('HERE API 调用失败:', error)
     throw error
   }
@@ -545,6 +600,32 @@ export async function batchGetCities(postalCodes) {
 // 导出地址缓存相关功能
 export { addressCache }
 
+// 导出 API 使用量监控功能
+export { hereApiUsage }
+
+/**
+ * 获取 HERE API 使用统计
+ * 用于前端显示和管理监控
+ */
+export async function getApiUsageStats() {
+  return await hereApiUsage.getAllUsageStats()
+}
+
+/**
+ * 获取 API 使用历史
+ */
+export async function getApiUsageHistory(months = 6) {
+  return await hereApiUsage.getUsageHistory(months)
+}
+
+/**
+ * 手动同步 API 调用次数
+ * 可用于从 HERE 控制台同步实际使用量
+ */
+export async function syncApiCallCount(apiType, count) {
+  return await hereApiUsage.setCallCount(apiType, count)
+}
+
 export default {
   autosuggestAddress,
   geocodeAddress,
@@ -552,7 +633,11 @@ export default {
   calculateTransportCost,
   getCityByPostalCode,
   batchGetCities,
-  addressCache,  // 导出缓存模块，供其他模块使用
+  addressCache,       // 导出缓存模块
+  hereApiUsage,       // 导出使用量监控模块
+  getApiUsageStats,   // 获取使用统计
+  getApiUsageHistory, // 获取使用历史
+  syncApiCallCount,   // 同步调用次数
   TOLL_RATES,
   FUEL_SURCHARGE_RATE
 }
