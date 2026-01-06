@@ -879,11 +879,11 @@ export default function BillDetails() {
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ETD:</span>
-                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.etd)}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.etd)}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ETA:</span>
-                  <span className="ml-2 font-medium text-xs">{formatDateTime(billDetail.eta)}</span>
+                  <span className="ml-2 font-medium text-xs">{formatDate(billDetail.eta)}</span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">ATA:</span>

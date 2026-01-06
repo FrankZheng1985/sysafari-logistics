@@ -4,7 +4,9 @@ import { useLocation } from 'react-router-dom'
 import { Database, Package, Anchor, MapPin, Globe, Plane, Tag, Truck, Percent } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
+import NoPermission from '../components/NoPermission'
 import BasicDataModal from '../components/BasicDataModal'
+import { useAuth } from '../contexts/AuthContext'
 import ContainerCodeModal from '../components/ContainerCodeModal'
 import PortModal from '../components/PortModal'
 import DestinationPortModal from '../components/DestinationPortModal'
@@ -64,6 +66,18 @@ import {
 
 export default function BasicDataManage() {
   const location = useLocation()
+  const { hasPermission, isAdmin, isManager } = useAuth()
+  
+  // 页面级权限检查
+  const canAccessPage = isAdmin() || isManager() || hasPermission('system:basic_data')
+  
+  if (!canAccessPage) {
+    return (
+      <NoPermission 
+        message="您没有基础数据管理权限，请联系管理员。"
+      />
+    )
+  }
   
   // 根据URL路径初始化activeTab
   const getInitialTab = (): 'basic' | 'container' | 'port' | 'destination' | 'country' | 'airport' | 'fee-category' | 'transport-method' | 'vat' => {

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { ToggleLeft, RefreshCw } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
+import NoPermission from '../components/NoPermission'
 import { loadMenuSettingsAsync, saveMenuSettings, resetMenuSettings } from '../utils/menuSettings'
+import { useAuth } from '../contexts/AuthContext'
 
 interface MenuItem {
   path: string
@@ -17,9 +19,21 @@ const menuItems: MenuItem[] = [
 ]
 
 export default function MenuSettings() {
+  const { hasPermission, isAdmin, isManager } = useAuth()
   const [settings, setSettings] = useState<Record<string, boolean>>({})
   const [hasChanges, setHasChanges] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // 页面级权限检查
+  const canAccessPage = isAdmin() || isManager() || hasPermission('system:menu')
+  
+  if (!canAccessPage) {
+    return (
+      <NoPermission 
+        message="您没有板块开关管理权限，请联系管理员。"
+      />
+    )
+  }
 
   useEffect(() => {
     // 异步加载设置

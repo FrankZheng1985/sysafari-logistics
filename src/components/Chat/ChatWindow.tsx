@@ -2,25 +2,20 @@
  * 聊天窗口组件
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   Send, 
   Smile, 
   Paperclip, 
   Image as ImageIcon, 
   MoreVertical,
-  Phone,
-  Video,
   Users,
   Pin,
   BellOff,
   Bell,
-  Trash2,
-  LogOut,
   ChevronLeft,
-  Check,
-  CheckCheck,
-  X
+  X,
+  Loader2
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSocket, type Conversation, type ChatMessage } from '../../contexts/SocketContext'
@@ -28,6 +23,20 @@ import { getApiBaseUrl } from '../../utils/api'
 import MessageItem from './MessageItem'
 
 const API_BASE = getApiBaseUrl()
+
+// 常用表情列表
+const EMOJI_LIST = [
+  '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
+  '🙂', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗',
+  '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭',
+  '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏',
+  '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤',
+  '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵',
+  '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙',
+  '👋', '🤚', '🖐️', '✋', '🖖', '👏', '🙌', '🤝',
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔',
+  '💯', '💢', '💥', '💫', '💦', '💨', '🎉', '🎊'
+]
 
 interface ChatWindowProps {
   conversation: Conversation
@@ -56,10 +65,15 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
   const [showMenu, setShowMenu] = useState(false)
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [uploading, setUploading] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const emojiPickerRef = useRef<HTMLDivElement>(null)
 
   // 获取会话名称
   const conversationName = conversation.type === 'private'
@@ -211,6 +225,59 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
     }
   }
 
+  // 处理粘贴事件（支持粘贴截图）
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      
+      // 检查是否是图片
+      if (item.type.startsWith('image/')) {
+        e.preventDefault() // 阻止默认粘贴行为
+        
+        const file = item.getAsFile()
+        if (!file) continue
+        
+        // 验证文件大小（最大 10MB）
+        if (file.size > 10 * 1024 * 1024) {
+          alert('图片大小不能超过 10MB')
+          return
+        }
+        
+        // 生成文件名（截图没有文件名）
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const fileName = `screenshot_${timestamp}.png`
+        
+        // 创建带文件名的新 File 对象
+        const namedFile = new File([file], fileName, { type: file.type })
+        
+        setUploading(true)
+        try {
+          const result = await uploadFile(namedFile)
+          if (result && result.url) {
+            // 发送图片消息
+            socketSendMessage({
+              conversationId: conversation.id,
+              content: '[截图]',
+              msgType: 'image',
+              fileUrl: result.url,
+              fileName: result.name,
+              fileSize: result.size
+            })
+          } else {
+            alert(`截图上传失败：${result?.error || '未知错误'}`)
+          }
+        } finally {
+          setUploading(false)
+        }
+        
+        return // 只处理第一张图片
+      }
+    }
+  }
+
   // 回复消息
   const handleReply = (message: ChatMessage) => {
     setReplyTo(message)
@@ -248,6 +315,143 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
   const typingText = typingUsers.size > 0
     ? Array.from(typingUsers.values()).join(', ') + ' 正在输入...'
     : ''
+
+  // 点击外部关闭表情选择器
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false)
+      }
+    }
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showEmojiPicker])
+
+  // 插入表情
+  const handleEmojiSelect = (emoji: string) => {
+    setInputValue(prev => prev + emoji)
+    setShowEmojiPicker(false)
+    inputRef.current?.focus()
+  }
+
+  // 上传文件到服务器
+  const uploadFile = async (file: File): Promise<{ url: string; name: string; size: number; error?: string } | null> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('documentType', 'chat')
+    formData.append('documentName', file.name)
+    formData.append('accessLevel', 'all')
+    formData.append('isPublic', 'true')
+    
+    try {
+      console.log('[ChatWindow] 开始上传文件:', file.name, file.size, file.type)
+      const response = await fetch(`${API_BASE}/api/documents/upload`, {
+        method: 'POST',
+        body: formData
+      })
+      
+      console.log('[ChatWindow] 上传响应状态:', response.status, response.statusText)
+      
+      const data = await response.json()
+      console.log('[ChatWindow] 上传响应数据:', data)
+      
+      // 返回的数据结构: { errCode: 200, data: { cosUrl: '...', ... } }
+      if (data.errCode === 200 && data.data?.cosUrl) {
+        return {
+          url: data.data.cosUrl,
+          name: file.name,
+          size: file.size
+        }
+      }
+      
+      const errorMsg = data.msg || '上传失败'
+      console.error('[ChatWindow] 上传失败:', errorMsg)
+      return { url: '', name: '', size: 0, error: errorMsg }
+    } catch (error) {
+      console.error('[ChatWindow] 上传文件异常:', error)
+      return { url: '', name: '', size: 0, error: error instanceof Error ? error.message : '网络错误' }
+    }
+  }
+
+  // 处理图片选择
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    // 验证文件类型
+    if (!file.type.startsWith('image/')) {
+      alert('请选择图片文件')
+      return
+    }
+    
+    // 验证文件大小（最大 10MB）
+    if (file.size > 10 * 1024 * 1024) {
+      alert('图片大小不能超过 10MB')
+      return
+    }
+    
+    setUploading(true)
+    try {
+      const result = await uploadFile(file)
+      if (result && result.url) {
+        // 发送图片消息
+        socketSendMessage({
+          conversationId: conversation.id,
+          content: '[图片]',
+          msgType: 'image',
+          fileUrl: result.url,
+          fileName: result.name,
+          fileSize: result.size
+        })
+      } else {
+        alert(`图片上传失败：${result?.error || '未知错误'}`)
+      }
+    } finally {
+      setUploading(false)
+      // 清空 input，允许重复选择同一文件
+      if (imageInputRef.current) {
+        imageInputRef.current.value = ''
+      }
+    }
+  }
+
+  // 处理文件选择
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    // 验证文件大小（最大 50MB）
+    if (file.size > 50 * 1024 * 1024) {
+      alert('文件大小不能超过 50MB')
+      return
+    }
+    
+    setUploading(true)
+    try {
+      const result = await uploadFile(file)
+      if (result && result.url) {
+        // 发送文件消息
+        socketSendMessage({
+          conversationId: conversation.id,
+          content: `[文件] ${result.name}`,
+          msgType: 'file',
+          fileUrl: result.url,
+          fileName: result.name,
+          fileSize: result.size
+        })
+      } else {
+        alert(`文件上传失败：${result?.error || '未知错误'}`)
+      }
+    } finally {
+      setUploading(false)
+      // 清空 input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -370,18 +574,38 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
           </div>
         ) : (
           <>
-            {messages.map((message, index) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                isOwn={message.sender_id === user?.id}
-                showAvatar={
-                  index === 0 ||
-                  messages[index - 1].sender_id !== message.sender_id
-                }
-                onReply={() => handleReply(message)}
-              />
-            ))}
+            {messages.map((message, index) => {
+              // 确保类型一致比较（都转为字符串）
+              const senderId = String(message.sender_id).trim()
+              const currentUserId = String(user?.id || '').trim()
+              const isOwnMessage = senderId === currentUserId
+              
+              // 调试日志（临时）
+              if (index === 0) {
+                console.log('[ChatWindow] 用户ID比较:', {
+                  messageSenderId: message.sender_id,
+                  messageSenderIdType: typeof message.sender_id,
+                  userId: user?.id,
+                  userIdType: typeof user?.id,
+                  senderId,
+                  currentUserId,
+                  isOwnMessage
+                })
+              }
+              
+              return (
+                <MessageItem
+                  key={message.id}
+                  message={message}
+                  isOwn={isOwnMessage}
+                  showAvatar={
+                    index === 0 ||
+                    messages[index - 1].sender_id !== message.sender_id
+                  }
+                  onReply={() => handleReply(message)}
+                />
+              )
+            })}
           </>
         )}
         <div ref={messagesEndRef} />
@@ -406,6 +630,21 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
 
       {/* 输入区域 */}
       <div className="px-4 py-3 bg-white border-t border-gray-200">
+        {/* 隐藏的文件输入框 */}
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageSelect}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <textarea
@@ -413,39 +652,76 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="输入消息..."
+              onPaste={handlePaste}
+              placeholder="输入消息...（可直接粘贴截图）"
               rows={1}
-              className="w-full px-4 py-2 pr-20 text-sm border border-gray-300 rounded-lg resize-none focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-4 py-2 pr-28 text-sm border border-gray-300 rounded-lg resize-none focus:ring-primary-500 focus:border-primary-500"
               style={{ maxHeight: '120px' }}
+              disabled={uploading}
             />
             <div className="absolute right-2 bottom-2 flex items-center gap-1">
+              {/* 表情按钮 */}
+              <div className="relative" ref={emojiPickerRef}>
+                <button
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className={`p-1 transition-colors ${showEmojiPicker ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'}`}
+                  title="表情"
+                  disabled={uploading}
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
+                
+                {/* 表情选择器 */}
+                {showEmojiPicker && (
+                  <div className="absolute bottom-full right-0 mb-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-50">
+                    <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+                      {EMOJI_LIST.map((emoji, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleEmojiSelect(emoji)}
+                          className="w-8 h-8 flex items-center justify-center text-xl hover:bg-gray-100 rounded transition-colors"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* 图片按钮 */}
               <button
-                className="p-1 text-gray-400 hover:text-gray-600"
-                title="表情"
-              >
-                <Smile className="w-5 h-5" />
-              </button>
-              <button
-                className="p-1 text-gray-400 hover:text-gray-600"
-                title="图片"
+                onClick={() => imageInputRef.current?.click()}
+                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                title="发送图片"
+                disabled={uploading}
               >
                 <ImageIcon className="w-5 h-5" />
               </button>
+              
+              {/* 文件按钮 */}
               <button
-                className="p-1 text-gray-400 hover:text-gray-600"
-                title="文件"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                title="发送文件"
+                disabled={uploading}
               >
                 <Paperclip className="w-5 h-5" />
               </button>
             </div>
           </div>
+          
           <button
             onClick={handleSendMessage}
-            disabled={!inputValue.trim() || sending}
+            disabled={(!inputValue.trim() && !uploading) || sending || uploading}
             className="flex-shrink-0 p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="发送"
+            title={uploading ? '上传中...' : '发送'}
           >
-            <Send className="w-5 h-5" />
+            {uploading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
           </button>
         </div>
       </div>

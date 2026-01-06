@@ -1,19 +1,65 @@
 import { User, Key, LogOut, Shield, MessageCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import UserPasswordModal from './UserPasswordModal'
 import NotificationBell from './NotificationBell'
 import MessageCenterModal from './MessageCenterModal'
 import { useAuth } from '../contexts/AuthContext'
-import { changePassword } from '../utils/api'
+import { useSocket } from '../contexts/SocketContext'
+import { changePassword, getApiBaseUrl } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 export default function Header() {
   const navigate = useNavigate()
   const { user: currentUser, logout, isAdmin, isManager, isTestMode } = useAuth()
+  const { onConversationUpdate, onNewMessage } = useSocket()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [showMessageCenter, setShowMessageCenter] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // 获取未读消息数
+  const fetchUnreadCount = useCallback(async () => {
+    if (!currentUser?.id) return
+    try {
+      const response = await fetch(`${API_BASE}/api/chat/unread-count?userId=${currentUser.id}`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setUnreadCount(data.data?.count || 0)
+      }
+    } catch (error) {
+      console.error('获取未读消息数失败:', error)
+    }
+  }, [currentUser?.id])
+
+  // 初始化和定时刷新未读数
+  useEffect(() => {
+    fetchUnreadCount()
+    // 每30秒刷新一次
+    const interval = setInterval(fetchUnreadCount, 30000)
+    return () => clearInterval(interval)
+  }, [fetchUnreadCount])
+
+  // 监听实时消息更新
+  useEffect(() => {
+    const unsubConv = onConversationUpdate(() => fetchUnreadCount())
+    const unsubMsg = onNewMessage(() => fetchUnreadCount())
+    return () => { unsubConv(); unsubMsg() }
+  }, [onConversationUpdate, onNewMessage, fetchUnreadCount])
+
+  // 打开消息中心时刷新未读数
+  const handleOpenMessageCenter = () => {
+    setShowMessageCenter(true)
+  }
+
+  // 关闭消息中心时刷新未读数
+  const handleCloseMessageCenter = () => {
+    setShowMessageCenter(false)
+    // 延迟刷新，等待已读标记生效
+    setTimeout(fetchUnreadCount, 500)
+  }
 
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -82,11 +128,16 @@ export default function Header() {
       <div className="flex items-center gap-3 relative" ref={dropdownRef}>
         {/* 消息中心按钮 */}
         <button
-          onClick={() => setShowMessageCenter(true)}
+          onClick={handleOpenMessageCenter}
           className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           title="消息中心"
         >
           <MessageCircle className="w-5 h-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-xs font-medium rounded-full flex items-center justify-center px-1">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
         
         {/* 通知铃铛 */}
@@ -175,7 +226,7 @@ export default function Header() {
         {/* 消息中心模态框 (使用Portal渲染到body) */}
         <MessageCenterModal
           visible={showMessageCenter}
-          onClose={() => setShowMessageCenter(false)}
+          onClose={handleCloseMessageCenter}
         />
       </div>
     </header>

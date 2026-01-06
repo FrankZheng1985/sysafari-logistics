@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
+import NoPermission from '../components/NoPermission'
 import { isDemoEnvironment } from '../components/Layout'
 import { 
   getUserList, 
@@ -392,7 +393,7 @@ function UserModal({ visible, onClose, onSuccess, user, roles, supervisors }: Us
 
 export default function UserManage() {
   const navigate = useNavigate()
-  const { hasPermission, user: currentUser } = useAuth()
+  const { hasPermission, user: currentUser, isAdmin, isManager } = useAuth()
   const [users, setUsers] = useState<UserType[]>([])
   const [roles, setRoles] = useState<Role[]>([])
   const [supervisors, setSupervisors] = useState<Supervisor[]>([])
@@ -404,6 +405,18 @@ export default function UserManage() {
   
   // 检测是否是演示环境
   const isDemo = useMemo(() => isDemoEnvironment(), [])
+
+  // 页面级权限检查：管理员、经理或有 system:user 权限的用户才能访问
+  const canAccessPage = isAdmin() || isManager() || hasPermission('system:user')
+  
+  // 如果没有权限，显示无权限提示
+  if (!canAccessPage) {
+    return (
+      <NoPermission 
+        message="您没有用户管理权限，请联系管理员。"
+      />
+    )
+  }
   
   // Modal states
   const [modalVisible, setModalVisible] = useState(false)

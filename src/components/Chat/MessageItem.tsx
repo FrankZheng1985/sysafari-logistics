@@ -59,6 +59,17 @@ export default function MessageItem({ message, isOwn, showAvatar, onReply }: Mes
 
   // 渲染消息内容
   const renderContent = () => {
+    // 调试日志
+    if (message.msg_type === 'image' || message.content?.includes('[图片]') || message.content?.includes('[截图]')) {
+      console.log('[MessageItem] 图片消息调试:', {
+        id: message.id,
+        msg_type: message.msg_type,
+        file_url: message.file_url,
+        content: message.content,
+        全部字段: message
+      })
+    }
+
     // 已撤回的消息
     if (message.is_recalled) {
       return (
@@ -86,6 +97,11 @@ export default function MessageItem({ message, isOwn, showAvatar, onReply }: Mes
             alt="图片"
             className="rounded-lg max-w-full cursor-pointer hover:opacity-90"
             onClick={() => window.open(message.file_url, '_blank')}
+            onError={(e) => {
+              console.error('[MessageItem] 图片加载失败:', message.file_url)
+              // 显示错误占位图
+              e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="150" viewBox="0 0 200 150"><rect fill="%23f3f4f6" width="200" height="150"/><text x="50%" y="50%" fill="%239ca3af" text-anchor="middle" dy=".3em">图片加载失败</text></svg>'
+            }}
           />
         </div>
       )

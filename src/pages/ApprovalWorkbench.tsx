@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatDateTime } from '../utils/dateFormat'
+import { getAuthHeaders } from '../utils/api'
 import { 
   ClipboardCheck, 
   Check,
@@ -200,10 +201,12 @@ export default function ApprovalWorkbench() {
       
       // 根据数据源选择不同的 API
       const apiUrl = dataSource === 'unified' 
-        ? `${API_BASE}/api/system/unified-approvals?${params}`
+        ? `${API_BASE}/api/unified-approvals?${params}`
         : `${API_BASE}/api/approvals?${params}`
       
-      const response = await fetch(apiUrl)
+      const response = await fetch(apiUrl, {
+        headers: getAuthHeaders()
+      })
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -248,12 +251,12 @@ export default function ApprovalWorkbench() {
       if (dataSource === 'unified') {
         // 统一审批 API
         const apiUrl = approvalAction === 'approve'
-          ? `${API_BASE}/api/system/unified-approvals/${currentApproval.id}/approve`
-          : `${API_BASE}/api/system/unified-approvals/${currentApproval.id}/reject`
+          ? `${API_BASE}/api/unified-approvals/${currentApproval.id}/approve`
+          : `${API_BASE}/api/unified-approvals/${currentApproval.id}/reject`
         
         response = await fetch(apiUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify(
             approvalAction === 'approve'
               ? { comment: remark }
@@ -264,7 +267,7 @@ export default function ApprovalWorkbench() {
         // 旧业务审批 API
         response = await fetch(`${API_BASE}/api/approvals/${currentApproval.id}/process`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
             status: approvalAction === 'approve' ? 'approved' : 'rejected',
             approverId: user.id,

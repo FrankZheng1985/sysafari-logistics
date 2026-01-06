@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import RoleModal from '../components/RoleModal'
+import NoPermission from '../components/NoPermission'
 import { 
   getRoleList, 
   getPermissionList,
@@ -93,11 +94,22 @@ const ROLE_CONFIG: Record<string, { level: number, color: string, textColor: str
 
 export default function RolePermissions() {
   const navigate = useNavigate()
-  const { hasPermission } = useAuth()
+  const { hasPermission, isAdmin, isManager } = useAuth()
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(true)
+
+  // 页面级权限检查
+  const canAccessPage = isAdmin() || isManager() || hasPermission('system:user')
+  
+  if (!canAccessPage) {
+    return (
+      <NoPermission 
+        message="您没有角色权限管理权限，请联系管理员。"
+      />
+    )
+  }
   const [saving, setSaving] = useState(false)
   const [editingRole, setEditingRole] = useState<string | null>(null)
   const [tempPermissions, setTempPermissions] = useState<string[]>([])

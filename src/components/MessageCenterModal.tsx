@@ -84,6 +84,7 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [conversationRefreshKey, setConversationRefreshKey] = useState(0)
   
   // 统计数据
   const [unreadMessages, setUnreadMessages] = useState(0)
@@ -378,6 +379,7 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
                     activeConversationId={activeConversation?.id}
                     onNewChat={() => setShowNewChatModal(true)}
                     unreadTotal={0}
+                    refreshTrigger={conversationRefreshKey}
                   />
                 </div>
                 {/* 聊天窗口 */}
@@ -556,9 +558,20 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
         <NewChatModal
           isOpen={showNewChatModal}
           onClose={() => setShowNewChatModal(false)}
-          onChatCreated={(conversationId: string) => {
-            // 处理新聊天创建
+          onChatCreated={async (conversationId: string) => {
+            // 处理新聊天创建 - 获取会话详情并打开
             setShowNewChatModal(false)
+            // 触发对话列表刷新
+            setConversationRefreshKey(prev => prev + 1)
+            try {
+              const response = await fetch(`${API_BASE}/api/chat/conversations/${conversationId}?userId=${user?.id}`)
+              const data = await response.json()
+              if (data.errCode === 200 && data.data) {
+                setActiveConversation(data.data)
+              }
+            } catch (error) {
+              console.error('获取会话详情失败:', error)
+            }
           }}
         />
       )}

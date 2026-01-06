@@ -7,6 +7,7 @@ import {
 import { useState, useEffect, useCallback } from 'react'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
+import NoPermission from '../components/NoPermission'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDateTime } from '../utils/dateFormat'
 
@@ -110,10 +111,21 @@ interface BackupSettings {
 type TabType = 'overview' | 'settings' | 'audit' | 'blacklist' | 'sessions' | 'backup'
 
 export default function SecurityCenter() {
-  const { hasPermission, user } = useAuth()
+  const { hasPermission, user, isAdmin, isManager } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  // 页面级权限检查
+  const canAccessPage = isAdmin() || isManager() || hasPermission('system:security')
+  
+  if (!canAccessPage) {
+    return (
+      <NoPermission 
+        message="您没有安全管理中心权限，请联系管理员。"
+      />
+    )
+  }
   
   // 概览数据
   const [overview, setOverview] = useState<SecurityOverview | null>(null)

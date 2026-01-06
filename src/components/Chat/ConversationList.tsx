@@ -2,7 +2,7 @@
  * 会话列表组件
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { 
   MessageSquare, 
   Users, 
@@ -14,8 +14,8 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSocket, type Conversation } from '../../contexts/SocketContext'
 import { getApiBaseUrl } from '../../utils/api'
-import { type Conversation } from '../../contexts/SocketContext'
 
 const API_BASE = getApiBaseUrl()
 
@@ -24,22 +24,25 @@ interface ConversationListProps {
   onSelectConversation: (conversation: Conversation) => void
   onNewChat: () => void
   unreadTotal: number
+  refreshTrigger?: number
 }
 
 export default function ConversationList({
   activeConversationId,
   onSelectConversation,
   onNewChat,
-  unreadTotal
+  unreadTotal,
+  refreshTrigger
 }: ConversationListProps) {
   const { user } = useAuth()
+  const { onConversationUpdate, onNewMessage } = useSocket()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState('')
   const [filter, setFilter] = useState<'all' | 'private' | 'group'>('all')
 
   // 加载会话列表
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!user?.id) return
     
     setLoading(true)
@@ -64,11 +67,36 @@ export default function ConversationList({
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, filter])
 
   useEffect(() => {
     fetchConversations()
-  }, [user?.id, filter])
+  }, [fetchConversations])
+
+  // 监听外部触发的刷新
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      fetchConversations()
+    }
+  }, [refreshTrigger, fetchConversations])
+
+  // 监听会话更新事件（新消息、已读状态变化等）
+  useEffect(() => {
+    const unsubConv = onConversationUpdate(() => {
+      // 会话有更新时刷新列表
+      fetchConversations()
+    })
+    
+    const unsubMsg = onNewMessage(() => {
+      // 收到新消息时刷新列表
+      fetchConversations()
+    })
+    
+    return () => {
+      unsubConv()
+      unsubMsg()
+    }
+  }, [onConversationUpdate, onNewMessage, fetchConversations])
 
   // 刷新会话列表
   const refreshConversations = () => {
@@ -213,7 +241,15 @@ export default function ConversationList({
               return (
                 <div
                   key={conv.id}
-                  onClick={() => onSelectConversation(conv)}
+                  onClick={() => {
+                    // 选择对话并立即在本地清除未读数
+                    onSelectConversation(conv)
+                    if (conv.unread_count > 0) {
+                      setConversations(prev => prev.map(c => 
+                        c.id === conv.id ? { ...c, unread_count: 0 } : c
+                      ))
+                    }
+                  }}
                   className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
                     isActive
                       ? 'bg-primary-50 border-l-2 border-primary-500'

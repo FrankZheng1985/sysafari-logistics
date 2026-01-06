@@ -73,6 +73,11 @@ const MENU_PERMISSIONS: Record<string, string[]> = {
   '/system/approval-settings': ['system:approval_settings'],
   '/system/logo-manage': ['system:logo'],
   '/system/api-integrations': ['system:api_integrations'],
+  // 新增：系统管理子菜单权限定义
+  '/system/menu-settings': ['system:menu'],
+  '/system/user-manage': ['system:user'],
+  '/system/security-center': ['system:security'],
+  '/system/basic-data': ['system:basic_data'],
 }
 
 interface MenuItem {
