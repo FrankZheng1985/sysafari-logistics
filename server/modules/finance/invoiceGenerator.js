@@ -274,6 +274,8 @@ export async function generateExcel(data) {
     billNo: '提单号',
     feeType: '费用类型',
     amount: `金额 ${currency}`,
+    discount: '优惠',
+    finalAmount: `最终金额 ${currency}`,
     total: '合计:'
   } : {
     title: 'STATEMENT OF ACCOUNT',
@@ -284,6 +286,8 @@ export async function generateExcel(data) {
     billNo: 'BILL NO',
     feeType: 'FEE TYPE',
     amount: `Amount ${currency}`,
+    discount: 'Discount',
+    finalAmount: `Final ${currency}`,
     total: 'Total:'
   }
   
@@ -295,31 +299,33 @@ export async function generateExcel(data) {
   
   // 设置列宽
   worksheet.columns = [
-    { header: labels.containerNo, key: 'containerNo', width: 20 },
-    { header: labels.billNo, key: 'billNo', width: 20 },
-    { header: labels.feeType, key: 'feeType', width: 30 },
-    { header: labels.amount, key: 'amount', width: 15 }
+    { header: labels.containerNo, key: 'containerNo', width: 18 },
+    { header: labels.billNo, key: 'billNo', width: 18 },
+    { header: labels.feeType, key: 'feeType', width: 25 },
+    { header: labels.amount, key: 'amount', width: 14 },
+    { header: labels.discount, key: 'discount', width: 12 },
+    { header: labels.finalAmount, key: 'finalAmount', width: 14 }
   ]
   
   // 标题行
-  worksheet.mergeCells('A1:D1')
+  worksheet.mergeCells('A1:F1')
   const titleCell = worksheet.getCell('A1')
   titleCell.value = labels.title
   titleCell.font = { bold: true, size: 16 }
   titleCell.alignment = { horizontal: 'center' }
   
   // 客户信息行
-  worksheet.mergeCells('A3:B3')
+  worksheet.mergeCells('A3:C3')
   worksheet.getCell('A3').value = `${labels.customer}: ${customerName}`
   worksheet.getCell('A3').font = { bold: true }
   
-  worksheet.mergeCells('C3:D3')
-  worksheet.getCell('C3').value = `${labels.date}: ${formattedDate}`
-  worksheet.getCell('C3').font = { bold: true }
+  worksheet.mergeCells('D3:F3')
+  worksheet.getCell('D3').value = `${labels.date}: ${formattedDate}`
+  worksheet.getCell('D3').font = { bold: true }
   
   // 表头行
   const headerRow = worksheet.getRow(5)
-  headerRow.values = [labels.containerNo, labels.billNo, labels.feeType, labels.amount]
+  headerRow.values = [labels.containerNo, labels.billNo, labels.feeType, labels.amount, labels.discount, labels.finalAmount]
   headerRow.font = { bold: true }
   headerRow.eachCell(cell => {
     cell.fill = {
@@ -360,11 +366,19 @@ export async function generateExcel(data) {
       language
     )
 
+    const itemAmount = parseFloat(item.amount) || 0
+    const itemDiscount = parseFloat(item.discountAmount) || 0
+    const itemFinalAmount = item.finalAmount !== undefined 
+      ? parseFloat(item.finalAmount) 
+      : (itemAmount - itemDiscount)
+
     row.values = [
       showContainerNo ? itemContainerNo : '',
       showBillNo ? item.billNumber : '',
       feeName,
-      parseFloat(item.amount) || 0
+      itemAmount,
+      itemDiscount !== 0 ? itemDiscount : '',
+      itemFinalAmount
     ]
     
     // 设置边框
@@ -380,17 +394,25 @@ export async function generateExcel(data) {
     // 金额右对齐
     row.getCell(4).alignment = { horizontal: 'right' }
     row.getCell(4).numFmt = '#,##0.00'
+    row.getCell(5).alignment = { horizontal: 'right' }
+    row.getCell(5).numFmt = '#,##0.00'
+    // 优惠列用橙色
+    if (itemDiscount !== 0) {
+      row.getCell(5).font = { color: { argb: 'FFE67E22' } }
+    }
+    row.getCell(6).alignment = { horizontal: 'right' }
+    row.getCell(6).numFmt = '#,##0.00'
     
     rowIndex++
   })
   
   // 合计行
   const totalRow = worksheet.getRow(rowIndex)
-  totalRow.values = ['', '', labels.total, total]
+  totalRow.values = ['', '', '', '', labels.total, total]
   totalRow.font = { bold: true }
-  totalRow.getCell(3).alignment = { horizontal: 'right' }
-  totalRow.getCell(4).alignment = { horizontal: 'right' }
-  totalRow.getCell(4).numFmt = '#,##0.00'
+  totalRow.getCell(5).alignment = { horizontal: 'right' }
+  totalRow.getCell(6).alignment = { horizontal: 'right' }
+  totalRow.getCell(6).numFmt = '#,##0.00'
   totalRow.eachCell(cell => {
     cell.border = {
       top: { style: 'thin' },
@@ -719,13 +741,46 @@ export async function regenerateInvoiceFiles(invoiceId) {
         feeGroups[feeName].totalAmount += parseFloat(fee.amount) || 0
       })
       
-      items = Object.values(feeGroups).map(group => ({
-        description: group.description,
-        descriptionEn: group.descriptionEn,
-        quantity: group.quantity,
-        unitValue: group.totalAmount / group.quantity,
-        amount: group.totalAmount
-      }))
+      // 计算总优惠金额（subtotal - total）
+      const invoiceSubtotal = parseFloat(invoice.subtotal) || 0
+      const invoiceTotal = parseFloat(invoice.total_amount) || 0
+      const totalDiscount = invoiceSubtotal - invoiceTotal
+      
+      console.log(`[regenerateInvoiceFiles] 计算优惠: subtotal=${invoiceSubtotal}, total=${invoiceTotal}, totalDiscount=${totalDiscount}`)
+      
+      // 如果有优惠，分配到特定费用类型（税号使用费、进口商代理费等）
+      let discountByFeeType = {}
+      if (totalDiscount > 0.01) {
+        const targetFeeKeywords = ['税号', '进口商代理', '代理费']
+        const eligibleFeeTypes = Object.keys(feeGroups).filter(feeName =>
+          targetFeeKeywords.some(keyword => feeName.includes(keyword))
+        )
+        
+        console.log(`[regenerateInvoiceFiles] 优惠分配目标费用类型:`, eligibleFeeTypes)
+        
+        if (eligibleFeeTypes.length > 0) {
+          // 平均分配到各个目标费用类型
+          const discountPerFeeType = totalDiscount / eligibleFeeTypes.length
+          eligibleFeeTypes.forEach(feeName => {
+            discountByFeeType[feeName] = discountPerFeeType
+          })
+        }
+      }
+      
+      items = Object.values(feeGroups).map(group => {
+        const discountAmt = discountByFeeType[group.description] || 0
+        const finalAmt = group.totalAmount - discountAmt
+        console.log(`[regenerateInvoiceFiles] "${group.description}": amount=${group.totalAmount}, discount=${discountAmt}, final=${finalAmt}`)
+        return {
+          description: group.description,
+          descriptionEn: group.descriptionEn,
+          quantity: group.quantity,
+          unitValue: group.totalAmount / group.quantity,
+          amount: group.totalAmount,
+          discountAmount: discountAmt,
+          finalAmount: finalAmt
+        }
+      })
     }
   }
   
@@ -745,22 +800,32 @@ export async function regenerateInvoiceFiles(invoiceId) {
       parsedItems.forEach(item => {
         const feeName = item.description?.trim() || item.fee_name?.trim() || '费用'
         const amount = parseFloat(item.amount) || 0
+        const discountAmt = parseFloat(item.discountAmount) || 0
+        const finalAmt = item.finalAmount !== undefined 
+          ? parseFloat(item.finalAmount) 
+          : (amount - discountAmt)
         if (!feeGroups[feeName]) {
           feeGroups[feeName] = {
             description: feeName,
             quantity: 0,
-            totalAmount: 0
+            totalAmount: 0,
+            totalDiscount: 0,
+            totalFinal: 0
           }
         }
         feeGroups[feeName].quantity += 1
         feeGroups[feeName].totalAmount += amount
+        feeGroups[feeName].totalDiscount += discountAmt
+        feeGroups[feeName].totalFinal += finalAmt
       })
 
       items = Object.values(feeGroups).map(group => ({
         description: group.description,
         quantity: group.quantity,
         unitValue: group.totalAmount / group.quantity,
-        amount: group.totalAmount
+        amount: group.totalAmount,
+        discountAmount: group.totalDiscount,
+        finalAmount: group.totalFinal
       }))
     } else {
       // 最后的后备方案
@@ -833,6 +898,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
   }
 
   // 生成PDF
+  // subtotal = 优惠前金额（明细合计），total = 优惠后金额（最终金额）
   const pdfData = {
     invoiceNumber: invoice.invoice_number,
     invoiceDate: invoice.invoice_date,
@@ -844,8 +910,8 @@ export async function regenerateInvoiceFiles(invoiceId) {
     },
     containerNumbers,
     items,
-    subtotal: invoiceData ? invoiceData.total : (parseFloat(invoice.subtotal) || parseFloat(invoice.total_amount) || 0),
-    total: invoiceData ? invoiceData.total : (parseFloat(invoice.total_amount) || 0),
+    subtotal: parseFloat(invoice.subtotal) || parseFloat(invoice.total_amount) || 0,
+    total: parseFloat(invoice.total_amount) || 0,
     currency: invoice.currency || 'EUR',
     exchangeRate: parseFloat(invoice.exchange_rate) || 1,
     language: invoice.language || 'en'  // 发票语言
@@ -859,25 +925,68 @@ export async function regenerateInvoiceFiles(invoiceId) {
   // 生成Excel
   // Excel 显示所有原始费用（不合并），每项都有自己的集装箱号和提单号
   let excelItems = []
+  
+  // 计算总优惠金额（subtotal - total）
+  const invoiceSubtotal = parseFloat(invoice.subtotal) || 0
+  const invoiceTotal = parseFloat(invoice.total_amount) || 0
+  const totalDiscountForExcel = invoiceSubtotal - invoiceTotal
+  
   if (fees && fees.length > 0) {
     // 有原始费用记录，显示所有费用明细（按集装箱号排序）
-    excelItems = fees.map(f => ({
-      containerNumber: f.container_number || '',
-      billNumber: f.bill_number || '',
-      feeName: f.fee_name || 'Other',
-      feeNameEn: f.fee_name_en || null,
-      amount: parseFloat(f.amount) || 0
-    }))
+    
+    // 统计每个费用类型出现的次数
+    const feeTypeCounts = {}
+    fees.forEach(f => {
+      const feeName = f.fee_name || 'Other'
+      feeTypeCounts[feeName] = (feeTypeCounts[feeName] || 0) + 1
+    })
+    
+    // 计算优惠分配
+    let discountByFeeType = {}
+    if (totalDiscountForExcel > 0.01) {
+      const targetFeeKeywords = ['税号', '进口商代理', '代理费']
+      const eligibleFeeTypes = Object.keys(feeTypeCounts).filter(feeName =>
+        targetFeeKeywords.some(keyword => feeName.includes(keyword))
+      )
+      
+      if (eligibleFeeTypes.length > 0) {
+        // 平均分配到各个目标费用类型
+        const discountPerFeeType = totalDiscountForExcel / eligibleFeeTypes.length
+        eligibleFeeTypes.forEach(feeName => {
+          // 再按该费用类型的数量平均分配到每一行
+          const count = feeTypeCounts[feeName] || 1
+          discountByFeeType[feeName] = discountPerFeeType / count
+        })
+      }
+    }
+    
+    excelItems = fees.map(f => {
+      const feeName = f.fee_name || 'Other'
+      const amount = parseFloat(f.amount) || 0
+      const discountAmt = discountByFeeType[feeName] || 0
+      
+      return {
+        containerNumber: f.container_number || '',
+        billNumber: f.bill_number || '',
+        feeName: feeName,
+        feeNameEn: f.fee_name_en || null,
+        amount: amount,
+        discountAmount: discountAmt,
+        finalAmount: amount - discountAmt
+      }
+    })
     // 按集装箱号排序，让同一个柜子的费用显示在一起
     excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
   } else {
-    // 使用 items 字段（可能包含 containerNumber）
+    // 使用 items 字段
     excelItems = items.map(item => ({
       containerNumber: item.containerNumber || '',
       billNumber: item.billNumber || '',
       feeName: item.description,
       feeNameEn: item.descriptionEn || null,
-      amount: item.amount
+      amount: item.amount,
+      discountAmount: item.discountAmount || 0,
+      finalAmount: item.finalAmount || item.amount
     }))
   }
 

@@ -313,11 +313,21 @@ export default function CreateInvoice() {
         
         if (parsedItems.length > 0) {
           // 使用 items 字段的数据（包含正确的金额）
-          items = parsedItems.map((item, index) => {
+          items = parsedItems.map((item: any, index) => {
             const amount = Number(item.amount) || 0
             const quantity = item.quantity || 1
             // 如果有 unitPrice 就用 unitPrice，否则用 amount/quantity 计算
             const unitPrice = item.unitPrice || (quantity > 0 ? amount / quantity : amount)
+            const taxRate = Number(item.taxRate) || 0
+            const taxAmount = Number(item.taxAmount) || (amount * taxRate / 100)
+            const discountPercent = Number(item.discountPercent) || 0
+            const discountAmount = Number(item.discountAmount) || 0
+            // 计算最终金额：如果有 finalAmount 就用，否则计算
+            const percentDiscount = (amount + taxAmount) * (discountPercent / 100)
+            const totalDiscount = percentDiscount + discountAmount
+            const finalAmount = item.finalAmount !== undefined 
+              ? Number(item.finalAmount) 
+              : (amount + taxAmount - totalDiscount)
             return {
               id: String(index + 1),
               description: item.description || '',
@@ -325,11 +335,11 @@ export default function CreateInvoice() {
               unitPrice: unitPrice,
               currency: invoice.currency || 'EUR',
               amount: amount,
-              taxRate: item.taxRate || 0,
-              taxAmount: 0,
-              discountPercent: 0,
-              discountAmount: 0,
-              finalAmount: amount,
+              taxRate: taxRate,
+              taxAmount: taxAmount,
+              discountPercent: discountPercent,
+              discountAmount: discountAmount,
+              finalAmount: finalAmount,
               isFromOrder: false
             }
           })
@@ -351,6 +361,40 @@ export default function CreateInvoice() {
             finalAmount: amountPerItem,
             isFromOrder: false
           }))
+        }
+        
+        // 如果 items 中没有优惠数据，但 subtotal 和 totalAmount 有差异，需要分配优惠
+        const invoiceSubtotal = Number(invoice.subtotal) || 0
+        const invoiceTotal = Number(invoice.totalAmount) || 0
+        const itemsTotalDiscount = items.reduce((sum, item) => sum + (Number(item.discountAmount) || 0), 0)
+        const itemsTotalPercentDiscount = items.reduce((sum, item) => {
+          const itemSubtotal = (Number(item.amount) || 0) + (Number(item.taxAmount) || 0)
+          return sum + itemSubtotal * (Number(item.discountPercent) || 0) / 100
+        }, 0)
+        
+        // 如果 items 中没有优惠，但发票有优惠差额
+        if (itemsTotalDiscount === 0 && itemsTotalPercentDiscount === 0 && invoiceSubtotal > invoiceTotal + 0.01) {
+          const totalDiscount = invoiceSubtotal - invoiceTotal
+          // 将优惠分配到特定费用类型（税号使用费、进口商代理费等）
+          const targetKeywords = ['税号', '进口商代理', '代理费']
+          const eligibleItems = items.filter(item => 
+            targetKeywords.some(keyword => item.description.includes(keyword))
+          )
+          
+          if (eligibleItems.length > 0) {
+            const discountPerItem = totalDiscount / eligibleItems.length
+            items = items.map(item => {
+              if (targetKeywords.some(keyword => item.description.includes(keyword))) {
+                const newDiscount = discountPerItem
+                return {
+                  ...item,
+                  discountAmount: newDiscount,
+                  finalAmount: item.amount + (Number(item.taxAmount) || 0) - newDiscount
+                }
+              }
+              return item
+            })
+          }
         }
 
         // 设置表单数据
@@ -968,8 +1012,16 @@ export default function CreateInvoice() {
   const calculateTotals = () => {
     const subtotal = formData.items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
     const taxAmount = formData.items.reduce((sum, item) => sum + (Number(item.taxAmount) || 0), 0)
-    const totalAmount = subtotal + taxAmount
-    return { subtotal, taxAmount, totalAmount }
+    // 计算折扣/调整金额：百分比折扣 + 固定金额折扣
+    const discountAmount = formData.items.reduce((sum, item) => {
+      const discountPercent = Number(item.discountPercent) || 0
+      const discountAmt = Number(item.discountAmount) || 0
+      const itemSubtotal = (Number(item.amount) || 0) + (Number(item.taxAmount) || 0)
+      return sum + (itemSubtotal * discountPercent / 100) + discountAmt
+    }, 0)
+    // 最终金额 = 小计 + 税额 - 折扣
+    const totalAmount = subtotal + taxAmount - discountAmount
+    return { subtotal, taxAmount, discountAmount, totalAmount }
   }
 
   // 选择客户
@@ -1338,7 +1390,7 @@ export default function CreateInvoice() {
     }
   }
 
-  const { subtotal, taxAmount, totalAmount } = calculateTotals()
+  const { subtotal, taxAmount, discountAmount, totalAmount } = calculateTotals()
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('zh-CN', {
@@ -2547,7 +2599,7 @@ export default function CreateInvoice() {
                             />
                           </td>
                           <td className="py-1.5 px-1.5 text-right font-medium text-gray-900 whitespace-nowrap">
-                            {formatCurrency(item.finalAmount || (item.amount + item.taxAmount))}
+                            {formatCurrency(item.finalAmount ?? (item.amount + item.taxAmount))}
                           </td>
                           <td className="py-1.5 px-1.5 text-center">
                             <button
@@ -2585,7 +2637,7 @@ export default function CreateInvoice() {
                           }, 0))}
                         </td>
                         <td className="py-2 px-1.5 text-right text-primary-700 font-bold whitespace-nowrap">
-                          {formatCurrency(formData.items.reduce((sum, item) => sum + (Number(item.finalAmount) || (Number(item.amount) || 0) + (Number(item.taxAmount) || 0)), 0))}
+                          {formatCurrency(formData.items.reduce((sum, item) => sum + (item.finalAmount !== undefined ? Number(item.finalAmount) : (Number(item.amount) || 0) + (Number(item.taxAmount) || 0)), 0))}
                         </td>
                         <td></td>
                       </tr>
@@ -2653,6 +2705,12 @@ export default function CreateInvoice() {
                   <span className="text-sm text-gray-600">税额</span>
                   <span className="text-sm font-medium text-gray-900">{formatCurrency(taxAmount)}</span>
                 </div>
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">折扣/调整</span>
+                    <span className="text-sm font-medium text-orange-600">-{formatCurrency(discountAmount)}</span>
+                  </div>
+                )}
                 <div className="border-t border-gray-200 pt-3">
                   <div className="flex items-center justify-between">
                     <span className={`text-sm font-medium ${

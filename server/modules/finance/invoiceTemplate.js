@@ -357,6 +357,9 @@ export function generateInvoiceHTML(data) {
     .items-table .quantity {
       text-align: center;
     }
+    .items-table .discount-col {
+      color: ${COLORS.primary};
+    }
     
     /* 合计区域 */
     .totals-section {
@@ -373,12 +376,15 @@ export function generateInvoiceHTML(data) {
     .totals {
       text-align: right;
     }
-    .subtotal-row, .total-row {
+    .subtotal-row, .total-row, .discount-row {
       display: flex;
       justify-content: flex-end;
       gap: 40px;
       margin-bottom: 3px;
       font-size: 10px;
+    }
+    .discount-row {
+      color: ${COLORS.primary};
     }
     .total-row {
       font-size: 13px;
@@ -455,21 +461,28 @@ export function generateInvoiceHTML(data) {
   <table class="items-table">
     <thead>
       <tr>
-        <th style="width: ${isMultiContainerInvoice ? '55%' : '40%'}">Service Description</th>
-        <th style="width: ${isMultiContainerInvoice ? '15%' : '15%'}" class="quantity">Quantity</th>
-        ${isMultiContainerInvoice ? '' : '<th style="width: 20%" class="amount">Unit Value</th>'}
-        <th style="width: ${isMultiContainerInvoice ? '30%' : '25%'}" class="amount">Amount ${currency}</th>
+        <th style="width: ${isMultiContainerInvoice ? '45%' : '35%'}">Service Description</th>
+        <th style="width: 10%" class="quantity">Quantity</th>
+        ${isMultiContainerInvoice ? '' : '<th style="width: 15%" class="amount">Unit Value</th>'}
+        <th style="width: ${isMultiContainerInvoice ? '20%' : '20%'}" class="amount">Amount ${currency}</th>
+        <th style="width: ${isMultiContainerInvoice ? '12%' : '12%'}" class="amount discount-col">Discount</th>
+        <th style="width: ${isMultiContainerInvoice ? '13%' : '18%'}" class="amount">Final</th>
       </tr>
     </thead>
     <tbody>
-      ${items.map(item => `
+      ${items.map(item => {
+        const discountAmt = Number(item.discountAmount) || 0
+        const finalAmt = item.finalAmount !== undefined ? Number(item.finalAmount) : (Number(item.amount) - discountAmt)
+        return `
       <tr>
         <td>${getFeeName(item.description, item.descriptionEn, language)}</td>
         <td class="quantity">${item.quantity}</td>
         ${isMultiContainerInvoice ? '' : `<td class="amount">${formatNumber(item.unitValue)}</td>`}
         <td class="amount">${formatNumber(item.amount)}</td>
+        <td class="amount discount-col">${discountAmt !== 0 ? '-' + formatNumber(discountAmt) : '-'}</td>
+        <td class="amount">${formatNumber(finalAmt)}</td>
       </tr>
-      `).join('')}
+      `}).join('')}
     </tbody>
   </table>
   
@@ -483,6 +496,12 @@ export function generateInvoiceHTML(data) {
         <span>Sub Total</span>
         <span>${formatNumber(subtotal)} ${currency}</span>
       </div>
+      ${subtotal > total ? `
+      <div class="discount-row">
+        <span>Discount</span>
+        <span>-${formatNumber(subtotal - total)} ${currency}</span>
+      </div>
+      ` : ''}
       <div class="total-row">
         <span>Total:</span>
         <span>${formatNumber(total)} ${currency}</span>

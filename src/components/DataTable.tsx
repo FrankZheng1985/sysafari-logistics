@@ -106,23 +106,35 @@ export default function DataTable<T extends Record<string, any>>({
   const filteredData = useMemo(() => {
     let result = [...data]
 
-    // Apply search filter
+    // Apply search filter - 支持多关键词搜索（空格/逗号/分号分隔）
     if (searchValue && searchValue.trim()) {
-      const searchLower = searchValue.toLowerCase().trim()
       const columnsToSearch = searchableColumns || columns.filter(col => col.filterable !== false).map(col => col.key)
       
-      result = result.filter((record) => {
-        return columnsToSearch.some((columnKey) => {
-          const column = columns.find((col) => col.key === columnKey)
-          if (column && column.render) {
-            // For columns with custom render, try to get the text content
+      // 将搜索词按分隔符拆分，过滤空值
+      const keywords = searchValue.split(/[\s,;，；]+/).filter(k => k.trim().length > 0).map(k => k.toLowerCase().trim())
+      
+      if (keywords.length === 0) {
+        // 没有有效关键词，不过滤
+      } else if (keywords.length === 1) {
+        // 单关键词：原有逻辑
+        const searchLower = keywords[0]
+        result = result.filter((record) => {
+          return columnsToSearch.some((columnKey) => {
             const cellValue = String(record[columnKey] || '')
             return cellValue.toLowerCase().includes(searchLower)
-          }
-          const cellValue = String(record[columnKey] || '')
-          return cellValue.toLowerCase().includes(searchLower)
+          })
         })
-      })
+      } else {
+        // 多关键词：任意一个关键词匹配即可（OR 逻辑，与后端一致）
+        result = result.filter((record) => {
+          return keywords.some((keyword) => {
+            return columnsToSearch.some((columnKey) => {
+              const cellValue = String(record[columnKey] || '')
+              return cellValue.toLowerCase().includes(keyword)
+            })
+          })
+        })
+      }
     }
 
     // Apply column filters
@@ -602,7 +614,7 @@ export default function DataTable<T extends Record<string, any>>({
   return (
     <div className="flex flex-col h-full" onClick={handleClickOutside}>
       <div className="flex-1 overflow-auto border border-gray-200 rounded-lg shadow-sm">
-        <table className="w-full table-fixed divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               {/* Selection column */}

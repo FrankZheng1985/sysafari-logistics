@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { 
   ArrowLeft, Save, FileText, Plus, Trash2, 
-  Calculator, AlertCircle, Package
+  Calculator, AlertCircle, Package, RefreshCw
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
@@ -41,11 +41,25 @@ interface InvoiceFormData {
   items: InvoiceItem[]
 }
 
+// 费用分类映射
+const feeCategoryMap: Record<string, string> = {
+  'freight': '运费',
+  'customs': '关税',
+  'vat': '增值税',
+  'handling': '操作费',
+  'storage': '仓储费',
+  'inspection': '查验费',
+  'documentation': '单证费',
+  'insurance': '保险费',
+  'other': '其他费用'
+}
+
 export default function EditInvoice() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
+  const [reloadingFees, setReloadingFees] = useState(false)
   const [paymentDays, setPaymentDays] = useState<number | ''>(30)
 
   const [formData, setFormData] = useState<InvoiceFormData>({
@@ -108,11 +122,21 @@ export default function EditInvoice() {
         
         if (parsedItems.length > 0) {
           // 使用 items 字段的数据（包含正确的金额）
-          items = parsedItems.map((item, index) => {
+          items = parsedItems.map((item: any, index) => {
             const amount = Number(item.amount) || 0
             const quantity = item.quantity || 1
             // 如果有 unitPrice 就用 unitPrice，否则用 amount/quantity 计算
             const unitPrice = item.unitPrice || (quantity > 0 ? amount / quantity : amount)
+            const taxRate = Number(item.taxRate) || 0
+            const taxAmount = Number(item.taxAmount) || (amount * taxRate / 100)
+            const discountPercent = Number(item.discountPercent) || 0
+            const discountAmount = Number(item.discountAmount) || 0
+            // 计算最终金额：如果有 finalAmount 就用，否则计算
+            const percentDiscount = (amount + taxAmount) * (discountPercent / 100)
+            const totalDiscount = percentDiscount + discountAmount
+            const finalAmount = item.finalAmount !== undefined 
+              ? Number(item.finalAmount) 
+              : (amount + taxAmount - totalDiscount)
             return {
               id: (index + 1).toString(),
               description: item.description || '',
@@ -120,11 +144,11 @@ export default function EditInvoice() {
               unitPrice: unitPrice,
               currency: invoice.currency || 'EUR',
               amount: amount,
-              taxRate: item.taxRate || 0,
-              taxAmount: 0,
-              discountPercent: 0,
-              discountAmount: 0,
-              finalAmount: amount
+              taxRate: taxRate,
+              taxAmount: taxAmount,
+              discountPercent: discountPercent,
+              discountAmount: discountAmount,
+              finalAmount: finalAmount
             }
           })
         } else if (invoice.description) {
@@ -161,6 +185,40 @@ export default function EditInvoice() {
           }]
         }
         
+        // 如果 items 中没有优惠数据，但 subtotal 和 totalAmount 有差异，需要分配优惠
+        const invoiceSubtotal = Number(invoice.subtotal) || 0
+        const invoiceTotal = Number(invoice.totalAmount) || 0
+        const itemsTotalDiscount = items.reduce((sum, item) => sum + (Number(item.discountAmount) || 0), 0)
+        const itemsTotalPercentDiscount = items.reduce((sum, item) => {
+          const itemSubtotal = (Number(item.amount) || 0) + (Number(item.taxAmount) || 0)
+          return sum + itemSubtotal * (Number(item.discountPercent) || 0) / 100
+        }, 0)
+        
+        // 如果 items 中没有优惠，但发票有优惠差额
+        if (itemsTotalDiscount === 0 && itemsTotalPercentDiscount === 0 && invoiceSubtotal > invoiceTotal + 0.01) {
+          const totalDiscount = invoiceSubtotal - invoiceTotal
+          // 将优惠分配到特定费用类型（税号使用费、进口商代理费等）
+          const targetKeywords = ['税号', '进口商代理', '代理费']
+          const eligibleItems = items.filter(item => 
+            targetKeywords.some(keyword => item.description.includes(keyword))
+          )
+          
+          if (eligibleItems.length > 0) {
+            const discountPerItem = totalDiscount / eligibleItems.length
+            items = items.map(item => {
+              if (targetKeywords.some(keyword => item.description.includes(keyword))) {
+                const newDiscount = discountPerItem
+                return {
+                  ...item,
+                  discountAmount: newDiscount,
+                  finalAmount: item.amount + (Number(item.taxAmount) || 0) - newDiscount
+                }
+              }
+              return item
+            })
+          }
+        }
+        
         // 计算账期天数
         if (invoice.dueDate && invoice.invoiceDate) {
           const days = Math.ceil(
@@ -194,6 +252,118 @@ export default function EditInvoice() {
     }
   }
 
+  // 从订单重新加载费用
+  const reloadFeesFromBill = async () => {
+    if (!formData.billId) {
+      alert('该发票没有关联订单，无法重新加载费用')
+      return
+    }
+
+    if (!confirm('确定要从订单重新加载费用吗？这将覆盖当前的发票明细。')) {
+      return
+    }
+
+    setReloadingFees(true)
+    try {
+      // 可能有多个订单ID（用逗号分隔）
+      const billIds = formData.billId.split(',').map(id => id.trim()).filter(Boolean)
+      const feeType = formData.invoiceType === 'purchase' ? 'payable' : 'receivable'
+      
+      // 获取所有关联订单的费用
+      const allFees: any[] = []
+      for (const billId of billIds) {
+        const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&feeType=${feeType}&pageSize=100`)
+        const data = await response.json()
+        if (data.errCode === 200 && data.data?.list) {
+          // 过滤已审批的费用
+          const approvedFees = data.data.list.filter((fee: any) => 
+            !fee.approvalStatus || fee.approvalStatus === 'approved'
+          )
+          allFees.push(...approvedFees)
+        }
+      }
+
+      if (allFees.length === 0) {
+        alert('未找到关联订单的费用数据')
+        setReloadingFees(false)
+        return
+      }
+
+      // 去重（基于费用ID）
+      const uniqueFees = allFees.filter((fee, index, self) => 
+        index === self.findIndex(f => f.id === fee.id)
+      )
+
+      // 合并相同费用项：按费用名称分组汇总
+      const feeMap = new Map<string, {
+        feeName: string
+        totalAmount: number
+        count: number
+        currency: string
+        feeIds: string[]
+        unitPrices: number[]
+        billIds: string[]
+        billNumbers: string[]
+      }>()
+
+      uniqueFees.forEach((fee: any) => {
+        const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
+        const amount = Number(fee.amount) || 0
+        const existing = feeMap.get(feeName)
+
+        if (existing) {
+          existing.totalAmount += amount
+          existing.count += 1
+          existing.feeIds.push(fee.id)
+          existing.unitPrices.push(amount)
+          if (fee.billId && !existing.billIds.includes(fee.billId)) {
+            existing.billIds.push(fee.billId)
+          }
+          if (fee.billNumber && !existing.billNumbers.includes(fee.billNumber)) {
+            existing.billNumbers.push(fee.billNumber)
+          }
+        } else {
+          feeMap.set(feeName, {
+            feeName,
+            totalAmount: amount,
+            count: 1,
+            currency: fee.currency || 'EUR',
+            feeIds: [fee.id],
+            unitPrices: [amount],
+            billIds: fee.billId ? [fee.billId] : [],
+            billNumbers: fee.billNumber ? [fee.billNumber] : []
+          })
+        }
+      })
+
+      // 转换为发票明细项
+      const items: InvoiceItem[] = Array.from(feeMap.values()).map((group, index) => {
+        const allSamePrice = group.unitPrices.every(p => p === group.unitPrices[0])
+        return {
+          id: (index + 1).toString(),
+          description: group.feeName,
+          quantity: group.count,
+          unitPrice: allSamePrice ? group.unitPrices[0] : -1,
+          currency: group.currency,
+          amount: group.totalAmount,
+          taxRate: 0,
+          taxAmount: 0,
+          discountPercent: 0,
+          discountAmount: 0,
+          finalAmount: group.totalAmount
+        }
+      })
+
+      setFormData(prev => ({ ...prev, items }))
+      alert(`已从订单重新加载 ${items.length} 项费用，共 ${uniqueFees.length} 条费用记录`)
+    } catch (error) {
+      console.error('重新加载费用失败:', error)
+      alert('重新加载费用失败，请稍后重试')
+    } finally {
+      setReloadingFees(false)
+    }
+  }
+
   // 处理账期天数变化
   const handlePaymentDaysChange = (days: number | '') => {
     setPaymentDays(days)
@@ -216,15 +386,31 @@ export default function EditInvoice() {
         if (item.id !== id) return item
 
         const updated = { ...item, [field]: value }
+        
         // 当数量、单价、税率或优惠字段变化时重新计算
         if (['quantity', 'unitPrice', 'taxRate', 'discountPercent', 'discountAmount'].includes(field)) {
-          const amount = (Number(updated.quantity) || 0) * (Number(updated.unitPrice) || 0)
-          const taxAmount = amount * ((Number(updated.taxRate) || 0) / 100)
-          const discountAmount = Number(updated.discountAmount) || (amount * ((Number(updated.discountPercent) || 0) / 100))
-          updated.amount = amount
+          const quantity = Number(updated.quantity) || 0
+          const unitPrice = Number(updated.unitPrice) || 0
+          const taxRate = Number(updated.taxRate) || 0
+          const discountPercent = Number(updated.discountPercent) || 0
+          const discountAmount = Number(updated.discountAmount) || 0
+          
+          // 只有当修改数量或单价时才重新计算金额
+          // 如果单价是-1（表示"多项"），保持原有金额不变
+          let amount = Number(updated.amount) || 0
+          if (['quantity', 'unitPrice'].includes(field) && unitPrice >= 0) {
+            amount = quantity * unitPrice
+            updated.amount = amount
+          }
+          
+          // 计算税额
+          const taxAmount = amount * (taxRate / 100)
           updated.taxAmount = taxAmount
-          updated.discountAmount = discountAmount
-          updated.finalAmount = amount + taxAmount - discountAmount
+          
+          // 计算最终金额：金额 + 税额 - 百分比优惠 - 固定优惠
+          const percentDiscount = (amount + taxAmount) * (discountPercent / 100)
+          const totalDiscount = percentDiscount + discountAmount
+          updated.finalAmount = amount + taxAmount - totalDiscount
         }
         return updated
       })
@@ -267,8 +453,16 @@ export default function EditInvoice() {
   const calculateTotals = () => {
     const subtotal = formData.items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
     const taxAmount = formData.items.reduce((sum, item) => sum + (Number(item.taxAmount) || 0), 0)
-    const totalAmount = subtotal + taxAmount
-    return { subtotal, taxAmount, totalAmount }
+    // 计算折扣/调整金额：百分比折扣 + 固定金额折扣
+    const discountAmount = formData.items.reduce((sum, item) => {
+      const discountPercent = Number(item.discountPercent) || 0
+      const discountAmt = Number(item.discountAmount) || 0
+      const itemSubtotal = (Number(item.amount) || 0) + (Number(item.taxAmount) || 0)
+      return sum + (itemSubtotal * discountPercent / 100) + discountAmt
+    }, 0)
+    // 最终金额 = 小计 + 税额 - 折扣
+    const totalAmount = subtotal + taxAmount - discountAmount
+    return { subtotal, taxAmount, discountAmount, totalAmount }
   }
 
   // 格式化货币
@@ -509,14 +703,28 @@ export default function EditInvoice() {
             <FileText className="w-4 h-4 text-gray-400" />
             <h2 className="text-sm font-medium text-gray-900">发票明细</h2>
           </div>
-          <button
-            type="button"
-            onClick={addItem}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            添加项目
-          </button>
+          <div className="flex items-center gap-2">
+            {formData.billId && (
+              <button
+                type="button"
+                onClick={reloadFeesFromBill}
+                disabled={reloadingFees}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
+                title="从关联订单重新加载所有费用"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${reloadingFees ? 'animate-spin' : ''}`} />
+                {reloadingFees ? '加载中...' : '从订单重新加载'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={addItem}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              添加项目
+            </button>
+          </div>
         </div>
 
         {formData.items.length === 0 ? (
@@ -537,13 +745,16 @@ export default function EditInvoice() {
               <thead>
                 <tr className="bg-gray-50 text-gray-600 text-xs">
                   <th className="py-2 px-2 text-left w-10">#</th>
-                  <th className="py-2 px-2 text-left min-w-[180px]">费用类型</th>
-                  <th className="py-2 px-2 text-center w-16">数量</th>
-                  <th className="py-2 px-2 text-right w-[120px]">单价</th>
-                  <th className="py-2 px-2 text-center w-[76px]">货币</th>
-                  <th className="py-2 px-2 text-right w-[110px]">金额</th>
-                  <th className="py-2 px-2 text-center w-[70px]">税率%</th>
-                  <th className="py-2 px-2 text-right w-24">税额</th>
+                  <th className="py-2 px-2 text-left min-w-[150px]">费用类型</th>
+                  <th className="py-2 px-2 text-center w-14">数量</th>
+                  <th className="py-2 px-2 text-right w-[100px]">单价</th>
+                  <th className="py-2 px-2 text-center w-[70px]">货币</th>
+                  <th className="py-2 px-2 text-right w-[100px]">金额</th>
+                  <th className="py-2 px-2 text-center w-[60px]">税率%</th>
+                  <th className="py-2 px-2 text-right w-20">税额</th>
+                  <th className="py-2 px-2 text-center w-[60px] text-orange-600">优惠%</th>
+                  <th className="py-2 px-2 text-right w-[90px] text-orange-600">优惠额</th>
+                  <th className="py-2 px-2 text-right w-[100px]">最终金额</th>
                   <th className="py-2 px-1 text-center w-10 whitespace-nowrap">操作</th>
                 </tr>
               </thead>
@@ -609,6 +820,32 @@ export default function EditInvoice() {
                     <td className="py-2 px-2 text-right text-gray-900 whitespace-nowrap">
                       {formatCurrency(item.taxAmount)}
                     </td>
+                    <td className="py-2 px-2">
+                      <input
+                        type="number"
+                        value={item.discountPercent || 0}
+                        onChange={(e) => updateItem(item.id, 'discountPercent', parseFloat(e.target.value) || 0)}
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        className="w-full px-1 py-1.5 border border-gray-200 rounded text-sm text-center focus:outline-none focus:ring-1 focus:ring-orange-500"
+                        placeholder="0"
+                      />
+                    </td>
+                    <td className="py-2 px-2">
+                      <input
+                        type="number"
+                        value={item.discountAmount || 0}
+                        onChange={(e) => updateItem(item.id, 'discountAmount', parseFloat(e.target.value) || 0)}
+                        min="0"
+                        step="0.01"
+                        className="w-full px-1 py-1.5 border border-gray-200 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-orange-500"
+                        placeholder="0"
+                      />
+                    </td>
+                    <td className="py-2 px-2 text-right text-gray-900 font-medium whitespace-nowrap">
+                      {formatCurrency(item.finalAmount ?? (item.amount + item.taxAmount))}
+                    </td>
                     <td className="py-2 px-2 text-center">
                       <button
                         type="button"
@@ -634,6 +871,13 @@ export default function EditInvoice() {
                   <td className="py-2 px-2 text-right text-gray-900 font-semibold whitespace-nowrap">
                     {formatCurrency(formData.items.reduce((sum, item) => sum + (Number(item.taxAmount) || 0), 0))}
                   </td>
+                  <td className="py-2 px-2 text-center text-gray-500">-</td>
+                  <td className="py-2 px-2 text-right text-orange-600 font-semibold whitespace-nowrap">
+                    {formatCurrency(calculateTotals().discountAmount)}
+                  </td>
+                  <td className="py-2 px-2 text-right text-gray-900 font-semibold whitespace-nowrap">
+                    {formatCurrency(calculateTotals().totalAmount)}
+                  </td>
                   <td></td>
                 </tr>
               </tbody>
@@ -653,6 +897,12 @@ export default function EditInvoice() {
                 <span className="text-gray-600">税额</span>
                 <span className="font-medium">{formatCurrency(calculateTotals().taxAmount)}</span>
               </div>
+              {calculateTotals().discountAmount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">折扣/调整</span>
+                  <span className="font-medium text-orange-600">-{formatCurrency(calculateTotals().discountAmount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-base font-semibold border-t pt-2">
                 <span>总计</span>
                 <span className="text-primary-600">{formatCurrency(calculateTotals().totalAmount)}</span>

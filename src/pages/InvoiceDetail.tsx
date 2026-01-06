@@ -736,6 +736,52 @@ export default function InvoiceDetail() {
                   
                   const displayTotal = Number(invoice.totalAmount)
                   
+                  // 如果明细中没有优惠数据，但发票总额与明细合计不一致，说明有优惠需要分配
+                  const totalDiscount = totals.finalAmount - displayTotal
+                  const needDistributeDiscount = totals.discountAmount === 0 && Math.abs(totalDiscount) > 0.01
+                  
+                  // 预计算每行的分配优惠
+                  // 逻辑：只给特定费用类型分配优惠（税号使用费、进口商代理费等含有优惠关键词的费用）
+                  const distributedDiscounts: number[] = []
+                  if (needDistributeDiscount && totals.amount > 0) {
+                    // 1. 初始化所有行的优惠为0
+                    parsedItems.forEach(() => distributedDiscounts.push(0))
+                    
+                    // 2. 定义可能有优惠的费用关键词
+                    const discountKeywords = ['税号', '进口商代理', '代理费']
+                    
+                    // 3. 找出包含优惠关键词的费用行
+                    const discountableFeeStats = new Map<string, { count: number, indices: number[] }>()
+                    parsedItems.forEach((item, index) => {
+                      const desc = item.description || ''
+                      // 检查是否包含任何优惠关键词
+                      const isDiscountable = discountKeywords.some(keyword => desc.includes(keyword))
+                      if (isDiscountable) {
+                        const existing = discountableFeeStats.get(desc)
+                        if (existing) {
+                          existing.count += 1
+                          existing.indices.push(index)
+                        } else {
+                          discountableFeeStats.set(desc, { count: 1, indices: [index] })
+                        }
+                      }
+                    })
+                    
+                    // 4. 把总优惠平均分给各个有优惠的费用类型，然后在类型内按行数平均分配
+                    const feeTypeCount = discountableFeeStats.size
+                    if (feeTypeCount > 0) {
+                      // 每种费用类型分配的优惠 = 总优惠 / 费用类型数量
+                      const discountPerType = totalDiscount / feeTypeCount
+                      discountableFeeStats.forEach((stats) => {
+                        // 在该类型内按行数平均分配
+                        const perRowDiscount = discountPerType / stats.count
+                        stats.indices.forEach(idx => {
+                          distributedDiscounts[idx] = perRowDiscount
+                        })
+                      })
+                    }
+                  }
+                  
                   return (
                     <table className="w-full text-sm">
                       <thead>
@@ -762,10 +808,16 @@ export default function InvoiceDetail() {
                               const amount = Number(item.amount) || 0
                               const taxAmount = Number(item.taxAmount) || 0
                               const discountPct = Number(item.discountPercent) || 0
-                              const discountAmt = Number(item.discountAmount) || 0
-                              const finalAmount = item.finalAmount !== undefined 
-                                ? Number(item.finalAmount) 
-                                : amount + taxAmount - discountAmt
+                              // 如果需要分配优惠，使用分配后的值；否则使用原值
+                              const discountAmt = needDistributeDiscount 
+                                ? (distributedDiscounts[index] || 0)
+                                : (Number(item.discountAmount) || 0)
+                              // 重新计算最终金额
+                              const finalAmount = needDistributeDiscount
+                                ? amount + taxAmount - discountAmt
+                                : (item.finalAmount !== undefined 
+                                    ? Number(item.finalAmount) 
+                                    : amount + taxAmount - discountAmt)
                               const isNegative = finalAmount < 0
                               
                               return (
@@ -796,8 +848,8 @@ export default function InvoiceDetail() {
                                   <td className="py-2 px-2 text-center text-gray-600">
                                     {discountPct > 0 ? `${discountPct}%` : '-'}
                                   </td>
-                                  <td className="py-2 px-2 text-right text-gray-600">
-                                    {discountAmt !== 0 ? formatCurrency(discountAmt, invoice.currency) : '-'}
+                                  <td className={`py-2 px-2 text-right ${discountAmt > 0 ? 'text-orange-600' : 'text-gray-600'}`}>
+                                    {discountAmt > 0.01 ? formatCurrency(discountAmt, invoice.currency) : '-'}
                                   </td>
                                   <td className={`py-2 px-2 text-right font-medium ${isNegative ? 'text-green-700' : 'text-gray-900'}`}>
                                     {formatCurrency(finalAmount, invoice.currency)}
@@ -805,32 +857,7 @@ export default function InvoiceDetail() {
                                 </tr>
                               )
                             })}
-                            {/* 如果明细金额合计与发票总额不一致，显示优惠/调整行 */}
-                            {Math.abs(totals.finalAmount - displayTotal) > 0.01 && (
-                              <tr className="border-b border-gray-100 bg-green-50">
-                                <td className="py-2 px-2 text-center text-gray-500">{parsedItems.length + 1}</td>
-                                <td className="py-2 px-2 text-green-700 font-medium">
-                                  {totals.finalAmount > displayTotal ? '优惠/折扣' : '调整费用'}
-                                </td>
-                                {hasDetailedData && (
-                                  <>
-                                    <td className="py-2 px-2 text-center text-gray-600">1</td>
-                                    <td className="py-2 px-2 text-right text-green-700">
-                                      {formatCurrency(displayTotal - totals.finalAmount, invoice.currency)}
-                                    </td>
-                                  </>
-                                )}
-                                <td className="py-2 px-2 text-right text-green-700">
-                                  {formatCurrency(displayTotal - totals.finalAmount, invoice.currency)}
-                                </td>
-                                <td className="py-2 px-2 text-right text-gray-600">€0.00</td>
-                                <td className="py-2 px-2 text-center text-gray-600">-</td>
-                                <td className="py-2 px-2 text-right text-gray-600">-</td>
-                                <td className="py-2 px-2 text-right text-green-700 font-medium">
-                                  {formatCurrency(displayTotal - totals.finalAmount, invoice.currency)}
-                                </td>
-                              </tr>
-                            )}
+                            {/* 优惠金额已在各行的"优惠额"列显示，不再单独显示汇总行 */}
                           </>
                         ) : invoice.description ? (
                           // 后备方案：从 description 字符串分割
@@ -857,20 +884,14 @@ export default function InvoiceDetail() {
                         <tr className="border-t-2 border-gray-300 bg-gray-50 font-medium">
                           <td colSpan={hasDetailedData ? 4 : 2} className="py-2 px-2 text-right text-gray-700">合计</td>
                           <td className="py-2 px-2 text-right text-gray-700">
-                            {/* 如果有调整行，金额列也要加上调整金额 */}
-                            {formatCurrency(
-                              Math.abs(totals.finalAmount - displayTotal) > 0.01 
-                                ? totals.amount + (displayTotal - totals.finalAmount)
-                                : totals.amount, 
-                              invoice.currency
-                            )}
+                            {formatCurrency(totals.amount, invoice.currency)}
                           </td>
                           <td className="py-2 px-2 text-right text-gray-700">
                             {formatCurrency(totals.taxAmount, invoice.currency)}
                           </td>
                           <td className="py-2 px-2 text-center text-gray-500">-</td>
                           <td className="py-2 px-2 text-right text-orange-600">
-                            {formatCurrency(totals.discountAmount, invoice.currency)}
+                            {formatCurrency(needDistributeDiscount ? totalDiscount : totals.discountAmount, invoice.currency)}
                           </td>
                           <td className="py-2 px-2 text-right text-primary-700 font-bold">
                             {formatCurrency(displayTotal, invoice.currency)}

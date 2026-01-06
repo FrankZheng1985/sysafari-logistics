@@ -327,7 +327,7 @@ export default function FinanceInvoices() {
     {
       key: 'invoiceNumber',
       label: '发票号',
-      width: '12%',
+      width: 160,
       sorter: true,
       render: (_value, record) => (
         <div>
@@ -339,7 +339,7 @@ export default function FinanceInvoices() {
     {
       key: 'invoiceType',
       label: '类型',
-      width: '7%',
+      width: 80,
       sorter: true,
       filters: [
         { text: '销售发票', value: 'sales' },
@@ -359,7 +359,7 @@ export default function FinanceInvoices() {
     {
       key: 'customerName',
       label: '客户/供应商',
-      width: '12%',
+      width: 140,
       sorter: true,
       filterable: true,
       render: (_value, record) => (
@@ -371,7 +371,6 @@ export default function FinanceInvoices() {
     {
       key: 'containerNumbers',
       label: '集装箱号/提单号',
-      width: '14%',
       render: (_value, record) => (
         <div className="truncate">
           {record.containerNumbers && record.containerNumbers.length > 0 ? (
@@ -391,7 +390,7 @@ export default function FinanceInvoices() {
     {
       key: 'totalAmount',
       label: '金额',
-      width: '10%',
+      width: 120,
       align: 'right',
       sorter: (a, b) => a.totalAmount - b.totalAmount,
       render: (_value, record) => (
@@ -406,7 +405,7 @@ export default function FinanceInvoices() {
     {
       key: 'paidAmount',
       label: '已付金额',
-      width: '10%',
+      width: 120,
       align: 'right',
       sorter: (a, b) => a.paidAmount - b.paidAmount,
       render: (_value, record) => (
@@ -425,7 +424,7 @@ export default function FinanceInvoices() {
     {
       key: 'status',
       label: '状态',
-      width: '8%',
+      width: 100,
       sorter: true,
       filters: [
         { text: '草稿', value: 'draft' },
@@ -448,7 +447,7 @@ export default function FinanceInvoices() {
     {
       key: 'dueDate',
       label: '到期日',
-      width: '9%',
+      width: 130,
       sorter: (a, b) => {
         const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0
         const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0
@@ -467,7 +466,7 @@ export default function FinanceInvoices() {
     {
       key: 'actions',
       label: '操作',
-      width: '14%',
+      width: 160,
       render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button

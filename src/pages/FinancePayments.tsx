@@ -332,7 +332,7 @@ export default function FinancePayments() {
     {
       key: 'paymentNumber',
       label: '付款单号',
-      width: 180,
+      width: '14%',
       sorter: true,
       render: (_value, record) => {
         const hasMultipleInvoices = record.invoiceCount && record.invoiceCount > 1
@@ -370,7 +370,7 @@ export default function FinancePayments() {
     {
       key: 'paymentType',
       label: '类型',
-      width: 100,
+      width: '7%',
       sorter: true,
       filters: [
         { text: '收款', value: 'income' },
@@ -394,7 +394,7 @@ export default function FinancePayments() {
     {
       key: 'customerName',
       label: '客户/供应商',
-      width: 150,
+      width: '14%',
       sorter: true,
       filterable: true,
       render: (_value, record) => (
@@ -416,7 +416,7 @@ export default function FinancePayments() {
     {
       key: 'containerNumbers',
       label: '集装箱号',
-      width: 140,
+      width: '12%',
       render: (_value, record) => {
         const containers = record.containerNumbers || []
         if (containers.length === 0) {
@@ -425,7 +425,7 @@ export default function FinancePayments() {
         // 只显示第一个，其他用 +N 表示，鼠标悬停显示全部
         const allContainersText = containers.join(', ')
         return (
-          <div className="max-w-[130px] cursor-default" title={allContainersText}>
+          <div className="truncate cursor-default" title={allContainersText}>
             <div className="text-xs text-gray-900 truncate">
               {containers[0]}
             </div>
@@ -441,7 +441,7 @@ export default function FinancePayments() {
     {
       key: 'amount',
       label: '金额',
-      width: 120,
+      width: '10%',
       align: 'right',
       sorter: (a, b) => a.amount - b.amount,
       render: (_value, record) => (
@@ -455,7 +455,7 @@ export default function FinancePayments() {
     {
       key: 'paymentMethod',
       label: '支付方式',
-      width: 120,
+      width: '9%',
       render: (_value, record) => {
         const config = getMethodConfig(record.paymentMethod)
         const Icon = config.icon
@@ -470,17 +470,17 @@ export default function FinancePayments() {
     {
       key: 'referenceNumber',
       label: '参考号',
-      width: 150,
+      width: '12%',
       render: (_value, record) => (
-        <span className="text-xs text-gray-600">{record.referenceNumber || '-'}</span>
+        <span className="text-xs text-gray-600 truncate block">{record.referenceNumber || '-'}</span>
       )
     },
     {
       key: 'description',
       label: '说明',
-      width: 200,
+      width: '15%',
       render: (_value, record) => (
-        <span className="text-xs text-gray-500 truncate block max-w-[200px]">
+        <span className="text-xs text-gray-500 truncate block">
           {record.description || '-'}
         </span>
       )
@@ -488,7 +488,7 @@ export default function FinancePayments() {
     {
       key: 'actions',
       label: '操作',
-      width: 100,
+      width: '7%',
       render: (_value, record) => (
         <div className="flex items-center justify-center gap-1">
           <button
