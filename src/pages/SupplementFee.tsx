@@ -706,8 +706,8 @@ export default function SupplementFee() {
       alert('请输入费用名称')
       return
     }
-    if (!manualAmount || parseFloat(manualAmount) <= 0) {
-      alert('请输入有效金额')
+    if (!manualAmount || parseFloat(manualAmount) === 0) {
+      alert('请输入有效金额（可为负数）')
       return
     }
     

@@ -708,8 +708,8 @@ export default function FeeModal({
       newErrors.feeName = '请输入费用名称'
     }
     
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
-      newErrors.amount = '请输入有效金额'
+    if (!formData.amount || parseFloat(formData.amount) === 0) {
+      newErrors.amount = '请输入有效金额（可为负数）'
     }
     
     if (!formData.feeDate) {
@@ -800,7 +800,7 @@ export default function FeeModal({
     // 多选费用分类时的批量提交
     if (isManualEntry && selectedManualCategories.length > 1) {
       // 验证多选费用项
-      const invalidItems = selectedManualCategories.filter(item => !item.feeName || !item.amount || parseFloat(item.amount) <= 0)
+      const invalidItems = selectedManualCategories.filter(item => !item.feeName || !item.amount || parseFloat(item.amount) === 0)
       if (invalidItems.length > 0) {
         alert(`请填写完整所有费用项的名称和金额`)
         return

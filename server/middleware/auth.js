@@ -84,7 +84,7 @@ async function authenticateSimpleToken(token) {
       roleName: userResult.role_name,
       roleLevel: ROLE_LEVELS[userResult.role] || 4,
       canManageTeam: ['admin', 'boss', 'manager'].includes(userResult.role),
-      canApprove: ['admin', 'boss', 'manager', 'finance_director'].includes(userResult.role),
+      canApprove: ['admin', 'boss', 'manager', 'finance_director', 'finance', 'finance_manager'].includes(userResult.role),
       supervisorId: userResult.supervisor_id,
       department: userResult.department,
       position: userResult.position,
