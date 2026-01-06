@@ -168,12 +168,16 @@ export async function getMessageById(req, res) {
   }
 }
 
-// ==================== 审批相关 ====================
+// ==================== 审批相关（已弃用）====================
+// ⚠️ 以下函数已弃用，保留仅为向后兼容
+// 新功能请使用 unifiedApprovalService 和 /api/unified-approvals/* API
 
 /**
  * 获取审批列表
+ * @deprecated 请使用 GET /api/unified-approvals
  */
 export async function getApprovals(req, res) {
+  console.warn('[DEPRECATED] getApprovals: 请使用 /api/unified-approvals')
   try {
     const { applicantId, approverId, userRole, userId, status, approvalType, page, pageSize } = req.query
     

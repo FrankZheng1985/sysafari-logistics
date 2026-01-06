@@ -5,6 +5,7 @@
 import { success, successWithPagination, badRequest, notFound, serverError } from '../../utils/response.js'
 import * as model from './model.js'
 import { translateText, translateFeeName } from '../../utils/translate.js'
+import * as unifiedApprovalService from '../../services/unifiedApprovalService.js'
 
 // ==================== 供应商列表 ====================
 
@@ -170,6 +171,7 @@ export async function updateSupplier(req, res) {
 
 /**
  * 删除供应商
+ * 需要审批：检查 SUPPLIER_DELETE 触发点配置
  */
 export async function deleteSupplier(req, res) {
   try {
@@ -180,6 +182,28 @@ export async function deleteSupplier(req, res) {
       return notFound(res, '供应商不存在')
     }
     
+    // 检查是否需要审批
+    const { needsApproval, approval, error } = await unifiedApprovalService.checkAndCreate('SUPPLIER_DELETE', {
+      title: `删除供应商 - ${existing.supplier_name}`,
+      content: `申请删除供应商「${existing.supplier_name}」(${existing.supplier_code})`,
+      businessId: id,
+      businessTable: 'suppliers',
+      applicantId: req.user?.id,
+      applicantName: req.user?.name,
+      applicantRole: req.user?.role,
+      requestData: { supplier: existing }
+    })
+    
+    if (needsApproval) {
+      // 需要审批，返回提示信息
+      return success(res, { 
+        needsApproval: true, 
+        approvalNo: approval?.approval_no,
+        message: '删除申请已提交审批'
+      }, '删除申请已提交审批，请等待审批通过')
+    }
+    
+    // 不需要审批，直接删除
     model.deleteSupplier(id)
     return success(res, null, '删除成功')
   } catch (error) {

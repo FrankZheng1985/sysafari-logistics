@@ -11,6 +11,7 @@ import * as orderModel from '../order/model.js'
 import * as invoiceGenerator from './invoiceGenerator.js'
 import * as messageModel from '../message/model.js'
 import { getBOCExchangeRate } from '../../utils/exchangeRate.js'
+import * as unifiedApprovalService from '../../services/unifiedApprovalService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -701,19 +702,25 @@ export async function createFee(req, res) {
     
     const result = await model.createFee(feeData)
     
-    // 如果需要审批，同时在 approvals 表创建审批记录
+    // 如果需要审批，同时在统一审批表创建审批记录
     if (feeData.isSupplementary === 1 && feeData.approvalStatus === 'pending') {
       try {
-        await messageModel.createApproval({
-          approvalType: 'fee',
-          businessId: result.id,
+        // 使用统一审批服务创建审批记录
+        await unifiedApprovalService.createApproval({
+          operationCode: 'FEE_SUPPLEMENT',
+          category: 'business',
           title: `追加费用审批 - ${feeName}`,
           content: `${userName} 在提单 ${req.body.billNumber || ''} 上追加了费用「${feeName}」，金额 ${amount} ${req.body.currency || 'EUR'}，请审批。`,
+          businessId: result.id?.toString(),
+          businessTable: 'fees',
           amount: amount,
+          currency: req.body.currency || 'EUR',
           applicantId: userId,
-          applicantName: userName
+          applicantName: userName,
+          applicantRole: req.user?.role,
+          requestData: { fee: feeData, billNumber: req.body.billNumber }
         })
-        console.log('[createFee] 已创建审批记录')
+        console.log('[createFee] 已创建统一审批记录')
       } catch (approvalError) {
         console.error('[createFee] 创建审批记录失败:', approvalError)
         // 不阻断主流程
@@ -1783,8 +1790,9 @@ export async function approveFee(req, res) {
     // 更新费用表审批状态
     await model.approveFee(id, userId, userName)
     
-    // 同时更新 approvals 表中的审批记录
+    // 同时更新审批记录（兼容旧 approvals 表和新统一审批表）
     try {
+      // 1. 更新旧 approvals 表（向后兼容）
       const approval = await messageModel.getApprovalByBusinessId(id)
       if (approval) {
         await messageModel.processApproval(approval.id, {
@@ -1793,6 +1801,23 @@ export async function approveFee(req, res) {
           approverName: userName,
           remark: '审批通过'
         })
+      }
+      
+      // 2. 更新统一审批表
+      const { getDatabase } = await import('../../config/database.js')
+      const db = getDatabase()
+      const unifiedApproval = await db.pool.query(
+        `SELECT id FROM unified_approvals WHERE business_id = $1 AND business_table = 'fees' AND status = 'pending'`,
+        [id.toString()]
+      )
+      if (unifiedApproval.rows.length > 0) {
+        await unifiedApprovalService.approve(
+          unifiedApproval.rows[0].id,
+          userId,
+          userName,
+          req.user?.role,
+          '审批通过'
+        )
       }
     } catch (approvalErr) {
       console.error('[approveFee] 更新审批记录失败:', approvalErr)
@@ -1833,8 +1858,9 @@ export async function rejectFee(req, res) {
     // 更新费用表审批状态
     await model.rejectFee(id, userId, userName, reason)
     
-    // 同时更新 approvals 表中的审批记录
+    // 同时更新审批记录（兼容旧 approvals 表和新统一审批表）
     try {
+      // 1. 更新旧 approvals 表（向后兼容）
       const approval = await messageModel.getApprovalByBusinessId(id)
       if (approval) {
         await messageModel.processApproval(approval.id, {
@@ -1843,6 +1869,23 @@ export async function rejectFee(req, res) {
           approverName: userName,
           rejectReason: reason
         })
+      }
+      
+      // 2. 更新统一审批表
+      const { getDatabase } = await import('../../config/database.js')
+      const db = getDatabase()
+      const unifiedApproval = await db.pool.query(
+        `SELECT id FROM unified_approvals WHERE business_id = $1 AND business_table = 'fees' AND status = 'pending'`,
+        [id.toString()]
+      )
+      if (unifiedApproval.rows.length > 0) {
+        await unifiedApprovalService.reject(
+          unifiedApproval.rows[0].id,
+          userId,
+          userName,
+          req.user?.role,
+          reason
+        )
       }
     } catch (approvalErr) {
       console.error('[rejectFee] 更新审批记录失败:', approvalErr)

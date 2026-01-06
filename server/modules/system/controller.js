@@ -9,6 +9,7 @@ import { validatePassword } from '../../utils/validator.js'
 import { getDatabase } from '../../config/database.js'
 import * as model from './model.js'
 import * as approvalService from '../../services/approvalService.js'
+import * as unifiedApprovalService from '../../services/unifiedApprovalService.js'
 import { canManageUser, canGrantPermission, getTeamMembers, getGrantablePermissions, checkRequiresApproval } from '../../middleware/auth.js'
 
 // ==================== 用户管理 ====================
@@ -67,6 +68,7 @@ export async function getUserById(req, res) {
 
 /**
  * 创建用户
+ * 检查是否需要审批（USER_CREATE 触发点）
  */
 export async function createUser(req, res) {
   try {
@@ -88,6 +90,25 @@ export async function createUser(req, res) {
       return badRequest(res, passwordValidation.errors.join('; '))
     }
     
+    // 检查是否需要审批
+    const { needsApproval, approval, error } = await unifiedApprovalService.checkAndCreate('USER_CREATE', {
+      title: `创建用户 - ${name} (${username})`,
+      content: `申请创建新用户「${name}」，用户名: ${username}，角色: ${role || 'operator'}`,
+      applicantId: req.user?.id,
+      applicantName: req.user?.name,
+      applicantRole: req.user?.role,
+      requestData: { username, name, email, phone, role, password: '[隐藏]' }
+    })
+    
+    if (needsApproval) {
+      return success(res, { 
+        needsApproval: true, 
+        approvalNo: approval?.approval_no,
+        message: '创建用户申请已提交审批'
+      }, '创建用户申请已提交审批，请等待审批通过')
+    }
+    
+    // 不需要审批，直接创建
     const result = await model.createUser({
       username,
       password,
@@ -166,6 +187,7 @@ export async function updateUserStatus(req, res) {
 
 /**
  * 删除用户
+ * 检查是否需要审批（USER_DELETE 触发点）
  */
 export async function deleteUser(req, res) {
   try {
@@ -186,6 +208,27 @@ export async function deleteUser(req, res) {
       return badRequest(res, '不能删除管理员账号')
     }
     
+    // 检查是否需要审批
+    const { needsApproval, approval, error } = await unifiedApprovalService.checkAndCreate('USER_DELETE', {
+      title: `删除用户 - ${existing.name} (${existing.username})`,
+      content: `申请删除用户「${existing.name}」，用户名: ${existing.username}，角色: ${existing.role}`,
+      businessId: id,
+      businessTable: 'users',
+      applicantId: req.user?.id,
+      applicantName: req.user?.name,
+      applicantRole: req.user?.role,
+      requestData: { user: { id: existing.id, username: existing.username, name: existing.name, role: existing.role } }
+    })
+    
+    if (needsApproval) {
+      return success(res, { 
+        needsApproval: true, 
+        approvalNo: approval?.approval_no,
+        message: '删除用户申请已提交审批'
+      }, '删除用户申请已提交审批，请等待审批通过')
+    }
+    
+    // 不需要审批，直接删除
     model.deleteUser(id)
     return success(res, null, '删除成功')
   } catch (error) {

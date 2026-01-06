@@ -132,7 +132,7 @@ export default function ApprovalSettings() {
     setLoading(true)
     try {
       // 加载触发点列表
-      const triggersRes = await fetch(`${API_BASE}/api/system/approval-settings/triggers`)
+      const triggersRes = await fetch(`${API_BASE}/api/approval-settings/triggers`)
       const triggersData = await triggersRes.json()
       if (triggersData.errCode === 200) {
         setTriggers(triggersData.data.triggers || [])
@@ -140,7 +140,7 @@ export default function ApprovalSettings() {
       }
       
       // 加载业务模块选项
-      const modulesRes = await fetch(`${API_BASE}/api/system/approval-settings/business-modules`)
+      const modulesRes = await fetch(`${API_BASE}/api/approval-settings/business-modules`)
       const modulesData = await modulesRes.json()
       if (modulesData.errCode === 200) {
         setBusinessModules(modulesData.data.modules || [])
@@ -148,14 +148,14 @@ export default function ApprovalSettings() {
       }
       
       // 加载全局配置
-      const configsRes = await fetch(`${API_BASE}/api/system/approval-settings/configs`)
+      const configsRes = await fetch(`${API_BASE}/api/approval-settings/configs`)
       const configsData = await configsRes.json()
       if (configsData.errCode === 200) {
         setConfigs(configsData.data || {})
       }
       
       // 加载所有申请记录
-      const requestsRes = await fetch(`${API_BASE}/api/system/approval-settings/trigger-requests`)
+      const requestsRes = await fetch(`${API_BASE}/api/approval-settings/trigger-requests`)
       const requestsData = await requestsRes.json()
       if (requestsData.errCode === 200) {
         setAllRequests(requestsData.data || [])
@@ -174,7 +174,7 @@ export default function ApprovalSettings() {
   // 切换触发点启用状态
   const handleToggleTrigger = async (trigger: ApprovalTrigger) => {
     try {
-      const res = await fetch(`${API_BASE}/api/system/approval-settings/triggers/${trigger.id}/toggle`, {
+      const res = await fetch(`${API_BASE}/api/approval-settings/triggers/${trigger.id}/toggle`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       })
@@ -205,7 +205,7 @@ export default function ApprovalSettings() {
     
     setSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/api/system/approval-settings/triggers/${editingTrigger.id}`, {
+      const res = await fetch(`${API_BASE}/api/approval-settings/triggers/${editingTrigger.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm)
@@ -238,7 +238,7 @@ export default function ApprovalSettings() {
     
     setSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/api/system/approval-settings/trigger-requests`, {
+      const res = await fetch(`${API_BASE}/api/approval-settings/trigger-requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestForm)
@@ -281,7 +281,7 @@ export default function ApprovalSettings() {
     }
     
     try {
-      const res = await fetch(`${API_BASE}/api/system/approval-settings/trigger-requests/${request.id}/status`, {
+      const res = await fetch(`${API_BASE}/api/approval-settings/trigger-requests/${request.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, developer_notes: notes })
@@ -306,7 +306,7 @@ export default function ApprovalSettings() {
         configValues[key] = config.value
       })
       
-      const res = await fetch(`${API_BASE}/api/system/approval-settings/configs`, {
+      const res = await fetch(`${API_BASE}/api/approval-settings/configs`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(configValues)

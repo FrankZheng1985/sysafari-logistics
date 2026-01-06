@@ -19,11 +19,19 @@ router.post('/messages/mark-read', controller.markMultipleAsRead)
 router.post('/messages/mark-all-read', controller.markAllAsRead)
 router.delete('/messages/:id', controller.deleteMessage)
 
-// ==================== 审批相关 ====================
+// ==================== 审批相关（已弃用，请使用统一审批 API）====================
+// ⚠️ 以下路由已弃用，保留仅为向后兼容
+// 新系统请使用: /api/unified-approvals/* 或 /api/system/unified-approvals/*
+// 
+// @deprecated 请使用 GET /api/unified-approvals
 router.get('/approvals', controller.getApprovals)
+// @deprecated 请使用 GET /api/unified-approvals/pending-count  
 router.get('/approvals/pending-count', controller.getPendingApprovalCount)
+// @deprecated 请使用 GET /api/unified-approvals/:id
 router.get('/approvals/:id', controller.getApprovalById)
+// @deprecated 请使用 unifiedApprovalService.createApproval()
 router.post('/approvals', controller.createApproval)
+// @deprecated 请使用 POST /api/unified-approvals/:id/approve 或 /reject
 router.put('/approvals/:id/process', controller.processApproval)
 
 // ==================== 预警相关 ====================

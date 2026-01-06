@@ -1,6 +1,7 @@
 /**
  * 审批工作台页面
  * 展示待审批列表，支持审批操作
+ * 支持业务审批和统一审批两种数据源
  */
 
 import { useState, useEffect } from 'react'
@@ -8,8 +9,6 @@ import { useNavigate } from 'react-router-dom'
 import { formatDateTime } from '../utils/dateFormat'
 import { 
   ClipboardCheck, 
-  Bell, 
-  AlertTriangle,
   Check,
   X,
   RefreshCw,
@@ -23,7 +22,10 @@ import {
   Eye,
   Filter,
   Truck,
-  MapPin
+  User,
+  Trash2,
+  Shield,
+  Settings
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../contexts/AuthContext'
@@ -33,23 +35,32 @@ const API_BASE = getApiBaseUrl()
 
 interface Approval {
   id: string
+  approval_no?: string
   approval_type: string
+  category?: string
   business_id: string
+  business_table?: string
   title: string
   content: string
   amount: number
+  currency?: string
   applicant_id: string
   applicant_name: string
+  applicant_role?: string
   approver_id: string
   approver_name: string
   status: string
   remark: string
-  reject_reason: string
+  reject_reason?: string
+  rejection_reason?: string
+  approval_comment?: string
   created_at: string
-  processed_at: string
+  processed_at?: string
+  approved_at?: string
+  rejected_at?: string
 }
 
-// 审批类型配置
+// 审批类型配置（业务审批）
 const APPROVAL_TYPES: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   order: { label: '订单审批', icon: Package, color: 'text-blue-600 bg-blue-100' },
   payment: { label: '付款申请', icon: Wallet, color: 'text-green-600 bg-green-100' },
@@ -58,6 +69,15 @@ const APPROVAL_TYPES: Record<string, { label: string; icon: React.ComponentType<
   inquiry: { label: '客户询价', icon: Truck, color: 'text-teal-600 bg-teal-100' },
   void: { label: '作废审批', icon: FileText, color: 'text-red-600 bg-red-100' },
   contract: { label: '合同审批', icon: FileText, color: 'text-indigo-600 bg-indigo-100' },
+  // 统一审批类型
+  USER_CREATE: { label: '用户创建', icon: User, color: 'text-blue-600 bg-blue-100' },
+  USER_DELETE: { label: '用户删除', icon: Trash2, color: 'text-red-600 bg-red-100' },
+  ROLE_CHANGE: { label: '角色变更', icon: Shield, color: 'text-purple-600 bg-purple-100' },
+  PERMISSION_CHANGE: { label: '权限变更', icon: Settings, color: 'text-amber-600 bg-amber-100' },
+  SUPPLIER_DELETE: { label: '供应商删除', icon: Trash2, color: 'text-red-600 bg-red-100' },
+  FEE_SUPPLEMENT: { label: '追加费用', icon: Wallet, color: 'text-orange-600 bg-orange-100' },
+  ORDER_MODIFY: { label: '订单修改', icon: Package, color: 'text-blue-600 bg-blue-100' },
+  PAYMENT_REQUEST: { label: '付款申请', icon: Wallet, color: 'text-green-600 bg-green-100' },
 }
 
 // 审批状态配置
@@ -115,6 +135,9 @@ function canApprove(userRole: string | undefined, approvalType: string): boolean
   return false
 }
 
+// 数据源类型
+type DataSource = 'legacy' | 'unified'
+
 export default function ApprovalWorkbench() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -125,6 +148,9 @@ export default function ApprovalWorkbench() {
   const [loading, setLoading] = useState(false)
   const [activeStatus, setActiveStatus] = useState('pending')
   const [activeType, setActiveType] = useState('all')
+  
+  // 数据源切换（legacy: 旧业务审批, unified: 统一审批）
+  const [dataSource, setDataSource] = useState<DataSource>('unified')
   
   // 审批弹窗状态
   const [showApprovalModal, setShowApprovalModal] = useState(false)
@@ -172,7 +198,12 @@ export default function ApprovalWorkbench() {
         params.append('approvalType', activeType)
       }
       
-      const response = await fetch(`${API_BASE}/api/approvals?${params}`)
+      // 根据数据源选择不同的 API
+      const apiUrl = dataSource === 'unified' 
+        ? `${API_BASE}/api/system/unified-approvals?${params}`
+        : `${API_BASE}/api/approvals?${params}`
+      
+      const response = await fetch(apiUrl)
       const data = await response.json()
       
       if (data.errCode === 200) {
@@ -212,18 +243,38 @@ export default function ApprovalWorkbench() {
     
     setSubmitting(true)
     try {
-      const response = await fetch(`${API_BASE}/api/approvals/${currentApproval.id}/process`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: approvalAction === 'approve' ? 'approved' : 'rejected',
-          approverId: user.id,
-          approverName: user.name || user.username,
-          approverRole: user.role,  // 传递审批人角色用于后端验证
-          remark: remark,
-          rejectReason: rejectReason
+      let response: Response
+      
+      if (dataSource === 'unified') {
+        // 统一审批 API
+        const apiUrl = approvalAction === 'approve'
+          ? `${API_BASE}/api/system/unified-approvals/${currentApproval.id}/approve`
+          : `${API_BASE}/api/system/unified-approvals/${currentApproval.id}/reject`
+        
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            approvalAction === 'approve'
+              ? { comment: remark }
+              : { reason: rejectReason }
+          )
         })
-      })
+      } else {
+        // 旧业务审批 API
+        response = await fetch(`${API_BASE}/api/approvals/${currentApproval.id}/process`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: approvalAction === 'approve' ? 'approved' : 'rejected',
+            approverId: user.id,
+            approverName: user.name || user.username,
+            approverRole: user.role,
+            remark: remark,
+            rejectReason: rejectReason
+          })
+        })
+      }
       
       const data = await response.json()
       if (data.errCode === 200) {
@@ -257,7 +308,7 @@ export default function ApprovalWorkbench() {
 
   useEffect(() => {
     fetchApprovals()
-  }, [user?.id, page, pageSize, activeStatus, activeType])
+  }, [user?.id, page, pageSize, activeStatus, activeType, dataSource])
 
   // 格式化时间
   const formatTime = (dateStr: string) => {
@@ -342,21 +393,47 @@ export default function ApprovalWorkbench() {
       <div className="bg-white rounded-lg border border-gray-200">
         {/* 筛选栏 */}
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-400" />
-            <span className="text-sm text-gray-500">类型:</span>
-            <select
-              value={activeType}
-              onChange={(e) => { setActiveType(e.target.value); setPage(1) }}
-              className="text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-            >
-              <option value="all">全部类型</option>
-              {/* 只显示用户有权查看的审批类型 */}
-              {visibleTypes.map((key) => {
-                const config = APPROVAL_TYPES[key]
-                return config ? <option key={key} value={key}>{config.label}</option> : null
-              })}
-            </select>
+          <div className="flex items-center gap-4">
+            {/* 数据源切换 */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => { setDataSource('unified'); setPage(1) }}
+                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                  dataSource === 'unified'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                统一审批
+              </button>
+              <button
+                onClick={() => { setDataSource('legacy'); setPage(1) }}
+                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                  dataSource === 'legacy'
+                    ? 'bg-white text-primary-600 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                业务审批
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-500">类型:</span>
+              <select
+                value={activeType}
+                onChange={(e) => { setActiveType(e.target.value); setPage(1) }}
+                className="text-sm border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="all">全部类型</option>
+                {/* 只显示用户有权查看的审批类型 */}
+                {visibleTypes.map((key) => {
+                  const config = APPROVAL_TYPES[key]
+                  return config ? <option key={key} value={key}>{config.label}</option> : null
+                })}
+              </select>
+            </div>
           </div>
           <button
             onClick={fetchApprovals}
@@ -396,6 +473,9 @@ export default function ApprovalWorkbench() {
                       </div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
+                          {approval.approval_no && (
+                            <span className="text-xs text-gray-400 font-mono">{approval.approval_no}</span>
+                          )}
                           <span className={`px-2 py-0.5 text-xs rounded ${typeConfig.color}`}>
                             {typeConfig.label}
                           </span>
@@ -414,9 +494,12 @@ export default function ApprovalWorkbench() {
                         {approval.status !== 'pending' && (
                           <div className="mt-2 text-xs text-gray-400">
                             <span>审批人: {approval.approver_name || '-'}</span>
-                            <span className="ml-4">处理时间: {formatTime(approval.processed_at)}</span>
-                            {approval.reject_reason && (
-                              <span className="ml-4 text-red-500">驳回原因: {approval.reject_reason}</span>
+                            <span className="ml-4">处理时间: {formatTime(approval.processed_at || approval.approved_at || approval.rejected_at)}</span>
+                            {(approval.reject_reason || approval.rejection_reason) && (
+                              <span className="ml-4 text-red-500">驳回原因: {approval.reject_reason || approval.rejection_reason}</span>
+                            )}
+                            {approval.approval_comment && (
+                              <span className="ml-4 text-gray-500">审批意见: {approval.approval_comment}</span>
                             )}
                           </div>
                         )}

@@ -1,6 +1,6 @@
 /**
  * 系统管理模块 - 路由定义
- * 包含用户管理、角色权限、审批流程等
+ * 包含用户管理、角色权限、审批流程、审批配置等
  */
 
 import express from 'express'
@@ -8,6 +8,7 @@ import * as controller from './controller.js'
 import * as apiIntegrationsController from './apiIntegrationsController.js'
 import * as securityController from './securityController.js'
 import * as approvalSettingsController from './approvalSettingsController.js'
+import * as unifiedApprovalController from './unifiedApprovalController.js'
 import { authenticate, authorize, requireRole, requireTeamManager, requireApprover } from '../../middleware/auth.js'
 
 const router = express.Router()
@@ -294,6 +295,26 @@ router.get('/approval-settings/configs', authenticate, approvalSettingsControlle
 
 // 更新审批全局配置
 router.put('/approval-settings/configs', authenticate, requireRole(['admin', 'boss']), approvalSettingsController.updateApprovalConfigs)
+
+// ==================== 统一审批路由 ====================
+
+// 获取统一审批列表
+router.get('/unified-approvals', authenticate, unifiedApprovalController.getApprovals)
+
+// 获取待审批数量
+router.get('/unified-approvals/pending-count', authenticate, unifiedApprovalController.getPendingCount)
+
+// 获取我的申请列表
+router.get('/unified-approvals/my-requests', authenticate, unifiedApprovalController.getMyRequests)
+
+// 获取审批详情
+router.get('/unified-approvals/:id', authenticate, unifiedApprovalController.getApprovalById)
+
+// 通过审批
+router.post('/unified-approvals/:id/approve', authenticate, requireApprover, unifiedApprovalController.approve)
+
+// 拒绝审批
+router.post('/unified-approvals/:id/reject', authenticate, requireApprover, unifiedApprovalController.reject)
 
 export default router
 
