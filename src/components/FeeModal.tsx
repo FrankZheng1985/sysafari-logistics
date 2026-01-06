@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Receipt, Truck, Building2, Shield, Package, FileText, Settings, ArrowDownCircle, ArrowUpCircle, Plus, Check, Search, AlertCircle, Edit3, ChevronRight } from 'lucide-react'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import DatePicker from './DatePicker'
 
 const API_BASE = getApiBaseUrl()
@@ -748,7 +748,7 @@ export default function FeeModal({
         try {
           const response = await fetch(`${API_BASE}/api/fees`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
               billId: formData.billId || null,
               billNumber: formData.billNumber || '',
@@ -826,7 +826,7 @@ export default function FeeModal({
             const description = `[手动录入-待审批] ${item.description || ''}`.trim()
             const response = await fetch(`${API_BASE}/api/fees`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({
                 billId: formData.billId || null,
                 billNumber: formData.billNumber || '',
@@ -852,7 +852,7 @@ export default function FeeModal({
               try {
                 await fetch(`${API_BASE}/api/fee-item-approvals`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                   body: JSON.stringify({
                     feeId: data.data?.id,
                     feeName: item.feeName,

@@ -242,14 +242,19 @@ export async function createInvoice(data) {
     ? JSON.stringify(data.containerNumbers) 
     : JSON.stringify([])
   
+  // 处理 items 数组
+  const items = typeof data.items === 'string' 
+    ? data.items 
+    : (Array.isArray(data.items) ? JSON.stringify(data.items) : null)
+  
   const result = await db.prepare(`
     INSERT INTO invoices (
       id, invoice_number, invoice_type, invoice_date, due_date,
       customer_id, customer_name, bill_id, bill_number, container_numbers,
       subtotal, tax_amount, total_amount, paid_amount,
-      currency, exchange_rate, description, notes,
+      currency, exchange_rate, description, items, notes,
       status, language, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     invoiceNumber,
@@ -268,6 +273,7 @@ export async function createInvoice(data) {
     data.currency || 'EUR',
     data.exchangeRate || 1,
     data.description || '',
+    items,
     data.notes || '',
     data.status || 'issued',
     data.language || 'en',  // 发票语言，默认英文
@@ -316,6 +322,15 @@ export async function updateInvoice(id, data) {
     values.push(Array.isArray(data.containerNumbers) 
       ? JSON.stringify(data.containerNumbers) 
       : JSON.stringify([]))
+  }
+  
+  // 特殊处理 items 数组
+  if (data.items !== undefined) {
+    fields.push('items = ?')
+    const itemsValue = typeof data.items === 'string' 
+      ? data.items 
+      : (Array.isArray(data.items) ? JSON.stringify(data.items) : null)
+    values.push(itemsValue)
   }
   
   if (fields.length === 0) return false

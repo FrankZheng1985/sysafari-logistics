@@ -10,7 +10,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import FeeModal from '../components/FeeModal'
 import { copyToClipboard } from '../components/Toast'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -192,7 +192,12 @@ export default function FinanceFees() {
     if (!confirm('确定要删除这条费用记录吗？')) return
     
     try {
-      const response = await fetch(`${API_BASE}/api/fees/${id}`, { method: 'DELETE' })
+      const response = await fetch(`${API_BASE}/api/fees/${id}`, { 
+        method: 'DELETE',
+        headers: {
+          ...getAuthHeaders()
+        }
+      })
       const data = await response.json()
       
       if (data.errCode === 200) {

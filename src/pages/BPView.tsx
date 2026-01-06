@@ -380,7 +380,7 @@ export default function BPView() {
             navigate(path)
           }
         }}
-        searchPlaceholder="订单号、提单号、集装箱号、客户名..."
+        searchPlaceholder="多提单搜索：订单号、提单号、集装箱号（空格/逗号分隔）"
         onSearch={setSearchValue}
         onSettingsClick={handleSettingsClick}
         onRefresh={handleRefresh}

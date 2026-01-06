@@ -141,7 +141,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'invoiceNumber',
       label: '发票号',
-      width: 150,
+      width: '14%',
       sorter: true,
       render: (_value, record) => (
         <div>
@@ -153,7 +153,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'invoiceType',
       label: '类型',
-      width: 100,
+      width: '8%',
       sorter: true,
       render: (_value, record) => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -168,7 +168,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'customerName',
       label: '客户/供应商',
-      width: 120,
+      width: '14%',
       sorter: true,
       render: (_value, record) => (
         <div className="text-sm text-gray-900 truncate" title={record.customerName || '-'}>
@@ -179,9 +179,9 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'containerNumbers',
       label: '集装箱号/提单号',
-      width: 160,
+      width: '16%',
       render: (_value, record) => (
-        <div className="max-w-[150px]">
+        <div className="truncate">
           {record.containerNumbers && record.containerNumbers.length > 0 ? (
             <div className="text-xs text-gray-900 truncate" title={record.containerNumbers.join(', ')}>
               {record.containerNumbers.join(', ')}
@@ -199,7 +199,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'totalAmount',
       label: '金额',
-      width: 120,
+      width: '10%',
       align: 'right',
       sorter: (a, b) => a.totalAmount - b.totalAmount,
       render: (_value, record) => (
@@ -214,7 +214,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'paidAmount',
       label: '已付金额',
-      width: 120,
+      width: '10%',
       align: 'right',
       sorter: (a, b) => a.paidAmount - b.paidAmount,
       render: (_value, record) => (
@@ -228,7 +228,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'status',
       label: '状态',
-      width: 100,
+      width: '8%',
       sorter: true,
       render: (_value, record) => {
         const config = getStatusConfig(record.status, record.invoiceType)
@@ -244,7 +244,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'updateTime',
       label: '完成时间',
-      width: 140,
+      width: '12%',
       sorter: (a, b) => {
         const dateA = (a.updateTime || a.createTime) ? new Date(a.updateTime || a.createTime).getTime() : 0
         const dateB = (b.updateTime || b.createTime) ? new Date(b.updateTime || b.createTime).getTime() : 0
@@ -259,7 +259,7 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'actions',
       label: '操作',
-      width: 120,
+      width: '8%',
       render: (_value, record) => (
         <div className="flex items-center gap-1">
           <button

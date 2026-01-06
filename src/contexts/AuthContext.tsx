@@ -162,6 +162,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (userProfile) {
           // 缓存用户信息
           localStorage.setItem(USER_CACHE_KEY, JSON.stringify(userProfile))
+          
+          // 同时保存 token 到 TEST_MODE_KEY，确保 getAuthHeaders() 可以获取
+          const loginData = { 
+            user: userProfile.user, 
+            permissions: userProfile.permissions || [], 
+            token: accessToken, 
+            isTestMode: false 
+          }
+          localStorage.setItem(TEST_MODE_KEY, JSON.stringify(loginData))
 
           setState({
             user: userProfile.user,
@@ -181,6 +190,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: 'operator',
             status: 'active',
           }
+          
+          // 同时保存 token 到 TEST_MODE_KEY，确保 getAuthHeaders() 可以获取
+          const loginData = { 
+            user: basicUser, 
+            permissions: [], 
+            token: accessToken, 
+            isTestMode: false 
+          }
+          localStorage.setItem(TEST_MODE_KEY, JSON.stringify(loginData))
 
           setState({
             user: basicUser,

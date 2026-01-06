@@ -695,15 +695,19 @@ export default function InvoiceDetail() {
             {(invoice.items && invoice.items.length > 0) || invoice.description ? (
               <div className="overflow-x-auto">
                 {(() => {
-                  // 优先从 items 字段读取（包含金额），否则从 description 读取
+                  // 优先从 items 字段读取，否则从 description 读取
                   interface ParsedItem {
                     description: string
+                    quantity?: number
+                    unitPrice?: number
+                    currency?: string
                     amount: number
-                    containerNumber?: string
+                    taxRate?: number
+                    taxAmount?: number
                     discountPercent?: number
                     discountAmount?: number
                     finalAmount?: number
-                    taxAmount?: number
+                    containerNumber?: string
                   }
                   let parsedItems: ParsedItem[] = []
                   if (invoice.items && typeof invoice.items === 'string') {
@@ -716,31 +720,19 @@ export default function InvoiceDetail() {
                     parsedItems = invoice.items
                   }
                   
-                  // 检查是否有优惠数据
-                  const hasDiscount = parsedItems.some(item => 
-                    (Number(item.discountAmount) || 0) !== 0 || 
-                    (Number(item.discountPercent) || 0) !== 0
+                  // 检查是否有详细数据（数量、单价等）
+                  const hasDetailedData = parsedItems.some(item => 
+                    item.quantity !== undefined || item.unitPrice !== undefined
                   )
                   
-                  // 计算总优惠金额
-                  const totalDiscount = parsedItems.reduce((sum, item) => {
-                    const discountAmt = Number(item.discountAmount) || 0
-                    const percentDiscount = (Number(item.amount) || 0) * ((Number(item.discountPercent) || 0) / 100)
-                    return sum + discountAmt + percentDiscount
-                  }, 0)
-                  
-                  // 计算 items 的原价合计
-                  const itemsTotal = parsedItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
-                  // 计算 items 的最终金额合计（使用 finalAmount 或 amount - discount）
-                  const finalTotal = parsedItems.reduce((sum, item) => {
-                    if (item.finalAmount !== undefined && item.finalAmount !== null) {
-                      return sum + Number(item.finalAmount)
-                    }
-                    const amount = Number(item.amount) || 0
-                    const discountAmt = Number(item.discountAmount) || 0
-                    const percentDiscount = amount * ((Number(item.discountPercent) || 0) / 100)
-                    return sum + (amount - discountAmt - percentDiscount)
-                  }, 0)
+                  // 计算合计
+                  const totals = parsedItems.reduce((acc, item) => {
+                    acc.amount += Number(item.amount) || 0
+                    acc.taxAmount += Number(item.taxAmount) || 0
+                    acc.discountAmount += Number(item.discountAmount) || 0
+                    acc.finalAmount += Number(item.finalAmount) || Number(item.amount) || 0
+                    return acc
+                  }, { amount: 0, taxAmount: 0, discountAmount: 0, finalAmount: 0 })
                   
                   const displayTotal = Number(invoice.totalAmount)
                   
@@ -748,14 +740,19 @@ export default function InvoiceDetail() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-200 bg-gray-50">
-                          <th className="text-left py-2 px-3 font-medium text-gray-600 w-12">序号</th>
-                          <th className="text-left py-2 px-3 font-medium text-gray-600 w-32">集装箱号</th>
-                          <th className="text-left py-2 px-3 font-medium text-gray-600">描述</th>
-                          <th className="text-right py-2 px-3 font-medium text-gray-600 w-24">原价</th>
-                          {hasDiscount && (
-                            <th className="text-right py-2 px-3 font-medium text-gray-600 w-24">优惠</th>
+                          <th className="text-center py-2 px-2 font-medium text-gray-600 w-10">#</th>
+                          <th className="text-left py-2 px-2 font-medium text-gray-600">描述</th>
+                          {hasDetailedData && (
+                            <>
+                              <th className="text-center py-2 px-2 font-medium text-gray-600 w-16">数量</th>
+                              <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">单价</th>
+                            </>
                           )}
-                          <th className="text-right py-2 px-3 font-medium text-gray-600 w-24">金额</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-24">金额</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">税额</th>
+                          <th className="text-center py-2 px-2 font-medium text-gray-600 w-16">优惠%</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">优惠额</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-24">最终金额</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -763,83 +760,119 @@ export default function InvoiceDetail() {
                           <>
                             {parsedItems.map((item, index) => {
                               const amount = Number(item.amount) || 0
-                              const discountAmt = Number(item.discountAmount) || 0
+                              const taxAmount = Number(item.taxAmount) || 0
                               const discountPct = Number(item.discountPercent) || 0
-                              const percentDiscount = amount * (discountPct / 100)
-                              const itemDiscount = discountAmt + percentDiscount
-                              // 优先使用 finalAmount，否则计算
-                              const finalAmount = item.finalAmount !== undefined && item.finalAmount !== null
-                                ? Number(item.finalAmount)
-                                : amount - itemDiscount
+                              const discountAmt = Number(item.discountAmount) || 0
+                              const finalAmount = item.finalAmount !== undefined 
+                                ? Number(item.finalAmount) 
+                                : amount + taxAmount - discountAmt
+                              const isNegative = finalAmount < 0
                               
                               return (
-                                <tr key={index} className="border-b border-gray-100">
-                                  <td className="py-2 px-3 text-gray-500">{index + 1}</td>
-                                  <td className="py-2 px-3 text-gray-600 text-xs font-mono">
-                                    {item.containerNumber || '-'}
+                                <tr key={index} className={`border-b border-gray-100 ${isNegative ? 'bg-green-50' : ''}`}>
+                                  <td className="py-2 px-2 text-center text-gray-500">{index + 1}</td>
+                                  <td className={`py-2 px-2 ${isNegative ? 'text-green-700 font-medium' : 'text-gray-900'}`}>
+                                    {item.description}
                                   </td>
-                                  <td className="py-2 px-3 text-gray-900">{item.description}</td>
-                                  <td className="py-2 px-3 text-right text-gray-600">
+                                  {hasDetailedData && (
+                                    <>
+                                      <td className="py-2 px-2 text-center text-gray-600">
+                                        {item.quantity || '-'}
+                                      </td>
+                                      <td className="py-2 px-2 text-right text-gray-600">
+                                        {item.unitPrice !== undefined 
+                                          ? (item.unitPrice === -1 ? '多项' : formatCurrency(item.unitPrice, invoice.currency))
+                                          : '-'
+                                        }
+                                      </td>
+                                    </>
+                                  )}
+                                  <td className={`py-2 px-2 text-right ${isNegative ? 'text-green-700' : 'text-gray-900'}`}>
                                     {formatCurrency(amount, invoice.currency)}
                                   </td>
-                                  {hasDiscount && (
-                                    <td className="py-2 px-3 text-right">
-                                      {itemDiscount !== 0 ? (
-                                        <span className="text-green-600">
-                                          -{formatCurrency(itemDiscount, invoice.currency)}
-                                          {discountPct > 0 && <span className="text-xs ml-1">({discountPct}%)</span>}
-                                        </span>
-                                      ) : (
-                                        <span className="text-gray-400">-</span>
-                                      )}
-                                    </td>
-                                  )}
-                                  <td className="py-2 px-3 text-right text-gray-900 font-medium">
+                                  <td className="py-2 px-2 text-right text-gray-600">
+                                    {formatCurrency(taxAmount, invoice.currency)}
+                                  </td>
+                                  <td className="py-2 px-2 text-center text-gray-600">
+                                    {discountPct > 0 ? `${discountPct}%` : '-'}
+                                  </td>
+                                  <td className="py-2 px-2 text-right text-gray-600">
+                                    {discountAmt !== 0 ? formatCurrency(discountAmt, invoice.currency) : '-'}
+                                  </td>
+                                  <td className={`py-2 px-2 text-right font-medium ${isNegative ? 'text-green-700' : 'text-gray-900'}`}>
                                     {formatCurrency(finalAmount, invoice.currency)}
                                   </td>
                                 </tr>
                               )
                             })}
+                            {/* 如果明细金额合计与发票总额不一致，显示优惠/调整行 */}
+                            {Math.abs(totals.finalAmount - displayTotal) > 0.01 && (
+                              <tr className="border-b border-gray-100 bg-green-50">
+                                <td className="py-2 px-2 text-center text-gray-500">{parsedItems.length + 1}</td>
+                                <td className="py-2 px-2 text-green-700 font-medium">
+                                  {totals.finalAmount > displayTotal ? '优惠/折扣' : '调整费用'}
+                                </td>
+                                {hasDetailedData && (
+                                  <>
+                                    <td className="py-2 px-2 text-center text-gray-600">1</td>
+                                    <td className="py-2 px-2 text-right text-green-700">
+                                      {formatCurrency(displayTotal - totals.finalAmount, invoice.currency)}
+                                    </td>
+                                  </>
+                                )}
+                                <td className="py-2 px-2 text-right text-green-700">
+                                  {formatCurrency(displayTotal - totals.finalAmount, invoice.currency)}
+                                </td>
+                                <td className="py-2 px-2 text-right text-gray-600">€0.00</td>
+                                <td className="py-2 px-2 text-center text-gray-600">-</td>
+                                <td className="py-2 px-2 text-right text-gray-600">-</td>
+                                <td className="py-2 px-2 text-right text-green-700 font-medium">
+                                  {formatCurrency(displayTotal - totals.finalAmount, invoice.currency)}
+                                </td>
+                              </tr>
+                            )}
                           </>
                         ) : invoice.description ? (
                           // 后备方案：从 description 字符串分割
                           invoice.description.split(';').filter((s: string) => s.trim()).map((item: string, index: number) => (
                             <tr key={index} className="border-b border-gray-100">
-                              <td className="py-2 px-3 text-gray-500">{index + 1}</td>
-                              <td className="py-2 px-3 text-gray-500">-</td>
-                              <td className="py-2 px-3 text-gray-900">{item.trim()}</td>
-                              <td className="py-2 px-3 text-right text-gray-500">-</td>
-                              {hasDiscount && <td className="py-2 px-3 text-right text-gray-500">-</td>}
-                              <td className="py-2 px-3 text-right text-gray-500">-</td>
+                              <td className="py-2 px-2 text-center text-gray-500">{index + 1}</td>
+                              <td className="py-2 px-2 text-gray-900">{item.trim()}</td>
+                              {hasDetailedData && (
+                                <>
+                                  <td className="py-2 px-2 text-center text-gray-500">-</td>
+                                  <td className="py-2 px-2 text-right text-gray-500">-</td>
+                                </>
+                              )}
+                              <td className="py-2 px-2 text-right text-gray-500">-</td>
+                              <td className="py-2 px-2 text-right text-gray-500">-</td>
+                              <td className="py-2 px-2 text-center text-gray-500">-</td>
+                              <td className="py-2 px-2 text-right text-gray-500">-</td>
+                              <td className="py-2 px-2 text-right text-gray-500">-</td>
                             </tr>
                           ))
                         ) : null}
                       </tbody>
                       <tfoot>
-                        {/* 小计行（如果有优惠） */}
-                        {hasDiscount && totalDiscount !== 0 && (
-                          <>
-                            <tr className="border-t border-gray-200">
-                              <td colSpan={3} className="py-2 px-3 text-right text-gray-600">小计</td>
-                              <td className="py-2 px-3 text-right text-gray-700">
-                                {formatCurrency(itemsTotal, invoice.currency)}
-                              </td>
-                              <td></td>
-                              <td></td>
-                            </tr>
-                            <tr className="bg-green-50">
-                              <td colSpan={3} className="py-2 px-3 text-right text-green-700">优惠合计</td>
-                              <td></td>
-                              <td className="py-2 px-3 text-right text-green-700 font-medium">
-                                -{formatCurrency(totalDiscount, invoice.currency)}
-                              </td>
-                              <td></td>
-                            </tr>
-                          </>
-                        )}
                         <tr className="border-t-2 border-gray-300 bg-gray-50 font-medium">
-                          <td colSpan={hasDiscount ? 5 : 3} className="py-2 px-3 text-right text-gray-700">合计</td>
-                          <td className="py-2 px-3 text-right text-gray-900 font-semibold">
+                          <td colSpan={hasDetailedData ? 4 : 2} className="py-2 px-2 text-right text-gray-700">合计</td>
+                          <td className="py-2 px-2 text-right text-gray-700">
+                            {/* 如果有调整行，金额列也要加上调整金额 */}
+                            {formatCurrency(
+                              Math.abs(totals.finalAmount - displayTotal) > 0.01 
+                                ? totals.amount + (displayTotal - totals.finalAmount)
+                                : totals.amount, 
+                              invoice.currency
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right text-gray-700">
+                            {formatCurrency(totals.taxAmount, invoice.currency)}
+                          </td>
+                          <td className="py-2 px-2 text-center text-gray-500">-</td>
+                          <td className="py-2 px-2 text-right text-orange-600">
+                            {formatCurrency(totals.discountAmount, invoice.currency)}
+                          </td>
+                          <td className="py-2 px-2 text-right text-primary-700 font-bold">
                             {formatCurrency(displayTotal, invoice.currency)}
                           </td>
                         </tr>

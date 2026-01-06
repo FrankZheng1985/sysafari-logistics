@@ -315,6 +315,21 @@ export default function EditInvoice() {
         currency: formData.currency,
         exchangeRate: formData.exchangeRate,
         description: formData.items.map(i => i.description).join('; '),
+        items: JSON.stringify(formData.items.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          currency: item.currency,
+          amount: item.amount,
+          taxRate: item.taxRate,
+          taxAmount: item.taxAmount,
+          discountPercent: item.discountPercent,
+          discountAmount: item.discountAmount,
+          finalAmount: item.finalAmount,
+          billId: item.billId,
+          billNumber: item.billNumber,
+          feeId: item.feeId
+        }))),
         notes: formData.notes,
         status: formData.status
       }

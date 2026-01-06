@@ -894,7 +894,7 @@ export default function OrderBills() {
             navigate(path)
           }
         }}
-        searchPlaceholder={isDraftTab ? "搜索订单号、提单号..." : "搜索订单号、提单号、集装箱号..."}
+        searchPlaceholder={isDraftTab ? "搜索订单号、提单号（支持多个，用空格/逗号分隔）" : "多提单搜索：订单号、提单号、集装箱号（空格/逗号分隔）"}
         defaultSearchValue={searchValue}
         onSearch={setSearchValue}
         onSettingsClick={handleSettingsClick}

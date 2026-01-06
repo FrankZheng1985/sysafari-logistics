@@ -365,7 +365,7 @@ export default function BPHistory() {
             navigate(path)
           }
         }}
-        searchPlaceholder="订单号、提单号、集装箱号、客户名..."
+        searchPlaceholder="多提单搜索：订单号、提单号、集装箱号（空格/逗号分隔）"
         onSearch={setSearchValue}
         onSettingsClick={handleSettingsClick}
         summary={<div className="text-xs text-gray-500">历史记录: <span className="font-medium text-gray-900">{total}</span></div>}
