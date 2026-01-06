@@ -118,16 +118,16 @@ export default function ApprovalCenter() {
   const loadRequests = useCallback(async () => {
     setLoading(true)
     try {
-      let url = `${API_BASE_URL}/api/approvals`
+      let url = `${API_BASE_URL}/api/system/approvals`
       const params = new URLSearchParams({
         page: String(pagination.page),
         pageSize: String(pagination.pageSize)
       })
       
       if (activeTab === 'pending') {
-        url = `${API_BASE_URL}/api/approvals/pending`
+        url = `${API_BASE_URL}/api/system/approvals/pending`
       } else if (activeTab === 'my') {
-        url = `${API_BASE_URL}/api/approvals/my`
+        url = `${API_BASE_URL}/api/system/approvals/my`
       }
       
       if (filterStatus) params.append('status', filterStatus)
@@ -151,7 +151,7 @@ export default function ApprovalCenter() {
   // 加载待审批数量
   const loadPendingCount = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/approvals/pending/count`)
+      const response = await fetch(`${API_BASE_URL}/api/system/approvals/pending/count`)
       const data = await response.json()
       if (data.errCode === 200) {
         setPendingCount(data.data.count)
@@ -164,7 +164,7 @@ export default function ApprovalCenter() {
   // 加载审批历史
   const loadRequestHistory = async (requestId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/approvals/${requestId}`)
+      const response = await fetch(`${API_BASE_URL}/api/system/approvals/${requestId}`)
       const data = await response.json()
       if (data.errCode === 200) {
         setRequestHistory(data.data.history || [])
@@ -192,7 +192,7 @@ export default function ApprovalCenter() {
     
     setApproving(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/approvals/${selectedRequest.id}/approve`, {
+      const response = await fetch(`${API_BASE_URL}/api/system/approvals/${selectedRequest.id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comment: approvalComment })
@@ -227,7 +227,7 @@ export default function ApprovalCenter() {
     
     setApproving(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/approvals/${selectedRequest.id}/reject`, {
+      const response = await fetch(`${API_BASE_URL}/api/system/approvals/${selectedRequest.id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: rejectionReason })
@@ -257,7 +257,7 @@ export default function ApprovalCenter() {
     if (!confirm('确定要取消该审批请求吗？')) return
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/approvals/${request.id}/cancel`, {
+      const response = await fetch(`${API_BASE_URL}/api/system/approvals/${request.id}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: '用户主动取消' })

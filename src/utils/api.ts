@@ -4059,8 +4059,10 @@ export interface TaricRealtimeResult {
   }>
   measures: Array<{
     type: string
+    typeCn?: string
     rate?: number
     geographicalArea?: string
+    geographicalAreaCn?: string
     startDate?: string
     endDate?: string
   }>

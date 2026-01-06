@@ -7,6 +7,7 @@ import express from 'express'
 import * as controller from './controller.js'
 import * as apiIntegrationsController from './apiIntegrationsController.js'
 import * as securityController from './securityController.js'
+import * as approvalSettingsController from './approvalSettingsController.js'
 import { authenticate, authorize, requireRole, requireTeamManager, requireApprover } from '../../middleware/auth.js'
 
 const router = express.Router()
@@ -264,6 +265,35 @@ router.get('/supervisors', authenticate, controller.getSupervisorCandidates)
 
 // 翻译文本（中文 -> 英文）
 router.post('/translate', controller.translateText)
+
+// ==================== 审批权限设置路由 ====================
+
+// 获取所有审批触发点
+router.get('/approval-settings/triggers', authenticate, approvalSettingsController.getApprovalTriggers)
+
+// 更新触发点配置
+router.put('/approval-settings/triggers/:id', authenticate, requireRole(['admin', 'boss']), approvalSettingsController.updateApprovalTrigger)
+
+// 切换触发点启用状态
+router.put('/approval-settings/triggers/:id/toggle', authenticate, requireRole(['admin', 'boss']), approvalSettingsController.toggleApprovalTrigger)
+
+// 获取业务模块列表（用于申请新触发点）
+router.get('/approval-settings/business-modules', authenticate, approvalSettingsController.getBusinessModules)
+
+// 提交新触发点申请
+router.post('/approval-settings/trigger-requests', authenticate, approvalSettingsController.createTriggerRequest)
+
+// 获取触发点申请列表
+router.get('/approval-settings/trigger-requests', authenticate, approvalSettingsController.getTriggerRequests)
+
+// 更新触发点申请状态（开发人员操作）
+router.put('/approval-settings/trigger-requests/:id/status', authenticate, requireRole(['admin', 'boss']), approvalSettingsController.updateTriggerRequestStatus)
+
+// 获取审批全局配置
+router.get('/approval-settings/configs', authenticate, approvalSettingsController.getApprovalConfigs)
+
+// 更新审批全局配置
+router.put('/approval-settings/configs', authenticate, requireRole(['admin', 'boss']), approvalSettingsController.updateApprovalConfigs)
 
 export default router
 

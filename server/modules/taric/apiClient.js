@@ -17,6 +17,8 @@ import https from 'https'
 import http from 'http'
 import { findDutyRate } from './commonDutyRates.js'
 import { findChinaAntiDumpingRate } from './chinaAntiDumpingRates.js'
+import { translateMeasureType, translateGeographicalArea } from './measureTranslations.js'
+import { translateText } from '../../utils/translate.js'
 
 // ==================== 配置 ====================
 
@@ -68,6 +70,92 @@ export function getCacheStats() {
   }
   
   return { validCount, expiredCount, totalCount: cache.size }
+}
+
+// ==================== 翻译缓存与补充翻译 ====================
+
+// 翻译缓存（避免重复调用 Google API）
+const translationCache = new Map()
+const TRANSLATION_CACHE_TTL = 7 * 24 * 60 * 60 * 1000 // 7天缓存
+
+function getCachedTranslation(text) {
+  const item = translationCache.get(text)
+  if (!item) return null
+  if (Date.now() > item.expiry) {
+    translationCache.delete(text)
+    return null
+  }
+  return item.translation
+}
+
+function setCachedTranslation(text, translation) {
+  translationCache.set(text, {
+    translation,
+    expiry: Date.now() + TRANSLATION_CACHE_TTL
+  })
+}
+
+/**
+ * 补充翻译：对预设翻译未覆盖的措施类型和地理区域进行 Google API 翻译
+ * @param {Array} measures - 措施列表
+ * @returns {Promise<Array>} - 翻译后的措施列表
+ */
+async function supplementMeasuresTranslation(measures) {
+  if (!measures || !Array.isArray(measures) || measures.length === 0) {
+    return measures
+  }
+  
+  // 收集需要翻译的文本
+  const textsToTranslate = new Set()
+  
+  for (const measure of measures) {
+    // 如果没有中文翻译且有英文文本，需要翻译
+    if (!measure.typeCn && measure.type && measure.type !== 'Unknown') {
+      const cached = getCachedTranslation(measure.type)
+      if (!cached) {
+        textsToTranslate.add(measure.type)
+      }
+    }
+    if (!measure.geographicalAreaCn && measure.geographicalArea) {
+      const cached = getCachedTranslation(measure.geographicalArea)
+      if (!cached) {
+        textsToTranslate.add(measure.geographicalArea)
+      }
+    }
+  }
+  
+  // 如果没有需要翻译的文本，直接返回
+  if (textsToTranslate.size === 0) {
+    // 但仍需填充缓存中的翻译
+    return measures.map(measure => ({
+      ...measure,
+      typeCn: measure.typeCn || getCachedTranslation(measure.type),
+      geographicalAreaCn: measure.geographicalAreaCn || getCachedTranslation(measure.geographicalArea)
+    }))
+  }
+  
+  // 批量翻译（限制数量避免请求过多）
+  const textsArray = Array.from(textsToTranslate).slice(0, 10) // 最多翻译10个
+  
+  for (const text of textsArray) {
+    try {
+      const translated = await translateText(text, 'en', 'zh-CN', 3000) // 3秒超时
+      if (translated && translated !== text) {
+        setCachedTranslation(text, translated)
+      }
+    } catch (error) {
+      console.warn(`翻译失败 [${text}]:`, error.message)
+    }
+    // 添加小延迟避免请求过快
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  
+  // 更新 measures 的翻译
+  return measures.map(measure => ({
+    ...measure,
+    typeCn: measure.typeCn || getCachedTranslation(measure.type) || null,
+    geographicalAreaCn: measure.geographicalAreaCn || getCachedTranslation(measure.geographicalArea) || null
+  }))
 }
 
 // ==================== HTTP 请求工具 ====================
@@ -325,15 +413,21 @@ function parseXICommodityResponse(data, originCountry) {
     thirdCountryDuty: thirdCountryDuty,
     antiDumpingRate: extractAntiDumpingRateFromXI(filteredMeasures, originCountry),
     countervailingRate: extractCountervailingRateFromXI(filteredMeasures, originCountry),
-    measures: enhancedMeasures.map(m => ({
-      type: m.measure_type?.description || 'Unknown',
-      typeId: m.measure_type_id,
-      geographicalArea: m.geographical_area?.description,
-      geographicalAreaId: m.geographical_area_id,
-      dutyExpression: m.duty_expression?.formatted_base || m.duty_expression?.base,
-      startDate: m.effective_start_date,
-      endDate: m.effective_end_date
-    })),
+        measures: enhancedMeasures.map(m => {
+      const type = m.measure_type?.description || 'Unknown'
+      const geographicalArea = m.geographical_area?.description || null
+      return {
+        type,
+        typeCn: translateMeasureType(type),
+        typeId: m.measure_type_id,
+        geographicalArea,
+        geographicalAreaCn: translateGeographicalArea(geographicalArea),
+        geographicalAreaId: m.geographical_area_id,
+        dutyExpression: m.duty_expression?.formatted_base || m.duty_expression?.base,
+        startDate: m.effective_start_date,
+        endDate: m.effective_end_date
+      }
+    }),
     totalMeasures: enhancedMeasures.length,
     dataSource: 'xi_api'
   }
@@ -512,6 +606,15 @@ export async function lookupTaricCode(hsCode, originCountry = '') {
     // 如果 XI API 失败，使用本地数据
     if (!localRate && !chinaAntiDumping) {
       result.note = '无法从 EU TARIC 系统获取数据，请稍后重试'
+    }
+  }
+  
+  // 补充翻译：对预设翻译未覆盖的内容进行 Google API 翻译
+  if (result.measures && result.measures.length > 0) {
+    try {
+      result.measures = await supplementMeasuresTranslation(result.measures)
+    } catch (error) {
+      console.warn('措施翻译补充失败:', error.message)
     }
   }
   
