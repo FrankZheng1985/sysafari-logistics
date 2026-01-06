@@ -484,16 +484,28 @@ async function lookupFromXIApi(hsCode, originCountry = '') {
       const heading = headingData.data
       const included = headingData.included || []
       
-      // 找到最接近的可申报编码
-      const declarableCommodity = included.find(item => 
+      // 找到所有匹配的可申报编码
+      const declarableCommodities = included.filter(item => 
         item.type === 'commodity' && 
         item.attributes?.declarable === true &&
         item.attributes?.goods_nomenclature_item_id?.startsWith(normalizedCode.substring(0, 6))
       )
       
-      if (declarableCommodity) {
+      if (declarableCommodities.length > 0) {
+        // 优先选择"通用/其他"类别的编码（以90结尾的编码，通常是标准关税）
+        // 避免选择航空器专用等特殊用途编码（如 xxxx10 结尾）
+        let bestCommodity = declarableCommodities.find(item => {
+          const code = item.attributes?.goods_nomenclature_item_id || ''
+          return code.endsWith('90')  // 通用类别通常以90结尾
+        })
+        
+        // 如果没有以90结尾的，选择最后一个（通常是"其他"类别）
+        if (!bestCommodity) {
+          bestCommodity = declarableCommodities[declarableCommodities.length - 1]
+        }
+        
         // 查询找到的编码
-        const foundCode = declarableCommodity.attributes.goods_nomenclature_item_id
+        const foundCode = bestCommodity.attributes.goods_nomenclature_item_id
         const foundUrl = `${XI_API_BASE}/commodities/${foundCode}`
         const foundData = await httpGetJson(foundUrl)
         
