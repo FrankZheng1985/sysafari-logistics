@@ -5,10 +5,25 @@ import {
   ChevronDown, Save, RefreshCw
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE = getApiBaseUrl()
+
+// 获取带认证的 fetch 配置
+const getAuthFetchOptions = (method: string = 'GET', body?: any): RequestInit => {
+  const options: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    }
+  }
+  if (body) {
+    options.body = JSON.stringify(body)
+  }
+  return options
+}
 
 // 类型定义
 interface ApprovalTrigger {
@@ -132,7 +147,7 @@ export default function ApprovalSettings() {
     setLoading(true)
     try {
       // 加载触发点列表
-      const triggersRes = await fetch(`${API_BASE}/api/approval-settings/triggers`)
+      const triggersRes = await fetch(`${API_BASE}/api/approval-settings/triggers`, getAuthFetchOptions())
       const triggersData = await triggersRes.json()
       if (triggersData.errCode === 200) {
         setTriggers(triggersData.data.triggers || [])
@@ -140,7 +155,7 @@ export default function ApprovalSettings() {
       }
       
       // 加载业务模块选项
-      const modulesRes = await fetch(`${API_BASE}/api/approval-settings/business-modules`)
+      const modulesRes = await fetch(`${API_BASE}/api/approval-settings/business-modules`, getAuthFetchOptions())
       const modulesData = await modulesRes.json()
       if (modulesData.errCode === 200) {
         setBusinessModules(modulesData.data.modules || [])
@@ -148,14 +163,14 @@ export default function ApprovalSettings() {
       }
       
       // 加载全局配置
-      const configsRes = await fetch(`${API_BASE}/api/approval-settings/configs`)
+      const configsRes = await fetch(`${API_BASE}/api/approval-settings/configs`, getAuthFetchOptions())
       const configsData = await configsRes.json()
       if (configsData.errCode === 200) {
         setConfigs(configsData.data || {})
       }
       
       // 加载所有申请记录
-      const requestsRes = await fetch(`${API_BASE}/api/approval-settings/trigger-requests`)
+      const requestsRes = await fetch(`${API_BASE}/api/approval-settings/trigger-requests`, getAuthFetchOptions())
       const requestsData = await requestsRes.json()
       if (requestsData.errCode === 200) {
         setAllRequests(requestsData.data || [])
@@ -174,10 +189,7 @@ export default function ApprovalSettings() {
   // 切换触发点启用状态
   const handleToggleTrigger = async (trigger: ApprovalTrigger) => {
     try {
-      const res = await fetch(`${API_BASE}/api/approval-settings/triggers/${trigger.id}/toggle`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }
-      })
+      const res = await fetch(`${API_BASE}/api/approval-settings/triggers/${trigger.id}/toggle`, getAuthFetchOptions('PUT'))
       const data = await res.json()
       if (data.errCode === 200) {
         setTriggers(prev => prev.map(t => 
@@ -205,11 +217,7 @@ export default function ApprovalSettings() {
     
     setSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/api/approval-settings/triggers/${editingTrigger.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm)
-      })
+      const res = await fetch(`${API_BASE}/api/approval-settings/triggers/${editingTrigger.id}`, getAuthFetchOptions('PUT', editForm))
       const data = await res.json()
       if (data.errCode === 200) {
         setTriggers(prev => prev.map(t => 
@@ -238,11 +246,7 @@ export default function ApprovalSettings() {
     
     setSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/api/approval-settings/trigger-requests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestForm)
-      })
+      const res = await fetch(`${API_BASE}/api/approval-settings/trigger-requests`, getAuthFetchOptions('POST', requestForm))
       const data = await res.json()
       if (data.errCode === 200) {
         alert('申请已提交')
@@ -281,11 +285,7 @@ export default function ApprovalSettings() {
     }
     
     try {
-      const res = await fetch(`${API_BASE}/api/approval-settings/trigger-requests/${request.id}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, developer_notes: notes })
-      })
+      const res = await fetch(`${API_BASE}/api/approval-settings/trigger-requests/${request.id}/status`, getAuthFetchOptions('PUT', { status: newStatus, developer_notes: notes }))
       const data = await res.json()
       if (data.errCode === 200) {
         loadData()
@@ -306,11 +306,7 @@ export default function ApprovalSettings() {
         configValues[key] = config.value
       })
       
-      const res = await fetch(`${API_BASE}/api/approval-settings/configs`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(configValues)
-      })
+      const res = await fetch(`${API_BASE}/api/approval-settings/configs`, getAuthFetchOptions('PUT', configValues))
       const data = await res.json()
       if (data.errCode === 200) {
         alert('配置保存成功')
