@@ -59,6 +59,11 @@ interface Approval {
   processed_at?: string
   approved_at?: string
   rejected_at?: string
+  request_data?: {
+    billNumber?: string
+    containerNumber?: string
+    fee?: Record<string, unknown>
+  }
 }
 
 // 审批类型配置（业务审批）
@@ -147,6 +152,14 @@ function canApprove(userRole: string | undefined, approvalType: string): boolean
 // 数据源类型
 type DataSource = 'legacy' | 'unified'
 
+// 统计数据接口
+interface ApprovalStats {
+  pending: number
+  approved: number
+  rejected: number
+  total: number
+}
+
 export default function ApprovalWorkbench() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -160,6 +173,14 @@ export default function ApprovalWorkbench() {
   
   // 数据源切换（legacy: 旧业务审批, unified: 统一审批）
   const [dataSource, setDataSource] = useState<DataSource>('unified')
+  
+  // 统计数据
+  const [stats, setStats] = useState<ApprovalStats>({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    total: 0
+  })
   
   // 审批弹窗状态
   const [showApprovalModal, setShowApprovalModal] = useState(false)
@@ -180,6 +201,26 @@ export default function ApprovalWorkbench() {
   
   // 获取当前用户可见的审批类型
   const visibleTypes = getVisibleApprovalTypes(user?.role)
+
+  // 加载统计数据
+  const fetchStats = async () => {
+    try {
+      if (dataSource === 'unified') {
+        const response = await fetch(`${API_BASE}/api/unified-approvals/stats`, {
+          headers: getAuthHeaders()
+        })
+        const data = await response.json()
+        if (data.errCode === 200) {
+          setStats(data.data)
+        }
+      } else {
+        // 业务审批暂时从列表数据计算
+        // TODO: 添加业务审批的统计接口
+      }
+    } catch (error) {
+      console.error('加载统计数据失败:', error)
+    }
+  }
 
   // 加载审批列表
   const fetchApprovals = async () => {
@@ -321,6 +362,11 @@ export default function ApprovalWorkbench() {
     fetchApprovals()
   }, [user?.id, page, pageSize, activeStatus, activeType, dataSource])
 
+  // 加载统计数据
+  useEffect(() => {
+    fetchStats()
+  }, [user?.id, dataSource])
+
   // 格式化时间
   const formatTime = (dateStr: string) => {
     return formatDateTime(dateStr)
@@ -351,9 +397,8 @@ export default function ApprovalWorkbench() {
       <div className="grid grid-cols-4 gap-4">
         {Object.entries(APPROVAL_STATUS).map(([key, config]) => {
           const Icon = config.icon
-          const count = key === 'pending' 
-            ? approvals.filter(a => a.status === 'pending').length 
-            : 0 // 实际应该从统计API获取
+          // 从 stats 获取各状态的数量
+          const count = stats[key as keyof ApprovalStats] || 0
           return (
             <button
               key={key}
@@ -368,7 +413,7 @@ export default function ApprovalWorkbench() {
                 <div>
                   <p className="text-sm text-gray-500">{config.label}</p>
                   <p className="text-2xl font-semibold text-gray-900 mt-1">
-                    {key === activeStatus ? total : '-'}
+                    {count}
                   </p>
                 </div>
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${config.color}`}>
@@ -390,7 +435,7 @@ export default function ApprovalWorkbench() {
             <div>
               <p className="text-sm text-gray-500">全部</p>
               <p className="text-2xl font-semibold text-gray-900 mt-1">
-                {activeStatus === 'all' ? total : '-'}
+                {stats.total}
               </p>
             </div>
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 text-gray-600">
@@ -502,6 +547,12 @@ export default function ApprovalWorkbench() {
                           {approval.amount && <span>金额: {formatAmount(approval.amount)}</span>}
                           <span>提交时间: {formatTime(approval.created_at)}</span>
                         </div>
+                        {/* 显示集装箱号（如果存在） */}
+                        {approval.request_data?.containerNumber && (
+                          <div className="mt-1 text-xs text-gray-400">
+                            <span>集装箱号: <span className="font-mono text-gray-600">{approval.request_data.containerNumber}</span></span>
+                          </div>
+                        )}
                         {approval.status !== 'pending' && (
                           <div className="mt-2 text-xs text-gray-400">
                             <span>审批人: {approval.approver_name || '-'}</span>

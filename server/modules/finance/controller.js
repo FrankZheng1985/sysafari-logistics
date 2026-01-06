@@ -705,6 +705,13 @@ export async function createFee(req, res) {
     // 如果需要审批，同时在统一审批表创建审批记录
     if (feeData.isSupplementary === 1 && feeData.approvalStatus === 'pending') {
       try {
+        // 获取提单信息以获取集装箱号
+        let containerNumber = ''
+        if (billId) {
+          const billInfo = await orderModel.getBillById(billId)
+          containerNumber = billInfo?.containerNumber || ''
+        }
+        
         // 使用统一审批服务创建审批记录
         const approvalResult = await unifiedApprovalService.createApproval({
           operationCode: 'FEE_SUPPLEMENT',
@@ -718,7 +725,11 @@ export async function createFee(req, res) {
           applicantId: userId,
           applicantName: userName,
           applicantRole: req.user?.role,
-          requestData: { fee: feeData, billNumber: req.body.billNumber }
+          requestData: { 
+            fee: feeData, 
+            billNumber: req.body.billNumber,
+            containerNumber: containerNumber
+          }
         })
         
         if (approvalResult.success) {

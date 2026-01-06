@@ -304,6 +304,9 @@ router.get('/unified-approvals', authenticate, unifiedApprovalController.getAppr
 // 获取待审批数量
 router.get('/unified-approvals/pending-count', authenticate, unifiedApprovalController.getPendingCount)
 
+// 获取审批统计
+router.get('/unified-approvals/stats', authenticate, unifiedApprovalController.getStats)
+
 // 获取我的申请列表
 router.get('/unified-approvals/my-requests', authenticate, unifiedApprovalController.getMyRequests)
 
