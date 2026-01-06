@@ -122,8 +122,10 @@ export default function SubscriptionManagement() {
         api.get('/api/subscriptions/statistics')
       ])
       
-      setSubscriptions(subsRes.data.data || [])
-      setStatistics(statsRes.data.data || null)
+      // API 返回格式: { errCode: 200, data: { list: [...] } }
+      const items = subsRes.data?.data?.list || subsRes.data?.data?.items || subsRes.data?.data || []
+      setSubscriptions(Array.isArray(items) ? items : [])
+      setStatistics(statsRes.data?.data || null)
     } catch (error) {
       console.error('加载订阅数据失败:', error)
     } finally {
