@@ -539,6 +539,24 @@ export async function lookupUkTaricCode(hsCode, originCountry = '', region = 'uk
         }
       }
       
+      // 翻译商品描述
+      if (result.goodsDescription && !result.goodsDescriptionCn) {
+        try {
+          const cachedDescCn = getCachedTranslation(result.goodsDescription)
+          if (cachedDescCn) {
+            result.goodsDescriptionCn = cachedDescCn
+          } else {
+            const translatedDesc = await translateText(result.goodsDescription, 'en', 'zh-CN', 5000)
+            if (translatedDesc && translatedDesc !== result.goodsDescription) {
+              result.goodsDescriptionCn = translatedDesc
+              setCachedTranslation(result.goodsDescription, translatedDesc)
+            }
+          }
+        } catch (err) {
+          console.warn('UK商品描述翻译失败:', err.message)
+        }
+      }
+      
       // 添加元数据
       const finalResult = {
         ...result,
@@ -633,6 +651,24 @@ export async function lookupUkTaricCode(hsCode, originCountry = '', region = 'uk
                 suggResult.measures = await supplementMeasuresTranslation(suggResult.measures)
               } catch (err) {
                 console.warn('UK建议编码措施翻译补充失败:', err.message)
+              }
+            }
+            
+            // 翻译商品描述
+            if (suggResult.goodsDescription && !suggResult.goodsDescriptionCn) {
+              try {
+                const cachedDescCn = getCachedTranslation(suggResult.goodsDescription)
+                if (cachedDescCn) {
+                  suggResult.goodsDescriptionCn = cachedDescCn
+                } else {
+                  const translatedDesc = await translateText(suggResult.goodsDescription, 'en', 'zh-CN', 5000)
+                  if (translatedDesc && translatedDesc !== suggResult.goodsDescription) {
+                    suggResult.goodsDescriptionCn = translatedDesc
+                    setCachedTranslation(suggResult.goodsDescription, translatedDesc)
+                  }
+                }
+              } catch (err) {
+                console.warn('UK建议编码商品描述翻译失败:', err.message)
               }
             }
             

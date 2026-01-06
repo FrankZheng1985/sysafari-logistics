@@ -1003,6 +1003,9 @@ function RealtimeLookupModal({
                   <div className="bg-blue-50 rounded p-2">
                     <p className="text-[10px] text-gray-500 mb-0.5">商品描述</p>
                     <p className="text-xs text-gray-800">{result.goodsDescription}</p>
+                    {result.goodsDescriptionCn && (
+                      <p className="text-xs text-blue-600 mt-1 pt-1 border-t border-blue-100">{result.goodsDescriptionCn}</p>
+                    )}
                   </div>
                 )}
 

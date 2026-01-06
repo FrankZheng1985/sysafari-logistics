@@ -618,6 +618,26 @@ export async function lookupTaricCode(hsCode, originCountry = '') {
     }
   }
   
+  // 翻译商品描述（如果没有中文描述）
+  if (result.goodsDescription && !result.goodsDescriptionCn) {
+    try {
+      // 先检查翻译缓存
+      const cachedDescCn = getCachedTranslation(result.goodsDescription)
+      if (cachedDescCn) {
+        result.goodsDescriptionCn = cachedDescCn
+      } else {
+        // 调用 Google API 翻译
+        const translatedDesc = await translateText(result.goodsDescription, 'en', 'zh-CN', 5000)
+        if (translatedDesc && translatedDesc !== result.goodsDescription) {
+          result.goodsDescriptionCn = translatedDesc
+          setCachedTranslation(result.goodsDescription, translatedDesc)
+        }
+      }
+    } catch (error) {
+      console.warn('商品描述翻译失败:', error.message)
+    }
+  }
+  
   // 缓存结果
   setCache(cacheKey, result)
   

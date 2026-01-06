@@ -4043,6 +4043,7 @@ export interface TaricRealtimeResult {
   hsCode10: string
   originCountryCode: string | null
   goodsDescription?: string
+  goodsDescriptionCn?: string
   dutyRate: number | null
   thirdCountryDuty: number | null
   antiDumpingRate: number | null
