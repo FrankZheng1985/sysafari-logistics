@@ -61,8 +61,18 @@ const MENU_PERMISSIONS: Record<string, string[]> = {
   '/finance/commission': ['finance:commission_manage'],
   '/finance/carrier-settlement': ['finance:carrier_settlement'],
   '/tools': ['product:view', 'system:tariff_rate'],
-  '/system': ['system:user', 'system:menu', 'system:basic_data', 'system:security'],
+  '/system': [
+    'system:user', 'system:menu', 'system:basic_data', 'system:security',
+    'system:tariff_rate', 'system:message', 'system:data_import', 
+    'system:activity_log', 'system:logo', 'system:api_integrations',
+    'system:approval_settings'
+  ],
+  '/system/tariff-rates': ['system:tariff_rate'],
+  '/system/info-center': ['system:message'],
+  '/system/data-import': ['system:data_import'],
   '/system/approval-settings': ['system:approval_settings'],
+  '/system/logo-manage': ['system:logo'],
+  '/system/api-integrations': ['system:api_integrations'],
 }
 
 interface MenuItem {
