@@ -59,7 +59,8 @@ export async function getInvoices(params = {}) {
     page = 1, pageSize = 20 
   } = params
   
-  let query = 'SELECT * FROM invoices WHERE 1=1'
+  // 默认只查询未删除的发票
+  let query = 'SELECT * FROM invoices WHERE (is_deleted IS NULL OR is_deleted = FALSE)'
   const queryParams = []
   
   if (type) {
@@ -156,7 +157,7 @@ export async function getInvoiceStats(params = {}) {
     queryParams.push(endDate)
   }
   
-  // 销售发票统计
+  // 销售发票统计（排除已删除的发票）
   // 状态说明: paid=已收, unpaid=未收, partial=部分收款, pending=待处理, cancelled=已取消
   // 待收 = pending + unpaid + partial (不含逾期)
   // 逾期 = due_date < 当前日期 且 status 不是 paid/cancelled
@@ -170,10 +171,10 @@ export async function getInvoiceStats(params = {}) {
       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
       SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled') THEN 1 ELSE 0 END) as overdue_count
     FROM invoices 
-    WHERE invoice_type = 'sales' ${dateFilter}
+    WHERE invoice_type = 'sales' AND (is_deleted IS NULL OR is_deleted = FALSE) ${dateFilter}
   `).get(...queryParams)
   
-  // 采购发票统计
+  // 采购发票统计（排除已删除的发票）
   // 状态说明: paid=已付, unpaid=未付, partial=部分付款, pending=待处理, cancelled=已取消
   // 待付 = pending + unpaid + partial (不含逾期)
   // 逾期 = due_date < 当前日期 且 status 不是 paid/cancelled
@@ -187,7 +188,7 @@ export async function getInvoiceStats(params = {}) {
       SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_count,
       SUM(CASE WHEN due_date < CURRENT_DATE AND status NOT IN ('paid', 'cancelled') THEN 1 ELSE 0 END) as overdue_count
     FROM invoices 
-    WHERE invoice_type = 'purchase' ${dateFilter}
+    WHERE invoice_type = 'purchase' AND (is_deleted IS NULL OR is_deleted = FALSE) ${dateFilter}
   `).get(...queryParams)
   
   // 确保数值类型正确（PostgreSQL返回字符串）
@@ -343,14 +344,17 @@ export async function updateInvoice(id, data) {
 }
 
 /**
- * 删除发票
+ * 删除发票（软删除）
+ * 只标记为已删除，不真正删除记录，确保发票号不会被重复使用
  */
 export async function deleteInvoice(id) {
   const db = getDatabase()
-  // 先删除关联的付款记录
-  await db.prepare('DELETE FROM payments WHERE invoice_id = ?').run(id)
-  // 再删除发票
-  const result = await db.prepare('DELETE FROM invoices WHERE id = ?').run(id)
+  // 软删除：标记为已删除，记录删除时间
+  const result = await db.prepare(`
+    UPDATE invoices 
+    SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW() 
+    WHERE id = ?
+  `).run(id)
   return result.changes > 0
 }
 
@@ -1562,15 +1566,15 @@ export async function getBillFinanceSummary(billId) {
   // 获取费用汇总
   const feeStats = getFeeStats({ billId })
   
-  // 获取关联发票
+  // 获取关联发票（排除已删除的）
   const invoices = await db.prepare(`
-    SELECT * FROM invoices WHERE bill_id = ?
+    SELECT * FROM invoices WHERE bill_id = ? AND (is_deleted IS NULL OR is_deleted = FALSE)
   `).all(billId).map(convertInvoiceToCamelCase)
   
-  // 获取关联付款
+  // 获取关联付款（排除已删除发票的付款）
   const payments = await db.prepare(`
     SELECT * FROM payments 
-    WHERE invoice_id IN (SELECT id FROM invoices WHERE bill_id = ?)
+    WHERE invoice_id IN (SELECT id FROM invoices WHERE bill_id = ? AND (is_deleted IS NULL OR is_deleted = FALSE))
   `).all(billId).map(convertPaymentToCamelCase)
   
   // 计算应收应付
@@ -2197,7 +2201,7 @@ function formatBankAccount(row) {
 export async function getBalanceSheet(asOfDate) {
   const db = getDatabase()
   
-  // 应收账款（销售发票未收款）
+  // 应收账款（销售发票未收款，排除已删除）
   const receivablesResult = await db.prepare(`
     SELECT 
       COALESCE(SUM(total_amount - paid_amount), 0) as total,
@@ -2205,10 +2209,11 @@ export async function getBalanceSheet(asOfDate) {
     FROM invoices 
     WHERE invoice_type = 'sales' 
       AND status NOT IN ('paid', 'cancelled')
+      AND (is_deleted IS NULL OR is_deleted = FALSE)
       AND invoice_date <= $1
   `).get(asOfDate)
   
-  // 应付账款（采购发票未付款）
+  // 应付账款（采购发票未付款，排除已删除）
   const payablesResult = await db.prepare(`
     SELECT 
       COALESCE(SUM(total_amount - paid_amount), 0) as total,
@@ -2216,6 +2221,7 @@ export async function getBalanceSheet(asOfDate) {
     FROM invoices 
     WHERE invoice_type = 'purchase' 
       AND status NOT IN ('paid', 'cancelled')
+      AND (is_deleted IS NULL OR is_deleted = FALSE)
       AND invoice_date <= $1
   `).get(asOfDate)
   
@@ -2463,7 +2469,7 @@ export async function getBusinessAnalysis(startDate, endDate) {
   // 3. 盈利能力分析（从利润表获取）
   const incomeStatement = await getIncomeStatement(startDate, endDate)
   
-  // 4. 应收账款分析
+  // 4. 应收账款分析（排除已删除）
   const receivablesAging = await db.prepare(`
     SELECT 
       CASE 
@@ -2477,6 +2483,7 @@ export async function getBusinessAnalysis(startDate, endDate) {
     FROM invoices 
     WHERE invoice_type = 'sales' 
       AND status NOT IN ('paid', 'cancelled')
+      AND (is_deleted IS NULL OR is_deleted = FALSE)
     GROUP BY 
       CASE 
         WHEN due_date >= CURRENT_DATE OR due_date IS NULL THEN '0-30'
@@ -2487,16 +2494,17 @@ export async function getBusinessAnalysis(startDate, endDate) {
       END
   `).all()
   
-  // 平均收款周期 - 简化查询
+  // 平均收款周期 - 简化查询（排除已删除）
   const avgCollectionDays = await db.prepare(`
     SELECT COALESCE(AVG(CURRENT_DATE - invoice_date), 0) as avg_days
     FROM invoices
     WHERE invoice_type = 'sales'
       AND invoice_date >= $1 AND invoice_date <= $2
       AND status NOT IN ('paid', 'cancelled')
+      AND (is_deleted IS NULL OR is_deleted = FALSE)
   `).get(startDate, endDate)
   
-  // 回款率
+  // 回款率（排除已删除）
   const collectionRate = await db.prepare(`
     SELECT 
       COALESCE(SUM(paid_amount), 0) as collected,
@@ -2504,6 +2512,7 @@ export async function getBusinessAnalysis(startDate, endDate) {
     FROM invoices 
     WHERE invoice_type = 'sales'
       AND invoice_date >= $1 AND invoice_date <= $2
+      AND (is_deleted IS NULL OR is_deleted = FALSE)
   `).get(startDate, endDate)
   
   const collectionRatePercent = Number(collectionRate?.total || 0) > 0 
