@@ -66,9 +66,18 @@ export async function getBills(params = {}) {
         // 如果是为新建发票筛选，排除已经开具发票的订单（未取消的发票）
         if (forInvoiceType) {
           // 排除该类型已有未取消发票的订单（只要开过票且未取消，就不再显示）
-          query += ` AND b.id NOT IN (
-            SELECT DISTINCT bill_id FROM invoices 
-            WHERE invoice_type = ? AND status != 'cancelled' AND bill_id IS NOT NULL
+          // 注意：bill_id 可能是逗号分隔的多个订单ID，需要用 LIKE 匹配
+          query += ` AND NOT EXISTS (
+            SELECT 1 FROM invoices 
+            WHERE invoice_type = ? 
+              AND status != 'cancelled' 
+              AND bill_id IS NOT NULL
+              AND (
+                bill_id = b.id 
+                OR bill_id LIKE b.id || ',%'
+                OR bill_id LIKE '%,' || b.id || ',%'
+                OR bill_id LIKE '%,' || b.id
+              )
           )`
           queryParams.push(forInvoiceType)
         }
