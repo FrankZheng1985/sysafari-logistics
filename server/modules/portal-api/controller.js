@@ -75,6 +75,86 @@ export async function login(req, res) {
 }
 
 /**
+ * 工作人员代登录客户门户
+ * 用于ERP系统工作人员直接登录客户门户查看客户数据
+ * 需要ERP系统认证（req.user 来自主系统认证中间件）
+ */
+export async function staffProxyLogin(req, res) {
+  try {
+    const { accountId } = req.params
+    const staffUser = req.user // 来自ERP认证中间件
+    
+    if (!staffUser || !staffUser.id) {
+      return unauthorized(res, '请先登录ERP系统')
+    }
+    
+    if (!accountId) {
+      return badRequest(res, '请指定要登录的客户账户')
+    }
+    
+    console.log('🔐 工作人员代登录请求:', { 
+      staffId: staffUser.id, 
+      staffName: staffUser.name,
+      staffRole: staffUser.role,
+      targetAccountId: accountId 
+    })
+    
+    // 获取客户账户信息
+    const account = await crmModel.getCustomerAccountById(accountId)
+    
+    if (!account) {
+      return notFound(res, '客户账户不存在')
+    }
+    
+    if (account.status !== 'active') {
+      return forbidden(res, '该客户账户已被禁用')
+    }
+    
+    // 记录代登录日志（可选：记录到审计日志）
+    console.log(`📝 工作人员代登录: ${staffUser.name}(${staffUser.id}) -> 客户账户 ${account.username}(${account.id})`)
+    
+    // 生成特殊的 JWT Token，包含工作人员代登录标记
+    const token = jwt.sign(
+      {
+        accountId: account.id,
+        customerId: account.customerId,
+        customerName: account.customerName,
+        username: account.username,
+        type: 'customer',
+        // 代登录标记
+        staffProxy: true,
+        staffId: staffUser.id,
+        staffName: staffUser.name,
+        staffRole: staffUser.role
+      },
+      JWT_SECRET,
+      { expiresIn: '4h' } // 代登录 token 有效期较短
+    )
+    
+    return success(res, {
+      token,
+      expiresIn: '4h',
+      user: {
+        id: account.id,
+        customerId: account.customerId,
+        customerName: account.customerName,
+        customerCode: account.customerCode,
+        username: account.username,
+        email: account.email,
+        phone: account.phone,
+        avatarUrl: account.avatarUrl,
+        // 代登录信息
+        staffProxy: true,
+        staffName: staffUser.name
+      }
+    }, '代登录成功')
+  } catch (error) {
+    console.error('工作人员代登录失败:', error)
+    return serverError(res, '代登录服务暂时不可用')
+  }
+}
+
+/**
  * 刷新 Token
  */
 export async function refreshToken(req, res) {
@@ -114,7 +194,8 @@ export async function getCurrentUser(req, res) {
       return notFound(res, '账户不存在')
     }
     
-    return success(res, {
+    // 基础用户信息
+    const userData = {
       id: account.id,
       customerId: account.customerId,
       customerName: account.customerName,
@@ -124,7 +205,17 @@ export async function getCurrentUser(req, res) {
       phone: account.phone,
       avatarUrl: account.avatarUrl,
       lastLoginAt: account.lastLoginAt
-    })
+    }
+    
+    // 如果是工作人员代登录，添加代登录标记
+    if (req.customer.staffProxy) {
+      userData.staffProxy = true
+      userData.staffId = req.customer.staffId
+      userData.staffName = req.customer.staffName
+      userData.staffRole = req.customer.staffRole
+    }
+    
+    return success(res, userData)
   } catch (error) {
     console.error('获取用户信息失败:', error)
     return serverError(res, '获取用户信息失败')

@@ -5901,6 +5901,71 @@ export async function deleteCustomerAccount(id: number): Promise<ApiResponse<nul
   }
 }
 
+/**
+ * 工作人员代登录客户门户
+ * 生成代登录Token，用于工作人员直接登录客户门户系统
+ */
+export interface StaffProxyLoginResponse {
+  token: string
+  expiresIn: string
+  user: {
+    id: number
+    customerId: string
+    customerName: string
+    customerCode: string
+    username: string
+    email: string | null
+    phone: string | null
+    avatarUrl: string | null
+    staffProxy: boolean
+    staffName: string
+  }
+}
+
+export async function staffProxyLoginToPortal(accountId: number): Promise<ApiResponse<StaffProxyLoginResponse>> {
+  try {
+    const token = localStorage.getItem('bp_logistics_user_cache')
+    let authToken = ''
+    if (token) {
+      try {
+        const cached = JSON.parse(token)
+        authToken = cached.token || ''
+      } catch {
+        // 尝试直接使用
+        authToken = token
+      }
+    }
+    
+    // 也尝试从测试模式获取 token
+    if (!authToken) {
+      const testMode = localStorage.getItem('bp_logistics_test_mode')
+      if (testMode) {
+        try {
+          const testData = JSON.parse(testMode)
+          authToken = testData.token || ''
+        } catch {
+          // ignore
+        }
+      }
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/api/customer-accounts/${accountId}/staff-login`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+      }
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('工作人员代登录失败:', error)
+    throw error
+  }
+}
+
 
 // ==================== HERE 地理编码 API ====================
 

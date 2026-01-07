@@ -14,6 +14,7 @@ import {
   getCustomerAddresses, createCustomerAddress, updateCustomerAddress, deleteCustomerAddress,
   getCustomerTaxNumbers, createCustomerTaxNumber, updateCustomerTaxNumber, deleteCustomerTaxNumber,
   getCustomerAccounts, createCustomerAccount, updateCustomerAccount, deleteCustomerAccount, resetCustomerAccountPassword,
+  staffProxyLoginToPortal,
   type Customer, type CustomerAddress, type CustomerTaxNumber, type CustomerAccount, type OrderTrendItem, type OrderTrendData
 } from '../utils/api'
 
@@ -1287,10 +1288,29 @@ export default function CRMCustomerDetail() {
                               {account.status === 'active' ? '正常' : account.status === 'suspended' ? '已停用' : '未激活'}
                             </span>
                             <button
-                              onClick={() => {
-                                // 打开客户门户系统并携带用户名
-                                const portalUrl = `http://localhost:5174/login?username=${encodeURIComponent(account.username)}`
-                                window.open(portalUrl, '_blank')
+                              onClick={async () => {
+                                try {
+                                  // 调用工作人员代登录 API
+                                  const res = await staffProxyLoginToPortal(account.id)
+                                  if (res.errCode === 200 && res.data?.token) {
+                                    // 获取门户系统地址（根据当前环境）
+                                    const hostname = window.location.hostname
+                                    let portalBase = 'http://localhost:5174'
+                                    if (hostname === 'erp.xianfeng-eu.com') {
+                                      portalBase = 'https://portal.xianfeng-eu.com'
+                                    } else if (hostname === 'demo.xianfeng-eu.com') {
+                                      portalBase = 'https://demo-portal.xianfeng-eu.com'
+                                    }
+                                    // 跳转到门户系统，携带代登录 token
+                                    const portalUrl = `${portalBase}/login?token=${encodeURIComponent(res.data.token)}`
+                                    window.open(portalUrl, '_blank')
+                                  } else {
+                                    alert(res.msg || '代登录失败，请稍后重试')
+                                  }
+                                } catch (error) {
+                                  console.error('代登录失败:', error)
+                                  alert('代登录失败，请稍后重试')
+                                }
                               }}
                               className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 flex items-center gap-1"
                               title="登录到客户门户"
