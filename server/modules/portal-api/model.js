@@ -21,7 +21,8 @@ export async function getCustomerOrders(customerId, params = {}) {
     startDate, 
     endDate, 
     page = 1, 
-    pageSize = 20 
+    pageSize = 20,
+    reviewStatus  // 审核状态筛选: pending, rejected, approved
   } = params
   
   let sql = `
@@ -33,6 +34,7 @@ export async function getCustomerOrders(customerId, params = {}) {
       b.customs_status, b.delivery_status,
       b.etd, b.eta, b.ata, b.external_order_no,
       b.customer_name, b.customer_code,
+      b.source, b.review_status, b.reject_reason, b.reviewed_at,
       b.created_at, b.updated_at
     FROM bills_of_lading b
     WHERE b.customer_id = $1
@@ -79,6 +81,18 @@ export async function getCustomerOrders(customerId, params = {}) {
   if (endDate) {
     sql += ` AND b.created_at <= $${paramIndex++}`
     conditions.push(endDate)
+  }
+  
+  // 审核状态筛选（支持逗号分隔的多个状态）
+  if (reviewStatus) {
+    const statuses = reviewStatus.split(',').map(s => s.trim())
+    if (statuses.length === 1) {
+      sql += ` AND b.review_status = $${paramIndex++}`
+      conditions.push(statuses[0])
+    } else {
+      sql += ` AND b.review_status IN (${statuses.map(() => `$${paramIndex++}`).join(', ')})`
+      conditions.push(...statuses)
+    }
   }
   
   // 计数
@@ -258,7 +272,9 @@ export async function getCustomerOrderStats(customerId) {
       COUNT(CASE WHEN ship_status = '已到港' AND (customs_status IS NULL OR customs_status = '' OR customs_status != '已放行') AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status NOT IN ('已送达')) AND status != '已完成' THEN 1 END) as arrived,
       COUNT(CASE WHEN customs_status = '已放行' AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status NOT IN ('已送达')) AND status != '已完成' THEN 1 END) as customs_cleared,
       COUNT(CASE WHEN delivery_status = '派送中' OR delivery_status = '待派送' THEN 1 END) as delivering,
-      COUNT(CASE WHEN delivery_status = '已送达' OR status = '已完成' THEN 1 END) as delivered
+      COUNT(CASE WHEN delivery_status = '已送达' OR status = '已完成' THEN 1 END) as delivered,
+      COUNT(CASE WHEN review_status = 'pending' THEN 1 END) as pending_review,
+      COUNT(CASE WHEN review_status = 'rejected' THEN 1 END) as rejected
     FROM bills_of_lading
     WHERE customer_id = $1
   `).get(customerId)
@@ -269,7 +285,10 @@ export async function getCustomerOrderStats(customerId) {
     arrived: parseInt(stats?.arrived) || 0,
     customsCleared: parseInt(stats?.customs_cleared) || 0,
     delivering: parseInt(stats?.delivering) || 0,
-    delivered: parseInt(stats?.delivered) || 0
+    delivered: parseInt(stats?.delivered) || 0,
+    // 审核相关统计
+    pendingReview: parseInt(stats?.pending_review) || 0,
+    rejected: parseInt(stats?.rejected) || 0
   }
 }
 
@@ -458,7 +477,7 @@ export async function createOrderDraft(customerId, data) {
   // 生成订单号
   const orderNumber = await generateOrderNumber(db)
   
-  // 插入订单
+  // 插入订单（门户提交的提单需要审核）
   const result = await db.prepare(`
     INSERT INTO bills_of_lading (
       id, bill_number, container_number, external_order_no,
@@ -466,10 +485,10 @@ export async function createOrderDraft(customerId, data) {
       port_of_loading, port_of_discharge, place_of_delivery,
       etd, eta, pieces, weight, volume,
       cargo_description, container_type, service_type, remark,
-      status, source_channel,
+      status, source_channel, source, review_status,
       created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '草稿', 'portal', NOW(), NOW())
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '草稿', 'portal', 'portal', 'pending', NOW(), NOW())
   `).run(
     orderNumber,
     billNumber || null,
@@ -492,6 +511,15 @@ export async function createOrderDraft(customerId, data) {
     remark || null
   )
   
+  // 创建审批记录
+  await createPortalBillApproval(db, orderNumber, customerId, {
+    billNumber,
+    containerNumber,
+    shipper,
+    consignee,
+    externalOrderNo
+  })
+  
   // 如果有货物明细，创建货物导入批次
   if (cargoItems && cargoItems.length > 0) {
     await createCargoItems(db, orderNumber, customerId, cargoItems)
@@ -500,7 +528,60 @@ export async function createOrderDraft(customerId, data) {
   return {
     orderId: orderNumber,
     externalOrderNo,
-    status: '草稿'
+    status: '草稿',
+    reviewStatus: 'pending'
+  }
+}
+
+/**
+ * 创建门户提单审批记录
+ * 当客户通过门户提交提单时，自动创建审批记录
+ */
+async function createPortalBillApproval(db, orderId, customerId, billData) {
+  try {
+    // 获取客户信息
+    const customer = await db.pool.query(
+      'SELECT customer_name, company_name FROM customers WHERE id = $1',
+      [customerId]
+    )
+    const customerName = customer.rows[0]?.customer_name || customer.rows[0]?.company_name || '未知客户'
+    
+    // 构建审批摘要
+    const summary = [
+      `提单号: ${billData.billNumber || '待确认'}`,
+      `柜号: ${billData.containerNumber || '待确认'}`,
+      `发货人: ${billData.shipper || '未填写'}`,
+      `收货人: ${billData.consignee || '未填写'}`,
+      `客户订单号: ${billData.externalOrderNo || '无'}`
+    ].join('\n')
+    
+    // 创建审批记录
+    await db.pool.query(`
+      INSERT INTO unified_approvals (
+        approval_type, business_id, business_module, approval_title,
+        approval_content, approval_data, status,
+        applicant_id, applicant_name, priority,
+        created_at, updated_at
+      )
+      VALUES (
+        'PORTAL_BILL_SUBMIT', $1, 'bill', $2,
+        $3, $4, 'pending',
+        $5, $6, 'normal',
+        NOW(), NOW()
+      )
+    `, [
+      orderId,
+      `客户提单审核: ${customerName}`,
+      summary,
+      JSON.stringify({ ...billData, customerId, customerName }),
+      customerId,
+      customerName
+    ])
+    
+    console.log(`[Portal] 创建提单审批记录成功: ${orderId}`)
+  } catch (error) {
+    console.error('[Portal] 创建提单审批记录失败:', error)
+    // 审批记录创建失败不影响订单创建
   }
 }
 
@@ -603,6 +684,11 @@ function convertOrderToCamelCase(row) {
     ata: row.ata,
     customerName: row.customer_name,
     customerCode: row.customer_code,
+    // 审核相关字段
+    source: row.source,
+    reviewStatus: row.review_status,
+    rejectReason: row.reject_reason,
+    reviewedAt: row.reviewed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

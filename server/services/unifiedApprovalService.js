@@ -268,6 +268,20 @@ export async function reject(approvalId, approverId, approverName, approverRole,
       WHERE id = $5
     `, [approverId, approverName, approverRole, reason, approvalId])
     
+    // 针对不同审批类型执行拒绝后的操作
+    if (approval.approval_type === 'PORTAL_BILL_SUBMIT' && approval.business_id) {
+      // 客户门户提单审批拒绝，更新提单状态
+      await db.pool.query(`
+        UPDATE bills_of_lading SET 
+          review_status = 'rejected',
+          reject_reason = $1,
+          reviewed_at = NOW(),
+          reviewer_id = $2,
+          reviewer_name = $3
+        WHERE id = $4
+      `, [reason, approverId, approverName, approval.business_id])
+    }
+    
     // 发送通知给申请人
     await notifyApplicant(approval, 'rejected', reason)
     
@@ -506,6 +520,22 @@ async function executeApprovedAction(approval) {
             [approval.business_id]
           )
           result = { executed: true, action: 'fee_approve' }
+        }
+        break
+        
+      case 'PORTAL_BILL_SUBMIT':
+        // 客户门户提单审批通过，更新提单状态
+        if (approval.business_id) {
+          await db.pool.query(`
+            UPDATE bills_of_lading SET 
+              review_status = 'approved',
+              reviewed_at = NOW(),
+              reviewer_id = $1,
+              reviewer_name = $2,
+              status = 'active'
+            WHERE id = $3
+          `, [approval.approver_id, approval.approver_name, approval.business_id])
+          result = { executed: true, action: 'portal_bill_approve' }
         }
         break
         

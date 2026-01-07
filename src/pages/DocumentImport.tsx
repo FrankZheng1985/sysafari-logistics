@@ -111,11 +111,15 @@ export default function DocumentImport() {
     }
   }, [selectedBill])
   
-  // 加载提单列表
-  const loadBills = async () => {
+  // 加载提单列表（支持服务端搜索）
+  const loadBills = async (search?: string) => {
     setLoadingBills(true)
     try {
-      const response = await getBillsList({ pageSize: 100 })
+      // 使用服务端搜索，支持搜索提单号、集装箱号等
+      const response = await getBillsList({ 
+        pageSize: 100,
+        search: search || undefined
+      })
       if (response.errCode === 200) {
         setBills(response.data?.list || [])
       }
@@ -126,14 +130,20 @@ export default function DocumentImport() {
     }
   }
   
-  // 过滤提单
-  const filteredBills = bills.filter(b => 
-    b.billNumber?.toLowerCase().includes(billSearch.toLowerCase()) ||
-    b.containerNumber?.toLowerCase().includes(billSearch.toLowerCase()) ||
-    b.companyName?.toLowerCase().includes(billSearch.toLowerCase()) ||
-    b.customerName?.toLowerCase().includes(billSearch.toLowerCase()) ||
-    b.orderNumber?.toLowerCase().includes(billSearch.toLowerCase())
-  )
+  // 当搜索词变化时，重新加载提单（防抖处理）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (billSearch.trim()) {
+        loadBills(billSearch.trim())
+      } else {
+        loadBills()
+      }
+    }, 300) // 300ms 防抖
+    return () => clearTimeout(timer)
+  }, [billSearch])
+  
+  // 提单列表（已从服务端搜索，无需前端过滤）
+  const filteredBills = bills
   
   // 当选择客户后加载该客户的税号
   useEffect(() => {

@@ -178,7 +178,7 @@ export async function changePassword(req, res) {
 export async function getOrders(req, res) {
   try {
     const customerId = req.customer.customerId
-    const { status, shipStatus, customsStatus, deliveryStatus, billNumber, startDate, endDate, page, pageSize } = req.query
+    const { status, shipStatus, customsStatus, deliveryStatus, billNumber, startDate, endDate, page, pageSize, reviewStatus } = req.query
     
     const result = await model.getCustomerOrders(customerId, {
       status,
@@ -188,6 +188,7 @@ export async function getOrders(req, res) {
       billNumber,
       startDate,
       endDate,
+      reviewStatus,  // 审核状态筛选
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20
     })

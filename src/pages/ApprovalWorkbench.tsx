@@ -93,6 +93,7 @@ const APPROVAL_TYPES: Record<string, { label: string; icon: React.ComponentType<
   FEE_SUPPLEMENT: { label: '追加费用', icon: Wallet, color: 'text-orange-600 bg-orange-100' },
   ORDER_MODIFY: { label: '订单修改', icon: Package, color: 'text-blue-600 bg-blue-100' },
   PAYMENT_REQUEST: { label: '付款申请', icon: Wallet, color: 'text-green-600 bg-green-100' },
+  PORTAL_BILL_SUBMIT: { label: '客户提单审核', icon: Truck, color: 'text-cyan-600 bg-cyan-100' },
 }
 
 // 审批状态配置

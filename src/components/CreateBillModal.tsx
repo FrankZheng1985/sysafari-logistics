@@ -80,8 +80,8 @@ export default function CreateBillModal({
   editData = null,
 }: CreateBillModalProps) {
   const isEditMode = mode === 'edit' && editData !== null
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(isEditMode ? 3 : 1) // 编辑模式直接跳到第三步
-  const [selectedType, setSelectedType] = useState<'official' | 'temporary' | null>(null)
+  const [currentStep, setCurrentStep] = useState<2 | 3>(isEditMode ? 3 : 2) // 编辑模式直接跳到第三步，创建模式跳过第一步直接到第二步
+  const [selectedType, setSelectedType] = useState<'official' | 'temporary'>('official') // 默认为正式提单
   const [selectedTransport, setSelectedTransport] = useState<'air' | 'sea' | 'rail' | 'truck' | null>(null)
   const [easyBill, setEasyBill] = useState(true)
   
@@ -157,6 +157,8 @@ export default function CreateBillModal({
   const [showEasyBillWarning, setShowEasyBillWarning] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  // 跟踪表单是否有未保存的修改
+  const [isDirty, setIsDirty] = useState(false)
   const [containerCodes, setContainerCodes] = useState<ContainerCode[]>([])
   const [showContainerCodeDropdown, setShowContainerCodeDropdown] = useState(false)
   const [parsingFile, setParsingFile] = useState(false)
@@ -735,14 +737,7 @@ export default function CreateBillModal({
   }
 
   const handleNext = () => {
-    if (currentStep === 1) {
-      if (!selectedType) {
-        alert('请选择提单类型')
-        return
-      }
-      // 选择类型后自动进入下一步
-      setCurrentStep(2)
-    } else if (currentStep === 2) {
+    if (currentStep === 2) {
       if (!selectedTransport) {
         alert('请选择运输方式')
         return
@@ -757,21 +752,39 @@ export default function CreateBillModal({
 
 
   const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep((currentStep - 1) as 1 | 2 | 3)
+    if (currentStep > 2) {
+      setCurrentStep(2) // 从第三步返回第二步
     }
   }
 
   const handleCancel = () => {
-    setCurrentStep(1)
-    setSelectedType(null)
+    // 检查是否有未保存的数据
+    const hasUnsavedData = isDirty || 
+      referenceList.length > 0 || 
+      formData.masterBillNumber || 
+      formData.containerNumber ||
+      formData.origin ||
+      formData.destination
+    
+    if (hasUnsavedData) {
+      const confirmed = window.confirm('您有未保存的数据，确定要离开吗？\n\n提示：您可以点击"保存草稿"按钮保存当前填写的内容。')
+      if (!confirmed) {
+        return // 用户取消，不关闭
+      }
+    }
+    
+    // 重置状态并关闭
+    setCurrentStep(2)
+    setSelectedType('official')
     setSelectedTransport(null)
     setEasyBill(true)
+    setIsDirty(false)
     onClose()
   }
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    setIsDirty(true) // 标记表单已修改
   }
 
   // 通过爬虫查询提单/集装箱信息（免费）
@@ -1529,16 +1542,19 @@ export default function CreateBillModal({
       consigneeAddressDetails: autoConsigneeAddressDetails,
     }
     setReferenceList([...referenceList, newRow])
+    setIsDirty(true) // 标记表单已修改
   }
 
   const handleDeleteReferenceRow = (id: string) => {
     setReferenceList(referenceList.filter(row => row.id !== id))
+    setIsDirty(true) // 标记表单已修改
   }
 
   const handleReferenceChange = (id: string, field: string, value: string) => {
     setReferenceList(referenceList.map(row =>
       row.id === id ? { ...row, [field]: value } : row
     ))
+    setIsDirty(true) // 标记表单已修改
   }
 
   const handleSaveReference = () => {
@@ -1688,7 +1704,8 @@ export default function CreateBillModal({
         customsStats: '0/0',
         creator: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).email || 'system' : 'system',
         createTime: new Date().toISOString().split('T')[0] + ' ' + new Date().toTimeString().split(' ')[0],
-        status: selectedType === 'official' ? '船未到港' : '已完成',
+        status: 'active',  // 正式提单状态为 active
+        shipStatus: '未到港',  // 船运状态默认为未到港
         shipper: '',
         consignee: '',
         notifyParty: '',
@@ -1712,8 +1729,8 @@ export default function CreateBillModal({
         lastMileTransport: formData.lastMileTransport,
         devanning: formData.devanning,
         t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
-        // Reference List
-        referenceList: JSON.stringify(referenceList),
+        // Reference List（传数组，让后端统一序列化）
+        referenceList: referenceList,
         // 订单导入扩展字段
         serviceType: formData.serviceType || '',
         cargoValue: formData.cargoValue ? parseFloat(formData.cargoValue) : null,
@@ -1734,8 +1751,8 @@ export default function CreateBillModal({
         onSubmit?.(selectedType!)
         onSuccess?.() // 刷新列表
         // 重置表单
-        setCurrentStep(1)
-        setSelectedType(null)
+        setCurrentStep(2)
+        setSelectedType('official')
         setSelectedTransport(null)
         setEasyBill(true)
         setFormData({
@@ -1781,6 +1798,7 @@ export default function CreateBillModal({
         setShippingCompanySource('')
         setReferenceList([])
         setErrors({})
+        setIsDirty(false) // 重置修改标记
         onClose()
       } else {
         alert(`创建失败: ${response.msg}`)
@@ -1850,7 +1868,7 @@ export default function CreateBillModal({
         customsStats: '0/0',
         creator: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!).email || 'system' : 'system',
         createTime: new Date().toISOString().split('T')[0] + ' ' + new Date().toTimeString().split(' ')[0],
-        status: '草稿', // 草稿状态
+        status: 'draft', // 草稿状态（使用英文标识，与后端保持一致）
         shipper: '',
         consignee: '',
         notifyParty: '',
@@ -1873,8 +1891,8 @@ export default function CreateBillModal({
         lastMileTransport: formData.lastMileTransport || 'truck',
         devanning: formData.devanning || '',
         t1Declaration: formData.isT1Customs === 'yes' ? 'yes' : 'no',
-        // Reference List
-        referenceList: JSON.stringify(referenceList),
+        // Reference List（传数组，让后端统一序列化）
+        referenceList: referenceList,
       }
 
       console.log('准备保存草稿，数据:', draftData)
@@ -1886,8 +1904,8 @@ export default function CreateBillModal({
         onSubmit?.(selectedType!)
         onSuccess?.() // 刷新列表
         // 重置表单
-        setCurrentStep(1)
-        setSelectedType(null)
+        setCurrentStep(2)
+        setSelectedType('official')
         setSelectedTransport(null)
         setEasyBill(true)
         setFormData({
@@ -1928,6 +1946,7 @@ export default function CreateBillModal({
         setShippingCompanySource('')
         setReferenceList([])
         setErrors({})
+        setIsDirty(false) // 重置修改标记
         onClose()
       } else {
         alert(`保存失败: ${response.msg}`)
@@ -1974,43 +1993,10 @@ export default function CreateBillModal({
           </button>
         </div>
 
-        {/* Progress Steps */}
+        {/* Progress Steps - 简化为两步 */}
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
           <div className="flex items-center">
-            {/* Step 1 */}
-            <div className="flex items-center">
-              <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
-                  currentStep === 1
-                    ? 'bg-primary-600 text-white'
-                    : currentStep > 1
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-200 text-gray-500'
-                }`}
-              >
-                {currentStep > 1 ? '✓' : '1'}
-              </div>
-              <span
-                className={`ml-2 text-xs ${
-                  currentStep === 1
-                    ? 'text-primary-600 font-medium'
-                    : currentStep > 1
-                    ? 'text-primary-600'
-                    : 'text-gray-500'
-                }`}
-              >
-                选择提单类型
-              </span>
-            </div>
-
-            {/* Connector 1 */}
-            <div
-              className={`flex-1 h-0.5 mx-3 transition-all ${
-                currentStep > 1 ? 'bg-primary-600' : 'bg-gray-200'
-              }`}
-            />
-
-            {/* Step 2 */}
+            {/* Step 1: 运输方式 + 上传运输单 */}
             <div className="flex items-center">
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
@@ -2021,7 +2007,7 @@ export default function CreateBillModal({
                     : 'bg-gray-200 text-gray-500'
                 }`}
               >
-                {currentStep > 2 ? '✓' : '2'}
+                {currentStep > 2 ? '✓' : '1'}
               </div>
               <span
                 className={`ml-2 text-xs ${
@@ -2036,14 +2022,14 @@ export default function CreateBillModal({
               </span>
             </div>
 
-            {/* Connector 2 */}
+            {/* Connector */}
             <div
               className={`flex-1 h-0.5 mx-3 transition-all ${
                 currentStep > 2 ? 'bg-primary-600' : 'bg-gray-200'
               }`}
             />
 
-            {/* Step 3 */}
+            {/* Step 2: 确认信息 + 补录 */}
             <div className="flex items-center">
               <div
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium transition-all ${
@@ -2052,7 +2038,7 @@ export default function CreateBillModal({
                     : 'bg-gray-200 text-gray-500'
                 }`}
               >
-                3
+                2
               </div>
               <span
                 className={`ml-2 text-xs ${
@@ -2069,54 +2055,6 @@ export default function CreateBillModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 min-h-0">
-          {currentStep === 1 && (
-            <div className="flex items-center justify-center gap-6 min-h-[300px]">
-              {/* 正式提单 */}
-              <button
-                type="button"
-                onClick={() => setSelectedType('official')}
-                aria-label="正式提单"
-                className={`flex-1 max-w-xs h-32 border-2 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  selectedType === 'official'
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <span
-                  className={`text-lg font-medium ${
-                    selectedType === 'official'
-                      ? 'text-green-600'
-                      : 'text-gray-600'
-                  }`}
-                >
-                  正式提单
-                </span>
-              </button>
-
-              {/* 临时提单 */}
-              <button
-                type="button"
-                onClick={() => setSelectedType('temporary')}
-                aria-label="临时提单"
-                className={`flex-1 max-w-xs h-32 border-2 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  selectedType === 'temporary'
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
-              >
-                <span
-                  className={`text-lg font-medium ${
-                    selectedType === 'temporary'
-                      ? 'text-green-600'
-                      : 'text-gray-600'
-                  }`}
-                >
-                  临时提单
-                </span>
-              </button>
-            </div>
-          )}
-
           {currentStep === 2 && (
             <div className="min-h-[300px]">
               {/* 运输方式选择 */}
@@ -3592,7 +3530,7 @@ export default function CreateBillModal({
                       </div>
                     </div>
 
-                    {/* 收货人（关联客户收货地址） */}
+                    {/* 收货人（从客户税号信息获取，按公司分组显示） */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">
                         收货人
@@ -3601,28 +3539,51 @@ export default function CreateBillModal({
                         value={formData.consigneeType}
                         onChange={(e) => handleInputChange('consigneeType', e.target.value)}
                         className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white text-gray-900"
-                        disabled={loadingAddresses || !selectedCustomer}
+                        disabled={loadingTaxNumbers || !selectedCustomer}
                       >
                         <option value="">请选择收货人</option>
-                        {/* 从客户地址中筛选收货地址（addressType 为 consignee 或 both） */}
-                        {selectedCustomer && customerAddresses.length > 0 && 
-                          customerAddresses
-                            .filter(addr => addr.addressType === 'consignee' || addr.addressType === 'both')
-                            .map((addr) => (
-                              <option key={addr.id} value={addr.companyName || addr.contactPerson || `addr_${addr.id}`}>
-                                {addr.companyName || addr.contactPerson || '未命名收货人'}
-                                {addr.contactPerson && addr.companyName && ` (${addr.contactPerson})`}
-                              </option>
-                            ))
+                        {/* 按公司名称分组，合并显示 VAT 和 EORI */}
+                        {selectedCustomer && customerTaxNumbers.length > 0 && 
+                          (() => {
+                            // 按公司名称分组
+                            const companyMap = new Map<string, { companyName: string; vat?: string; eori?: string; other?: string }>()
+                            customerTaxNumbers.forEach((tax) => {
+                              const key = tax.companyName || tax.companyShortName || '未命名公司'
+                              if (!companyMap.has(key)) {
+                                companyMap.set(key, { companyName: key })
+                              }
+                              const company = companyMap.get(key)!
+                              if (tax.taxType === 'vat') {
+                                company.vat = tax.taxNumber
+                              } else if (tax.taxType === 'eori') {
+                                company.eori = tax.taxNumber
+                              } else {
+                                company.other = tax.taxNumber
+                              }
+                            })
+                            // 转换为数组并渲染
+                            return Array.from(companyMap.entries()).map(([key, company]) => {
+                              const taxInfo: string[] = []
+                              if (company.vat) taxInfo.push(`VAT: ${company.vat}`)
+                              if (company.eori) taxInfo.push(`EORI: ${company.eori}`)
+                              if (company.other) taxInfo.push(company.other)
+                              return (
+                                <option key={key} value={company.companyName}>
+                                  {company.companyName}
+                                  {taxInfo.length > 0 && ` (${taxInfo.join(', ')})`}
+                                </option>
+                              )
+                            })
+                          })()
                         }
                       </select>
-                      {loadingAddresses && (
+                      {loadingTaxNumbers && (
                         <p className="mt-1 text-[10px] text-gray-400 flex items-center gap-1">
                           <Loader2 className="w-3 h-3 animate-spin" />
                           正在加载收货人信息...
                         </p>
                       )}
-                      {!loadingAddresses && selectedCustomer && customerAddresses.filter(addr => addr.addressType === 'consignee' || addr.addressType === 'both').length === 0 && (
+                      {!loadingTaxNumbers && selectedCustomer && customerTaxNumbers.length === 0 && (
                         <p className="mt-1 text-[10px] text-gray-400">
                           该客户暂无收货人信息，可在CRM客户管理中添加
                         </p>
@@ -4138,7 +4099,7 @@ export default function CreateBillModal({
             >
               取消
             </button>
-            {currentStep > 1 && (
+            {currentStep > 2 && (
               <button
                 onClick={handleBack}
                 className="px-1.5 py-0.5 border border-gray-300 text-gray-700 rounded hover:bg-gray-100 transition-colors text-xs"
