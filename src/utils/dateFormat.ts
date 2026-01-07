@@ -1,20 +1,12 @@
 /**
  * 日期格式化工具函数
  * 
- * 输入格式: YY-MM-DD（不含时间）
- * 显示格式: YY-MM-DD HH:MM
+ * 显示格式: YYYY-MM-DD 或 YYYY-MM-DD HH:MM
  */
-
-/**
- * 获取两位数年份
- */
-function getShortYear(year: number): string {
-  return String(year).slice(-2)
-}
 
 /**
  * 格式化日期 - 只显示年月日
- * 输出格式: YY-MM-DD (如: 25-01-05)
+ * 输出格式: YYYY-MM-DD (如: 2025-01-05)
  */
 export function formatDate(dateStr: string | null | undefined, showFullTime?: boolean): string {
   if (!dateStr) return '-'
@@ -22,7 +14,7 @@ export function formatDate(dateStr: string | null | undefined, showFullTime?: bo
     const date = new Date(dateStr)
     if (isNaN(date.getTime())) return '-'
     
-    const year = getShortYear(date.getFullYear())
+    const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     
@@ -40,7 +32,7 @@ export function formatDate(dateStr: string | null | undefined, showFullTime?: bo
 
 /**
  * 格式化日期时间 - 显示年月日时分
- * 输出格式: YY-MM-DD HH:MM (如: 25-01-05 14:30)
+ * 输出格式: YYYY-MM-DD HH:MM (如: 2025-01-05 14:30)
  */
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
@@ -48,7 +40,7 @@ export function formatDateTime(dateStr: string | null | undefined): string {
     const date = new Date(dateStr)
     if (isNaN(date.getTime())) return '-'
     
-    const year = getShortYear(date.getFullYear())
+    const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const hours = String(date.getHours()).padStart(2, '0')
@@ -62,7 +54,7 @@ export function formatDateTime(dateStr: string | null | undefined): string {
 
 /**
  * 格式化日期时间 - 简短显示（与 formatDateTime 相同）
- * 输出格式: YY-MM-DD HH:MM (如: 25-01-05 14:30)
+ * 输出格式: YYYY-MM-DD HH:MM (如: 2025-01-05 14:30)
  */
 export function formatDateTimeShort(dateStr: string | null | undefined): string {
   return formatDateTime(dateStr)

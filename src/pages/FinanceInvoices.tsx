@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -332,7 +333,7 @@ export default function FinanceInvoices() {
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900">{record.invoiceNumber}</div>
-          <div className="text-xs text-gray-400">{record.invoiceDate}</div>
+          <div className="text-xs text-gray-400">{formatDate(record.invoiceDate)}</div>
         </div>
       )
     },
@@ -371,8 +372,9 @@ export default function FinanceInvoices() {
     {
       key: 'containerNumbers',
       label: '集装箱号/提单号',
+      width: 280,
       render: (_value, record) => (
-        <div className="truncate">
+        <div className="max-w-[260px]">
           {record.containerNumbers && record.containerNumbers.length > 0 ? (
             <div className="text-xs text-gray-900 truncate" title={record.containerNumbers.join(', ')}>
               {record.containerNumbers.join(', ')}
@@ -458,7 +460,7 @@ export default function FinanceInvoices() {
         const isOverdue = new Date(record.dueDate) < new Date() && record.status !== 'paid'
         return (
           <span className={isOverdue ? 'text-red-500' : 'text-gray-600'}>
-            {record.dueDate}
+            {formatDate(record.dueDate)}
           </span>
         )
       }

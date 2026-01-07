@@ -7,6 +7,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
+import { formatDate } from '../utils/dateFormat'
 
 interface TransportPrice {
   id: string
@@ -400,10 +401,10 @@ export default function TransportPricing() {
         <div className="text-xs text-gray-600">
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3" />
-            {record.effectiveDate}
+            {formatDate(record.effectiveDate)}
           </div>
           {record.expiryDate && (
-            <div className="text-gray-400">至 {record.expiryDate}</div>
+            <div className="text-gray-400">至 {formatDate(record.expiryDate)}</div>
           )}
         </div>
       ),

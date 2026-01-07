@@ -14,6 +14,7 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -475,7 +476,7 @@ export default function CRMPenaltyRecords() {
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900 text-xs">{record.recordNo}</div>
-          <div className="text-[10px] text-gray-500">{record.incidentDate}</div>
+          <div className="text-[10px] text-gray-500">{formatDate(record.incidentDate)}</div>
         </div>
       )
     },

@@ -26,7 +26,11 @@ import {
   User,
   Trash2,
   Shield,
-  Settings
+  Settings,
+  ExternalLink,
+  Calendar,
+  Hash,
+  MessageSquare
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../contexts/AuthContext'
@@ -61,8 +65,13 @@ interface Approval {
   rejected_at?: string
   request_data?: {
     billNumber?: string
+    billId?: string
     containerNumber?: string
-    fee?: Record<string, unknown>
+    fee?: {
+      billId?: string
+      billNumber?: string
+      [key: string]: unknown
+    }
   }
 }
 
@@ -189,6 +198,10 @@ export default function ApprovalWorkbench() {
   const [remark, setRemark] = useState('')
   const [rejectReason, setRejectReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  
+  // 查看详情弹窗状态
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [detailApproval, setDetailApproval] = useState<Approval | null>(null)
 
   const tabs = [
     { label: '消息中心', path: '/system/messages' },
@@ -344,17 +357,75 @@ export default function ApprovalWorkbench() {
     }
   }
 
-  // 查看关联业务
-  const viewBusiness = (approval: Approval) => {
-    if (approval.approval_type === 'order' && approval.business_id) {
-      navigate(`/bill-details/${approval.business_id}`)
-    } else if (approval.approval_type === 'payment' && approval.business_id) {
-      navigate(`/finance/invoices/${approval.business_id}`)
-    } else if (approval.approval_type === 'supplier' && approval.business_id) {
+  // 打开查看详情弹窗
+  const openDetailModal = (approval: Approval) => {
+    setDetailApproval(approval)
+    setShowDetailModal(true)
+  }
+
+  // 跳转到关联业务页面
+  const goToBusinessPage = (approval: Approval) => {
+    const type = approval.approval_type
+    const businessId = approval.business_id
+    const requestData = approval.request_data
+    
+    // 订单相关审批 - business_id 就是提单ID
+    if (['order', 'ORDER_MODIFY', 'void'].includes(type) && businessId) {
+      navigate(`/bookings/bill/${businessId}`)
+      return
+    }
+    
+    // 追加费用审批 - business_id 是费用ID，需要从 request_data 获取提单ID
+    if (type === 'FEE_SUPPLEMENT') {
+      const billId = requestData?.fee?.billId || requestData?.billId
+      if (billId) {
+        navigate(`/bookings/bill/${billId}`)
+        return
+      }
+      // 如果没有提单ID，跳转到费用管理页面
+      navigate('/finance/fees')
+      return
+    }
+    
+    // 普通费用审批 - business_id 是提单ID
+    if (type === 'fee' && businessId) {
+      navigate(`/bookings/bill/${businessId}`)
+      return
+    }
+    
+    // 付款相关审批
+    if (['payment', 'PAYMENT_REQUEST'].includes(type) && businessId) {
+      navigate(`/finance/invoices/${businessId}`)
+      return
+    }
+    
+    // 供应商相关审批
+    if (['supplier', 'SUPPLIER_DELETE'].includes(type)) {
       navigate('/suppliers/list')
-    } else if (approval.approval_type === 'inquiry') {
-      // 跳转到 CRM 报价管理的客户询价 Tab
+      return
+    }
+    
+    // 用户相关审批
+    if (['USER_CREATE', 'USER_DELETE', 'ROLE_CHANGE', 'PERMISSION_CHANGE'].includes(type)) {
+      navigate('/system/users')
+      return
+    }
+    
+    // 询价审批
+    if (type === 'inquiry') {
       navigate('/crm/quotations')
+      return
+    }
+    
+    // 合同审批
+    if (type === 'contract') {
+      navigate('/crm/contracts')
+      return
+    }
+    
+    // 默认情况：如果有业务ID，尝试跳转到提单详情
+    if (businessId) {
+      navigate(`/bookings/bill/${businessId}`)
     }
   }
 
@@ -570,15 +641,13 @@ export default function ApprovalWorkbench() {
 
                     {/* 右侧操作 */}
                     <div className="flex items-center gap-2">
-                      {approval.business_id && (
-                        <button
-                          onClick={() => viewBusiness(approval)}
-                          className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-                        >
-                          <Eye className="w-4 h-4" />
-                          查看
-                        </button>
-                      )}
+                      <button
+                        onClick={() => openDetailModal(approval)}
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                      >
+                        <Eye className="w-4 h-4" />
+                        查看
+                      </button>
                       {/* 只有待审批状态且用户有权限时才显示审批按钮 */}
                       {approval.status === 'pending' && canApprove(user?.role, approval.approval_type) && (
                         <>
@@ -708,6 +777,255 @@ export default function ApprovalWorkbench() {
               >
                 {submitting ? '处理中...' : (approvalAction === 'approve' ? '确认通过' : '确认驳回')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 查看详情弹窗 */}
+      {showDetailModal && detailApproval && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            {/* 标题栏 */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const typeConfig = APPROVAL_TYPES[detailApproval.approval_type] || APPROVAL_TYPES.order
+                  const TypeIcon = typeConfig.icon
+                  return (
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeConfig.color}`}>
+                      <TypeIcon className="w-5 h-5" />
+                    </div>
+                  )
+                })()}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">审批详情</h3>
+                  {detailApproval.approval_no && (
+                    <p className="text-xs text-gray-400 font-mono">{detailApproval.approval_no}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 内容区域 */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="space-y-6">
+                {/* 状态和类型 */}
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const typeConfig = APPROVAL_TYPES[detailApproval.approval_type] || APPROVAL_TYPES.order
+                    const statusConfig = APPROVAL_STATUS[detailApproval.status] || APPROVAL_STATUS.pending
+                    const StatusIcon = statusConfig.icon
+                    return (
+                      <>
+                        <span className={`px-3 py-1 text-sm rounded-lg ${typeConfig.color}`}>
+                          {typeConfig.label}
+                        </span>
+                        <span className={`px-3 py-1 text-sm rounded-lg flex items-center gap-1.5 ${statusConfig.color}`}>
+                          <StatusIcon className="w-4 h-4" />
+                          {statusConfig.label}
+                        </span>
+                      </>
+                    )
+                  })()}
+                </div>
+
+                {/* 基本信息 */}
+                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs text-gray-500 mb-1">审批标题</p>
+                      <p className="text-sm text-gray-900 font-medium">{detailApproval.title}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <MessageSquare className="w-4 h-4 text-gray-400 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs text-gray-500 mb-1">审批内容</p>
+                      <p className="text-sm text-gray-700">{detailApproval.content || '-'}</p>
+                    </div>
+                  </div>
+                  {detailApproval.amount > 0 && (
+                    <div className="flex items-start gap-3">
+                      <Wallet className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-500 mb-1">涉及金额</p>
+                        <p className="text-sm text-gray-900 font-medium">
+                          {formatAmount(detailApproval.amount)} {detailApproval.currency || 'EUR'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 申请人信息 */}
+                <div className="bg-blue-50 rounded-lg p-4 space-y-3">
+                  <h4 className="text-sm font-medium text-blue-900 flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    申请信息
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs text-blue-600/70 mb-1">申请人</p>
+                      <p className="text-blue-900">{detailApproval.applicant_name || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-blue-600/70 mb-1">提交时间</p>
+                      <p className="text-blue-900">{formatTime(detailApproval.created_at)}</p>
+                    </div>
+                  </div>
+                  {detailApproval.request_data?.containerNumber && (
+                    <div>
+                      <p className="text-xs text-blue-600/70 mb-1">集装箱号</p>
+                      <p className="text-blue-900 font-mono">{detailApproval.request_data.containerNumber}</p>
+                    </div>
+                  )}
+                  {detailApproval.request_data?.billNumber && (
+                    <div>
+                      <p className="text-xs text-blue-600/70 mb-1">提单号</p>
+                      <p className="text-blue-900 font-mono">{detailApproval.request_data.billNumber}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 审批信息（如果已处理） */}
+                {detailApproval.status !== 'pending' && (
+                  <div className={`rounded-lg p-4 space-y-3 ${
+                    detailApproval.status === 'approved' ? 'bg-green-50' : 'bg-red-50'
+                  }`}>
+                    <h4 className={`text-sm font-medium flex items-center gap-2 ${
+                      detailApproval.status === 'approved' ? 'text-green-900' : 'text-red-900'
+                    }`}>
+                      {detailApproval.status === 'approved' ? (
+                        <CheckCircle className="w-4 h-4" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                      审批结果
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className={`text-xs mb-1 ${
+                          detailApproval.status === 'approved' ? 'text-green-600/70' : 'text-red-600/70'
+                        }`}>审批人</p>
+                        <p className={detailApproval.status === 'approved' ? 'text-green-900' : 'text-red-900'}>
+                          {detailApproval.approver_name || '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className={`text-xs mb-1 ${
+                          detailApproval.status === 'approved' ? 'text-green-600/70' : 'text-red-600/70'
+                        }`}>处理时间</p>
+                        <p className={detailApproval.status === 'approved' ? 'text-green-900' : 'text-red-900'}>
+                          {formatTime(detailApproval.processed_at || detailApproval.approved_at || detailApproval.rejected_at)}
+                        </p>
+                      </div>
+                    </div>
+                    {(detailApproval.reject_reason || detailApproval.rejection_reason) && (
+                      <div>
+                        <p className="text-xs text-red-600/70 mb-1">驳回原因</p>
+                        <p className="text-red-900">
+                          {detailApproval.reject_reason || detailApproval.rejection_reason}
+                        </p>
+                      </div>
+                    )}
+                    {detailApproval.approval_comment && (
+                      <div>
+                        <p className={`text-xs mb-1 ${
+                          detailApproval.status === 'approved' ? 'text-green-600/70' : 'text-red-600/70'
+                        }`}>审批意见</p>
+                        <p className={detailApproval.status === 'approved' ? 'text-green-900' : 'text-red-900'}>
+                          {detailApproval.approval_comment}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 关联业务 */}
+                {(detailApproval.business_id || detailApproval.request_data?.fee?.billId) && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2 mb-3">
+                      <Hash className="w-4 h-4" />
+                      关联业务
+                    </h4>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-600">
+                        {detailApproval.approval_type === 'FEE_SUPPLEMENT' ? (
+                          <span>提单: <span className="font-mono">{detailApproval.request_data?.fee?.billId || '-'}</span></span>
+                        ) : (
+                          <span className="font-mono">{detailApproval.business_id}</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          // 获取正确的跳转 ID
+                          let targetId = detailApproval.business_id
+                          if (detailApproval.approval_type === 'FEE_SUPPLEMENT') {
+                            targetId = detailApproval.request_data?.fee?.billId || ''
+                          }
+                          if (targetId) {
+                            setShowDetailModal(false)
+                            // 使用正确的路由路径 /bookings/bill/:id
+                            navigate(`/bookings/bill/${targetId}`)
+                          } else {
+                            alert('无法获取关联业务ID')
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        跳转到订单详情
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 底部操作栏 */}
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0 bg-gray-50">
+              <div className="text-xs text-gray-400">
+                <Calendar className="w-3.5 h-3.5 inline mr-1" />
+                创建于 {formatTime(detailApproval.created_at)}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowDetailModal(false)}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  关闭
+                </button>
+                {detailApproval.status === 'pending' && canApprove(user?.role, detailApproval.approval_type) && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowDetailModal(false)
+                        openApprovalModal(detailApproval, 'reject')
+                      }}
+                      className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                    >
+                      驳回
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowDetailModal(false)
+                        openApprovalModal(detailApproval, 'approve')
+                      }}
+                      className="px-4 py-2 text-sm text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                    >
+                      通过
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

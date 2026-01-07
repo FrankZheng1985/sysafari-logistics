@@ -1219,13 +1219,35 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
     }
     console.log(`[发票文件生成] 找到发票: ${invoice.invoice_number}`)
 
-    // 解析 items 数据（从 description 字段或传入的 items）
-    // 按费用类型合并同类费用
+    // 解析 items 数据
+    // 优先级：1. 数据库中的 invoice.items 字段  2. 传入的 invoiceData.items  3. description 字段
     let items = []
-    if (invoiceData.items && Array.isArray(invoiceData.items)) {
+    let rawItems = null
+    
+    // 首先尝试从数据库的 items 字段获取（这是最完整的数据）
+    if (invoice.items) {
+      try {
+        rawItems = typeof invoice.items === 'string' ? JSON.parse(invoice.items) : invoice.items
+        console.log(`[发票文件生成] 从数据库 items 字段获取到 ${rawItems?.length || 0} 条记录`)
+      } catch (e) {
+        console.log('[发票文件生成] 解析数据库 items 字段失败:', e.message)
+      }
+    }
+    
+    // 如果数据库没有，尝试从传入的 invoiceData 获取
+    if (!rawItems && invoiceData.items) {
+      try {
+        rawItems = typeof invoiceData.items === 'string' ? JSON.parse(invoiceData.items) : invoiceData.items
+        console.log(`[发票文件生成] 从传入数据获取到 ${rawItems?.length || 0} 条记录`)
+      } catch (e) {
+        console.log('[发票文件生成] 解析传入 items 失败:', e.message)
+      }
+    }
+    
+    if (rawItems && Array.isArray(rawItems) && rawItems.length > 0) {
       // 按费用类型分组合并
       const feeGroups = {}
-      invoiceData.items.forEach(item => {
+      rawItems.forEach(item => {
         const feeName = item.description || 'Other'
         if (!feeGroups[feeName]) {
           feeGroups[feeName] = {
@@ -1234,8 +1256,10 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
             totalAmount: 0
           }
         }
+        // 使用 finalAmount 或 amount 字段
+        const itemAmount = parseFloat(item.finalAmount) || parseFloat(item.amount) || 0
         feeGroups[feeName].quantity += (item.quantity || 1)
-        feeGroups[feeName].totalAmount += parseFloat(item.amount) || 0
+        feeGroups[feeName].totalAmount += itemAmount
       })
       // 转换为数组
       items = Object.values(feeGroups).map(group => ({
@@ -1244,8 +1268,10 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
         unitValue: group.totalAmount / group.quantity,
         amount: group.totalAmount
       }))
+      console.log(`[发票文件生成] 合并后 items: ${items.length} 条`)
     } else if (invoice.description) {
-      // 从 description 字段解析（格式：desc1; desc2; desc3）
+      // 备选方案：从 description 字段解析（格式：desc1; desc2; desc3）
+      console.log('[发票文件生成] 使用 description 字段解析费用')
       const descriptions = invoice.description.split(';').filter(s => s.trim())
       // 按费用类型分组
       const feeGroups = {}
@@ -1271,8 +1297,34 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
     }
 
     // 获取关联订单的集装箱号
+    // 优先使用发票记录中已保存的 container_numbers 字段
     let containerNumbers = []
-    if (invoice.bill_id) {
+    if (invoice.container_numbers) {
+      try {
+        const parsed = typeof invoice.container_numbers === 'string' 
+          ? JSON.parse(invoice.container_numbers) 
+          : invoice.container_numbers
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          containerNumbers = parsed.filter(Boolean)
+        }
+      } catch (e) {
+        console.log('[发票文件生成] 解析 container_numbers 失败:', e.message)
+      }
+    }
+    
+    // 如果没有从发票记录获取到，尝试从 items 中提取
+    if (containerNumbers.length === 0 && invoiceData.items && Array.isArray(invoiceData.items)) {
+      const containerSet = new Set()
+      invoiceData.items.forEach(item => {
+        if (item.containerNumber) {
+          containerSet.add(item.containerNumber)
+        }
+      })
+      containerNumbers = Array.from(containerSet)
+    }
+    
+    // 最后备选：从关联的 bill_id 获取
+    if (containerNumbers.length === 0 && invoice.bill_id) {
       const bill = await db.prepare('SELECT container_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
       if (bill && bill.container_number) {
         containerNumbers.push(bill.container_number)
@@ -1354,33 +1406,42 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
 
     // 准备Excel数据
     // 获取集装箱号和提单号
-    const excelContainerNo = containerNumbers.length > 0 ? containerNumbers[0] : ''
+    const excelContainerNo = containerNumbers.length > 0 ? containerNumbers.join(', ') : ''
     
-    // 获取提单号
-    let blNumber = ''
-    if (invoice.bill_id) {
+    // 获取提单号（优先使用发票记录中的 bill_number 字段）
+    let blNumber = invoice.bill_number || ''
+    if (!blNumber && invoice.bill_id) {
       const billInfo = await db.prepare('SELECT bill_number FROM bills_of_lading WHERE id = ?').get(invoice.bill_id)
       if (billInfo) {
         blNumber = billInfo.bill_number || ''
       }
     }
 
-    // Excel 数据也按费用类型合并
+    // Excel 数据使用已解析的 items（复用上面的 rawItems）
     let excelItems = []
-    if (invoiceData.items && Array.isArray(invoiceData.items)) {
+    if (rawItems && Array.isArray(rawItems) && rawItems.length > 0) {
       const feeGroups = {}
-      invoiceData.items.forEach(item => {
+      rawItems.forEach(item => {
         const feeName = item.description || 'Other'
         if (!feeGroups[feeName]) {
           feeGroups[feeName] = 0
         }
-        feeGroups[feeName] += parseFloat(item.amount) || 0
+        const itemAmount = parseFloat(item.finalAmount) || parseFloat(item.amount) || 0
+        feeGroups[feeName] += itemAmount
       })
       excelItems = Object.entries(feeGroups).map(([feeName, amount]) => ({
         containerNo: excelContainerNo,
         billNumber: blNumber,
         feeName: feeName,
         amount: amount
+      }))
+    } else if (items.length > 0) {
+      // 使用已处理的 items（从 description 解析的）
+      excelItems = items.map(item => ({
+        containerNo: excelContainerNo,
+        billNumber: blNumber,
+        feeName: item.description,
+        amount: item.amount
       }))
     }
 

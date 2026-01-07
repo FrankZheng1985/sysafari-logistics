@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DateTimePicker from '../components/DateTimePicker'
 import { getApiBaseUrl } from '../utils/api'
+import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -361,7 +362,7 @@ export default function FinancePayments() {
             )}
             <div>
               <div className="font-medium text-gray-900">{record.paymentNumber}</div>
-              <div className="text-xs text-gray-400">{record.paymentDate}</div>
+              <div className="text-xs text-gray-400">{formatDate(record.paymentDate)}</div>
             </div>
           </div>
         )

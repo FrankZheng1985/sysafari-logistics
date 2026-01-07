@@ -7,7 +7,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import { getApiBaseUrl } from '../utils/api'
-import { formatDateTime } from '../utils/dateFormat'
+import { formatDate, formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -146,7 +146,7 @@ export default function FinanceInvoiceHistory() {
       render: (_value, record) => (
         <div>
           <div className="font-medium text-gray-900">{record.invoiceNumber}</div>
-          <div className="text-xs text-gray-400">{record.invoiceDate}</div>
+          <div className="text-xs text-gray-400">{formatDate(record.invoiceDate)}</div>
         </div>
       )
     },
@@ -179,9 +179,9 @@ export default function FinanceInvoiceHistory() {
     {
       key: 'containerNumbers',
       label: '集装箱号/提单号',
-      width: '16%',
+      width: 280,
       render: (_value, record) => (
-        <div className="truncate">
+        <div className="max-w-[260px]">
           {record.containerNumbers && record.containerNumbers.length > 0 ? (
             <div className="text-xs text-gray-900 truncate" title={record.containerNumbers.join(', ')}>
               {record.containerNumbers.join(', ')}

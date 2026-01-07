@@ -143,7 +143,8 @@ export default function CreateInvoice() {
   const [selectedBills, setSelectedBills] = useState<Bill[]>([]) // 多选订单
   const [loadingFees, setLoadingFees] = useState(false)
   const [paymentDays, setPaymentDays] = useState<number | ''>(7)  // 账期天数，默认7天
-  const [customerBillCounts, setCustomerBillCounts] = useState<Record<string, number>>({})  // 每个客户的可开票订单数
+  const [customerBillCounts, setCustomerBillCounts] = useState<Record<string, number>>({})  // 每个客户的可开票订单数（下拉列表用）
+  const [currentBillsTotal, setCurrentBillsTotal] = useState<number>(0)  // 当前选中客户的真实可开票订单总数
   
   // 采购发票专用状态
   const [supplierSearch, setSupplierSearch] = useState('')
@@ -537,8 +538,9 @@ export default function CreateInvoice() {
             })
             const billResponse = await fetch(`${API_BASE}/api/bills?${billParams}`)
             const billData = await billResponse.json()
-            if (billData.errCode === 200 && billData.data?.list) {
-              counts[customer.id] = billData.data.list.length
+            if (billData.errCode === 200 && billData.data) {
+              // 使用后端返回的 total，而不是 list.length，确保即使超过分页数量也能显示正确
+              counts[customer.id] = billData.data.total || billData.data.list?.length || 0
             } else {
               counts[customer.id] = 0
             }
@@ -572,7 +574,7 @@ export default function CreateInvoice() {
   const fetchCompletedBills = async (search = '', invoiceType = formData.invoiceType, customerId = '') => {
     try {
       const params = new URLSearchParams({ 
-        pageSize: '50',
+        pageSize: '100',  // 与 customerBillCounts 保持一致，确保显示的订单数量匹配
         type: 'history', // 获取已完成的订单
         forInvoiceType: invoiceType, // 排除该类型已完成收付款的订单
         includeFeeAmount: 'true'  // 包含费用金额统计，用于显示应收/应付金额
@@ -584,9 +586,16 @@ export default function CreateInvoice() {
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         setBills(data.data.list)
+        // 保存后端返回的真实订单总数（用于显示"X个柜子可开票"）
+        setCurrentBillsTotal(data.data.total || data.data.list.length)
+      } else {
+        setBills([])
+        setCurrentBillsTotal(0)
       }
     } catch (error) {
       console.error('获取订单列表失败:', error)
+      setBills([])
+      setCurrentBillsTotal(0)
     }
   }
 
@@ -1062,6 +1071,7 @@ export default function CreateInvoice() {
     setBillSearch('')
     setBillFees([])
     setBills([])
+    setCurrentBillsTotal(0)  // 重置可开票订单总数
   }
 
   // 选择订单（单选模式，用于向后兼容）
@@ -1584,10 +1594,10 @@ export default function CreateInvoice() {
                 <div className="flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-primary-600" />
                   <span className="text-sm font-medium text-gray-900">{formData.customerName}</span>
-                  {/* 显示可开票订单数量 */}
-                  {bills.length > 0 ? (
+                  {/* 显示可开票订单数量 - 使用后端返回的真实总数 */}
+                  {currentBillsTotal > 0 ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                      {bills.length} 个柜子可开票
+                      {currentBillsTotal} 个柜子可开票
                     </span>
                   ) : (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
