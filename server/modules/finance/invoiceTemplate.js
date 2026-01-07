@@ -102,12 +102,17 @@ const FEE_NAME_MAP = {
   // 清关相关
   '报关费': 'Customs Clearance Fee',
   '清关费': 'Customs Clearance Fee',
+  '清关等待费': 'Customs Clearance Waiting Fee',
   '关税': 'Customs Duty',
   '增值税': 'VAT',
   '进口增值税': 'Import VAT',
   '反倾销税': 'Anti-dumping Duty',
   'HS CODE操作费': 'HS Code Handling Fee',
   'HS编码操作费': 'HS Code Handling Fee',
+  '税号便费': 'Tax ID Handling Fee',
+  '税号使用费': 'Tax ID Service Fee',
+  '税号费': 'Tax ID Fee',
+  'T1费': 'T1 Transit Fee',
   
   // 代理费用
   '操作费': 'Handling Fee',
@@ -133,12 +138,17 @@ const FEE_NAME_MAP = {
   // 仓储相关
   '仓储费': 'Warehousing Fee',
   '仓库费': 'Warehouse Fee',
+  '堆存费': 'Storage Fee',
   '装卸费': 'Loading/Unloading Fee',
+  
+  // 港口费用
+  '港杂费': 'Port Charges',
+  '港杂': 'Port Charges',
+  '港口费': 'Port Charges',
   
   // 其他费用
   '保险费': 'Insurance Fee',
   '文件费': 'Documentation Fee',
-  '港杂费': 'Port Charges',
   '查验费': 'Inspection Fee',
   '加班费': 'Overtime Fee',
   '滞港费': 'Demurrage Fee',
@@ -161,17 +171,29 @@ function getFeeNameEnglish(chineseName, descriptionEn = null) {
   }
   
   if (!chineseName) return 'Other Charges'
+  
+  // 1. 尝试直接匹配映射表
   if (FEE_NAME_MAP[chineseName]) {
     return FEE_NAME_MAP[chineseName]
   }
+  
+  // 2. 尝试双向部分匹配
   for (const [cn, en] of Object.entries(FEE_NAME_MAP)) {
+    // 费用名包含映射 key（如 "港杂费" 包含 "港杂"）
     if (chineseName.includes(cn)) {
       return en
     }
+    // 映射 key 包含费用名（如 "港杂费" 的 key 包含费用名 "港杂"）
+    if (cn.includes(chineseName) && chineseName.length >= 2) {
+      return en
+    }
   }
+  
+  // 3. 如果已经是英文，直接返回
   if (/^[a-zA-Z\s\/]+$/.test(chineseName)) {
     return chineseName
   }
+  
   return chineseName
 }
 
