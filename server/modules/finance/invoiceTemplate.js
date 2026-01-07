@@ -102,6 +102,7 @@ const FEE_NAME_MAP = {
   // 清关相关
   '报关费': 'Customs Clearance Fee',
   '清关费': 'Customs Clearance Fee',
+  '清关操作费': 'Customs Clearance Handling Fee',
   '清关等待费': 'Customs Clearance Waiting Fee',
   '关税': 'Customs Duty',
   '增值税': 'VAT',
@@ -109,8 +110,10 @@ const FEE_NAME_MAP = {
   '反倾销税': 'Anti-dumping Duty',
   'HS CODE操作费': 'HS Code Handling Fee',
   'HS编码操作费': 'HS Code Handling Fee',
+  'HS CODE超10个费用': 'HS Code Excess Fee (Over 10)',
   '税号便费': 'Tax ID Handling Fee',
   '税号使用费': 'Tax ID Service Fee',
+  '税号代理费': 'Tax ID Agency Fee',
   '税号费': 'Tax ID Fee',
   'T1费': 'T1 Transit Fee',
   
@@ -118,12 +121,15 @@ const FEE_NAME_MAP = {
   '操作费': 'Handling Fee',
   '代理费': 'Agency Fee',
   '进口商代理费': 'Import Agency Fee',
+  '进口代理费': 'Import Agency Fee',
   '出口商代理费': 'Export Agency Fee',
   '货代费': 'Freight Forwarder Fee',
+  '公司服务费': 'Company Service Fee',
   
   // 运输费用
   '提柜送仓费': 'Container Delivery Fee',
   '送货费': 'Delivery Fee',
+  '运输费': 'Transportation Fee',
   '卸货费': 'Unloading Fee',
   '卸货压车费': 'Unloading & Waiting Fee',
   '卡车等待费': 'Truck Waiting Fee',
@@ -158,6 +164,8 @@ const FEE_NAME_MAP = {
   '起运港费': 'Origin Charges',
   '燃油附加费': 'Bunker Adjustment Factor',
   '其他费用': 'Other Charges',
+  '其他杂费': 'Other Miscellaneous Charges',
+  '其他': 'Others',
   '杂费': 'Miscellaneous Charges',
   '服务费': 'Service Fee'
 }
