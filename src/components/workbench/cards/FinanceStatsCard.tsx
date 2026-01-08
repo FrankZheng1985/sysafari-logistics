@@ -38,50 +38,30 @@ export default function FinanceStatsCard({ refreshKey }: FinanceStatsCardProps) 
     setLoading(true)
     try {
       const token = await getAccessToken()
-      const response = await fetch(`${API_BASE}/api/finance/overview`, {
+      // 使用工作台专用API
+      const response = await fetch(`${API_BASE}/api/workbench/finance-stats`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       
       if (response.ok) {
         const data = await response.json()
         if (data.errCode === 200 && data.data) {
-          const invoices = data.data.invoices
           setStats({
-            receivable: invoices?.balance?.receivable || 0,
-            payable: invoices?.balance?.payable || 0,
-            overdueReceivable: invoices?.sales?.overdueCount || 0,
-            overduePayable: invoices?.purchase?.overdueCount || 0,
-            collectionRate: invoices?.sales?.totalAmount > 0 
-              ? Math.round((invoices?.sales?.paidAmount / invoices?.sales?.totalAmount) * 100)
-              : 0,
+            receivable: data.data.receivable || 0,
+            payable: data.data.payable || 0,
+            overdueReceivable: data.data.overdueReceivableCount || 0,
+            overduePayable: data.data.overduePayableCount || 0,
+            collectionRate: data.data.collectionRate || 0,
           })
         } else {
-          setStats({
-            receivable: 0,
-            payable: 0,
-            overdueReceivable: 0,
-            overduePayable: 0,
-            collectionRate: 0,
-          })
+          setStats({ receivable: 0, payable: 0, overdueReceivable: 0, overduePayable: 0, collectionRate: 0 })
         }
       } else {
-        setStats({
-          receivable: 0,
-          payable: 0,
-          overdueReceivable: 0,
-          overduePayable: 0,
-          collectionRate: 0,
-        })
+        setStats({ receivable: 0, payable: 0, overdueReceivable: 0, overduePayable: 0, collectionRate: 0 })
       }
     } catch (error) {
       console.error('加载财务统计失败:', error)
-      setStats({
-        receivable: 0,
-        payable: 0,
-        overdueReceivable: 0,
-        overduePayable: 0,
-        collectionRate: 0,
-      })
+      setStats({ receivable: 0, payable: 0, overdueReceivable: 0, overduePayable: 0, collectionRate: 0 })
     } finally {
       setLoading(false)
     }

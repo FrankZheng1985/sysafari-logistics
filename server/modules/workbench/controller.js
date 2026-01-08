@@ -165,3 +165,67 @@ export async function getOrderStats(req, res) {
     sendServerError(res, '获取订单统计失败')
   }
 }
+
+/**
+ * 获取TMS运输统计
+ */
+export async function getTmsStats(req, res) {
+  try {
+    const userId = req.user.userId
+    const role = req.user.role
+    
+    const stats = await model.getTmsStats(userId, role)
+    sendSuccess(res, stats)
+  } catch (error) {
+    console.error('获取TMS统计失败:', error)
+    sendServerError(res, '获取TMS统计失败')
+  }
+}
+
+/**
+ * 获取财务统计
+ */
+export async function getFinanceStats(req, res) {
+  try {
+    const userId = req.user.userId
+    const role = req.user.role
+    
+    const stats = await model.getFinanceStats(userId, role)
+    sendSuccess(res, stats)
+  } catch (error) {
+    console.error('获取财务统计失败:', error)
+    sendServerError(res, '获取财务统计失败')
+  }
+}
+
+/**
+ * 获取查验统计
+ */
+export async function getInspectionStats(req, res) {
+  try {
+    const userId = req.user.userId
+    const role = req.user.role
+    
+    const stats = await model.getInspectionStats(userId, role)
+    sendSuccess(res, stats)
+  } catch (error) {
+    console.error('获取查验统计失败:', error)
+    sendServerError(res, '获取查验统计失败')
+  }
+}
+
+/**
+ * 获取单证统计
+ */
+export async function getDocumentStats(req, res) {
+  try {
+    const userId = req.user.userId
+    const role = req.user.role
+    
+    const stats = await model.getDocumentStats(userId, role)
+    sendSuccess(res, stats)
+  } catch (error) {
+    console.error('获取单证统计失败:', error)
+    sendServerError(res, '获取单证统计失败')
+  }
+}

@@ -36,7 +36,8 @@ export default function TmsStatsCard({ refreshKey }: TmsStatsCardProps) {
     setLoading(true)
     try {
       const token = await getAccessToken()
-      const response = await fetch(`${API_BASE}/api/cmr/stats`, {
+      // 使用工作台专用API
+      const response = await fetch(`${API_BASE}/api/workbench/tms-stats`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       
@@ -44,9 +45,9 @@ export default function TmsStatsCard({ refreshKey }: TmsStatsCardProps) {
         const data = await response.json()
         if (data.errCode === 200 && data.data) {
           setStats({
-            pending: data.data.undelivered || data.data.pending || 0,
+            pending: data.data.pending || 0,
             delivering: data.data.delivering || 0,
-            delivered: data.data.delivered || data.data.archived || 0,
+            delivered: data.data.delivered || 0,
             exception: data.data.exception || 0,
           })
         } else {

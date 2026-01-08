@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, TrendingUp, Clock, CheckCircle } from 'lucide-react'
+import { Package, TrendingUp, Clock, CheckCircle, Calendar, Ship } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { getApiBaseUrl } from '../../../utils/api'
 
 const API_BASE = getApiBaseUrl()
+
+interface TransportStats {
+  method: string
+  count: number
+}
 
 interface OrderStats {
   total: number
@@ -12,6 +17,11 @@ interface OrderStats {
   inProgress: number
   completed: number
   todayNew: number
+  weekNew: number
+  monthNew: number
+  byTransport: TransportStats[]
+  portArrived: number
+  portNotArrived: number
 }
 
 interface OrderStatsCardProps {
@@ -27,6 +37,11 @@ export default function OrderStatsCard({ refreshKey }: OrderStatsCardProps) {
     inProgress: 0,
     completed: 0,
     todayNew: 0,
+    weekNew: 0,
+    monthNew: 0,
+    byTransport: [],
+    portArrived: 0,
+    portNotArrived: 0,
   })
   const [loading, setLoading] = useState(true)
 
@@ -38,7 +53,6 @@ export default function OrderStatsCard({ refreshKey }: OrderStatsCardProps) {
     setLoading(true)
     try {
       const token = await getAccessToken()
-      // 使用专门的订单统计 API
       const res = await fetch(`${API_BASE}/api/workbench/order-stats`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
@@ -52,17 +66,20 @@ export default function OrderStatsCard({ refreshKey }: OrderStatsCardProps) {
             inProgress: data.data.inProgress || 0,
             completed: data.data.completed || 0,
             todayNew: data.data.todayNew || 0,
+            weekNew: data.data.weekNew || 0,
+            monthNew: data.data.monthNew || 0,
+            byTransport: data.data.byTransport || [],
+            portArrived: data.data.portArrived || 0,
+            portNotArrived: data.data.portNotArrived || 0,
           })
         }
       }
     } catch (error) {
       console.error('加载订单统计失败:', error)
       setStats({
-        total: 0,
-        pending: 0,
-        inProgress: 0,
-        completed: 0,
-        todayNew: 0,
+        total: 0, pending: 0, inProgress: 0, completed: 0,
+        todayNew: 0, weekNew: 0, monthNew: 0,
+        byTransport: [], portArrived: 0, portNotArrived: 0,
       })
     } finally {
       setLoading(false)
@@ -104,6 +121,22 @@ export default function OrderStatsCard({ refreshKey }: OrderStatsCardProps) {
         </div>
       </div>
 
+      {/* 时间维度统计 */}
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="p-2 bg-gray-50 rounded-lg">
+          <div className="text-xs text-gray-500">本月</div>
+          <div className="text-sm font-semibold text-gray-700">{stats.monthNew}</div>
+        </div>
+        <div className="p-2 bg-gray-50 rounded-lg">
+          <div className="text-xs text-gray-500">本周</div>
+          <div className="text-sm font-semibold text-gray-700">{stats.weekNew}</div>
+        </div>
+        <div className="p-2 bg-gray-50 rounded-lg">
+          <div className="text-xs text-gray-500">今日</div>
+          <div className="text-sm font-semibold text-gray-700">{stats.todayNew}</div>
+        </div>
+      </div>
+
       {/* 状态分布 */}
       <div className="grid grid-cols-3 gap-2">
         <div 
@@ -131,6 +164,20 @@ export default function OrderStatsCard({ refreshKey }: OrderStatsCardProps) {
           <div className="text-xs text-green-600">已完成</div>
         </div>
       </div>
+
+      {/* 港口状态 */}
+      {(stats.portArrived > 0 || stats.portNotArrived > 0) && (
+        <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Ship className="w-4 h-4 text-gray-500" />
+            <span className="text-xs text-gray-600">港口状态</span>
+          </div>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-green-600">已到港: {stats.portArrived}</span>
+            <span className="text-amber-600">未到港: {stats.portNotArrived}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

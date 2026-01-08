@@ -327,11 +327,12 @@ export async function getTeamOverview(userId) {
 }
 
 /**
- * 获取公司概览
+ * 获取公司概览 - 增强版
  */
 export async function getCompanyOverview() {
   const db = getDatabase()
   try {
+    // ========== 订单统计 ==========
     // 本月订单数
     const monthlyOrdersResult = await db.prepare(
       `SELECT COUNT(*) as count FROM bills 
@@ -347,7 +348,21 @@ export async function getCompanyOverview() {
     ).get()
     const lastMonthOrders = parseInt(lastMonthOrdersResult?.count) || 0
     
-    // 计算增长率
+    // 本周订单数
+    const weeklyOrdersResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM bills 
+       WHERE created_at >= date_trunc('week', CURRENT_DATE)`
+    ).get()
+    const weeklyOrders = parseInt(weeklyOrdersResult?.count) || 0
+    
+    // 今日订单数
+    const todayOrdersResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM bills 
+       WHERE created_at >= CURRENT_DATE`
+    ).get()
+    const todayOrders = parseInt(todayOrdersResult?.count) || 0
+    
+    // 订单增长率
     let monthlyOrdersGrowth = 0
     if (lastMonthOrders > 0) {
       monthlyOrdersGrowth = parseFloat(((monthlyOrders - lastMonthOrders) / lastMonthOrders * 100).toFixed(1))
@@ -355,7 +370,8 @@ export async function getCompanyOverview() {
       monthlyOrdersGrowth = 100
     }
     
-    // 本月收入 (invoice_type 而非 type)
+    // ========== 收入统计 ==========
+    // 本月收入
     const monthlyRevenueResult = await db.prepare(
       `SELECT COALESCE(SUM(total_amount), 0) as total FROM invoices 
        WHERE invoice_type = 'sales' AND created_at >= date_trunc('month', CURRENT_DATE)`
@@ -371,7 +387,7 @@ export async function getCompanyOverview() {
     ).get()
     const lastMonthRevenue = parseFloat(lastMonthRevenueResult?.total) || 0
     
-    // 计算增长率
+    // 收入增长率
     let monthlyRevenueGrowth = 0
     if (lastMonthRevenue > 0) {
       monthlyRevenueGrowth = parseFloat(((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1))
@@ -379,7 +395,22 @@ export async function getCompanyOverview() {
       monthlyRevenueGrowth = 100
     }
     
-    // 客户统计 (status = 'active')
+    // ========== 应收应付统计 ==========
+    // 应收账款余额（未付的销售发票）
+    const receivableResult = await db.prepare(
+      `SELECT COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as balance
+       FROM invoices WHERE invoice_type = 'sales' AND status != 'paid'`
+    ).get()
+    const receivableBalance = parseFloat(receivableResult?.balance) || 0
+    
+    // 应付账款余额（未付的采购发票）
+    const payableResult = await db.prepare(
+      `SELECT COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as balance
+       FROM invoices WHERE invoice_type = 'purchase' AND status != 'paid'`
+    ).get()
+    const payableBalance = parseFloat(payableResult?.balance) || 0
+    
+    // ========== 客户统计 ==========
     const customersResult = await db.prepare(
       `SELECT COUNT(*) as total FROM customers WHERE status = 'active'`
     ).get()
@@ -391,7 +422,7 @@ export async function getCompanyOverview() {
     ).get()
     const newCustomers = parseInt(newCustomersResult?.count) || 0
     
-    // 订单完成率 (使用中文状态 "已完成")
+    // ========== 完成率统计 ==========
     const completedOrdersResult = await db.prepare(
       `SELECT 
          COUNT(*) FILTER (WHERE status IN ('已完成', 'completed', 'archived')) as completed,
@@ -400,30 +431,36 @@ export async function getCompanyOverview() {
        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'`
     ).get()
     const completed = parseInt(completedOrdersResult?.completed) || 0
-    const total = parseInt(completedOrdersResult?.total) || 1
+    const total = parseInt(completedOrdersResult?.total) || 0
     const orderCompletionRate = total > 0 ? Math.round((completed / total) * 100) : 0
     
     return {
+      // 订单指标
       monthlyOrders,
       monthlyOrdersGrowth,
+      weeklyOrders,
+      todayOrders,
+      // 收入指标
       monthlyRevenue,
       monthlyRevenueGrowth,
+      // 应收应付
+      receivableBalance,
+      payableBalance,
+      // 客户指标
       totalCustomers,
       newCustomers,
+      // 效率指标
       orderCompletionRate,
       customerSatisfaction: 0,
     }
   } catch (error) {
     console.error('获取公司概览出错:', error)
     return {
-      monthlyOrders: 0,
-      monthlyOrdersGrowth: 0,
-      monthlyRevenue: 0,
-      monthlyRevenueGrowth: 0,
-      totalCustomers: 0,
-      newCustomers: 0,
-      orderCompletionRate: 0,
-      customerSatisfaction: 0,
+      monthlyOrders: 0, monthlyOrdersGrowth: 0, weeklyOrders: 0, todayOrders: 0,
+      monthlyRevenue: 0, monthlyRevenueGrowth: 0,
+      receivableBalance: 0, payableBalance: 0,
+      totalCustomers: 0, newCustomers: 0,
+      orderCompletionRate: 0, customerSatisfaction: 0,
     }
   }
 }
@@ -436,12 +473,12 @@ export async function getSchedule(userId, date) {
 }
 
 /**
- * 获取订单统计
+ * 获取订单统计 - 增强版
  */
 export async function getOrderStats(userId, role) {
   const db = getDatabase()
   try {
-    // 全部订单统计
+    // ========== 全部订单状态统计 ==========
     const statsResult = await db.prepare(
       `SELECT 
          COUNT(*) as total,
@@ -451,28 +488,343 @@ export async function getOrderStats(userId, role) {
        FROM bills`
     ).get()
     
+    // ========== 时间维度统计 ==========
     // 今日新增
     const todayResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills 
-       WHERE created_at >= CURRENT_DATE`
+      `SELECT COUNT(*) as count FROM bills WHERE created_at >= CURRENT_DATE`
+    ).get()
+    
+    // 本周新增
+    const weekResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM bills WHERE created_at >= date_trunc('week', CURRENT_DATE)`
+    ).get()
+    
+    // 本月新增
+    const monthResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM bills WHERE created_at >= date_trunc('month', CURRENT_DATE)`
+    ).get()
+    
+    // ========== 运输方式统计 ==========
+    const transportResult = await db.prepare(
+      `SELECT 
+         COALESCE(transport_method, '未指定') as method,
+         COUNT(*) as count
+       FROM bills
+       GROUP BY transport_method
+       ORDER BY count DESC
+       LIMIT 5`
+    ).all()
+    
+    // ========== 港口状态统计 ==========
+    const portStatusResult = await db.prepare(
+      `SELECT 
+         COUNT(*) FILTER (WHERE ship_status = '已到港') as arrived,
+         COUNT(*) FILTER (WHERE ship_status = '未到港' OR ship_status IS NULL) as not_arrived
+       FROM bills
+       WHERE status NOT IN ('已完成', 'completed', 'archived')`
     ).get()
     
     return {
+      // 状态统计
       total: parseInt(statsResult?.total) || 0,
       pending: parseInt(statsResult?.pending) || 0,
       inProgress: parseInt(statsResult?.in_progress) || 0,
       completed: parseInt(statsResult?.completed) || 0,
+      // 时间维度
       todayNew: parseInt(todayResult?.count) || 0,
+      weekNew: parseInt(weekResult?.count) || 0,
+      monthNew: parseInt(monthResult?.count) || 0,
+      // 运输方式分布
+      byTransport: (transportResult || []).map(r => ({
+        method: r.method,
+        count: parseInt(r.count) || 0
+      })),
+      // 港口状态
+      portArrived: parseInt(portStatusResult?.arrived) || 0,
+      portNotArrived: parseInt(portStatusResult?.not_arrived) || 0,
     }
   } catch (error) {
     console.error('获取订单统计出错:', error)
     return {
-      total: 0,
-      pending: 0,
-      inProgress: 0,
-      completed: 0,
-      todayNew: 0,
+      total: 0, pending: 0, inProgress: 0, completed: 0,
+      todayNew: 0, weekNew: 0, monthNew: 0,
+      byTransport: [], portArrived: 0, portNotArrived: 0,
     }
+  }
+}
+
+/**
+ * 获取TMS运输统计 - 增强版
+ */
+export async function getTmsStats(userId, role) {
+  const db = getDatabase()
+  try {
+    // 运输状态统计（从bills表）
+    const statsResult = await db.prepare(
+      `SELECT 
+         COUNT(*) FILTER (WHERE ship_status = '已到港' 
+           AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '待派送')
+           AND status NOT IN ('已完成', 'completed', 'archived')) as pending,
+         COUNT(*) FILTER (WHERE delivery_status = '派送中') as delivering,
+         COUNT(*) FILTER (WHERE delivery_status IN ('已送达', '已完成')) as delivered,
+         COUNT(*) FILTER (WHERE delivery_status IN ('订单异常', '异常关闭')) as exception
+       FROM bills`
+    ).get()
+    
+    // 今日待派送
+    const todayPendingResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM bills
+       WHERE ship_status = '已到港'
+         AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '待派送')
+         AND ata >= CURRENT_DATE
+         AND status NOT IN ('已完成', 'completed', 'archived')`
+    ).get()
+    
+    // 平均派送时效（已送达订单的 ata 到实际送达的天数）
+    const avgDeliveryResult = await db.prepare(
+      `SELECT AVG(
+         EXTRACT(DAY FROM (updated_at - ata))
+       ) as avg_days
+       FROM bills
+       WHERE delivery_status IN ('已送达', '已完成')
+         AND ata IS NOT NULL
+         AND updated_at IS NOT NULL`
+    ).get()
+    
+    const pending = parseInt(statsResult?.pending) || 0
+    const delivering = parseInt(statsResult?.delivering) || 0
+    const delivered = parseInt(statsResult?.delivered) || 0
+    const exception = parseInt(statsResult?.exception) || 0
+    const total = pending + delivering + delivered + exception
+    
+    return {
+      pending,
+      delivering,
+      delivered,
+      exception,
+      total,
+      todayPending: parseInt(todayPendingResult?.count) || 0,
+      avgDeliveryDays: parseFloat(avgDeliveryResult?.avg_days) || 0,
+      deliveryRate: total > 0 ? Math.round((delivered / total) * 100) : 0,
+    }
+  } catch (error) {
+    console.error('获取TMS统计出错:', error)
+    return {
+      pending: 0, delivering: 0, delivered: 0, exception: 0,
+      total: 0, todayPending: 0, avgDeliveryDays: 0, deliveryRate: 0,
+    }
+  }
+}
+
+/**
+ * 获取财务统计 - 增强版
+ */
+export async function getFinanceStats(userId, role) {
+  const db = getDatabase()
+  try {
+    // ========== 应收应付 ==========
+    // 应收账款（sales发票未付金额）
+    const receivableResult = await db.prepare(
+      `SELECT 
+         COALESCE(SUM(total_amount), 0) as total,
+         COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as balance,
+         COUNT(*) as count
+       FROM invoices 
+       WHERE invoice_type = 'sales' AND status != 'paid'`
+    ).get()
+    
+    // 应付账款（purchase发票未付金额）
+    const payableResult = await db.prepare(
+      `SELECT 
+         COALESCE(SUM(total_amount), 0) as total,
+         COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as balance,
+         COUNT(*) as count
+       FROM invoices 
+       WHERE invoice_type = 'purchase' AND status != 'paid'`
+    ).get()
+    
+    // 逾期应收（超过付款期限的sales发票）
+    const overdueReceivableResult = await db.prepare(
+      `SELECT COUNT(*) as count, COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as amount
+       FROM invoices 
+       WHERE invoice_type = 'sales' 
+         AND status != 'paid'
+         AND due_date < CURRENT_DATE`
+    ).get()
+    
+    // 逾期应付
+    const overduePayableResult = await db.prepare(
+      `SELECT COUNT(*) as count, COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as amount
+       FROM invoices 
+       WHERE invoice_type = 'purchase' 
+         AND status != 'paid'
+         AND due_date < CURRENT_DATE`
+    ).get()
+    
+    // ========== 收支统计 ==========
+    // 本月收入
+    const monthlyIncomeResult = await db.prepare(
+      `SELECT COALESCE(SUM(total_amount), 0) as total
+       FROM invoices 
+       WHERE invoice_type = 'sales' 
+         AND created_at >= date_trunc('month', CURRENT_DATE)`
+    ).get()
+    
+    // 本月支出
+    const monthlyExpenseResult = await db.prepare(
+      `SELECT COALESCE(SUM(total_amount), 0) as total
+       FROM invoices 
+       WHERE invoice_type = 'purchase' 
+         AND created_at >= date_trunc('month', CURRENT_DATE)`
+    ).get()
+    
+    // 本月费用（从fees表）
+    const monthlyFeesResult = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) as total
+       FROM fees 
+       WHERE created_at >= date_trunc('month', CURRENT_DATE)`
+    ).get()
+    
+    // 收款率
+    const salesTotal = parseFloat(receivableResult?.total) || 0
+    const salesPaid = salesTotal - (parseFloat(receivableResult?.balance) || 0)
+    const collectionRate = salesTotal > 0 ? Math.round((salesPaid / salesTotal) * 100) : 0
+    
+    const monthlyIncome = parseFloat(monthlyIncomeResult?.total) || 0
+    const monthlyExpense = parseFloat(monthlyExpenseResult?.total) || 0
+    const monthlyProfit = monthlyIncome - monthlyExpense
+    const profitRate = monthlyIncome > 0 ? Math.round((monthlyProfit / monthlyIncome) * 100) : 0
+    
+    return {
+      // 应收应付
+      receivable: parseFloat(receivableResult?.balance) || 0,
+      receivableCount: parseInt(receivableResult?.count) || 0,
+      payable: parseFloat(payableResult?.balance) || 0,
+      payableCount: parseInt(payableResult?.count) || 0,
+      // 逾期
+      overdueReceivable: parseFloat(overdueReceivableResult?.amount) || 0,
+      overdueReceivableCount: parseInt(overdueReceivableResult?.count) || 0,
+      overduePayable: parseFloat(overduePayableResult?.amount) || 0,
+      overduePayableCount: parseInt(overduePayableResult?.count) || 0,
+      // 收支
+      monthlyIncome,
+      monthlyExpense,
+      monthlyProfit,
+      monthlyFees: parseFloat(monthlyFeesResult?.total) || 0,
+      // 指标
+      collectionRate,
+      profitRate,
+    }
+  } catch (error) {
+    console.error('获取财务统计出错:', error)
+    return {
+      receivable: 0, receivableCount: 0, payable: 0, payableCount: 0,
+      overdueReceivable: 0, overdueReceivableCount: 0, overduePayable: 0, overduePayableCount: 0,
+      monthlyIncome: 0, monthlyExpense: 0, monthlyProfit: 0, monthlyFees: 0,
+      collectionRate: 0, profitRate: 0,
+    }
+  }
+}
+
+/**
+ * 获取查验统计 - 从bills表
+ */
+export async function getInspectionStats(userId, role) {
+  const db = getDatabase()
+  try {
+    // 从bills表获取查验相关统计（根据is_inspected字段）
+    const statsResult = await db.prepare(
+      `SELECT 
+         COUNT(*) FILTER (WHERE is_inspected = true AND inspection_status = '待查验') as pending,
+         COUNT(*) FILTER (WHERE is_inspected = true AND inspection_status = '查验中') as inspecting,
+         COUNT(*) FILTER (WHERE is_inspected = true AND inspection_status IN ('已放行', '查验通过')) as released,
+         COUNT(*) FILTER (WHERE is_inspected = true) as total
+       FROM bills`
+    ).get()
+    
+    // 如果没有 inspection_status 字段，尝试用其他逻辑
+    let pending = parseInt(statsResult?.pending) || 0
+    let inspecting = parseInt(statsResult?.inspecting) || 0
+    let released = parseInt(statsResult?.released) || 0
+    let total = parseInt(statsResult?.total) || 0
+    
+    // 如果所有值都是0，尝试用 is_inspected 字段
+    if (total === 0) {
+      const fallbackResult = await db.prepare(
+        `SELECT 
+           COUNT(*) FILTER (WHERE is_inspected = true OR is_inspected = 1) as inspected,
+           COUNT(*) FILTER (WHERE (is_inspected = true OR is_inspected = 1) AND status IN ('已完成', 'completed')) as released_count
+         FROM bills`
+      ).get()
+      
+      total = parseInt(fallbackResult?.inspected) || 0
+      released = parseInt(fallbackResult?.released_count) || 0
+      pending = total - released
+    }
+    
+    const releaseRate = total > 0 ? Math.round((released / total) * 100) : 0
+    
+    return {
+      pending,
+      inspecting,
+      released,
+      total,
+      releaseRate,
+    }
+  } catch (error) {
+    console.error('获取查验统计出错:', error)
+    return { pending: 0, inspecting: 0, released: 0, total: 0, releaseRate: 0 }
+  }
+}
+
+/**
+ * 获取单证统计
+ */
+export async function getDocumentStats(userId, role) {
+  const db = getDatabase()
+  try {
+    // 从bills表统计单证状态
+    const statsResult = await db.prepare(
+      `SELECT 
+         COUNT(*) FILTER (WHERE doc_status = '待匹配' OR doc_status IS NULL) as pending_match,
+         COUNT(*) FILTER (WHERE doc_status = '待补充') as pending_supplement,
+         COUNT(*) FILTER (WHERE doc_status = '已完成') as completed,
+         COUNT(*) as total
+       FROM bills
+       WHERE status NOT IN ('已完成', 'completed', 'archived')`
+    ).get()
+    
+    let pendingMatch = parseInt(statsResult?.pending_match) || 0
+    let pendingSupplement = parseInt(statsResult?.pending_supplement) || 0
+    let completed = parseInt(statsResult?.completed) || 0
+    let total = parseInt(statsResult?.total) || 0
+    
+    // 如果没有 doc_status 字段，用订单状态估算
+    if (total === 0) {
+      const fallbackResult = await db.prepare(
+        `SELECT 
+           COUNT(*) FILTER (WHERE status IN ('pending', '待处理')) as pending,
+           COUNT(*) FILTER (WHERE status IN ('已完成', 'completed')) as done
+         FROM bills`
+      ).get()
+      
+      pendingMatch = parseInt(fallbackResult?.pending) || 0
+      completed = parseInt(fallbackResult?.done) || 0
+    }
+    
+    const matchRate = (pendingMatch + completed) > 0 
+      ? Math.round((completed / (pendingMatch + completed)) * 100) 
+      : 0
+    
+    return {
+      pendingMatch,
+      pendingSupplement,
+      completed,
+      matchRate,
+    }
+  } catch (error) {
+    console.error('获取单证统计出错:', error)
+    return { pendingMatch: 0, pendingSupplement: 0, completed: 0, matchRate: 0 }
   }
 }
 

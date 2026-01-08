@@ -40,4 +40,16 @@ router.get('/workbench/schedule', controller.getSchedule)
 // 获取订单统计
 router.get('/workbench/order-stats', controller.getOrderStats)
 
+// 获取TMS运输统计
+router.get('/workbench/tms-stats', controller.getTmsStats)
+
+// 获取财务统计
+router.get('/workbench/finance-stats', controller.getFinanceStats)
+
+// 获取查验统计
+router.get('/workbench/inspection-stats', controller.getInspectionStats)
+
+// 获取单证统计
+router.get('/workbench/document-stats', controller.getDocumentStats)
+
 export default router

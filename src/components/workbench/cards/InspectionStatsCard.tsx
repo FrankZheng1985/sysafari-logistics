@@ -36,38 +36,26 @@ export default function InspectionStatsCard({ refreshKey }: InspectionStatsCardP
     setLoading(true)
     try {
       const token = await getAccessToken()
-      const [pendingRes, releasedRes] = await Promise.all([
-        fetch(`${API_BASE}/api/inspection/list?type=pending&pageSize=1`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        }),
-        fetch(`${API_BASE}/api/inspection/list?type=released&pageSize=1`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        }),
-      ])
-
-      let pendingCount = 0
-      let releasedCount = 0
-
-      if (pendingRes.ok) {
-        const data = await pendingRes.json()
-        if (data.errCode === 200) {
-          pendingCount = data.data?.total || 0
-        }
-      }
-
-      if (releasedRes.ok) {
-        const data = await releasedRes.json()
-        if (data.errCode === 200) {
-          releasedCount = data.data?.total || 0
-        }
-      }
-
-      setStats({
-        pending: pendingCount,
-        inspecting: 0,
-        released: releasedCount,
-        total: pendingCount + releasedCount,
+      // 使用工作台专用API
+      const response = await fetch(`${API_BASE}/api/workbench/inspection-stats`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.errCode === 200 && data.data) {
+          setStats({
+            pending: data.data.pending || 0,
+            inspecting: data.data.inspecting || 0,
+            released: data.data.released || 0,
+            total: data.data.total || 0,
+          })
+        } else {
+          setStats({ pending: 0, inspecting: 0, released: 0, total: 0 })
+        }
+      } else {
+        setStats({ pending: 0, inspecting: 0, released: 0, total: 0 })
+      }
     } catch (error) {
       console.error('加载查验统计失败:', error)
       setStats({ pending: 0, inspecting: 0, released: 0, total: 0 })

@@ -36,8 +36,8 @@ export default function DocumentStatsCard({ refreshKey }: DocumentStatsCardProps
     setLoading(true)
     try {
       const token = await getAccessToken()
-      // 尝试获取单证统计数据
-      const response = await fetch(`${API_BASE}/api/documents/stats`, {
+      // 使用工作台专用API
+      const response = await fetch(`${API_BASE}/api/workbench/document-stats`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       
@@ -51,30 +51,14 @@ export default function DocumentStatsCard({ refreshKey }: DocumentStatsCardProps
             matchRate: data.data.matchRate || 0,
           })
         } else {
-          // 使用模拟数据
-          setStats({
-            pendingMatch: 12,
-            pendingSupplement: 8,
-            completed: 156,
-            matchRate: 92,
-          })
+          setStats({ pendingMatch: 0, pendingSupplement: 0, completed: 0, matchRate: 0 })
         }
       } else {
-        setStats({
-          pendingMatch: 12,
-          pendingSupplement: 8,
-          completed: 156,
-          matchRate: 92,
-        })
+        setStats({ pendingMatch: 0, pendingSupplement: 0, completed: 0, matchRate: 0 })
       }
     } catch (error) {
       console.error('加载单证统计失败:', error)
-      setStats({
-        pendingMatch: 12,
-        pendingSupplement: 8,
-        completed: 156,
-        matchRate: 92,
-      })
+      setStats({ pendingMatch: 0, pendingSupplement: 0, completed: 0, matchRate: 0 })
     } finally {
       setLoading(false)
     }
