@@ -741,24 +741,21 @@ export default function SupplementFee() {
     ))
   }
 
-  // 提交追加费用并创建追加发票
+  // 提交追加费用
   const handleSubmit = async () => {
     if (pendingFeeItems.length === 0) {
       alert('请至少添加一项费用')
       return
     }
     
-    // 追加发票只支持应收费用
+    // 追加费用只支持应收费用
     if (feeType !== 'receivable') {
-      alert('追加发票仅支持应收费用')
+      alert('追加费用仅支持应收费用')
       return
     }
     
-    // 必须有原发票信息
-    if (!invoice?.invoiceNumber) {
-      alert('该订单尚未关联主发票号，无法创建追加发票。\n\n请先为该订单创建销售发票并确认收款，之后即可添加追加费用。')
-      return
-    }
+    // 判断是否有原发票（决定是否创建追加发票）
+    const hasOriginalInvoice = !!invoice?.invoiceNumber
     
     setSubmitting(true)
     try {
@@ -776,6 +773,9 @@ export default function SupplementFee() {
       
       // 第一步：创建费用记录
       for (const fee of pendingFeeItems) {
+        // 没有原发票时，所有费用都需要审批
+        const needApproval = !hasOriginalInvoice || fee.source === 'manual' || !hasFinancePermission
+        
         const feeData = {
           feeName: fee.feeName,
           feeType: 'receivable',
@@ -789,7 +789,9 @@ export default function SupplementFee() {
           customerId: bill?.customerId,
           customerName: bill?.customerName,
           feeSource: fee.source,
-          needApproval: fee.source === 'manual'
+          needApproval: needApproval,
+          // 标记是否为追加费用（没有原发票时）
+          isSupplementFee: !hasOriginalInvoice
         }
         
         const response = await fetch(`${API_BASE}/api/fees`, {
@@ -819,8 +821,8 @@ export default function SupplementFee() {
           })
           totalAmount += fee.amount
           
-          // 手动录入的费用创建审批记录
-          if (fee.source === 'manual') {
+          // 手动录入的费用或没有原发票时创建审批记录
+          if (fee.source === 'manual' || !hasOriginalInvoice) {
             try {
               await fetch(`${API_BASE}/api/fee-item-approvals`, {
                 method: 'POST',
@@ -853,8 +855,21 @@ export default function SupplementFee() {
         return
       }
       
-      // 第二步：根据审批状态决定是否创建发票
-      // 如果有待审批的费用，不创建发票，提示用户等待审批
+      // 情况1：没有原发票 - 费用直接记录到订单，需要财务审批
+      if (!hasOriginalInvoice) {
+        const successCount = createdFeeIds.length
+        alert(`追加费用已提交！\n\n✅ 成功添加 ${successCount} 笔费用到订单\n⏳ 费用需要财务部门审批\n\n审批通过后，费用将计入订单成本。后续创建发票时可以包含这些费用。`)
+        
+        // 返回提单详情页
+        if (bill?.id) {
+          navigate(`/bookings/bill/${bill.id}`)
+        } else {
+          navigate('/finance/fees')
+        }
+        return
+      }
+      
+      // 情况2：有原发票但有待审批的费用
       if (hasPendingApproval) {
         const successCount = createdFeeIds.length
         alert(`追加费用已提交！\n\n✅ 成功提交 ${successCount} 笔费用\n⏳ 费用需要财务部门审批\n\n审批通过后，财务人员会为您创建追加发票。`)
@@ -868,19 +883,19 @@ export default function SupplementFee() {
         return
       }
       
-      // 财务人员：费用已直接生效，创建追加发票
+      // 情况3：有原发票且财务人员直接操作 - 创建追加发票
       // 优先从原发票获取信息，如果原发票没有才从提单获取
-      const customerId = invoice.customerId || bill?.customerId
-      const customerName = invoice.customerName || bill?.customerName || ''
-      const containerNumbers = (invoice.containerNumbers && invoice.containerNumbers.length > 0) 
-        ? invoice.containerNumbers 
+      const customerId = invoice!.customerId || bill?.customerId
+      const customerName = invoice!.customerName || bill?.customerName || ''
+      const containerNumbers = (invoice!.containerNumbers && invoice!.containerNumbers.length > 0) 
+        ? invoice!.containerNumbers 
         : (bill?.containerNumbers || [])
-      const billId = invoice.billId || bill?.id
-      const billNumber = invoice.billNumber || bill?.billNumber || ''
-      const currency = invoice.currency || pendingFeeItems[0]?.currency || 'EUR'
+      const billId = invoice!.billId || bill?.id
+      const billNumber = invoice!.billNumber || bill?.billNumber || ''
+      const currency = invoice!.currency || pendingFeeItems[0]?.currency || 'EUR'
       
       const supplementInvoiceData = {
-        parentInvoiceNumber: invoice.invoiceNumber,
+        parentInvoiceNumber: invoice!.invoiceNumber,
         billId: billId,
         billNumber: billNumber,
         customerId: customerId,
@@ -892,9 +907,9 @@ export default function SupplementFee() {
         subtotal: totalAmount,
         totalAmount: totalAmount,
         currency: currency,
-        invoiceType: invoice.invoiceType || 'sales',
+        invoiceType: invoice!.invoiceType || 'sales',
         status: 'pending',
-        description: `追加费用 - 原发票: ${invoice.invoiceNumber}`
+        description: `追加费用 - 原发票: ${invoice!.invoiceNumber}`
       }
       
       const invoiceResponse = await fetch(`${API_BASE}/api/invoices/supplement`, {
@@ -1075,7 +1090,7 @@ export default function SupplementFee() {
         )}
       </div>
 
-      {/* 追加发票说明 - 根据是否有原发票显示不同内容 */}
+      {/* 追加费用说明 - 根据是否有原发票显示不同内容 */}
       {invoice?.invoiceNumber ? (
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
@@ -1083,9 +1098,9 @@ export default function SupplementFee() {
               <FileText className="w-4 h-4 text-purple-600" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-purple-900 mb-1">追加发票说明</h3>
+              <h3 className="text-sm font-medium text-purple-900 mb-1">追加发票模式</h3>
               <p className="text-xs text-purple-700">
-                追加费用将自动创建一张新的销售发票（追加发票），发票号格式为：原发票号-1、原发票号-2 依此类推。
+                该订单已有主发票，追加费用将自动创建一张新的追加发票（发票号格式：原发票号-1、-2...）
               </p>
               <p className="text-xs text-purple-600 mt-1">
                 原发票号：<span className="font-medium">{invoice.invoiceNumber}</span>
@@ -1094,30 +1109,19 @@ export default function SupplementFee() {
           </div>
         </div>
       ) : (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-4 h-4 text-amber-600" />
+            <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <DollarSign className="w-4 h-4 text-blue-600" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-amber-900 mb-1">无法添加追加费用</h3>
-              <p className="text-xs text-amber-700">
-                该订单尚未关联主发票号，无法创建追加发票。请先完成以下操作：
+              <h3 className="text-sm font-medium text-blue-900 mb-1">订单费用模式</h3>
+              <p className="text-xs text-blue-700">
+                该订单暂无主发票，追加的费用将直接记录到订单费用中，需财务审批后生效。
               </p>
-              <ol className="text-xs text-amber-700 mt-2 list-decimal list-inside space-y-1">
-                <li>前往【发票管理】为该订单创建销售发票</li>
-                <li>确认发票收款后，系统会自动关联主发票号</li>
-                <li>之后即可为该订单添加追加费用</li>
-              </ol>
-              {bill?.billNumber && (
-                <button
-                  onClick={() => navigate(`/finance/invoices?billNumber=${bill.billNumber}`)}
-                  className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  查看发票
-                </button>
-              )}
+              <p className="text-xs text-blue-600 mt-1">
+                💡 后续创建发票时，可以将这些费用包含到发票中
+              </p>
             </div>
           </div>
         </div>
@@ -1504,13 +1508,19 @@ export default function SupplementFee() {
       <div className="flex items-center justify-between gap-3">
         {/* 左侧提示信息 */}
         <div className="flex-1">
-          {!invoice?.invoiceNumber && (
-            <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+          {!invoice?.invoiceNumber && pendingFeeItems.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>该订单尚未关联主发票号，无法添加追加费用。请先创建并确认主发票。</span>
+              <span>该订单暂无主发票，费用将直接记录到订单，需财务审批后生效</span>
             </div>
           )}
-          {invoice?.invoiceNumber && pendingFeeItems.length === 0 && (
+          {invoice?.invoiceNumber && pendingFeeItems.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+              <Check className="w-4 h-4 flex-shrink-0" />
+              <span>将创建追加发票（原发票：{invoice.invoiceNumber}）</span>
+            </div>
+          )}
+          {pendingFeeItems.length === 0 && (
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>请至少添加一项费用</span>
@@ -1528,13 +1538,14 @@ export default function SupplementFee() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || pendingFeeItems.length === 0 || !invoice?.invoiceNumber}
-            title={!invoice?.invoiceNumber ? '请先为该订单创建并确认主发票' : pendingFeeItems.length === 0 ? '请先添加费用项' : undefined}
+            disabled={submitting || pendingFeeItems.length === 0}
+            title={pendingFeeItems.length === 0 ? '请先添加费用项' : undefined}
             className={`flex items-center gap-2 px-4 py-2 text-sm text-white rounded-lg transition-colors ${
-              submitting || pendingFeeItems.length === 0 || !invoice?.invoiceNumber
-                ? 'bg-gray-400 cursor-not-allowed'
+              submitting || pendingFeeItems.length === 0
+                ? 'bg-gray-400 cursor-not-allowed opacity-60'
                 : 'bg-primary-600 hover:bg-primary-700'
             }`}
+            style={submitting || pendingFeeItems.length === 0 ? { backgroundColor: '#9ca3af' } : undefined}
           >
             {submitting ? (
               <>
@@ -1552,25 +1563,25 @@ export default function SupplementFee() {
       </div>
 
       {/* 提示信息 */}
-      <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
-        <h4 className="text-sm font-medium text-blue-800 mb-2 flex items-center gap-2">
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <h4 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
           <FileText className="w-4 h-4" />
           追加费用说明
         </h4>
-        <ul className="text-xs text-blue-700 space-y-1">
-          <li>• 追加费用将关联到原订单，但不会自动添加到已开具的发票中</li>
-          {hasFinancePermission ? (
+        <ul className="text-xs text-gray-600 space-y-1">
+          {invoice?.invoiceNumber ? (
             <>
-              <li>• 追加费用需要开具新的追加发票（发票号格式：原发票号-1, 原发票号-2...）</li>
-              <li>• 添加后请前往【发票管理】-【新建发票】生成追加发票</li>
+              <li>• <span className="text-purple-600 font-medium">有主发票</span>：追加费用将创建追加发票（发票号格式：原发票号-1, -2...）</li>
+              <li>• 追加发票创建后需要单独确认收款</li>
             </>
           ) : (
             <>
-              <li>• 您添加的追加费用需要经过财务部门审批后才能生效</li>
-              <li>• 审批通过后，财务人员会为追加费用开具相应的追加发票</li>
-              <li>• 您可以在提单详情的费用管理中查看费用审批状态</li>
+              <li>• <span className="text-blue-600 font-medium">无主发票</span>：追加费用将直接记录到订单费用中</li>
+              <li>• 费用需要财务部门审批后才能生效</li>
+              <li>• 后续创建发票时，可以将这些费用包含到发票中</li>
             </>
           )}
+          <li>• 您可以在订单详情的【费用管理】中查看费用状态</li>
         </ul>
       </div>
 
