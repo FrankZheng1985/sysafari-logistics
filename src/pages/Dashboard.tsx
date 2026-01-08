@@ -63,6 +63,7 @@ export default function Dashboard() {
     {
       key: 'containerNumber',
       label: '集装箱编号',
+      width: 115,
       render: (_value, record: BillOfLading) => (
         <span 
           className="text-primary-600 hover:underline cursor-pointer text-xs"

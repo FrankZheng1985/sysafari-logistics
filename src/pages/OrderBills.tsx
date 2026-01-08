@@ -551,7 +551,7 @@ export default function OrderBills() {
     {
       key: 'containerNumber',
       label: '集装箱号',
-      width: 130,
+      width: 115,
       fixed: 'left',
       sorter: true,
       render: (_value, record: BillOfLading) => (

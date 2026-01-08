@@ -466,7 +466,7 @@ export default function CRMCustomerDetail() {
     {
       key: 'containerNumber',
       label: '集装箱号',
-      width: 140,
+      width: 115,
       render: (_value, record) => (
         <div className="flex items-center gap-1">
           <span className="text-gray-900">{record.containerNumber || '-'}</span>

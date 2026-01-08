@@ -140,6 +140,7 @@ export default function CMRExceptionManage() {
     {
       key: 'containerNumber',
       label: '集装箱号',
+      width: 115,
       sorter: true,
       render: (_value, record) => <span className="text-gray-900">{record.containerNumber || '-'}</span>
     },

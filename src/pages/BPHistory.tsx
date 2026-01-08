@@ -78,6 +78,8 @@ export default function BPHistory() {
     {
       key: 'orderNumber',
       label: '订单号',
+      width: 100,
+      fixed: 'left',
       sorter: true,
       render: (_value, record: CompletedBillOfLading) => (
         <div className="flex items-center gap-1">
@@ -105,6 +107,8 @@ export default function BPHistory() {
     {
       key: 'billNumber',
       label: '提单号',
+      width: 140,
+      fixed: 'left',
       sorter: true,
       filterable: true,
       render: (_value, record: CompletedBillOfLading) => (
@@ -133,6 +137,8 @@ export default function BPHistory() {
     {
       key: 'containerNumber',
       label: '集装箱号',
+      width: 115,
+      fixed: 'left',
       sorter: true,
       filterable: true,
       render: (_value, record: CompletedBillOfLading) => (
