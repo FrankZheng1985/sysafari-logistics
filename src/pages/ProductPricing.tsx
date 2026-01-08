@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit2, Trash2, Package, ChevronRight, ChevronDown, Settings, DollarSign, Loader2, Building2, ArrowRight, Percent, Calculator, X, CheckSquare, Square, RefreshCw, TrendingUp, Download, Sliders } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -1082,7 +1082,7 @@ export default function ProductPricing() {
       
       const response = await fetch(url, {
         method: editingFeeItem ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           ...feeItemForm,
           standardPrice: finalPrice,
@@ -1116,7 +1116,8 @@ export default function ProductPricing() {
     
     try {
       const response = await fetch(`${API_BASE}/api/products/fee-items/${feeItemId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { ...getAuthHeaders() }
       })
       
       const data = await response.json()

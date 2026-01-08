@@ -13,7 +13,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DateTimePicker from '../components/DateTimePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -380,7 +380,7 @@ export default function CRMPenaltyRecords() {
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           ...formData,
           penaltyName: penaltyRules.find(r => r.id.toString() === formData.penaltyRuleId)?.penaltyName || formData.penaltyType
@@ -410,7 +410,7 @@ export default function CRMPenaltyRecords() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/penalty-records/${record.id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: newStatus })
       })
 

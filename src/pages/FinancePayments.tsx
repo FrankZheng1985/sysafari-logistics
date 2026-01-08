@@ -8,7 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DateTimePicker from '../components/DateTimePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -255,7 +255,7 @@ export default function FinancePayments() {
         
         const response = await fetch(`${API_BASE}/api/payments`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify(paymentData)
         })
         

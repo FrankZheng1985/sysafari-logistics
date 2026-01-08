@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -530,7 +530,7 @@ export default function EditInvoice() {
 
       const response = await fetch(`${API_BASE}/api/invoices/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(submitData)
       })
 

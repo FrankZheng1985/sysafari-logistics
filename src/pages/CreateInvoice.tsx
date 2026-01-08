@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -1368,14 +1368,14 @@ export default function CreateInvoice() {
         // 编辑模式：更新发票
         response = await fetch(`${API_BASE}/api/invoices/${editInvoiceId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify(submitData)
         })
       } else {
         // 创建模式：新建发票
         response = await fetch(`${API_BASE}/api/invoices`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify(submitData)
         })
       }

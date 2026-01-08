@@ -454,6 +454,8 @@ export default function OrderBills() {
     {
       key: 'status',
       label: '状态',
+      width: 90,
+      fixed: 'left',
       filters: [
         { text: '船未到港', value: '船未到港' },
         { text: '已到港', value: '已到港' },
@@ -482,6 +484,8 @@ export default function OrderBills() {
     {
       key: 'orderNumber',
       label: '订单号',
+      width: 110,
+      fixed: 'left',
       sorter: (a, b) => (a.orderSeq || 0) - (b.orderSeq || 0),
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
@@ -512,6 +516,8 @@ export default function OrderBills() {
     {
       key: 'billNumber',
       label: '提单号',
+      width: 160,
+      fixed: 'left',
       sorter: true,
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
@@ -545,6 +551,8 @@ export default function OrderBills() {
     {
       key: 'containerNumber',
       label: '集装箱号',
+      width: 130,
+      fixed: 'left',
       sorter: true,
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1">
@@ -575,6 +583,8 @@ export default function OrderBills() {
     {
       key: 'customerName',
       label: '关联客户',
+      width: 120,
+      fixed: 'left',
       sorter: true,
       filterable: true,
       render: (_value, record: BillOfLading) => (

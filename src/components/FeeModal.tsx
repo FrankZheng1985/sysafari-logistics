@@ -722,7 +722,15 @@ export default function FeeModal({
     }
     
     setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    
+    // 如果有验证错误，显示提示
+    if (Object.keys(newErrors).length > 0) {
+      const errorMessages = Object.values(newErrors).join('\n')
+      alert(errorMessages)
+      return false
+    }
+    
+    return true
   }
 
   // 批量提交待提交费用列表
@@ -920,7 +928,7 @@ export default function FeeModal({
       
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           billId: formData.billId || null,
           billNumber: formData.billNumber || '',
@@ -950,7 +958,7 @@ export default function FeeModal({
           try {
             await fetch(`${API_BASE}/api/fee-item-approvals`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({
                 feeId: data.data?.id,
                 feeName: formData.feeName,

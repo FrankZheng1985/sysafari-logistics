@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { X, Play, Plane, Ship, Train, Truck, Upload, Download, HelpCircle, Plus, Trash2, FileText, ChevronDown, Loader2, Users, CheckCircle, AlertCircle, Eye } from 'lucide-react'
 import DatePicker from './DatePicker'
 import { createBill, updateBill, getShippingCompanyByContainerCode, searchContainerCodes, parseBillFile, getPortsOfLoadingList, getDestinationPortsList, getCustomers, parseTransportDocument, getTrackingSupplementInfo, getCustomerTaxNumbers, getCustomerAddresses, smartTrack, getApiBaseUrl, type ContainerCode, type PortOfLoadingItem, type DestinationPortItem, type Customer, type ParsedTransportData, type TrackingSupplementInfo, type CustomerTaxNumber, type CustomerAddress, type ScraperTrackingResult } from '../utils/api'
@@ -159,6 +159,9 @@ export default function CreateBillModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   // 跟踪表单是否有未保存的修改
   const [isDirty, setIsDirty] = useState(false)
+  
+  // 跟踪编辑模式是否已经初始化（防止重复覆盖用户输入）
+  const editInitializedRef = useRef<string | null>(null)
   const [containerCodes, setContainerCodes] = useState<ContainerCode[]>([])
   const [showContainerCodeDropdown, setShowContainerCodeDropdown] = useState(false)
   const [parsingFile, setParsingFile] = useState(false)
@@ -300,20 +303,14 @@ export default function CreateBillModal({
     if (visible && selectedTransport) {
       const loadPortsOfLoading = async () => {
         try {
-          console.log('加载起运港列表，运输方式:', selectedTransport)
-          // 根据运输方式加载对应的起运港数据
           const response = await getPortsOfLoadingList({
             transportType: selectedTransport,
             status: 'active'
           })
-          console.log('起运港API响应:', response)
           if (response.errCode === 200 && response.data) {
-            // 只显示启用的港口
             const activePorts = response.data.filter((port: PortOfLoadingItem) => port.status === 'active')
-            console.log('过滤后的起运港数量:', activePorts.length)
             setPortsOfLoading(activePorts)
           } else {
-            console.warn('起运港API返回异常:', response)
             setPortsOfLoading([])
           }
         } catch (error) {
@@ -323,7 +320,6 @@ export default function CreateBillModal({
       }
       loadPortsOfLoading()
     } else {
-      console.log('未选择运输方式或弹窗未打开，清空起运港列表')
       setPortsOfLoading([])
     }
   }, [visible, selectedTransport])
@@ -432,21 +428,26 @@ export default function CreateBillModal({
   }, [selectedCustomer?.id])
 
   // 编辑模式初始化：当打开编辑模式时，用现有数据填充表单
+  // 使用 ref 防止重复初始化（避免父组件重新渲染时覆盖用户输入）
   useEffect(() => {
+    console.log('[CreateBillModal] 编辑模式 useEffect 触发:', {
+      visible,
+      mode,
+      editDataId: editData?.id,
+      editInitializedRef: editInitializedRef.current,
+      timestamp: new Date().toISOString()
+    })
+    
     if (visible && mode === 'edit' && editData) {
-      // 调试日志：打印编辑数据中的附加属性字段
-      console.log('编辑模式初始化 - editData 附加属性字段:', {
-        containerType: editData.containerType,
-        billType: editData.billType,
-        consigneeType: editData.consigneeType,
-        containerReturn: editData.containerReturn,
-        fullContainerTransport: editData.fullContainerTransport,
-        lastMileTransport: editData.lastMileTransport,
-        devanning: editData.devanning,
-        t1Declaration: editData.t1Declaration,
-        transportArrangement: editData.transportArrangement,
-        transportMethod: editData.transportMethod,
-      })
+      // 检查是否已经初始化过这个订单（通过 ID 判断）
+      if (editInitializedRef.current === editData.id) {
+        // 已经初始化过，不再重复执行
+        console.log('[CreateBillModal] ⏭️ 跳过重复初始化，订单已初始化:', editData.id)
+        return
+      }
+      // 标记为已初始化
+      console.log('[CreateBillModal] 🚀 开始初始化编辑模式，订单ID:', editData.id)
+      editInitializedRef.current = editData.id
       
       // 设置运输方式
       const transport = editData.transportMethod as 'air' | 'sea' | 'rail' | 'truck' | null
@@ -508,12 +509,9 @@ export default function CreateBillModal({
         const billNo = (editData.billNumber || '').toUpperCase()
         const cntrNo = (editData.containerNumber || '').toUpperCase()
         
-        console.log('编辑模式尝试识别船公司:', { billNo, cntrNo })
-        
         // 尝试从提单号识别
         let code = billNo.substring(0, 4)
         if (!/^[A-Z]{4}$/.test(code)) {
-          // 如果提单号不是4位大写字母开头，尝试从柜号识别
           code = cntrNo.substring(0, 4)
         }
         
@@ -525,11 +523,10 @@ export default function CreateBillModal({
               if (companyName) {
                 setFormData(prev => ({ ...prev, shippingCompany: companyName }))
                 setShippingCompanySource('container')
-                console.log('编辑模式识别成功:', companyName)
               }
             }
           } catch (error) {
-            console.warn('编辑模式识别船公司失败:', error)
+            // 静默处理错误
           }
         }
       }
@@ -779,10 +776,16 @@ export default function CreateBillModal({
     setSelectedTransport(null)
     setEasyBill(true)
     setIsDirty(false)
+    editInitializedRef.current = null // 重置编辑初始化标记
     onClose()
   }
 
   const handleInputChange = (field: string, value: any) => {
+    // 记录附加属性字段的变化（用于调试）
+    const importantFields = ['containerType', 'containerReturn', 'fullContainerTransport', 'devanning', 'transportation', 'billType', 'isT1Customs', 'lastMileTransport']
+    if (importantFields.includes(field)) {
+      console.log(`[CreateBillModal] 📝 附加属性变化: ${field} = "${value}"`, new Date().toISOString())
+    }
     setFormData(prev => ({ ...prev, [field]: value }))
     setIsDirty(true) // 标记表单已修改
   }
@@ -1604,16 +1607,9 @@ export default function CreateBillModal({
       newErrors.estimatedArrival = '预计到达时间为必填项'
     }
     
-    // 海运特有字段验证
-    if (selectedTransport === 'sea') {
-      if (!formData.containerType) {
-        newErrors.containerType = '箱型为必填项'
-      }
-      if (!formData.billType) {
-        newErrors.billType = '提单类型为必填项'
-      }
-      // 收货人为非必填字段，不再验证
-    }
+    // 海运特有字段 - 附加属性和额外服务均为非必填
+    // containerType, billType, containerReturn, fullContainerTransport, 
+    // lastMileTransport, devanning, isT1Customs, transportation 等均为可选
     
     // 简易创建时，需要验证参考号（仅新建模式，编辑模式不强制）
     if (easyBill && selectedType === 'official' && !isEditMode) {
@@ -1799,6 +1795,7 @@ export default function CreateBillModal({
         setReferenceList([])
         setErrors({})
         setIsDirty(false) // 重置修改标记
+        editInitializedRef.current = null // 重置编辑初始化标记
         onClose()
       } else {
         alert(`创建失败: ${response.msg}`)
@@ -1947,6 +1944,7 @@ export default function CreateBillModal({
         setReferenceList([])
         setErrors({})
         setIsDirty(false) // 重置修改标记
+        editInitializedRef.current = null // 重置编辑初始化标记
         onClose()
       } else {
         alert(`保存失败: ${response.msg}`)
@@ -3440,7 +3438,7 @@ export default function CreateBillModal({
                     {/* 箱型 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        箱型 <span className="text-red-500">*</span>
+                        箱型
                       </label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 cursor-pointer">
@@ -3471,7 +3469,7 @@ export default function CreateBillModal({
                     {/* 运输 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        运输 <span className="text-red-500">*</span>
+                        运输
                       </label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 cursor-pointer">
@@ -3502,7 +3500,7 @@ export default function CreateBillModal({
                     {/* 提单 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        提单 <span className="text-red-500">*</span>
+                        提单
                       </label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 cursor-pointer">
@@ -3606,7 +3604,7 @@ export default function CreateBillModal({
                     {/* 异地还柜 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        异地还柜 <span className="text-red-500">*</span>
+                        异地还柜
                       </label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 cursor-pointer">
@@ -3637,7 +3635,7 @@ export default function CreateBillModal({
                     {/* 全程整柜运输 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        全程整柜运输 <span className="text-red-500">*</span>
+                        全程整柜运输
                       </label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 cursor-pointer">
@@ -3668,7 +3666,7 @@ export default function CreateBillModal({
                     {/* 末端运输方式 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        末端运输方式 <span className="text-red-500">*</span>
+                        末端运输方式
                       </label>
                       <select
                         value={formData.lastMileTransport}
@@ -3684,7 +3682,7 @@ export default function CreateBillModal({
                     {/* 拆柜 */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        拆柜 <span className="text-red-500">*</span>
+                        拆柜
                       </label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 cursor-pointer">
@@ -3715,7 +3713,7 @@ export default function CreateBillModal({
                     {/* 海关经停报关服务(T1报关) */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-2">
-                        海关经停报关服务(T1报关) <span className="text-red-500">*</span>
+                        海关经停报关服务(T1报关)
                       </label>
                       <div className="space-y-2">
                         <label className="flex items-center gap-1 cursor-pointer">

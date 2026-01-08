@@ -11,8 +11,10 @@ import NoPermission from '../components/NoPermission'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDateTime } from '../utils/dateFormat'
 
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+
 // API 基础地址
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
+const API_BASE_URL = getApiBaseUrl()
 
 // 类型定义
 interface SecurityOverview {
@@ -312,7 +314,7 @@ export default function SecurityCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ settings: modifiedSettings })
       })
       const data = await response.json()
@@ -346,7 +348,7 @@ export default function SecurityCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/ip-blacklist`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(newIpData)
       })
       const data = await response.json()
@@ -370,7 +372,8 @@ export default function SecurityCenter() {
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/ip-blacklist/${ipAddress}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { ...getAuthHeaders() }
       })
       const data = await response.json()
       if (data.errCode === 200) {
@@ -391,7 +394,8 @@ export default function SecurityCenter() {
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/active-sessions/${sessionId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { ...getAuthHeaders() }
       })
       const data = await response.json()
       if (data.errCode === 200) {
@@ -414,7 +418,7 @@ export default function SecurityCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/backups`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ type: 'full' })
       })
       const data = await response.json()
@@ -438,7 +442,8 @@ export default function SecurityCenter() {
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/backups/${backup.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { ...getAuthHeaders() }
       })
       const data = await response.json()
       if (data.errCode === 200) {
@@ -484,7 +489,7 @@ export default function SecurityCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/backups/${restoreTarget.id}/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ noBackupBefore: false })
       })
       const data = await response.json()
@@ -512,7 +517,7 @@ export default function SecurityCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/security/backup-settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(backupSettings)
       })
       const data = await response.json()

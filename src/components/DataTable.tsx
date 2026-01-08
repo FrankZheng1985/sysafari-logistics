@@ -252,6 +252,40 @@ export default function DataTable<T extends Record<string, any>>({
     return columns.filter((col) => visibleColumns.includes(col.key))
   }, [columns, visibleColumns])
 
+  // 计算固定列的 left 偏移量
+  const fixedLeftOffsets = useMemo(() => {
+    const offsets: Record<string, number> = {}
+    let currentOffset = 0
+    
+    // 如果有选择列，先预留选择列的宽度
+    if (rowSelection) {
+      currentOffset = compact ? 32 : 40
+    }
+    
+    visibleCols.forEach((col) => {
+      if (col.fixed === 'left') {
+        offsets[col.key] = currentOffset
+        // 获取列宽度，默认 120px
+        const colWidth = typeof col.width === 'number' ? col.width : 
+                         typeof col.width === 'string' ? parseInt(col.width) || 120 : 120
+        currentOffset += colWidth
+      }
+    })
+    
+    return offsets
+  }, [visibleCols, rowSelection, compact])
+
+  // 检查是否有固定列
+  const hasFixedLeftColumns = useMemo(() => {
+    return visibleCols.some(col => col.fixed === 'left')
+  }, [visibleCols])
+
+  // 获取最后一个固定列的 key
+  const lastFixedLeftColumnKey = useMemo(() => {
+    const fixedLeftCols = visibleCols.filter(col => col.fixed === 'left')
+    return fixedLeftCols.length > 0 ? fixedLeftCols[fixedLeftCols.length - 1].key : null
+  }, [visibleCols])
+
   // 早期返回必须在所有hooks之后
   if (loading) {
     return (
@@ -614,12 +648,18 @@ export default function DataTable<T extends Record<string, any>>({
   return (
     <div className="flex flex-col h-full" onClick={handleClickOutside}>
       <div className="flex-1 overflow-auto border border-gray-200 rounded-lg shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
           <thead className="bg-gray-50">
             <tr>
               {/* Selection column */}
               {rowSelection && (
-                <th className={`${compact ? 'px-2 py-1.5' : 'px-3 py-3.5'} text-left ${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-700 uppercase tracking-wider border-b border-gray-200`} style={{ width: compact ? '32px' : '40px' }}>
+                <th 
+                  className={`${compact ? 'px-2 py-1.5' : 'px-3 py-3.5'} text-left ${compact ? 'text-[10px]' : 'text-xs'} font-semibold text-gray-700 uppercase tracking-wider border-b border-gray-200 ${hasFixedLeftColumns ? 'sticky left-0 z-20 bg-gray-50' : ''}`} 
+                  style={{ 
+                    width: compact ? '32px' : '40px',
+                    ...(hasFixedLeftColumns ? { minWidth: compact ? '32px' : '40px' } : {})
+                  }}
+                >
                   {rowSelection.type === 'checkbox' ? (
                     <input
                       type="checkbox"
@@ -645,6 +685,8 @@ export default function DataTable<T extends Record<string, any>>({
               {visibleCols.map((column) => {
                 const hasFilter = column.filterable || column.filters || column.dateFilterable
                 const activeFilters = filterStates[column.key] || []
+                const isFixedLeft = column.fixed === 'left'
+                const isLastFixedLeft = column.key === lastFixedLeftColumnKey
 
                 return (
                   <th
@@ -655,8 +697,11 @@ export default function DataTable<T extends Record<string, any>>({
                         : column.align === 'right'
                         ? 'text-right'
                         : ''
-                    }`}
-                    style={column.width ? { width: column.width } : undefined}
+                    } ${isFixedLeft ? 'sticky z-20 bg-gray-50' : ''} ${isLastFixedLeft ? 'after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[1px] after:bg-gray-300 after:shadow-[2px_0_4px_rgba(0,0,0,0.1)]' : ''}`}
+                    style={{
+                      ...(column.width ? { width: column.width, minWidth: column.width } : {}),
+                      ...(isFixedLeft ? { left: fixedLeftOffsets[column.key] || 0 } : {})
+                    }}
                   >
                     <div className={`flex items-center ${compact ? 'gap-1' : 'gap-2'}`}>
                       <span>{column.label || column.title}</span>
@@ -723,7 +768,13 @@ export default function DataTable<T extends Record<string, any>>({
                   >
                     {/* Selection cell */}
                     {rowSelection && (
-                      <td className={`${compact ? 'px-2 py-1.5' : 'px-3 py-4'} whitespace-nowrap`} style={{ width: compact ? '32px' : '40px' }}>
+                      <td 
+                        className={`${compact ? 'px-2 py-1.5' : 'px-3 py-4'} whitespace-nowrap ${hasFixedLeftColumns ? 'sticky left-0 z-10 bg-white' : ''}`} 
+                        style={{ 
+                          width: compact ? '32px' : '40px',
+                          ...(hasFixedLeftColumns ? { minWidth: compact ? '32px' : '40px' } : {})
+                        }}
+                      >
                         <input
                           type={rowSelection.type || 'checkbox'}
                           checked={isSelected}
@@ -735,20 +786,29 @@ export default function DataTable<T extends Record<string, any>>({
                     )}
 
                     {/* Data cells */}
-                    {visibleCols.map((column) => (
-                      <td
-                        key={column.key}
-                        className={`${compact ? 'px-2 py-1.5' : 'px-3 py-3'} whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} text-gray-900 ${
-                          column.align === 'center'
-                            ? 'text-center'
-                            : column.align === 'right'
-                            ? 'text-right'
-                            : ''
-                        }`}
-                      >
-                        {column.render ? column.render(item[column.key], item) : item[column.key]}
-                      </td>
-                    ))}
+                    {visibleCols.map((column) => {
+                      const isFixedLeft = column.fixed === 'left'
+                      const isLastFixedLeft = column.key === lastFixedLeftColumnKey
+                      
+                      return (
+                        <td
+                          key={column.key}
+                          className={`${compact ? 'px-2 py-1.5' : 'px-3 py-3'} whitespace-nowrap ${compact ? 'text-xs' : 'text-sm'} text-gray-900 ${
+                            column.align === 'center'
+                              ? 'text-center'
+                              : column.align === 'right'
+                              ? 'text-right'
+                              : ''
+                          } ${isFixedLeft ? 'sticky z-10 bg-white' : ''} ${isLastFixedLeft ? 'after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[1px] after:bg-gray-200' : ''}`}
+                          style={{
+                            ...(column.width ? { width: column.width, minWidth: column.width } : {}),
+                            ...(isFixedLeft ? { left: fixedLeftOffsets[column.key] || 0 } : {})
+                          }}
+                        >
+                          {column.render ? column.render(item[column.key], item) : item[column.key]}
+                        </td>
+                      )
+                    })}
                   </tr>
                   {/* 展开行 */}
                   {isExpanded && expandable?.expandedRowRender && (

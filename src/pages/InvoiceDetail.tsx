@@ -6,7 +6,7 @@ import {
   AlertTriangle, DollarSign, Receipt, Printer, Ship, Download, RefreshCw, Plus
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -147,7 +147,7 @@ export default function InvoiceDetail() {
     try {
       const response = await fetch(`${API_BASE}/api/invoices/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: 'cancelled' })
       })
       

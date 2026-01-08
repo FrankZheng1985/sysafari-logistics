@@ -10,8 +10,10 @@ import DataTable from '../components/DataTable'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDateTime } from '../utils/dateFormat'
 
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+
 // API 基础地址
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL as string) || ''
+const API_BASE_URL = getApiBaseUrl()
 
 // 类型定义
 interface ApprovalRequest {
@@ -194,7 +196,7 @@ export default function ApprovalCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/system/approvals/${selectedRequest.id}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ comment: approvalComment })
       })
       const data = await response.json()
@@ -229,7 +231,7 @@ export default function ApprovalCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/system/approvals/${selectedRequest.id}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ reason: rejectionReason })
       })
       const data = await response.json()
@@ -259,7 +261,7 @@ export default function ApprovalCenter() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/system/approvals/${request.id}/cancel`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ reason: '用户主动取消' })
       })
       const data = await response.json()

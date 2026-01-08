@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSocket, type Conversation, type ChatMessage } from '../../contexts/SocketContext'
-import { getApiBaseUrl } from '../../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/api'
 import MessageItem from './MessageItem'
 
 const API_BASE = getApiBaseUrl()
@@ -289,7 +289,7 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
     try {
       await fetch(`${API_BASE}/api/chat/conversations/${conversation.id}/pin`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ userId: user?.id, isPinned: !conversation.is_pinned })
       })
       setShowMenu(false)
@@ -302,7 +302,7 @@ export default function ChatWindow({ conversation, onBack, onOpenGroupInfo }: Ch
     try {
       await fetch(`${API_BASE}/api/chat/conversations/${conversation.id}/mute`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ userId: user?.id, isMuted: !conversation.is_muted })
       })
       setShowMenu(false)
