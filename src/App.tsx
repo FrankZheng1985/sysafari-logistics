@@ -118,6 +118,8 @@ import DocumentCenter from './pages/DocumentCenter'
 // 帮助中心模块
 import HelpCenter from './pages/HelpCenter'
 import HelpVideoManage from './pages/HelpVideoManage'
+// 工作台模块
+import Workbench from './pages/Workbench'
 import { initMenuSettings } from './utils/menuSettings'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { SocketProvider } from './contexts/SocketContext'
@@ -149,6 +151,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<SystemDashboard />} />
         <Route path="/dashboard" element={<SystemDashboard />} />
+        <Route path="/workbench" element={<Workbench />} />
         <Route path="/bp-view" element={<BPView />} />
         <Route path="/bp-view/history" element={<BPHistory />} />
         <Route path="/bookings/labels" element={<OrderLabels />} />

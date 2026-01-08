@@ -31,7 +31,8 @@ import {
   FilePlus,
   Link2,
   AlertTriangle,
-  CalendarClock
+  CalendarClock,
+  LayoutDashboard
 } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import clsx from 'clsx'
@@ -44,6 +45,7 @@ const API_BASE = getApiBaseUrl()
 
 // 菜单权限映射：定义每个菜单路径需要的权限
 const MENU_PERMISSIONS: Record<string, string[]> = {
+  '/workbench': [], // 所有用户都可以访问工作台
   '/dashboard': ['dashboard:view'],
   '/bp-view': ['bp:view'],
   '/bookings': ['bill:view', 'bill:create', 'bill:edit'],
@@ -89,6 +91,11 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
+  {
+    path: '/workbench',
+    label: '我的工作台',
+    icon: LayoutDashboard,
+  },
   {
     path: '/dashboard',
     label: '系统概览',

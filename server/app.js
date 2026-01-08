@@ -62,6 +62,7 @@ import openApiRoutes from './modules/open-api/routes.js'
 import businessInfoRoutes from './modules/business-info/routes.js'
 import inquiryRoutes from './modules/inquiry/routes.js'
 import subscriptionRoutes from './modules/subscription/routes.js'
+import workbenchRoutes from './modules/workbench/routes.js'
 import { initSocketServer } from './modules/chat/socket.js'
 
 // 供应商模块初始化
@@ -69,6 +70,9 @@ import { initSupplierTable } from './modules/supplier/model.js'
 
 // 帮助视频模块初始化
 import { initHelpVideoTable } from './modules/help-video/model.js'
+
+// 工作台模块初始化
+import { initWorkbenchConfigTable } from './modules/workbench/model.js'
 
 // 定时任务
 import { startScheduler as startAlertScheduler } from './jobs/alertScheduler.js'
@@ -244,6 +248,9 @@ app.use('/api/inquiry', inquiryRoutes)
 // 服务订阅管理模块
 app.use('/api/subscriptions', subscriptionRoutes)
 
+// 工作台模块
+app.use('/api', workbenchRoutes)
+
 // ==================== 错误处理 ====================
 
 // 错误日志
@@ -281,6 +288,13 @@ async function initializeDatabase() {
     await initHelpVideoTable()
   } catch (err) {
     console.error('初始化帮助视频表失败:', err.message)
+  }
+  
+  // 初始化工作台配置表
+  try {
+    await initWorkbenchConfigTable()
+  } catch (err) {
+    console.error('初始化工作台配置表失败:', err.message)
   }
   
   // 启动预警定时任务（每24小时检查一次）
