@@ -38,40 +38,23 @@ export default function OrderStatsCard({ refreshKey }: OrderStatsCardProps) {
     setLoading(true)
     try {
       const token = await getAccessToken()
-      // 获取订单统计
-      const [scheduleRes, historyRes] = await Promise.all([
-        fetch(`${API_BASE}/api/bills/list?type=schedule&pageSize=1`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        }),
-        fetch(`${API_BASE}/api/bills/list?type=history&pageSize=1`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        }),
-      ])
-
-      let scheduleTotal = 0
-      let historyTotal = 0
-
-      if (scheduleRes.ok) {
-        const data = await scheduleRes.json()
-        if (data.errCode === 200) {
-          scheduleTotal = data.data?.total || 0
-        }
-      }
-
-      if (historyRes.ok) {
-        const data = await historyRes.json()
-        if (data.errCode === 200) {
-          historyTotal = data.data?.total || 0
-        }
-      }
-
-      setStats({
-        total: scheduleTotal + historyTotal,
-        pending: Math.floor(scheduleTotal * 0.3),
-        inProgress: Math.floor(scheduleTotal * 0.5),
-        completed: historyTotal,
-        todayNew: 0,
+      // 使用专门的订单统计 API
+      const res = await fetch(`${API_BASE}/api/workbench/order-stats`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data.errCode === 200 && data.data) {
+          setStats({
+            total: data.data.total || 0,
+            pending: data.data.pending || 0,
+            inProgress: data.data.inProgress || 0,
+            completed: data.data.completed || 0,
+            todayNew: data.data.todayNew || 0,
+          })
+        }
+      }
     } catch (error) {
       console.error('加载订单统计失败:', error)
       setStats({

@@ -789,7 +789,8 @@ CREATE TABLE IF NOT EXISTS invoices (
     created_by INTEGER,
     created_by_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN DEFAULT FALSE
 );
 
 -- ==================== 付款记录表 ====================

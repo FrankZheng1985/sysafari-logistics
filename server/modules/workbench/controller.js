@@ -149,3 +149,19 @@ export async function getSchedule(req, res) {
     sendServerError(res, '获取日程失败')
   }
 }
+
+/**
+ * 获取订单统计
+ */
+export async function getOrderStats(req, res) {
+  try {
+    const userId = req.user.userId
+    const role = req.user.role
+    
+    const stats = await model.getOrderStats(userId, role)
+    sendSuccess(res, stats)
+  } catch (error) {
+    console.error('获取订单统计失败:', error)
+    sendServerError(res, '获取订单统计失败')
+  }
+}

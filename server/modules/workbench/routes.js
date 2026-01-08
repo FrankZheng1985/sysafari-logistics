@@ -37,4 +37,7 @@ router.get('/workbench/company-overview', controller.getCompanyOverview)
 // 获取日程安排
 router.get('/workbench/schedule', controller.getSchedule)
 
+// 获取订单统计
+router.get('/workbench/order-stats', controller.getOrderStats)
+
 export default router

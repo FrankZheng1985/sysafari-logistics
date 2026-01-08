@@ -436,6 +436,47 @@ export async function getSchedule(userId, date) {
 }
 
 /**
+ * 获取订单统计
+ */
+export async function getOrderStats(userId, role) {
+  const db = getDatabase()
+  try {
+    // 全部订单统计
+    const statsResult = await db.prepare(
+      `SELECT 
+         COUNT(*) as total,
+         COUNT(*) FILTER (WHERE status IN ('pending', '待处理', '船未到港')) as pending,
+         COUNT(*) FILTER (WHERE status IN ('in_progress', '进行中')) as in_progress,
+         COUNT(*) FILTER (WHERE status IN ('completed', '已完成', 'archived')) as completed
+       FROM bills`
+    ).get()
+    
+    // 今日新增
+    const todayResult = await db.prepare(
+      `SELECT COUNT(*) as count FROM bills 
+       WHERE created_at >= CURRENT_DATE`
+    ).get()
+    
+    return {
+      total: parseInt(statsResult?.total) || 0,
+      pending: parseInt(statsResult?.pending) || 0,
+      inProgress: parseInt(statsResult?.in_progress) || 0,
+      completed: parseInt(statsResult?.completed) || 0,
+      todayNew: parseInt(todayResult?.count) || 0,
+    }
+  } catch (error) {
+    console.error('获取订单统计出错:', error)
+    return {
+      total: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      todayNew: 0,
+    }
+  }
+}
+
+/**
  * 初始化工作台配置表
  */
 export async function initWorkbenchConfigTable() {
