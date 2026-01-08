@@ -863,11 +863,17 @@ export function convertCMRToCamelCase(row) {
     placeOfDelivery: row.place_of_delivery,
     pieces: row.pieces,
     weight: row.weight,
+    
+    // 船期信息
+    etd: row.etd,
+    eta: row.eta,
+    ata: row.ata,
 
     // 状态信息
     status: row.status,  // 订单状态（已完成等）
     deliveryStatus: row.delivery_status,
     customsStatus: row.customs_status,
+    customsReleaseTime: row.customs_release_time,
     
     // CMR详细信息
     cmrCurrentStep: row.cmr_current_step || 0,

@@ -288,6 +288,67 @@ export default function CMRManage() {
       ),
     },
     {
+      key: 'eta',
+      label: 'ETA',
+      sorter: (a, b) => {
+        const dateA = a.eta && a.eta.trim() ? new Date(a.eta).getTime() : 0
+        const dateB = b.eta && b.eta.trim() ? new Date(b.eta).getTime() : 0
+        // 无效日期排到最后
+        if (isNaN(dateA) && isNaN(dateB)) return 0
+        if (isNaN(dateA)) return 1
+        if (isNaN(dateB)) return -1
+        return dateA - dateB
+      },
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs text-gray-600">{record.eta && record.eta.trim() ? formatDate(record.eta) : '-'}</span>
+      ),
+    },
+    {
+      key: 'ata',
+      label: 'ATA',
+      sorter: (a, b) => {
+        const dateA = a.ata && a.ata.trim() ? new Date(a.ata).getTime() : 0
+        const dateB = b.ata && b.ata.trim() ? new Date(b.ata).getTime() : 0
+        // 无效日期排到最后
+        if (isNaN(dateA) && isNaN(dateB)) return 0
+        if (isNaN(dateA)) return 1
+        if (isNaN(dateB)) return -1
+        return dateA - dateB
+      },
+      render: (_value, record: BillOfLading) => (
+        <span className="text-xs text-gray-600">{record.ata && record.ata.trim() ? formatDate(record.ata) : '-'}</span>
+      ),
+    },
+    {
+      key: 'customsStatus',
+      label: '清关完成',
+      filters: [
+        { text: '未放行', value: '未放行' },
+        { text: '已放行', value: '已放行' },
+      ],
+      onFilter: (value, record) => (record.customsStatus || '未放行') === value,
+      render: (_value, record: BillOfLading) => {
+        const status = record.customsStatus || '未放行'
+        const isCleared = status === '已放行'
+        return (
+          <div className="flex items-center justify-center">
+            <div className="text-center">
+              <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded text-xs ${
+                isCleared 
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-gray-100 text-gray-600'
+              }`}>
+                {isCleared ? '已放行' : '未放行'}
+              </span>
+              {isCleared && record.customsReleaseTime && (
+                <div className="text-xs text-gray-500 mt-0.5">{formatDate(record.customsReleaseTime)}</div>
+              )}
+            </div>
+          </div>
+        )
+      },
+    },
+    {
       key: 'deliveryStatus',
       label: '派送状态',
       filters: [
