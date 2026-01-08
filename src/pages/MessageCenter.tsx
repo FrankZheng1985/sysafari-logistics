@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../contexts/AuthContext'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -122,7 +122,7 @@ export default function MessageCenter() {
     try {
       await fetch(`${API_BASE}/api/messages/mark-read`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ ids: selectedIds })
       })
       setSelectedIds([])
@@ -139,7 +139,7 @@ export default function MessageCenter() {
     try {
       await fetch(`${API_BASE}/api/messages/mark-all-read`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ receiverId: user.id })
       })
       fetchMessages()

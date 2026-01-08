@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, FileText, Package, User, Ship, DollarSign, Anchor, Search } from 'lucide-react'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import DatePicker from './DatePicker'
 
 const API_BASE = getApiBaseUrl()
@@ -385,7 +385,7 @@ export default function ClearanceDocumentModal({
       
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(submitData)
       })
       

@@ -9,7 +9,7 @@ import {
   Plus, Edit2, Trash2, Save, X, AlertCircle
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -170,7 +170,7 @@ export default function ContractTemplateConfig() {
     try {
       const res = await fetch(`${API_BASE}/api/contract-template/config`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ configs: basicConfig })
       })
       const data = await res.json()
@@ -198,7 +198,7 @@ export default function ContractTemplateConfig() {
       
       const res = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(rule)
       })
       const data = await res.json()
@@ -237,7 +237,7 @@ export default function ContractTemplateConfig() {
     try {
       const res = await fetch(`${API_BASE}/api/contract-template/insurance`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ configs: insuranceConfig })
       })
       const data = await res.json()
@@ -265,7 +265,7 @@ export default function ContractTemplateConfig() {
       
       const res = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(season)
       })
       const data = await res.json()
@@ -304,7 +304,7 @@ export default function ContractTemplateConfig() {
     try {
       const res = await fetch(`${API_BASE}/api/contract-template/config`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ configs: { disclaimer_clauses: disclaimerClauses } })
       })
       const data = await res.json()

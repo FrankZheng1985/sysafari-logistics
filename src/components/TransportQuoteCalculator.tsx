@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { 
   X, 
   MapPin, 
@@ -230,7 +231,7 @@ export default function TransportQuoteCalculator({
         // 调用运输报价计算API
         fetch(`${API_BASE}/api/inquiry/transport/quote-calculate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
             origin: { address: transportData.origin },
             destination: { address: transportData.destination }

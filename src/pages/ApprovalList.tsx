@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ClipboardCheck, Check, X, Eye, RefreshCw, Clock, CheckCircle, XCircle, FileText, Settings, Save } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { PageContainer, ContentCard, LoadingSpinner, EmptyState } from '../components/ui'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -106,7 +106,7 @@ export default function ApprovalList() {
     try {
       const response = await fetch(`${API_BASE}/api/system-configs`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ key, value })
       })
       const data = await response.json()
@@ -163,7 +163,7 @@ export default function ApprovalList() {
     try {
       const response = await fetch(`${API_BASE}/api/void-applications/${selectedApp.id}/approve`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ comment })
       })
       
@@ -196,7 +196,7 @@ export default function ApprovalList() {
     try {
       const response = await fetch(`${API_BASE}/api/void-applications/${selectedApp.id}/reject`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ comment })
       })
       

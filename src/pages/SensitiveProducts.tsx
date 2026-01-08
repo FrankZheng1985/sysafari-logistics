@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { PageContainer, ContentCard } from '../components/ui'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useToast } from '../components/Toast'
 
 const API_BASE = getApiBaseUrl()
@@ -693,7 +693,7 @@ function ProductModal({ type, item, categories, onClose, onSuccess }: ProductMod
       
       const response = await fetch(url, {
         method: item ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(body)
       })
       

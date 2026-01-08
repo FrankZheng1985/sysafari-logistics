@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate, formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -101,7 +101,7 @@ export default function FinanceFeeApproval() {
     try {
       const response = await fetch(`${API_BASE}/api/fees/${feeId}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
       })
       
       const result = await response.json()
@@ -128,7 +128,7 @@ export default function FinanceFeeApproval() {
     try {
       const response = await fetch(`${API_BASE}/api/fees/${rejectingFeeId}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ reason: rejectReason })
       })
       
@@ -164,7 +164,7 @@ export default function FinanceFeeApproval() {
     try {
       const response = await fetch(`${API_BASE}/api/fees/batch-approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ ids: selectedIds })
       })
       

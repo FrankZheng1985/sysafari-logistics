@@ -268,7 +268,7 @@ export default function ProductPricing() {
     try {
       const response = await fetch(`${API_BASE}/api/translate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ text: chineseText, from: 'zh-CN', to: 'en' })
       })
       
@@ -323,7 +323,7 @@ export default function ProductPricing() {
     try {
       const response = await fetch(`${API_BASE}/api/translate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ text: chineseText, from: 'zh-CN', to: 'en' })
       })
       
@@ -657,7 +657,7 @@ export default function ProductPricing() {
     try {
       const response = await fetch(`${API_BASE}/api/products/fee-items/batch-sync-cost`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ feeItemIds: selectedFeeItems })
       })
       
@@ -692,7 +692,7 @@ export default function ProductPricing() {
     try {
       const response = await fetch(`${API_BASE}/api/products/fee-items/batch-set-profit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           feeItemIds: selectedFeeItems,
           profitType: batchProfitForm.profitType,
@@ -732,7 +732,7 @@ export default function ProductPricing() {
     try {
       const response = await fetch(`${API_BASE}/api/products/fee-items/batch-adjust-price`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           feeItemIds: selectedFeeItems,
           adjustType: batchAdjustForm.adjustType,
@@ -776,7 +776,7 @@ export default function ProductPricing() {
     try {
       const response = await fetch(`${API_BASE}/api/products/fee-items/batch-recalculate-rounding`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           feeItemIds: selectedFeeItems
         })
@@ -817,7 +817,7 @@ export default function ProductPricing() {
     try {
       const response = await fetch(`${API_BASE}/api/products/${currentProductId}/fee-items/batch-import`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           supplierPriceIds: selectedImportPrices,
           profitType: batchImportForm.profitType,
@@ -957,7 +957,7 @@ export default function ProductPricing() {
       
       const response = await fetch(url, {
         method: editingProduct ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(productForm)
       })
       

@@ -5,7 +5,7 @@ import {
   Check, X, AlertTriangle, RefreshCw, Trash2, Eye, User, Building, ChevronDown, Ship, FileText
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl, getCustomers, getCustomerTaxNumbers, getBillsList, type Customer, type CustomerTaxNumber, type BillOfLading } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders, getCustomers, getCustomerTaxNumbers, getBillsList, type Customer, type CustomerTaxNumber, type BillOfLading } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -415,7 +415,7 @@ export default function DocumentImport() {
           try {
             await fetch(`${API_BASE}/api/cargo/documents/imports/${importId}/shipper-importer`, {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
               body: JSON.stringify({
                 // 发货方信息（从提单获取）
                 shipperName: shipperInfo.name || null,

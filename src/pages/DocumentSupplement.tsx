@@ -6,7 +6,7 @@ import {
   CheckCircle, AlertCircle, HelpCircle
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -176,7 +176,7 @@ export default function DocumentSupplement() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           items: [{
             hsCode: item.hsCode,
@@ -224,7 +224,7 @@ export default function DocumentSupplement() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           items: editingItems.map(item => ({
             hsCode: item.hsCode,
@@ -263,7 +263,7 @@ export default function DocumentSupplement() {
       try {
         const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/auto`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({ chapter: selectedChapter, dryRun: false })
         })
         const data = await res.json()
@@ -298,7 +298,7 @@ export default function DocumentSupplement() {
         try {
           const res = await fetch(`${API_BASE}/api/cargo/documents/supplement/auto`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({ chapter, dryRun: false })
           })
           const data = await res.json()

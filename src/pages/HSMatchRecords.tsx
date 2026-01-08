@@ -9,7 +9,7 @@ import {
   Package, TrendingUp, History, X, Edit2, Save, FileCheck, Database
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -216,7 +216,7 @@ export default function HSMatchRecords() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/match-records/${editingRecord.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(editForm)
       })
       const data = await res.json()

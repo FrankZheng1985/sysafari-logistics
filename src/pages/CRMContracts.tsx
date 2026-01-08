@@ -8,7 +8,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -182,7 +182,7 @@ export default function CRMContracts() {
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData)
       })
 
@@ -204,7 +204,7 @@ export default function CRMContracts() {
     try {
       const response = await fetch(`${API_BASE}/api/contracts/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status })
       })
       const data = await response.json()
@@ -291,7 +291,7 @@ export default function CRMContracts() {
       // 2. 更新合同签署状态
       const updateRes = await fetch(`${API_BASE}/api/contracts/${uploadingContract.id}/upload-signed`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           filePath: uploadData.data.path || uploadData.data.url,
           fileName: file.name

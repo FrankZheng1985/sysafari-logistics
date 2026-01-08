@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getCustomerById, type Customer } from '../utils/api'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useDebounce } from '../hooks/useDebounce'
 
 const API_BASE = getApiBaseUrl()
@@ -328,7 +328,7 @@ export default function CRMCustomerEdit() {
       try {
         const response = await fetch(`${API_BASE}/api/ocr/business-license`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({ imageBase64: base64 })
         })
         
@@ -438,14 +438,14 @@ export default function CRMCustomerEdit() {
         // 编辑模式：更新客户
         response = await fetch(`${API_BASE}/api/customers/${id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify(formData)
         })
       } else {
         // 新增模式：创建客户
         response = await fetch(`${API_BASE}/api/customers`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify(formData)
         })
       }

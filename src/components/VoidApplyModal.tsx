@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, AlertTriangle, Plus, Trash2, Check, FileText, DollarSign, Clock, CheckCircle, Ship, FileCheck, Truck, Package, Edit, Ban } from 'lucide-react'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -327,7 +327,7 @@ export default function VoidApplyModal({
       
       const response = await fetch(`${API_BASE}/api/bills/${billId}/void-apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           reason,
           fees: allFees

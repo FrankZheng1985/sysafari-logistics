@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -203,7 +203,7 @@ export default function CRMCommissionRecords() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/calculate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(calculateForm)
       })
       const data = await response.json()
@@ -228,7 +228,7 @@ export default function CRMCommissionRecords() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/records/${record.id}/cancel`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ reason: '手动取消' })
       })
       const data = await response.json()

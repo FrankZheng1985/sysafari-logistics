@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { type BillOfLading, getApiBaseUrl } from '../utils/api'
+import { type BillOfLading, getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -74,7 +74,7 @@ export default function CMRExceptionManage() {
     try {
       const response = await fetch(`${API_BASE}/api/cmr/${selectedBill.id}/resolve-exception`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ resolution })
       })
       
@@ -96,7 +96,7 @@ export default function CMRExceptionManage() {
     try {
       const response = await fetch(`${API_BASE}/api/cmr/${billId}/close-exception`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
       })
       
       const data = await response.json()

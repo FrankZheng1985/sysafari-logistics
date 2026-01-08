@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -135,7 +135,7 @@ export default function CRMFeedbacks() {
     try {
       const response = await fetch(`${API_BASE}/api/feedbacks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData)
       })
 
@@ -156,7 +156,7 @@ export default function CRMFeedbacks() {
     try {
       const response = await fetch(`${API_BASE}/api/feedbacks/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status })
       })
       const data = await response.json()
@@ -177,7 +177,7 @@ export default function CRMFeedbacks() {
     try {
       const response = await fetch(`${API_BASE}/api/feedbacks/${selectedFeedback.id}/resolve`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ resolution })
       })
       const data = await response.json()

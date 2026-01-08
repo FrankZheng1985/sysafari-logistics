@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { AlertTriangle, TrendingUp, CheckCircle, Info, BarChart2, History, X } from 'lucide-react'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE_URL = getApiBaseUrl()
 
@@ -120,7 +120,7 @@ export default function DeclarationValueAnalyzer({
       try {
         const response = await fetch(`${API_BASE_URL}/api/cargo/declaration-value/check-risk`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({ hsCode, declaredPrice, originCountry, priceUnit })
         })
         const data = await response.json()

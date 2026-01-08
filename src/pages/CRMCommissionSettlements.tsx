@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate, formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -262,7 +262,7 @@ export default function CRMCommissionSettlements() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/settlements/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(generateForm)
       })
       const data = await response.json()
@@ -293,7 +293,7 @@ export default function CRMCommissionSettlements() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/settlements/auto-generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(autoGenerateForm)
       })
       const data = await response.json()
@@ -340,7 +340,7 @@ export default function CRMCommissionSettlements() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/settlements/${settlement.id}/approve`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ comment: '审批通过' })
       })
       const data = await response.json()
@@ -365,7 +365,7 @@ export default function CRMCommissionSettlements() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/settlements/${selectedSettlement?.id}/reject`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ comment: rejectComment })
       })
       const data = await response.json()
@@ -416,7 +416,7 @@ export default function CRMCommissionSettlements() {
     try {
       const response = await fetch(`${API_BASE}/api/commission/settlements/batch-submit`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ ids: draftSettlements.map(s => s.id) })
       })
       const data = await response.json()

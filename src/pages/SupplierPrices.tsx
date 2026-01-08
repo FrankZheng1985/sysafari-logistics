@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DateTimePicker from '../components/DateTimePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -233,7 +233,7 @@ export default function SupplierPrices() {
     try {
       const res = await fetch(`${API_BASE}/api/fee-item-approvals`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           approvalType: 'new_category',
           feeName: formData.name.trim(),
@@ -339,7 +339,7 @@ export default function SupplierPrices() {
     try {
       const res = await fetch(`${API_BASE}/api/translate/fee`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ name: formData.name })
       })
       const data = await res.json()
@@ -388,7 +388,7 @@ export default function SupplierPrices() {
       
       const res = await fetch(url, {
         method: editingPrice ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(payload)
       })
 
@@ -438,7 +438,7 @@ export default function SupplierPrices() {
     try {
       const res = await fetch(`${API_BASE}/api/suppliers/${selectedSupplier.id}/prices/${price.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ isActive: !price.isActive })
       })
       const data = await res.json()

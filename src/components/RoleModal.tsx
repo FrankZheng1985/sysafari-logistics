@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { X, Shield } from 'lucide-react'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface RoleModalProps {
   visible: boolean
@@ -105,7 +108,7 @@ export default function RoleModal({
       
       const response = await fetch(url, {
         method: role ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           roleCode: formData.roleCode,
           roleName: formData.roleName,

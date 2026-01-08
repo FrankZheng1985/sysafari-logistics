@@ -17,7 +17,7 @@ import {
   FileQuestion
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { getCachedNotificationOverview, invalidateNotificationCache } from '../utils/apiCache'
 
 const API_BASE = getApiBaseUrl()
@@ -111,7 +111,7 @@ export default function NotificationBell() {
     try {
       await fetch(`${API_BASE}/api/messages/mark-all-read`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ receiverId: user.id })
       })
       // 清除缓存并刷新数据

@@ -34,7 +34,7 @@ import {
   HelpItem,
   HelpModule
 } from '../data/helpData'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 // 图标映射
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -76,7 +76,7 @@ export default function HelpCenter() {
         const apiBase = getApiBaseUrl()
         const response = await fetch(`${apiBase}/api/help-videos/urls`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({ helpItemIds })
         })
         const data = await response.json()

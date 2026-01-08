@@ -30,7 +30,7 @@ import PageHeader from '../components/PageHeader'
 import { ConversationList, ChatWindow, NewChatModal } from '../components/Chat'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket, type Conversation, type ChatMessage } from '../contexts/SocketContext'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -206,7 +206,7 @@ export default function InfoCenter() {
     try {
       const response = await fetch(`${API_BASE}/api/approvals/${approvalId}/process`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           status: action === 'approve' ? 'approved' : 'rejected',
           approverId: user?.id,
@@ -237,7 +237,7 @@ export default function InfoCenter() {
         
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           handledBy: user?.name || user?.username
         })

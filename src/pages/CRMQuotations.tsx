@@ -9,7 +9,7 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
 import TransportQuoteCalculator from '../components/TransportQuoteCalculator'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDateTime } from '../utils/dateFormat'
 
@@ -505,7 +505,7 @@ export default function CRMQuotations() {
     try {
       const response = await fetch(`${API_BASE}/api/translate/fee`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ name: item.name })
       })
       const result = await response.json()
@@ -564,7 +564,7 @@ export default function CRMQuotations() {
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           ...formData,
           validUntil: validUntil.toISOString().split('T')[0],
@@ -591,7 +591,7 @@ export default function CRMQuotations() {
     try {
       const response = await fetch(`${API_BASE}/api/quotations/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status })
       })
       const data = await response.json()

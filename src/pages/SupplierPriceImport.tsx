@@ -5,7 +5,7 @@ import {
   Edit2, Trash2, Plus, ChevronDown, ChevronRight, X, Loader2, Download
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -372,7 +372,7 @@ export default function SupplierPriceImport() {
     try {
       const response = await fetch(`${API_BASE}/api/inquiry/cities-by-postal`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ postalCodes: unknownCodes })
       })
       const data = await response.json()
@@ -520,7 +520,7 @@ export default function SupplierPriceImport() {
     try {
       const response = await fetch(`${API_BASE}/api/suppliers/${selectedSupplier.id}/import/confirm`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           items: itemsWithAutoFields,
           fileName: file?.name

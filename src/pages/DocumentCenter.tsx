@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DocumentUpload from '../components/DocumentUpload'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -294,7 +294,7 @@ export default function DocumentCenter() {
     try {
       const res = await fetch(`${API_BASE}/api/documents/delete-batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ ids: selectedIds })
       })
       const data = await res.json()

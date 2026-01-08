@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Languages, Loader2 } from 'lucide-react'
 import DateTimePicker from './DateTimePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -117,7 +117,7 @@ export default function SupplierPriceModal({
     try {
       const response = await fetch(`${API_BASE}/api/translate/fee`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ name: formData.name })
       })
       const result = await response.json()
@@ -148,7 +148,7 @@ export default function SupplierPriceModal({
       
       const response = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           category: formData.category,
           name: formData.name,

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import DateTimePicker from '../../components/DateTimePicker'
-import { getApiBaseUrl } from '../../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -198,7 +198,7 @@ export default function CarrierSettlement() {
     try {
       const res = await fetch(`${API_BASE}/api/finance/carrier-settlements/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(createForm)
       })
       

@@ -7,7 +7,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -203,7 +203,7 @@ export default function CRMOpportunities() {
     try {
       const response = await fetch(`${API_BASE}/api/opportunities/${editingItem?.id}/follow-ups`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(followUpForm)
       })
       const data = await response.json()
@@ -234,7 +234,7 @@ export default function CRMOpportunities() {
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData)
       })
 
@@ -257,7 +257,7 @@ export default function CRMOpportunities() {
       if (stage === 'closed_won') {
         const response = await fetch(`${API_BASE}/api/opportunities/${id}/close`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({ stage })
         })
 
@@ -283,7 +283,7 @@ export default function CRMOpportunities() {
       // 其他阶段更新
       const response = await fetch(`${API_BASE}/api/opportunities/${id}/stage`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ stage, lostReason })
       })
 
@@ -301,7 +301,7 @@ export default function CRMOpportunities() {
     try {
       const response = await fetch(`${API_BASE}/api/contracts/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ opportunityId })
       })
 

@@ -5,7 +5,7 @@ import {
   Check, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
-import { getApiBaseUrl } from '../../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -173,7 +173,7 @@ export default function LastMileQuickQuote() {
       
       const res = await fetch(`${API_BASE}/api/last-mile/calculate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(payload)
       })
       
@@ -224,7 +224,7 @@ export default function LastMileQuickQuote() {
       
       const res = await fetch(`${API_BASE}/api/last-mile/compare-quotes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(payload)
       })
       

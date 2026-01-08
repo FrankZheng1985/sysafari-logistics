@@ -17,7 +17,7 @@ import {
   AtSign
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -157,7 +157,7 @@ export default function BusinessDiscussion({
     try {
       const response = await fetch(`${API_BASE}/api/chat/discussions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           businessType,
           businessId,
@@ -207,7 +207,7 @@ export default function BusinessDiscussion({
     try {
       const response = await fetch(`${API_BASE}/api/chat/discussions/${discussionId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ userId: user?.id })
       })
       

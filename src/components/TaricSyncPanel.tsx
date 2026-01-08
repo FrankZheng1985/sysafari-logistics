@@ -19,7 +19,7 @@ import {
   Loader2
 } from 'lucide-react'
 import { formatDateTime } from '../utils/dateFormat'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -114,7 +114,7 @@ export default function TaricSyncPanel() {
     try {
       const res = await fetch(`${API_BASE}/api/taric/sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ syncType: 'full' })
       })
       const json = await res.json()

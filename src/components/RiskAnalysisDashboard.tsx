@@ -9,7 +9,7 @@ import {
   CheckCircle, RefreshCw, ChevronDown, ChevronUp, X,
   Zap, FileWarning, DollarSign, Search, Package
 } from 'lucide-react'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE_URL = getApiBaseUrl()
 
@@ -100,7 +100,7 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/cargo/risk-analysis/full/${importId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
       })
       const data = await response.json()
       // API返回 errCode: 200 表示成功
@@ -129,7 +129,7 @@ export default function RiskAnalysisDashboard({ importId, onClose }: Props) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/cargo/documents/tax-calc/item/${itemId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           matchedHsCode: newHsCode,
           productName: productName

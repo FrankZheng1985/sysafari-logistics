@@ -10,7 +10,7 @@ import {
   ChevronLeft, ChevronRight, Search,
   Receipt, User, Calendar, Check, X, RefreshCw
 } from 'lucide-react'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -134,7 +134,7 @@ export default function FeeItemApprovals() {
     try {
       const response = await fetch(`${API_BASE}/api/fee-item-approvals/${item.id}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           userName: '管理员' // 实际应从登录状态获取
         })
@@ -175,7 +175,7 @@ export default function FeeItemApprovals() {
     try {
       const response = await fetch(`${API_BASE}/api/fee-item-approvals/${selectedItem.id}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           userName: '管理员', // 实际应从登录状态获取
           reason: rejectReason

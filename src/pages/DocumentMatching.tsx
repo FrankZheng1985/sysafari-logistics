@@ -6,7 +6,7 @@ import {
   Save, MapPin, Package, FileText, Globe
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -202,7 +202,7 @@ export default function DocumentMatching() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/run`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ importId: selectedBatch.id })
       })
       const data = await res.json()
@@ -230,7 +230,7 @@ export default function DocumentMatching() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           itemIds: selectedItems,
           action
@@ -259,7 +259,7 @@ export default function DocumentMatching() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/recommend`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           productName: item.productName,
           productNameEn: item.productNameEn,
@@ -286,7 +286,7 @@ export default function DocumentMatching() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           itemIds: [itemId],
           action: 'approve',
@@ -340,7 +340,7 @@ export default function DocumentMatching() {
       const itemIds = items.map(i => i.id)
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/batch-origin`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           importId: selectedBatch.id,
           originCountry: batchOriginCountry.trim().toUpperCase()
@@ -380,7 +380,7 @@ export default function DocumentMatching() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/item/${editingDetail.id}/detail`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(detailForm)
       })
       const data = await res.json()

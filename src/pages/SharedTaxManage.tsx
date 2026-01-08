@@ -3,6 +3,9 @@ import {
   Plus, Search, Edit, Trash2, Building2, CheckCircle, XCircle, 
   RefreshCw, FileText, AlertCircle, X, ChevronDown
 } from 'lucide-react'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+
+const API_BASE = getApiBaseUrl()
 
 interface SharedTaxNumber {
   id: number
@@ -375,7 +378,7 @@ export default function SharedTaxManage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/tax/validate-vat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ vatNumber: formData.vatNumber.trim() })
       })
       const data = await response.json()
@@ -438,7 +441,7 @@ export default function SharedTaxManage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/tax/validate-eori`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ eoriNumber: formData.eoriNumber.trim() })
       })
       const data = await response.json()
@@ -545,7 +548,7 @@ export default function SharedTaxManage() {
         
         const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers/${editingTax.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
             taxType: currentTax.taxType,
             taxNumber: currentTax.taxNumber,
@@ -571,7 +574,7 @@ export default function SharedTaxManage() {
         for (const tax of taxNumbers) {
           const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
               taxType: tax.taxType,
               taxNumber: tax.taxNumber,

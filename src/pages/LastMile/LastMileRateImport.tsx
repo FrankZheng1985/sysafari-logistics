@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '../../components/PageHeader'
 import DateTimePicker from '../../components/DateTimePicker'
-import { getApiBaseUrl } from '../../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/api'
 import { formatDate, formatDateTime } from '../../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -190,7 +190,7 @@ export default function LastMileRateImport() {
       // 由于后端已有 excelParser，这里直接模拟解析结果用于演示
       const res = await fetch(`${API_BASE}/api/quotation-center/import-logs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           carrierId: selectedCarrier,
           templateId: selectedTemplate || null,
@@ -292,7 +292,7 @@ export default function LastMileRateImport() {
       
       const res = await fetch(`${API_BASE}/api/quotation-center/import-logs/${importLogId}/confirm`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           rateCardName: rateCardName || `${carriers.find(c => c.id === selectedCarrier)?.carrierName || ''}-费率卡-${formatDate(new Date().toISOString())}`,
           validFrom,

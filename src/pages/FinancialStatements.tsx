@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import {
   FileText,
   Download,
@@ -272,7 +273,7 @@ export default function FinancialStatements() {
 
       const res = await fetch(`/api/finance/reports/${activeTab}/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(body)
       })
 

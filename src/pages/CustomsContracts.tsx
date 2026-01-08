@@ -10,7 +10,7 @@ import {
   Send, CheckCircle, XCircle, Download, Clock, AlertCircle
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { formatDate } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
@@ -140,7 +140,7 @@ export default function CustomsContracts() {
     try {
       const res = await fetch(`${API_BASE}/api/contract-template/contracts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData)
       })
       const data = await res.json()
@@ -205,7 +205,7 @@ export default function CustomsContracts() {
     try {
       const res = await fetch(`${API_BASE}/api/contract-template/contracts/${selectedContract.id}/reject`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ reason: rejectReason })
       })
       const data = await res.json()

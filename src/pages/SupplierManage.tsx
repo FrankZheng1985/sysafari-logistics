@@ -9,7 +9,7 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
 import SupplierPriceModal from '../components/SupplierPriceModal'
-import { getApiBaseUrl } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -402,7 +402,7 @@ export default function SupplierManage() {
       
       const res = await fetch(url, {
         method: editingSupplier ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData),
       })
       
@@ -501,7 +501,7 @@ export default function SupplierManage() {
     try {
       const res = await fetch(`${API_BASE}/api/suppliers/${supplier.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: newStatus }),
       })
       
@@ -532,7 +532,7 @@ export default function SupplierManage() {
     try {
       const res = await fetch(`${API_BASE}/api/suppliers/batch-delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ ids: selectedIds }),
       })
       

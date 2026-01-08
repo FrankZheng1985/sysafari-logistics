@@ -6,7 +6,7 @@ import {
   Shield, TrendingDown, ExternalLink
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl, getCustomers, getCustomerTaxNumbers, type Customer, type CustomerTaxNumber } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders, getCustomers, getCustomerTaxNumbers, type Customer, type CustomerTaxNumber } from '../utils/api'
 import { useToast } from '../components/Toast'
 import { useDownload } from '../hooks/useDownload'
 import RiskAnalysisDashboard from '../components/RiskAnalysisDashboard'
@@ -308,7 +308,7 @@ export default function DocumentTaxCalc() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/tax-calc/${selectedBatch.id}/trade-terms`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           incoterm: tradeTermsForm.incoterm,
           internationalFreight: tradeTermsForm.internationalFreight ? parseFloat(tradeTermsForm.internationalFreight) : null,
@@ -344,7 +344,7 @@ export default function DocumentTaxCalc() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/tax-calc/${selectedBatch.id}/recalculate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           recalculateCustomsValue: true,
           updateOriginTariffs
@@ -540,7 +540,7 @@ export default function DocumentTaxCalc() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/tax-calc/${selectedBatch.id}/clearance-type`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ clearanceType: type })
       })
       const data = await res.json()
@@ -645,7 +645,7 @@ export default function DocumentTaxCalc() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/tax-calc/item/${editingItem.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           productName: editForm.productName.trim() || undefined,
           matchedHsCode: editForm.matchedHsCode.trim() || undefined,
@@ -711,7 +711,7 @@ export default function DocumentTaxCalc() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/imports/${selectedBatch.id}/shipper-importer`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           shipperName: shipperForm.name || null,
           shipperAddress: shipperForm.address || null,
@@ -750,7 +750,7 @@ export default function DocumentTaxCalc() {
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/imports/${selectedBatch.id}/sync-shipper`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
       })
       const data = await res.json()
       if (data.errCode === 200) {

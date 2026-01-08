@@ -12,7 +12,7 @@ import {
   Plus
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { getApiBaseUrl } from '../../utils/api'
+import { getApiBaseUrl, getAuthHeaders } from '../../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -110,7 +110,7 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated }: NewChat
     try {
       const response = await fetch(`${API_BASE}/api/chat/conversations/private`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           userId1: user.id,
           userName1: user.name || user.username,
@@ -152,7 +152,7 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated }: NewChat
     try {
       const response = await fetch(`${API_BASE}/api/chat/conversations/group`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           name: groupName.trim(),
           creatorId: user.id,
