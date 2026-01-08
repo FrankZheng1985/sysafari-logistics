@@ -6,6 +6,7 @@ import express from 'express'
 import multer from 'multer'
 import * as controller from './controller.js'
 import * as portalController from '../portal-api/controller.js'
+import { authenticate } from '../../middleware/auth.js'
 
 const router = express.Router()
 
@@ -324,8 +325,8 @@ router.put('/customer-accounts/:id/reset-password', controller.resetCustomerAcco
 // 删除客户门户账户
 router.delete('/customer-accounts/:id', controller.deleteCustomerAccount)
 
-// 工作人员代登录客户门户（生成代登录Token）
-router.post('/customer-accounts/:accountId/staff-login', portalController.staffProxyLogin)
+// 工作人员代登录客户门户（生成代登录Token）- 需要 ERP 系统认证
+router.post('/customer-accounts/:accountId/staff-login', authenticate, portalController.staffProxyLogin)
 
 // ==================== API 密钥管理路由 ====================
 
