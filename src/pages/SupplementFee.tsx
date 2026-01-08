@@ -239,6 +239,12 @@ export default function SupplementFee() {
   const [feeCategories, setFeeCategories] = useState<FeeCategory[]>(DEFAULT_FEE_CATEGORIES)
   const [feeCategoryGroups, setFeeCategoryGroups] = useState<FeeCategoryGroup[]>([])
   
+  // 费用分类分组展开/收起状态（存储展开的分组value）- 默认收起
+  const [expandedCategoryGroups, setExpandedCategoryGroups] = useState<Set<string>>(new Set())
+  
+  // 费用分类自动收起定时器（展开后15秒自动收起）
+  const categoryCollapseTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  
   // 手动录入相关
   const [manualCategory, setManualCategory] = useState('')
   const [manualFeeName, setManualFeeName] = useState('')
@@ -257,6 +263,15 @@ export default function SupplementFee() {
                                hasPermission('finance:fee_manage') ||
                                hasPermission('finance:payment_approve') ||
                                user?.role === 'admin'
+
+  // 清理费用分类自动收起的定时器
+  useEffect(() => {
+    return () => {
+      // 组件卸载时清除所有定时器
+      categoryCollapseTimersRef.current.forEach(timer => clearTimeout(timer))
+      categoryCollapseTimersRef.current.clear()
+    }
+  }, [])
 
   useEffect(() => {
     if (invoiceId) {
@@ -1245,44 +1260,113 @@ export default function SupplementFee() {
               手动录入费用
             </div>
             
-            {/* 费用分类选择 */}
+            {/* 费用分类选择 - 带展开/收起功能 */}
             <div>
-              <label className="block text-xs text-gray-600 mb-1">费用分类</label>
-              <div className="max-h-[160px] overflow-y-auto space-y-2">
+              <label className="block text-xs font-medium text-gray-700 mb-2">
+                费用分类 <span className="text-red-500">*</span>
+                <span className="ml-2 text-amber-500 text-xs font-normal">(手动录入可选择分类)</span>
+              </label>
+              <div className="max-h-[280px] overflow-y-auto space-y-2">
                 {feeCategoryGroups.length > 0 ? (
-                  feeCategoryGroups.map(group => (
-                    <div key={group.parent.value} className="space-y-1">
-                      <div className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium ${group.parent.color}`}>
-                        {(() => {
-                          const Icon = group.parent.icon
-                          return <Icon className="w-3.5 h-3.5" />
-                        })()}
-                        <span>{group.parent.label}</span>
-                      </div>
-                      <div className="grid grid-cols-4 gap-1.5 pl-2">
-                        {group.children.map(cat => (
-                          <button
-                            key={cat.value}
-                            type="button"
-                            onClick={() => {
-                              setManualCategory(cat.value)
-                              if (!manualFeeName) {
-                                setManualFeeName(cat.label)
+                  feeCategoryGroups.map(group => {
+                    const isExpanded = expandedCategoryGroups.has(group.parent.value)
+                    const isSelectedInGroup = group.children.some(cat => manualCategory === cat.value)
+                    
+                    return (
+                      <div key={group.parent.value} className="space-y-1.5">
+                        {/* 一级分类标题 - 可点击展开/收起 */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const groupValue = group.parent.value
+                            
+                            setExpandedCategoryGroups(prev => {
+                              const newSet = new Set(prev)
+                              if (newSet.has(groupValue)) {
+                                // 收起时清除该分组的定时器
+                                const existingTimer = categoryCollapseTimersRef.current.get(groupValue)
+                                if (existingTimer) {
+                                  clearTimeout(existingTimer)
+                                  categoryCollapseTimersRef.current.delete(groupValue)
+                                }
+                                newSet.delete(groupValue)
+                              } else {
+                                // 展开时设置15秒后自动收起
+                                newSet.add(groupValue)
+                                
+                                // 清除之前的定时器（如果有）
+                                const existingTimer = categoryCollapseTimersRef.current.get(groupValue)
+                                if (existingTimer) {
+                                  clearTimeout(existingTimer)
+                                }
+                                
+                                // 设置新的15秒定时器
+                                const timer = setTimeout(() => {
+                                  setExpandedCategoryGroups(prevSet => {
+                                    const updatedSet = new Set(prevSet)
+                                    updatedSet.delete(groupValue)
+                                    return updatedSet
+                                  })
+                                  categoryCollapseTimersRef.current.delete(groupValue)
+                                }, 15000) // 15秒后自动收起
+                                
+                                categoryCollapseTimersRef.current.set(groupValue, timer)
                               }
-                            }}
-                            className={`flex items-center justify-center px-2 py-1.5 rounded border text-xs transition-all truncate ${
-                              manualCategory === cat.value
-                                ? `${cat.bg} ${cat.color} border-current font-medium`
-                                : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                            }`}
-                          >
-                            {manualCategory === cat.value && <Check className="w-3 h-3 mr-1 flex-shrink-0" />}
-                            {cat.label}
-                          </button>
-                        ))}
+                              return newSet
+                            })
+                          }}
+                          className={`w-full flex items-center justify-between gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors ${group.parent.color}`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                            )}
+                            {(() => {
+                              const Icon = group.parent.icon
+                              return <Icon className="w-3.5 h-3.5" />
+                            })()}
+                            <span>{group.parent.label}</span>
+                            <span className="text-gray-400 font-normal">({group.children.length})</span>
+                          </div>
+                          {isSelectedInGroup && (
+                            <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs">
+                              已选
+                            </span>
+                          )}
+                        </button>
+                        {/* 二级分类按钮 - 展开时显示 */}
+                        {isExpanded && (
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pl-6">
+                            {group.children.map(cat => {
+                              const isSelected = manualCategory === cat.value
+                              return (
+                                <button
+                                  key={cat.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setManualCategory(cat.value)
+                                    if (!manualFeeName) {
+                                      setManualFeeName(cat.label)
+                                    }
+                                  }}
+                                  className={`flex items-center justify-center px-2 py-1.5 rounded border text-xs transition-all truncate ${
+                                    isSelected
+                                      ? `${cat.bg} ${cat.color} border-current font-medium`
+                                      : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 mr-1 flex-shrink-0" />}
+                                  {cat.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))
+                    )
+                  })
                 ) : (
                   <div className="grid grid-cols-4 gap-2">
                     {feeCategories.map(cat => (
