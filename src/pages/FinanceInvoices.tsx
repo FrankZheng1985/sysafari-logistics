@@ -648,13 +648,34 @@ export default function FinanceInvoices() {
           </button>
         </div>
 
-        <button
-          onClick={() => navigate('/finance/invoices/create')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          新建发票
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 导出按钮 */}
+          <button
+            onClick={() => {
+              // 构建导出参数
+              const defaultStatus = 'draft,pending,partial,overdue'
+              const params = new URLSearchParams({
+                ...(filterType && { type: filterType }),
+                status: filterStatus || defaultStatus,
+                ...(searchValue && { search: searchValue }),
+                export: 'true'
+              })
+              window.open(`${API_BASE}/api/invoices/export?${params}`, '_blank')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-orange-600 text-xs font-medium rounded-lg border border-orange-300 hover:bg-orange-50 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            导出
+          </button>
+
+          <button
+            onClick={() => navigate('/finance/invoices/create')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            新建发票
+          </button>
+        </div>
       </div>
 
       {/* 数据表格 */}

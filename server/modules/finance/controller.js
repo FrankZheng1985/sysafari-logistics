@@ -82,6 +82,109 @@ export async function getInvoices(req, res) {
 }
 
 /**
+ * 导出发票列表为Excel
+ */
+export async function exportInvoices(req, res) {
+  try {
+    const { type, status, search, startDate, endDate } = req.query
+    
+    // 获取所有符合条件的发票（不分页）
+    const result = await model.getInvoices({
+      type,
+      status,
+      search,
+      startDate,
+      endDate,
+      page: 1,
+      pageSize: 10000  // 获取所有数据
+    })
+    
+    const invoices = result.list || []
+    
+    // 动态导入 ExcelJS
+    const ExcelJS = (await import('exceljs')).default
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('发票列表')
+    
+    // 定义列
+    worksheet.columns = [
+      { header: '发票号', key: 'invoiceNumber', width: 20 },
+      { header: '类型', key: 'invoiceType', width: 12 },
+      { header: '客户/供应商', key: 'customerName', width: 20 },
+      { header: '集装箱号/提单号', key: 'containerNumbers', width: 35 },
+      { header: '金额', key: 'totalAmount', width: 15 },
+      { header: '已付金额', key: 'paidAmount', width: 15 },
+      { header: '未付金额', key: 'unpaidAmount', width: 15 },
+      { header: '币种', key: 'currency', width: 8 },
+      { header: '状态', key: 'status', width: 12 },
+      { header: '发票日期', key: 'invoiceDate', width: 15 },
+      { header: '到期日', key: 'dueDate', width: 15 },
+      { header: '创建时间', key: 'createTime', width: 18 },
+    ]
+    
+    // 设置表头样式
+    worksheet.getRow(1).font = { bold: true }
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' }
+    }
+    
+    // 状态映射
+    const statusMap = {
+      draft: '草稿',
+      pending: '待付款',
+      partial: '部分付款',
+      paid: '已付款',
+      overdue: '已逾期',
+      cancelled: '已取消'
+    }
+    
+    // 类型映射
+    const typeMap = {
+      sales: '销售发票',
+      purchase: '采购发票'
+    }
+    
+    // 添加数据行
+    invoices.forEach(invoice => {
+      const totalAmount = Number(invoice.totalAmount) || 0
+      const paidAmount = Number(invoice.paidAmount) || 0
+      
+      worksheet.addRow({
+        invoiceNumber: invoice.invoiceNumber || '',
+        invoiceType: typeMap[invoice.invoiceType] || invoice.invoiceType,
+        customerName: invoice.customerName || '',
+        containerNumbers: Array.isArray(invoice.containerNumbers) 
+          ? invoice.containerNumbers.join(', ') 
+          : (invoice.billNumber || ''),
+        totalAmount: totalAmount.toFixed(2),
+        paidAmount: paidAmount.toFixed(2),
+        unpaidAmount: (totalAmount - paidAmount).toFixed(2),
+        currency: invoice.currency || 'EUR',
+        status: statusMap[invoice.status] || invoice.status,
+        invoiceDate: invoice.invoiceDate ? new Date(invoice.invoiceDate).toLocaleDateString('zh-CN') : '',
+        dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('zh-CN') : '',
+        createTime: invoice.createTime ? new Date(invoice.createTime).toLocaleString('zh-CN') : '',
+      })
+    })
+    
+    // 设置响应头
+    const fileName = `发票列表_${new Date().toISOString().slice(0, 10)}.xlsx`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+    
+    // 写入响应
+    await workbook.xlsx.write(res)
+    res.end()
+    
+  } catch (error) {
+    console.error('导出发票列表失败:', error)
+    return serverError(res, '导出发票列表失败')
+  }
+}
+
+/**
  * 获取发票统计
  */
 export async function getInvoiceStats(req, res) {

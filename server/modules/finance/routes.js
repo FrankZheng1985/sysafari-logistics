@@ -44,6 +44,9 @@ router.get('/invoices/cos-status', controller.checkCosStatus)
 // 从费用记录生成发票
 router.post('/invoices/generate', controller.generateInvoiceFromFees)
 
+// 导出发票列表
+router.get('/invoices/export', controller.exportInvoices)
+
 // 获取发票列表
 router.get('/invoices', controller.getInvoices)
 
