@@ -137,6 +137,7 @@ export default function CalendarCard({ refreshKey }: CalendarCardProps) {
         <button
           onClick={prevMonth}
           className="p-1 hover:bg-gray-100 rounded transition-colors"
+          title="上个月"
         >
           <ChevronLeft className="w-4 h-4 text-gray-600" />
         </button>
@@ -146,6 +147,7 @@ export default function CalendarCard({ refreshKey }: CalendarCardProps) {
         <button
           onClick={nextMonth}
           className="p-1 hover:bg-gray-100 rounded transition-colors"
+          title="下个月"
         >
           <ChevronRight className="w-4 h-4 text-gray-600" />
         </button>

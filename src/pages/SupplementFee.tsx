@@ -1414,6 +1414,7 @@ export default function SupplementFee() {
                     value={manualCurrency}
                     onChange={(e) => setManualCurrency(e.target.value)}
                     className="w-12 flex-shrink-0 px-1.5 py-1.5 text-sm border border-r-0 border-gray-200 rounded-l-lg focus:outline-none bg-gray-50"
+                    title="选择货币"
                   >
                     <option value="EUR">€</option>
                     <option value="USD">$</option>
@@ -1554,6 +1555,8 @@ export default function SupplementFee() {
                             className="w-full px-2 py-1 text-sm text-right border border-gray-200 rounded-r focus:outline-none focus:ring-1 focus:ring-primary-500"
                             step="0.01"
                             min="0"
+                            title="费用金额"
+                            placeholder="0.00"
                           />
                         </div>
                       </div>
@@ -1780,7 +1783,7 @@ function ProductFeeSelectModal({
             <Package className="w-5 h-5 text-green-600" />
             从产品库选择费用项
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
@@ -1930,7 +1933,7 @@ function SupplierPriceSelectModal({
             <Receipt className="w-5 h-5 text-orange-600" />
             {supplierName} - 供应商报价
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
@@ -2025,7 +2028,7 @@ function QuotationFeeSelectModal({
             <FileText className="w-5 h-5 text-purple-600" />
             从报价单选择费用项
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>

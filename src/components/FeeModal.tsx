@@ -1047,7 +1047,7 @@ export default function FeeModal({
           <h3 className="text-base font-semibold text-gray-900">
             {editingFee ? '编辑费用' : '新增费用'}
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
@@ -1124,6 +1124,7 @@ export default function FeeModal({
                     customerName: ''
                   }))}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  title="清除选择"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1218,6 +1219,7 @@ export default function FeeModal({
                         setSupplierPrices([])
                       }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      title="清除供应商"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -1783,6 +1785,7 @@ export default function FeeModal({
                                   ))
                                 }}
                                 className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                                title="选择币种"
                               >
                                 <option value="EUR">EUR</option>
                                 <option value="CNY">CNY</option>
@@ -1945,6 +1948,7 @@ export default function FeeModal({
                         value={formData.currency}
                         onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
                         className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
+                        title="选择币种"
                       >
                         <option value="EUR">EUR</option>
                         <option value="CNY">CNY</option>
@@ -2065,6 +2069,7 @@ export default function FeeModal({
                             setPendingFeeItems(prev => prev.filter((_, i) => i !== index))
                           }}
                           className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded flex-shrink-0"
+                          title="删除费用项"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -2090,6 +2095,7 @@ export default function FeeModal({
                                 setPendingFeeItems(newItems)
                               }}
                               className={`flex-1 px-1.5 py-1 text-xs border rounded ${categoryStyle.bg} ${categoryStyle.color} border-gray-200`}
+                              title="选择费用分类"
                             >
                               {feeCategories.map(cat => (
                                 <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -2113,6 +2119,7 @@ export default function FeeModal({
                             setPendingFeeItems(newItems)
                           }}
                           className="px-1.5 py-1 text-xs border border-gray-200 rounded bg-white"
+                          title="选择币种"
                         >
                           <option value="EUR">EUR</option>
                           <option value="CNY">CNY</option>
@@ -2503,7 +2510,7 @@ export default function FeeModal({
                   setShowSupplierPriceSelect(false)
                   setSelectedPriceIds([])
                   setSupplierPriceSearch('')
-                }} className="p-1 hover:bg-gray-100 rounded">
+                }} className="p-1 hover:bg-gray-100 rounded" title="关闭">
                   <X className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
@@ -2525,6 +2532,7 @@ export default function FeeModal({
                       <button
                         onClick={() => setSupplierPriceSearch('')}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        title="清除搜索"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -2865,7 +2873,7 @@ function ProductFeeSelectModal({
               </span>
             )}
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
@@ -2891,6 +2899,7 @@ function ProductFeeSelectModal({
                   setFeeItemSearch('')
                 }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                title="清除搜索"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3224,7 +3233,7 @@ function QuotationFeeSelectModal({
               {quotations.length} 份报价单
             </span>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>

@@ -601,6 +601,7 @@ export default function CRMCustomerDetail() {
           <button
             onClick={() => navigate('/crm/customers')}
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            title="返回客户列表"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
@@ -1361,7 +1362,7 @@ export default function CRMCustomerDetail() {
           <div className="bg-white rounded-lg w-[400px] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-medium">创建门户账户</h3>
-              <button onClick={() => setShowAccountModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowAccountModal(false)} className="text-gray-400 hover:text-gray-600" title="关闭">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1431,7 +1432,7 @@ export default function CRMCustomerDetail() {
           <div className="bg-white rounded-lg w-[400px]">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="font-medium">重置密码</h3>
-              <button onClick={() => setShowPasswordModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowPasswordModal(false)} className="text-gray-400 hover:text-gray-600" title="关闭">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1786,7 +1787,7 @@ function AddressModal({
           <h3 className="text-sm font-medium text-gray-900">
             {initialData ? '编辑地址' : '添加地址'}
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
@@ -1936,6 +1937,7 @@ function AddressModal({
                 value={formData.addressType}
                 onChange={(e) => setFormData({ ...formData, addressType: e.target.value as CustomerAddress['addressType'] })}
                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                title="选择地址类型"
               >
                 <option value="both">通用</option>
                 <option value="shipper">发货地址</option>
@@ -2753,7 +2755,7 @@ function TaxModal({
           <h3 className="text-sm font-medium text-gray-900">
             {isEditMode ? '编辑公司税号' : '添加公司税号'}
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded" title="关闭">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
@@ -2910,6 +2912,7 @@ function TaxModal({
                           type="button"
                           onClick={() => toggleSelectSharedCompany(company)}
                           className="text-gray-400 hover:text-red-500 ml-0.5"
+                          title="移除"
                         >
                           <X className="w-3 h-3" />
                         </button>

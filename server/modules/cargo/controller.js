@@ -2174,7 +2174,7 @@ export async function analyzeProductImageCtrl(req, res) {
     if (result.success) {
       return success(res, {
         ...result.data,
-        usage: result.usage  // 返回token使用情况
+        tokenUsage: result.usage  // 返回token使用情况（改名避免与产品用途usage字段冲突）
       }, 'AI分析完成')
     } else {
       return serverError(res, result.error || 'AI分析失败')

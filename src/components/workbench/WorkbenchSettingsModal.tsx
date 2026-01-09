@@ -36,6 +36,7 @@ export default function WorkbenchSettingsModal({
           <button
             onClick={onClose}
             className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="关闭"
           >
             <X className="w-5 h-5" />
           </button>

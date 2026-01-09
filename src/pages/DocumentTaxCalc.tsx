@@ -171,9 +171,15 @@ export default function DocumentTaxCalc() {
       location: string
     }>
     surfaceTreatment?: string
-    usage?: string
+    usage?: string  // 产品用途
     specialNotes?: string
     raw?: string
+    tokenUsage?: {  // API调用统计（不显示）
+      promptTokens?: number
+      completionTokens?: number
+      totalTokens?: number
+      responseTimeMs?: number
+    }
   } | null>(null)
   
   // 批次筛选Tab：全部 / 待计算 / 已计算
@@ -1103,6 +1109,7 @@ export default function DocumentTaxCalc() {
                       value={tradeTermsForm.incoterm}
                       onChange={(e) => setTradeTermsForm(prev => ({ ...prev, incoterm: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      title="选择贸易条款"
                     >
                       {incotermsList.length > 0 ? (
                         incotermsList.map(term => (
@@ -1134,6 +1141,7 @@ export default function DocumentTaxCalc() {
                       value={tradeTermsForm.freightAllocationMethod}
                       onChange={(e) => setTradeTermsForm(prev => ({ ...prev, freightAllocationMethod: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      title="选择运费分摊方式"
                     >
                       <option value="by_value">按货值比例分摊</option>
                       <option value="by_weight">按重量比例分摊</option>
@@ -2532,6 +2540,7 @@ export default function DocumentTaxCalc() {
                 <button
                   onClick={() => { setPreviewImage(null); setAiResult(null) }}
                   className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                  title="关闭预览"
                 >
                   <X className="w-5 h-5 text-white" />
                 </button>
@@ -2570,6 +2579,7 @@ export default function DocumentTaxCalc() {
                 <button
                   onClick={() => setAiResult(null)}
                   className="p-1 hover:bg-gray-200 rounded-full"
+                  title="关闭分析结果"
                 >
                   <X className="w-4 h-4 text-gray-500" />
                 </button>
