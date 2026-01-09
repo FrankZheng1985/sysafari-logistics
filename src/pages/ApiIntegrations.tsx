@@ -4,7 +4,7 @@ import {
   FileText, Ship, HardDrive, Languages, Calculator, BadgeCheck,
   ShieldCheck, Globe, ExternalLink, Plus, AlertTriangle, 
   CheckCircle, XCircle, Clock, Loader2, TrendingUp, Wallet,
-  ChevronRight, Info, Download, X, Building2, MapPin
+  ChevronRight, Info, Download, X, Building2, MapPin, Brain
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 import HereApiUsageCard from '../components/HereApiUsageCard'
@@ -23,6 +23,7 @@ const categoryIcons: Record<string, React.ElementType> = {
   business_info: Building2,
   infrastructure: Server,
   geocoding: MapPin,
+  ai: Brain,
   other: Link2
 }
 
@@ -38,6 +39,7 @@ const categoryNames: Record<string, string> = {
   business_info: '工商信息',
   infrastructure: '基础设施',
   geocoding: '地图服务',
+  ai: 'AI智能',
   other: '其他'
 }
 
@@ -647,7 +649,7 @@ export default function ApiIntegrations() {
   }, {} as Record<string, ApiIntegration[]>)
   
   // 分类顺序
-  const categoryOrder = ['tracking', 'ocr', 'storage', 'finance', 'translation', 'tariff', 'validation', 'business_info', 'geocoding', 'infrastructure', 'other']
+  const categoryOrder = ['ai', 'tracking', 'ocr', 'storage', 'finance', 'translation', 'tariff', 'validation', 'business_info', 'geocoding', 'infrastructure', 'other']
   
   if (loading) {
     return (

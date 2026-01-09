@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   FileCheck, Calculator, Download, CheckCircle, RefreshCw,
   ChevronDown, FileText, AlertTriangle, Edit2, X, Save, User, Building, MapPin, Phone, Hash, Check,
-  Shield, TrendingDown, ExternalLink
+  Shield, TrendingDown, ExternalLink, Sparkles
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getAuthHeaders, getCustomers, getCustomerTaxNumbers, type Customer, type CustomerTaxNumber } from '../utils/api'
@@ -82,6 +82,9 @@ interface TaxDetails {
     itemNo: number
     productName: string
     productImage: string | null
+    customerOrderNo: string | null
+    palletCount: number
+    referenceNo: string | null
     matchedHsCode: string
     quantity: number
     unitName: string
@@ -146,6 +149,32 @@ export default function DocumentTaxCalc() {
   const [changingType, setChangingType] = useState(false)
   const [showOtherTaxPopup, setShowOtherTaxPopup] = useState<number | null>(null) // 显示其他税弹窗的行ID
   const [showHsOtherTaxPopup, setShowHsOtherTaxPopup] = useState<number | null>(null) // 按HS编码汇总的其他税弹窗
+  
+  // 图片预览模态框
+  const [previewImage, setPreviewImage] = useState<{
+    url: string
+    productName: string
+    hsCode?: string
+    imagePath?: string // 用于AI分析的图片路径
+  } | null>(null)
+  
+  // AI分析状态
+  const [aiAnalyzing, setAiAnalyzing] = useState(false)
+  // 图片增强状态
+  const [imageEnhancing, setImageEnhancing] = useState(false)
+  const [aiResult, setAiResult] = useState<{
+    productDescription?: string
+    mainMaterial?: string
+    materialBreakdown?: Array<{
+      material: string
+      percentage: string
+      location: string
+    }>
+    surfaceTreatment?: string
+    usage?: string
+    specialNotes?: string
+    raw?: string
+  } | null>(null)
   
   // 批次筛选Tab：全部 / 待计算 / 已计算
   const [batchFilter, setBatchFilter] = useState<'all' | 'pending' | 'calculated'>('all')
@@ -1613,6 +1642,9 @@ export default function DocumentTaxCalc() {
                   <tr>
                     <th className="px-3 py-2 text-left font-medium text-gray-500">行号</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-500">图片</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">客户单号</th>
+                    <th className="px-3 py-2 text-center font-medium text-gray-500">托盘</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">唛头</th>
                     <th className="px-3 py-2 text-left font-medium text-gray-500">商品名称</th>
                     <th className="px-3 py-2 text-left font-medium text-gray-500">HS编码</th>
                     <th className="px-3 py-2 text-center font-medium text-gray-500">原产地</th>
@@ -1635,19 +1667,46 @@ export default function DocumentTaxCalc() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={14} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={17} className="px-4 py-8 text-center text-gray-400">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                         加载中...
                       </td>
                     </tr>
                   ) : taxDetails.items.length === 0 ? (
                     <tr>
-                      <td colSpan={14} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={17} className="px-4 py-8 text-center text-gray-400">
                         暂无数据
                       </td>
                     </tr>
                   ) : (
-                    taxDetails.items.map(item => (
+                    (() => {
+                      // 预处理：计算每个客户单号组的rowSpan
+                      const rowSpanMap: Record<number, number> = {}
+                      const isFirstInGroup: Record<number, boolean> = {}
+                      let currentOrderNo = ''
+                      let groupStartIdx = 0
+                      
+                      taxDetails.items.forEach((item, idx) => {
+                        const orderNo = item.customerOrderNo || `_empty_${idx}`
+                        if (orderNo !== currentOrderNo) {
+                          // 新的组开始
+                          if (idx > 0) {
+                            // 设置上一组的rowSpan
+                            rowSpanMap[groupStartIdx] = idx - groupStartIdx
+                          }
+                          currentOrderNo = orderNo
+                          groupStartIdx = idx
+                          isFirstInGroup[idx] = true
+                        } else {
+                          isFirstInGroup[idx] = false
+                        }
+                      })
+                      // 处理最后一组
+                      if (taxDetails.items.length > 0) {
+                        rowSpanMap[groupStartIdx] = taxDetails.items.length - groupStartIdx
+                      }
+                      
+                      return taxDetails.items.map((item, idx) => (
                       <tr key={item.id} className="border-b hover:bg-gray-50">
                         <td className="px-3 py-2 text-gray-500">{item.itemNo}</td>
                         <td className="px-3 py-2 text-center">
@@ -1655,8 +1714,16 @@ export default function DocumentTaxCalc() {
                             <img
                               src={`${API_BASE}${item.productImage}`}
                               alt={item.productName}
-                              className="w-10 h-10 object-cover rounded border border-gray-200 cursor-pointer hover:scale-150 transition-transform"
-                              onClick={() => window.open(`${API_BASE}${item.productImage}`, '_blank')}
+                              className="w-10 h-10 object-cover rounded border border-gray-200 cursor-pointer hover:scale-110 hover:shadow-lg transition-all"
+                              onClick={() => {
+                                setPreviewImage({
+                                  url: `${API_BASE}${item.productImage}`,
+                                  productName: item.productName,
+                                  hsCode: item.matchedHsCode,
+                                  imagePath: item.productImage
+                                })
+                                setAiResult(null) // 重置AI分析结果
+                              }}
                               onError={(e) => {
                                 (e.target as HTMLImageElement).style.display = 'none'
                               }}
@@ -1665,6 +1732,31 @@ export default function DocumentTaxCalc() {
                             <span className="text-gray-300 text-[10px]">无图</span>
                           )}
                         </td>
+                        {/* 客户单号、托盘、唛头 - 同一托盘合并显示 */}
+                        {isFirstInGroup[idx] && (
+                          <>
+                            <td 
+                              className="px-3 py-2 text-xs text-gray-600 max-w-[100px] truncate bg-gray-50/50 border-l border-gray-100" 
+                              title={item.customerOrderNo || ''}
+                              rowSpan={rowSpanMap[idx] || 1}
+                            >
+                              {item.customerOrderNo || '-'}
+                            </td>
+                            <td 
+                              className="px-3 py-2 text-center text-gray-600 font-medium bg-gray-50/50"
+                              rowSpan={rowSpanMap[idx] || 1}
+                            >
+                              {item.palletCount || '-'}
+                            </td>
+                            <td 
+                              className="px-3 py-2 text-xs text-gray-600 max-w-[120px] truncate bg-gray-50/50 border-r border-gray-100" 
+                              title={item.referenceNo || ''}
+                              rowSpan={rowSpanMap[idx] || 1}
+                            >
+                              {item.referenceNo || '-'}
+                            </td>
+                          </>
+                        )}
                         <td className="px-3 py-2 max-w-[150px] truncate" title={item.productName}>
                           {item.productName}
                         </td>
@@ -1765,7 +1857,7 @@ export default function DocumentTaxCalc() {
                           </button>
                         </td>
                       </tr>
-                    ))
+                    ))})()
                   )}
                 </tbody>
                 {taxDetails.items.length > 0 && (
@@ -2302,6 +2394,250 @@ export default function DocumentTaxCalc() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 图片预览模态框 - 全屏大图 + AI分析抽屉 */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 bg-black z-50 flex flex-col"
+          onClick={() => { setPreviewImage(null); setAiResult(null) }}
+        >
+          {/* 顶部工具栏 */}
+          <div 
+            className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent px-4 py-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between max-w-7xl mx-auto">
+              <div className="text-white">
+                <h3 className="font-medium text-lg">{previewImage.productName}</h3>
+                {previewImage.hsCode && (
+                  <span className="text-sm text-gray-300">当前HS编码: {previewImage.hsCode}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {/* AI分析按钮 */}
+                <button
+                  onClick={async () => {
+                    if (!previewImage.imagePath) {
+                      showToast('图片路径无效', 'error')
+                      return
+                    }
+                    setAiAnalyzing(true)
+                    setAiResult(null)
+                    try {
+                      const res = await fetch(`${API_BASE}/api/cargo/ai/analyze-image`, {
+                        method: 'POST',
+                        headers: {
+                          ...getAuthHeaders(),
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          imagePath: previewImage.imagePath,
+                          productName: previewImage.productName
+                        })
+                      })
+                      const data = await res.json()
+                      if (data.errCode === 200 && data.data) {
+                        setAiResult(data.data)
+                        showToast('AI材质分析完成', 'success')
+                      } else {
+                        showToast(data.msg || 'AI分析失败', 'error')
+                      }
+                    } catch (err) {
+                      console.error('AI分析出错:', err)
+                      showToast('AI分析出错', 'error')
+                    } finally {
+                      setAiAnalyzing(false)
+                    }
+                  }}
+                  disabled={aiAnalyzing}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center gap-2 disabled:opacity-50 text-sm font-medium"
+                >
+                  {aiAnalyzing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      分析中...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-4 h-4" />
+                      AI材质分析
+                    </>
+                  )}
+                </button>
+                {/* AI超清按钮 - 强制使用AI超分辨率 */}
+                <button
+                  onClick={async () => {
+                    if (!previewImage.imagePath) {
+                      showToast('图片路径无效', 'error')
+                      return
+                    }
+                    setImageEnhancing(true)
+                    showToast('正在调用AI超分辨率，请稍候...', 'info')
+                    try {
+                      const res = await fetch(`${API_BASE}/api/cargo/images/reprocess`, {
+                        method: 'POST',
+                        headers: {
+                          ...getAuthHeaders(),
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          imagePath: previewImage.imagePath,
+                          forceAi: true  // 强制使用AI超分辨率
+                        })
+                      })
+                      const data = await res.json()
+                      if (data.errCode === 200) {
+                        showToast(data.msg || 'AI超清处理完成', 'success')
+                        // 刷新图片（添加时间戳破缓存）
+                        setPreviewImage({
+                          ...previewImage,
+                          url: previewImage.url.split('?')[0] + '?t=' + Date.now()
+                        })
+                      } else {
+                        showToast(data.msg || 'AI超清失败', 'error')
+                      }
+                    } catch (err) {
+                      console.error('AI超清出错:', err)
+                      showToast('AI超清出错', 'error')
+                    } finally {
+                      setImageEnhancing(false)
+                    }
+                  }}
+                  disabled={imageEnhancing}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg transition-all flex items-center gap-2 disabled:opacity-50 text-sm font-medium"
+                >
+                  {imageEnhancing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      AI处理中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      AI超清
+                    </>
+                  )}
+                </button>
+                {/* 新窗口打开 */}
+                <button
+                  onClick={() => window.open(previewImage.url, '_blank')}
+                  className="px-3 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors flex items-center gap-1 text-sm"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  原图
+                </button>
+                {/* 关闭按钮 */}
+                <button
+                  onClick={() => { setPreviewImage(null); setAiResult(null) }}
+                  className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* 图片区域 - 100%全屏 */}
+          <div 
+            className="flex-1 flex items-center justify-center p-8 pt-20"
+            onClick={e => e.stopPropagation()}
+          >
+            <img
+              src={previewImage.url}
+              alt={previewImage.productName}
+              className="max-w-full max-h-full object-contain select-none"
+              style={{ 
+                filter: 'contrast(1.05) saturate(1.1)',
+                imageRendering: 'auto'
+              }}
+              draggable={false}
+            />
+          </div>
+          
+          {/* AI分析结果抽屉 - 底部弹出 */}
+          {(aiResult || aiAnalyzing) && (
+            <div 
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl max-h-[50vh] overflow-hidden animate-slide-up"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+                <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-purple-600" />
+                  AI材质分析结果
+                </h4>
+                <button
+                  onClick={() => setAiResult(null)}
+                  className="p-1 hover:bg-gray-200 rounded-full"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="overflow-y-auto p-4 max-h-[calc(50vh-60px)]">
+                {aiAnalyzing && (
+                  <div className="flex items-center justify-center py-8">
+                    <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mr-3" />
+                    <span className="text-gray-600">正在识别产品材质...</span>
+                  </div>
+                )}
+                
+                {aiResult && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* 产品描述 */}
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <h5 className="text-sm font-medium text-blue-800 mb-1">📦 产品描述</h5>
+                      <p className="text-sm text-blue-700">{aiResult.productDescription || '-'}</p>
+                    </div>
+                    
+                    {/* 主要材质 */}
+                    <div className="bg-green-50 rounded-lg p-3">
+                      <h5 className="text-sm font-medium text-green-800 mb-1">🧪 主要材质</h5>
+                      <p className="text-sm text-green-700 font-semibold">{aiResult.mainMaterial || '-'}</p>
+                    </div>
+                    
+                    {/* 材质构成 */}
+                    {aiResult.materialBreakdown && aiResult.materialBreakdown.length > 0 && (
+                      <div className="bg-emerald-50 rounded-lg p-3">
+                        <h5 className="text-sm font-medium text-emerald-800 mb-2">📊 材质构成</h5>
+                        <div className="space-y-1">
+                          {aiResult.materialBreakdown.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-xs">
+                              <span className="text-emerald-700">{item.material}</span>
+                              <span className="text-emerald-600 font-medium">{item.percentage}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* 表面处理 */}
+                    {aiResult.surfaceTreatment && (
+                      <div className="bg-purple-50 rounded-lg p-3">
+                        <h5 className="text-sm font-medium text-purple-800 mb-1">✨ 表面处理</h5>
+                        <p className="text-sm text-purple-700">{aiResult.surfaceTreatment}</p>
+                      </div>
+                    )}
+                    
+                    {/* 产品用途 */}
+                    <div className="bg-amber-50 rounded-lg p-3">
+                      <h5 className="text-sm font-medium text-amber-800 mb-1">🎯 产品用途</h5>
+                      <p className="text-sm text-amber-700">{aiResult.usage || '-'}</p>
+                    </div>
+                    
+                    {/* 特殊说明 */}
+                    {aiResult.specialNotes && (
+                      <div className="bg-red-50 rounded-lg p-3">
+                        <h5 className="text-sm font-medium text-red-800 mb-1">⚠️ 海关分类参考</h5>
+                        <p className="text-sm text-red-700">{aiResult.specialNotes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

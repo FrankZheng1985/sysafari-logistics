@@ -180,28 +180,38 @@ export async function previewImport(req, res) {
     }
 
     const file = req.file
+    console.log(`[预览导入] 收到文件: ${file.originalname}, 大小: ${file.size} bytes, 路径: ${file.path}`)
+    
     const fileType = importer.getFileType(file.originalname)
+    console.log(`[预览导入] 文件类型: ${fileType}`)
     
     let previewResult
     
     if (fileType === 'csv') {
       // CSV 文件：读取内容后解析
+      console.log('[预览导入] 开始解析CSV文件')
       const fileContent = fs.readFileSync(file.path, 'utf-8')
       previewResult = await importer.parseAndPreview(fileContent, 'csv')
     } else if (fileType === 'excel') {
       // Excel 文件：直接传文件路径解析
+      console.log('[预览导入] 开始解析Excel文件')
       previewResult = await importer.parseAndPreview(file.path, 'excel', true)
     } else {
       fs.unlinkSync(file.path)
       return badRequest(res, '不支持的文件格式，请上传 CSV 或 Excel (.xlsx, .xls) 文件')
     }
     
+    console.log(`[预览导入] 解析完成，有效记录: ${previewResult?.validCount || 0}，错误记录: ${previewResult?.errorCount || 0}`)
+    
     // 删除临时文件
-    fs.unlinkSync(file.path)
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path)
+    }
 
     return success(res, previewResult)
   } catch (error) {
-    console.error('预览失败:', error)
+    console.error('[预览导入] 失败:', error.message)
+    console.error('[预览导入] 错误堆栈:', error.stack)
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path)
     }
@@ -2116,6 +2126,173 @@ export async function getProductLibraryStatsCtrl(req, res) {
   }
 }
 
+// ==================== AI图片分析 ====================
+
+/**
+ * AI分析产品图片 - 识别材质并建议HS编码
+ */
+export async function analyzeProductImageCtrl(req, res) {
+  try {
+    const { imagePath, productName, imageUrl, importId, cargoItemId } = req.body
+    
+    if (!imagePath && !imageUrl) {
+      return badRequest(res, '请提供图片路径或URL')
+    }
+    
+    // 动态导入服务（避免模块加载时出错）
+    const qwenVision = await import('../../services/qwenVisionService.js')
+    
+    // 检查服务是否可用
+    if (!qwenVision.isServiceAvailable()) {
+      return badRequest(res, 'AI分析服务未配置，请联系管理员设置DASHSCOPE_API_KEY')
+    }
+    
+    // 处理图片路径
+    let imageSource = imageUrl
+    if (!imageSource && imagePath) {
+      // 如果是相对路径（如 /uploads/xxx），转为绝对路径
+      if (imagePath.startsWith('/uploads/')) {
+        // 后端运行在 server/ 目录下，uploads 在同级
+        // /uploads/cargo-images/xxx -> uploads/cargo-images/xxx
+        imageSource = path.join(process.cwd(), imagePath.substring(1))
+      } else {
+        imageSource = imagePath
+      }
+    }
+    
+    // 获取用户信息用于日志记录
+    const context = {
+      userId: req.user?.id || null,
+      userName: req.user?.name || req.user?.username || 'anonymous',
+      importId: importId || null,
+      cargoItemId: cargoItemId || null
+    }
+    
+    // 调用AI分析（带日志记录）
+    const result = await qwenVision.analyzeProductImage(imageSource, productName || '', context)
+    
+    if (result.success) {
+      return success(res, {
+        ...result.data,
+        usage: result.usage  // 返回token使用情况
+      }, 'AI分析完成')
+    } else {
+      return serverError(res, result.error || 'AI分析失败')
+    }
+    
+  } catch (error) {
+    console.error('AI图片分析失败:', error)
+    return serverError(res, 'AI图片分析失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取AI使用统计
+ */
+export async function getAiUsageStatsCtrl(req, res) {
+  try {
+    const { days = 30 } = req.query
+    const qwenVision = await import('../../services/qwenVisionService.js')
+    
+    const stats = await qwenVision.getUsageStats(parseInt(days))
+    
+    if (stats) {
+      return success(res, stats)
+    } else {
+      return serverError(res, '获取统计数据失败')
+    }
+  } catch (error) {
+    console.error('获取AI使用统计失败:', error)
+    return serverError(res, '获取AI使用统计失败')
+  }
+}
+
+/**
+ * 获取AI调用记录
+ */
+export async function getAiUsageLogsCtrl(req, res) {
+  try {
+    const { limit = 50 } = req.query
+    const qwenVision = await import('../../services/qwenVisionService.js')
+    
+    const logs = await qwenVision.getRecentLogs(parseInt(limit))
+    
+    return success(res, logs)
+  } catch (error) {
+    console.error('获取AI调用记录失败:', error)
+    return serverError(res, '获取AI调用记录失败')
+  }
+}
+
+// ==================== 图片处理 ====================
+
+/**
+ * 批量重新处理所有图片
+ */
+export async function reprocessAllImagesCtrl(req, res) {
+  try {
+    const { batchId, forceAll = false, limit = 50 } = req.body
+    
+    const results = await importer.reprocessAllImages({
+      batchId,
+      forceAll,
+      limit: parseInt(limit)
+    })
+    
+    return success(res, results, `处理完成: 成功${results.processed}, 失败${results.failed}`)
+  } catch (error) {
+    console.error('批量重新处理图片失败:', error)
+    return serverError(res, '批量处理图片失败')
+  }
+}
+
+/**
+ * 重新处理单张图片
+ */
+export async function reprocessSingleImageCtrl(req, res) {
+  try {
+    const { imagePath, forceAi = false } = req.body
+    
+    if (!imagePath) {
+      return badRequest(res, '请提供图片路径')
+    }
+    
+    const result = await importer.reprocessSingleImage(imagePath, { forceAi })
+    
+    if (result.success) {
+      const methodName = result.method === 'ai_super_resolution' ? 'AI超分辨率' : '传统增强'
+      return success(res, result, `图片处理成功 (${methodName})`)
+    } else {
+      return badRequest(res, result.error || '图片处理失败')
+    }
+  } catch (error) {
+    console.error('重新处理图片失败:', error)
+    return serverError(res, '图片处理失败')
+  }
+}
+
+/**
+ * 检查AI分析服务状态
+ */
+export async function checkAiServiceStatusCtrl(req, res) {
+  try {
+    const qwenVision = await import('../../services/qwenVisionService.js')
+    const isAvailable = qwenVision.isServiceAvailable()
+    
+    return success(res, {
+      available: isAvailable,
+      service: '阿里通义千问 Qwen-VL',
+      message: isAvailable ? 'AI分析服务已就绪' : '未配置DASHSCOPE_API_KEY'
+    })
+  } catch (error) {
+    return success(res, {
+      available: false,
+      service: '阿里通义千问 Qwen-VL',
+      message: '服务检查失败: ' + error.message
+    })
+  }
+}
+
 export default {
   // 导入管理
   getStats,
@@ -2222,5 +2399,15 @@ export default {
   // 综合产品风险检测
   checkProductRiskCtrl,
   batchCheckImportRiskCtrl,
-  getProductLibraryStatsCtrl
+  getProductLibraryStatsCtrl,
+  
+  // AI图片分析
+  analyzeProductImageCtrl,
+  checkAiServiceStatusCtrl,
+  getAiUsageStatsCtrl,
+  getAiUsageLogsCtrl,
+  
+  // 图片处理
+  reprocessAllImagesCtrl,
+  reprocessSingleImageCtrl
 }

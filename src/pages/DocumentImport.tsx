@@ -31,6 +31,7 @@ interface PreviewItem {
   productCode?: string
   palletCount?: number
   referenceNo?: string
+  customerOrderNo?: string  // 客户单号
   productName: string
   productNameEn?: string
   hsCode?: string
@@ -41,6 +42,7 @@ interface PreviewItem {
   totalValue: number
   grossWeight: number
   netWeight?: number
+  unitNetWeight?: number  // 单件净重（新增）
   originCountry?: string
   material?: string
   materialEn?: string
@@ -214,60 +216,115 @@ export default function DocumentImport() {
   }
 
   const handleDownloadTemplate = () => {
-    // 生成CSV模板 - 按系统字段排序
+    // 生成CSV模板 - 按最新客户Excel模板格式排列
+    // 第一行：元数据行（集装箱号）
+    const metaRow = ['集装箱号', 'ECMU1234567']
+    
+    // 第二行：标题行 - 完全按照最新模板格式（19列）
     const headers = [
-      '序列号*',           // serialNo
-      '柜号*',             // containerNo
-      '客户名称',          // customerName
-      '提单号',            // billNumber
-      '中文品名*',         // productName
-      '英文商品品名*',     // productNameEn
-      'HS编码*',           // customerHsCode
-      '商品箱数CTNS*',     // cartonCount
-      '商品总件数PCS*',    // quantity
-      '商品申报单价*',     // unitPrice
-      '商品申报总价*',     // totalValue
-      '商品毛重*',         // grossWeight
-      '商品净重*',         // netWeight
-      '中文材质*',         // material
-      '英文材质*',         // materialEn
-      '原产国',            // originCountry
+      '序号*',             // serialNo
+      '客户单号*',         // customerOrderNo
       '托盘件数*',         // palletCount
       '唛头*',             // referenceNo
-      '装柜位置'           // loadingPosition
+      '英文品名*',         // productNameEn
+      'HS编码*',           // customerHsCode
+      '商品箱数CTNS*',     // cartonCount
+      '商品件数PCS*',      // quantity
+      '申报单价*',         // unitPrice
+      '申报总价*',         // totalValue
+      '总毛重KG*',         // grossWeight
+      '总净重KG*',         // netWeight
+      '单件净重*',         // unitNetWeight (新增)
+      '中文品名*',         // productName
+      '产品图片*',         // productImage
+      '中文材质*',         // material
+      '英文材质*',         // materialEn
+      '税率',              // dutyRate
+      '预估关税'           // estimatedDuty
     ]
-    const sampleData = [
-      '1',                          // 序列号
-      'CMAU4786361',                // 柜号
-      '深圳电子科技有限公司',        // 客户名称
-      'OOLU3456789012',             // 提单号
-      '开沟机',                      // 中文品名
-      'Trenching machine',          // 英文品名
-      '8432800000',                 // HS编码
+    
+    // 示例数据：托盘1（客户单号5881234，包含2个产品）
+    const sampleData1 = [
+      '1',                          // 序号
+      '5881234',                    // 客户单号（托盘首行填写）
+      '2',                          // 托盘件数
+      '5881234-1',                  // 唛头
+      'Tea table',                  // 英文品名
+      '9403609000',                 // HS编码
       '2',                          // 箱数
-      '500',                        // 件数
-      '1000',                       // 单价
-      '500000',                     // 总价
-      '700.00',                     // 毛重
-      '630.00',                     // 净重
-      '铁',                          // 中文材质
-      'iron',                       // 英文材质
-      'CN',                         // 原产国
-      '1',                          // 托盘件数
-      'MH-001',                     // 唛头
-      'A区'                         // 装柜位置
+      '3',                          // 件数
+      '150',                        // 申报单价
+      '450',                        // 申报总价
+      '32.5',                       // 总毛重KG
+      '29.25',                      // 总净重KG
+      '9.75',                       // 单件净重
+      '茶几桌',                      // 中文品名
+      '',                           // 产品图片
+      '复合板',                      // 中文材质
+      'Composite board',            // 英文材质
+      '',                           // 税率
+      ''                            // 预估关税
+    ]
+    
+    // 同一托盘下的第二个产品（客户单号留空）
+    const sampleData2 = [
+      '2',                          // 序号
+      '',                           // 客户单号（同托盘留空）
+      '',                           // 托盘件数（同托盘留空）
+      '5881234-2',                  // 唛头
+      'stool',                      // 英文品名
+      '9401710000',                 // HS编码
+      '1',                          // 箱数
+      '1',                          // 件数
+      '80',                         // 申报单价
+      '80',                         // 申报总价
+      '10',                         // 总毛重KG
+      '9',                          // 总净重KG
+      '9',                          // 单件净重
+      '椅子',                        // 中文品名
+      '',                           // 产品图片
+      '金属框架+PU',                 // 中文材质
+      'Metal+PU',                   // 英文材质
+      '',                           // 税率
+      ''                            // 预估关税
+    ]
+    
+    // 示例数据：托盘2（新的客户单号）
+    const sampleData3 = [
+      '3',                          // 序号
+      'EK5581210',                  // 客户单号（新托盘）
+      '3',                          // 托盘件数
+      'EK5581210-1',                // 唛头
+      'cultivator',                 // 英文品名
+      '8432299000',                 // HS编码
+      '3',                          // 箱数
+      '1',                          // 件数
+      '500',                        // 申报单价
+      '500',                        // 申报总价
+      '232',                        // 总毛重KG
+      '208.8',                      // 总净重KG
+      '208.8',                      // 单件净重
+      '耕田机',                      // 中文品名
+      '',                           // 产品图片
+      '不锈钢',                      // 中文材质
+      'Stainless steel',            // 英文材质
+      '',                           // 税率
+      ''                            // 预估关税
     ]
 
     const csvContent = [
+      metaRow.join(','),
       headers.join(','),
-      sampleData.join(',')
+      sampleData1.join(','),
+      sampleData2.join(','),
+      sampleData3.join(',')
     ].join('\n')
 
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = '货物导入模板.csv'
+    link.download = '货物明细模板.csv'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -878,9 +935,11 @@ export default function DocumentImport() {
         <div className="mt-4 p-3 bg-blue-50 rounded text-xs text-blue-700">
           <p className="font-medium mb-1">模板说明：</p>
           <ul className="space-y-0.5 text-blue-600">
-            <li>• 必填字段：柜号、中文品名/英文品名(至少一个)、数量/箱数(至少一个)、申报单价/总价(至少一个)、毛重</li>
-            <li>• 可选字段：箱产品号、托盘件数、提头、HS编码、净重、材质、装柜位置、税率、预估关税</li>
-            <li>• 支持Excel(.xlsx/.xls)和CSV格式，建议使用Excel格式</li>
+            <li>• <span className="font-medium">模板格式</span>：第1行为集装箱号，第2行为列标题（19列），第3行开始为数据</li>
+            <li>• <span className="font-medium">必填字段</span>：序号*、客户单号*、托盘件数*、唛头*、英文品名*、HS编码*、商品箱数CTNS*、商品件数PCS*、申报单价*、申报总价*、总毛重KG*、总净重KG*、单件净重*、中文品名*、中文材质*、英文材质*</li>
+            <li>• <span className="font-medium">可选字段</span>：产品图片*、税率、预估关税</li>
+            <li>• <span className="font-medium">一托多品</span>：同一托盘下有多个产品时，客户单号和托盘件数只需在第一行填写，后续行会自动继承</li>
+            <li>• <span className="font-medium">支持格式</span>：Excel(.xlsx/.xls) 和 CSV，建议使用Excel格式（支持图片导入）</li>
           </ul>
         </div>
       </div>

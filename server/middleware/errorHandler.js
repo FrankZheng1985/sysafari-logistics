@@ -32,12 +32,38 @@ export function notFoundHandler(req, res) {
  */
 export function globalErrorHandler(err, req, res, next) {
   // 记录错误日志
-  console.error('🚨 Error:', err)
+  console.error('🚨 Error:', err.message)
+  console.error('🚨 Stack:', err.stack)
+  console.error('🚨 Request:', req.method, req.originalUrl)
   
   // 业务错误
   if (err instanceof BusinessError) {
     return res.status(err.httpStatus).json({
       errCode: err.code,
+      msg: err.message,
+      data: null
+    })
+  }
+  
+  // Multer 文件上传错误
+  if (err.name === 'MulterError') {
+    let msg = '文件上传失败'
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      msg = '文件大小超出限制（最大10MB）'
+    } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      msg = '不支持的文件字段'
+    }
+    return res.status(400).json({
+      errCode: 400,
+      msg,
+      data: null
+    })
+  }
+  
+  // 文件格式错误（multer fileFilter 抛出的错误）
+  if (err.message && (err.message.includes('只支持') || err.message.includes('文件格式'))) {
+    return res.status(400).json({
+      errCode: 400,
       msg: err.message,
       data: null
     })
@@ -61,8 +87,16 @@ export function globalErrorHandler(err, req, res, next) {
     })
   }
   
-  // 未知错误
-  return serverError(res, process.env.NODE_ENV === 'development' ? err.message : '服务器内部错误')
+  // Excel/文件解析错误 - 提供有用的错误信息
+  if (err.message && (err.message.includes('Excel') || err.message.includes('解析') || err.message.includes('文件'))) {
+    return serverError(res, err.message)
+  }
+  
+  // 未知错误 - 在任何环境都提供基本错误描述
+  const errorMsg = process.env.NODE_ENV === 'development' 
+    ? err.message 
+    : (err.message && !err.message.includes('at ') ? err.message : '服务器内部错误，请稍后重试')
+  return serverError(res, errorMsg)
 }
 
 /**

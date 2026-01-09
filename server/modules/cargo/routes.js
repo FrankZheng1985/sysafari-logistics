@@ -288,4 +288,24 @@ router.post('/product-risk/batch/:importId', controller.batchCheckImportRiskCtrl
 // 获取产品库统计信息
 router.get('/product-risk/stats', controller.getProductLibraryStatsCtrl)
 
+// ==================== AI图片分析 ====================
+// AI分析产品图片
+router.post('/ai/analyze-image', controller.analyzeProductImageCtrl)
+
+// 检查AI服务状态
+router.get('/ai/status', controller.checkAiServiceStatusCtrl)
+
+// 获取AI使用统计
+router.get('/ai/usage-stats', controller.getAiUsageStatsCtrl)
+
+// 获取AI调用记录
+router.get('/ai/usage-logs', controller.getAiUsageLogsCtrl)
+
+// ==================== 图片处理 ====================
+// 批量重新处理图片（增强清晰度）
+router.post('/images/reprocess-all', controller.reprocessAllImagesCtrl)
+
+// 重新处理单张图片
+router.post('/images/reprocess', controller.reprocessSingleImageCtrl)
+
 export default router
