@@ -26,13 +26,15 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 
 // 图片增强配置
 const IMAGE_ENHANCE_CONFIG = {
-  minWidth: 800,           // 最小宽度，小于此值会放大
-  maxWidth: 1600,          // 最大宽度
-  quality: 90,             // JPEG质量
+  minWidth: 600,           // 最小宽度，小于此值会放大
+  maxWidth: 1200,          // 最大宽度（从1600降低到1200，节省空间）
+  quality: 82,             // JPEG质量（从90降低到82，压缩率更高，视觉差异极小）
+  pngCompression: 9,       // PNG压缩级别（0-9，9为最高压缩）
   sharpen: true,           // 是否锐化
   enhanceContrast: true,   // 是否增强对比度
   cropEcommerce: true,     // 是否裁剪电商截图底部
-  useAiEnhance: true       // 是否使用AI超分辨率（模糊图片）
+  useAiEnhance: true,      // 是否使用AI超分辨率（模糊图片）
+  convertToJpeg: true      // 将PNG转为JPEG以节省空间（透明图片除外）
 }
 
 // 电商截图检测配置
@@ -388,7 +390,7 @@ async function enhanceImage(imageBuffer, outputPath) {
         console.log(`  图片模糊，尝试AI超分辨率...`)
         const aiSuccess = await aiSuperResolution(processedBuffer, outputPath)
         if (aiSuccess) {
-          return true // AI处理成功，直接返回
+          return { success: true, outputPath } // AI处理成功，直接返回
         }
         console.log(`  AI增强未成功，使用传统方法`)
       }
@@ -428,27 +430,64 @@ async function enhanceImage(imageBuffer, outputPath) {
       }).normalise()        // 自动调整对比度
     }
     
-    // 确定输出格式
+    // 确定输出格式 - 优化压缩策略
     const ext = path.extname(outputPath).toLowerCase()
-    if (ext === '.png') {
-      processor = processor.png({ quality: IMAGE_ENHANCE_CONFIG.quality })
+    let finalOutputPath = outputPath
+    
+    // 检查PNG是否有透明通道，没有则转为JPEG以节省空间
+    if (ext === '.png' && IMAGE_ENHANCE_CONFIG.convertToJpeg) {
+      const meta = await sharp(processedBuffer).metadata()
+      const hasAlpha = meta.hasAlpha && meta.channels === 4
+      
+      if (!hasAlpha) {
+        // 无透明通道，转为JPEG
+        finalOutputPath = outputPath.replace(/\.png$/i, '.jpg')
+        processor = processor.jpeg({ 
+          quality: IMAGE_ENHANCE_CONFIG.quality, 
+          mozjpeg: true,
+          chromaSubsampling: '4:2:0'  // 更好的压缩
+        })
+        console.log(`  PNG转JPEG: 无透明通道，节省空间`)
+      } else {
+        // 有透明通道，保持PNG但使用最高压缩
+        processor = processor.png({ 
+          compressionLevel: IMAGE_ENHANCE_CONFIG.pngCompression,
+          palette: true  // 使用调色板进一步压缩
+        })
+      }
+    } else if (ext === '.png') {
+      processor = processor.png({ 
+        compressionLevel: IMAGE_ENHANCE_CONFIG.pngCompression,
+        palette: true
+      })
     } else {
-      processor = processor.jpeg({ quality: IMAGE_ENHANCE_CONFIG.quality, mozjpeg: true })
+      // JPEG格式，使用mozjpeg获得更好的压缩
+      processor = processor.jpeg({ 
+        quality: IMAGE_ENHANCE_CONFIG.quality, 
+        mozjpeg: true,
+        chromaSubsampling: '4:2:0'
+      })
     }
     
     // 保存处理后的图片
-    await processor.toFile(outputPath)
+    await processor.toFile(finalOutputPath)
+    
+    // 如果文件名改变了（PNG转JPEG），删除原始路径的文件（如果存在）
+    if (finalOutputPath !== outputPath && fs.existsSync(outputPath)) {
+      fs.unlinkSync(outputPath)
+    }
     
     // 获取处理后的文件大小
-    const stats = fs.statSync(outputPath)
-    console.log(`  增强完成: ${(stats.size / 1024).toFixed(1)}KB`)
+    const stats = fs.statSync(finalOutputPath)
+    const fileSizeKB = (stats.size / 1024).toFixed(1)
+    console.log(`  增强完成: ${fileSizeKB}KB ${finalOutputPath !== outputPath ? '(已转为JPEG)' : ''}`)
     
-    return true
+    return { success: true, outputPath: finalOutputPath }
   } catch (err) {
     console.warn(`图片增强失败，使用原图:`, err.message)
     // 增强失败时，保存原始图片
     fs.writeFileSync(outputPath, imageBuffer)
-    return false
+    return { success: false, outputPath, error: err.message }
   }
 }
 
@@ -639,10 +678,13 @@ async function extractDispImgImages(filePath, batchId) {
           const fileName = `${batchId}_${imageId}${ext}`
           const savePath = path.join(UPLOAD_DIR, fileName)
           
-          // 使用图片增强处理（放大+锐化+提升清晰度）
-          await enhanceImage(imageBuffer, savePath)
-          imageIdToPath[imageId] = `/uploads/cargo-images/${fileName}`
-          console.log(`保存图片(已增强): ${imageId} -> ${fileName}`)
+          // 使用图片增强处理（放大+锐化+提升清晰度+压缩）
+          const result = await enhanceImage(imageBuffer, savePath)
+          // 获取实际保存的文件名（可能PNG被转为JPG）
+          const actualPath = result && result.outputPath ? result.outputPath : savePath
+          const actualFileName = path.basename(actualPath)
+          imageIdToPath[imageId] = `/uploads/cargo-images/${actualFileName}`
+          console.log(`保存图片(已增强): ${imageId} -> ${actualFileName}`)
         } catch (saveErr) {
           console.warn(`保存图片 ${imageId} 失败:`, saveErr.message)
         }
@@ -885,14 +927,18 @@ export async function parseExcelFile(filePath) {
                 const fileName = `${batchId}_row${imageRow}_${Date.now()}.${ext}`
                 const imageFilePath = path.join(UPLOAD_DIR, fileName)
                 
-                // 使用图片增强处理（放大+锐化+提升清晰度）
-                await enhanceImage(imageData.buffer, imageFilePath)
+                // 使用图片增强处理（放大+锐化+提升清晰度+压缩）
+                const result = await enhanceImage(imageData.buffer, imageFilePath)
+                
+                // 获取实际保存的文件名（可能PNG被转为JPG）
+                const actualPath = result && result.outputPath ? result.outputPath : imageFilePath
+                const actualFileName = path.basename(actualPath)
                 
                 // 存储图片路径（可能一行有多个图片，这里取第一个）
                 if (!rowImages[imageRow]) {
-                  rowImages[imageRow] = `/uploads/cargo-images/${fileName}`
+                  rowImages[imageRow] = `/uploads/cargo-images/${actualFileName}`
                 }
-                console.log(`保存嵌入式图片(已增强): 行${imageRow} -> ${fileName}`)
+                console.log(`保存嵌入式图片(已增强): 行${imageRow} -> ${actualFileName}`)
               } catch (saveErr) {
                 console.warn(`保存嵌入式图片到行${imageRow}失败:`, saveErr.message)
               }
@@ -1858,15 +1904,18 @@ export async function reprocessAllImages(options = {}) {
         fs.copyFileSync(filePath, backupPath)
         
         // 使用增强处理
-        const success = await enhanceImage(imageBuffer, filePath)
+        const result = await enhanceImage(imageBuffer, filePath)
+        const success = result && (result.success || result === true)
         
         if (success) {
           results.processed++
+          const newFileName = result.outputPath ? path.basename(result.outputPath) : fileName
           results.details.push({
             file: fileName,
+            newFile: newFileName !== fileName ? newFileName : undefined,
             status: 'success'
           })
-          console.log(`  ✓ ${fileName}`)
+          console.log(`  ✓ ${fileName}${newFileName !== fileName ? ` -> ${newFileName}` : ''}`)
         } else {
           results.failed++
           results.details.push({
@@ -1948,16 +1997,19 @@ export async function reprocessSingleImage(imagePath, options = {}) {
     }
     
     // 传统增强处理
-    const success = await enhanceImage(imageBuffer, localPath)
+    const result = await enhanceImage(imageBuffer, localPath)
+    const success = result && (result.success || result === true)
+    const finalPath = result && result.outputPath ? result.outputPath : localPath
     
     // 获取处理后的信息
-    const stats = fs.statSync(localPath)
-    const metadata = await sharp(localPath).metadata()
+    const stats = fs.statSync(finalPath)
+    const metadata = await sharp(finalPath).metadata()
     
     return {
       success,
       method: 'traditional',
       originalPath: imagePath,
+      newPath: finalPath !== localPath ? finalPath : undefined,
       size: stats.size,
       width: metadata.width,
       height: metadata.height

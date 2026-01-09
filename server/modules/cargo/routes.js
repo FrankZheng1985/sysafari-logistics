@@ -28,7 +28,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB - 支持包含大量产品图片的Excel文件
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['.csv', '.xlsx', '.xls']
     const ext = path.extname(file.originalname).toLowerCase()
@@ -56,10 +56,19 @@ router.get('/documents/imports/:id/items', controller.getImportItems)
 // Multer 错误处理中间件
 const handleMulterError = (err, req, res, next) => {
   if (err) {
-    console.error('[Multer Error]', err.message)
+    console.error('[Multer Error]', err.message, err.code)
+    
+    // 根据错误类型提供更友好的中文提示
+    let errorMsg = '文件上传失败'
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      errorMsg = '文件太大，请压缩后重试（最大支持100MB）'
+    } else if (err.message) {
+      errorMsg = err.message
+    }
+    
     return res.status(400).json({
       errCode: 400,
-      msg: err.message || '文件上传失败',
+      msg: errorMsg,
       data: null
     })
   }
