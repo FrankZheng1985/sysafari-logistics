@@ -149,6 +149,7 @@ export default function DocumentTaxCalc() {
   const [changingType, setChangingType] = useState(false)
   const [showOtherTaxPopup, setShowOtherTaxPopup] = useState<number | null>(null) // 显示其他税弹窗的行ID
   const [showHsOtherTaxPopup, setShowHsOtherTaxPopup] = useState<number | null>(null) // 按HS编码汇总的其他税弹窗
+  const [hsCodeSummaryExpanded, setHsCodeSummaryExpanded] = useState(false) // 按HS编码汇总展开/收起状态，默认收起
   
   // 图片预览模态框
   const [previewImage, setPreviewImage] = useState<{
@@ -1550,91 +1551,102 @@ export default function DocumentTaxCalc() {
           {/* 按HS编码汇总 */}
           {taxDetails.byHsCode.length > 0 && (
             <div className="bg-white rounded-lg border border-gray-200">
-              <div className="px-4 py-3 border-b border-gray-200">
-                <h3 className="text-sm font-medium text-gray-900">按HS编码汇总</h3>
+              <div 
+                className="px-4 py-3 border-b border-gray-200 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => setHsCodeSummaryExpanded(!hsCodeSummaryExpanded)}
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-gray-900">按HS编码汇总</h3>
+                  <span className="text-xs text-gray-500">({taxDetails.byHsCode.length}个编码)</span>
+                </div>
+                <ChevronDown 
+                  className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${hsCodeSummaryExpanded ? 'rotate-180' : ''}`}
+                />
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-500">HS编码</th>
-                      <th className="px-4 py-2 text-center font-medium text-gray-500">验证</th>
-                      <th className="px-4 py-2 text-center font-medium text-gray-500">商品数</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-500">货值</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-500">关税</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-500">
-                        增值税
-                        {isDeferred && <span className="text-blue-500 ml-1">(递延)</span>}
-                      </th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-500">
-                        <span className="cursor-help" title="包含：反倾销税、反补贴税等">其他税</span>
-                      </th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-500">税费合计</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {taxDetails.byHsCode.map((item, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-2 font-mono">{item.hsCode}</td>
-                        <td className="px-4 py-2 text-center">
-                          <a
-                            href={`https://ec.europa.eu/taxation_customs/dds2/taric/measures.jsp?Lang=en&Taric=${item.hsCode?.replace(/\D/g, '').substring(0, 10)}&GoodsText=&MeasType=&OriginCountry=CN`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center w-6 h-6 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-full transition-colors"
-                            title="在欧盟TARIC系统验证税率"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </td>
-                        <td className="px-4 py-2 text-center">{item.itemCount}</td>
-                        <td className="px-4 py-2 text-right">{formatCurrency(item.totalValue)}</td>
-                        <td className="px-4 py-2 text-right">{formatCurrency(item.totalDuty)}</td>
-                        <td className={`px-4 py-2 text-right ${isDeferred ? 'text-gray-400' : ''}`}>
-                          {formatCurrency(item.totalVat)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-purple-600">
-                          <div className="flex items-center justify-end gap-1 relative hs-other-tax-popup-container">
-                            {formatCurrency(item.totalOtherTax)}
-                            {item.totalOtherTax > 0 && (
-                              <>
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setShowHsOtherTaxPopup(showHsOtherTaxPopup === idx ? null : idx)
-                                  }}
-                                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-100 text-purple-600 hover:bg-purple-200 cursor-pointer text-[10px] font-bold transition-colors"
-                                >
-                                  !
-                                </button>
-                                {showHsOtherTaxPopup === idx && (
-                                  <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-purple-200 rounded-lg shadow-lg p-3 min-w-[200px]">
-                                    <div className="text-xs font-medium text-gray-700 mb-2 border-b pb-1">其他税费说明</div>
-                                    <div className="space-y-1.5 text-xs text-gray-600">
-                                      <div>• <span className="font-medium">反倾销税</span>：针对倾销行为征收的惩罚性关税</div>
-                                      <div>• <span className="font-medium">反补贴税</span>：针对政府补贴行为征收的关税</div>
-                                    </div>
-                                    <div className="mt-2 pt-2 border-t flex justify-between text-xs">
-                                      <span className="text-gray-600">HS编码 {item.hsCode} 合计</span>
-                                      <span className="text-purple-600 font-bold">{formatCurrency(item.totalOtherTax)}</span>
-                                    </div>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 text-right font-medium">
-                          {formatCurrency(isDeferred 
-                            ? item.totalDuty + item.totalOtherTax 
-                            : item.totalTax
-                          )}
-                        </td>
+              {hsCodeSummaryExpanded && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium text-gray-500">HS编码</th>
+                        <th className="px-4 py-2 text-center font-medium text-gray-500">验证</th>
+                        <th className="px-4 py-2 text-center font-medium text-gray-500">商品数</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-500">货值</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-500">关税</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-500">
+                          增值税
+                          {isDeferred && <span className="text-blue-500 ml-1">(递延)</span>}
+                        </th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-500">
+                          <span className="cursor-help" title="包含：反倾销税、反补贴税等">其他税</span>
+                        </th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-500">税费合计</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {taxDetails.byHsCode.map((item, idx) => (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2 font-mono">{item.hsCode}</td>
+                          <td className="px-4 py-2 text-center">
+                            <a
+                              href={`https://ec.europa.eu/taxation_customs/dds2/taric/measures.jsp?Lang=en&Taric=${item.hsCode?.replace(/\D/g, '').substring(0, 10)}&GoodsText=&MeasType=&OriginCountry=CN`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center w-6 h-6 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-full transition-colors"
+                              title="在欧盟TARIC系统验证税率"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </td>
+                          <td className="px-4 py-2 text-center">{item.itemCount}</td>
+                          <td className="px-4 py-2 text-right">{formatCurrency(item.totalValue)}</td>
+                          <td className="px-4 py-2 text-right">{formatCurrency(item.totalDuty)}</td>
+                          <td className={`px-4 py-2 text-right ${isDeferred ? 'text-gray-400' : ''}`}>
+                            {formatCurrency(item.totalVat)}
+                          </td>
+                          <td className="px-4 py-2 text-right text-purple-600">
+                            <div className="flex items-center justify-end gap-1 relative hs-other-tax-popup-container">
+                              {formatCurrency(item.totalOtherTax)}
+                              {item.totalOtherTax > 0 && (
+                                <>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setShowHsOtherTaxPopup(showHsOtherTaxPopup === idx ? null : idx)
+                                    }}
+                                    className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-100 text-purple-600 hover:bg-purple-200 cursor-pointer text-[10px] font-bold transition-colors"
+                                  >
+                                    !
+                                  </button>
+                                  {showHsOtherTaxPopup === idx && (
+                                    <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-purple-200 rounded-lg shadow-lg p-3 min-w-[200px]">
+                                      <div className="text-xs font-medium text-gray-700 mb-2 border-b pb-1">其他税费说明</div>
+                                      <div className="space-y-1.5 text-xs text-gray-600">
+                                        <div>• <span className="font-medium">反倾销税</span>：针对倾销行为征收的惩罚性关税</div>
+                                        <div>• <span className="font-medium">反补贴税</span>：针对政府补贴行为征收的关税</div>
+                                      </div>
+                                      <div className="mt-2 pt-2 border-t flex justify-between text-xs">
+                                        <span className="text-gray-600">HS编码 {item.hsCode} 合计</span>
+                                        <span className="text-purple-600 font-bold">{formatCurrency(item.totalOtherTax)}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-right font-medium">
+                            {formatCurrency(isDeferred 
+                              ? item.totalDuty + item.totalOtherTax 
+                              : item.totalTax
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
