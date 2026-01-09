@@ -683,6 +683,71 @@ async function checkQichachaHealth() {
 }
 
 /**
+ * 检查阿里云DashScope API配置和可用性
+ */
+async function checkAliyunDashscopeHealth() {
+  const db = getDatabase()
+  
+  // 首先检查数据库中是否存储了API Key
+  const apiInfo = await db.prepare('SELECT api_key FROM api_integrations WHERE api_code = $1').get('aliyun_qwen_vl')
+  const dbApiKey = apiInfo?.api_key
+  
+  // 然后检查环境变量
+  const envApiKey = process.env.DASHSCOPE_API_KEY
+  
+  const apiKey = dbApiKey || envApiKey
+  
+  if (!apiKey) {
+    return {
+      status: 'degraded',
+      responseTime: 0,
+      message: '未配置DashScope API密钥'
+    }
+  }
+  
+  // 使用API Key进行真实的健康检查 - 调用模型列表API
+  const startTime = Date.now()
+  try {
+    const response = await fetch('https://dashscope.aliyuncs.com/api/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      signal: AbortSignal.timeout(10000)
+    })
+    
+    const responseTime = Date.now() - startTime
+    
+    if (response.ok) {
+      return {
+        status: 'online',
+        responseTime,
+        message: 'API正常可用'
+      }
+    } else if (response.status === 401 || response.status === 403) {
+      return {
+        status: 'degraded',
+        responseTime,
+        message: 'API密钥无效或已过期'
+      }
+    } else {
+      return {
+        status: 'degraded',
+        responseTime,
+        message: `API响应异常: ${response.status}`
+      }
+    }
+  } catch (error) {
+    return {
+      status: 'offline',
+      responseTime: Date.now() - startTime,
+      message: error.message || '网络错误'
+    }
+  }
+}
+
+/**
  * 检查HERE Maps API配置和可用性
  */
 async function checkHereApiHealth() {
@@ -767,6 +832,9 @@ export async function performHealthCheck(apiCode) {
       break
     case 'here_geocoding':
       result = await checkHereApiHealth()
+      break
+    case 'aliyun_qwen_vl':
+      result = await checkAliyunDashscopeHealth()
       break
     default:
       // 默认HTTP健康检查
