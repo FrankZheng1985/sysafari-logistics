@@ -7,7 +7,7 @@ import { getDatabase } from '../../config/database.js'
 
 // 匹配阈值配置
 const MATCH_CONFIG = {
-  AUTO_APPROVE_THRESHOLD: 90,  // 自动通过的置信度阈值
+  AUTO_APPROVE_THRESHOLD: 100,  // 自动通过的置信度阈值（只有100%精确匹配才自动通过）
   EXACT_MATCH_CONFIDENCE: 100,  // 精确匹配置信度
   PREFIX_8_CONFIDENCE: 90,      // 8位前缀匹配置信度
   PREFIX_6_CONFIDENCE: 80,      // 6位前缀匹配置信度
