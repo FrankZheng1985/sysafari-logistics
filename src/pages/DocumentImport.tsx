@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   FileCheck, Upload, Download, FileSpreadsheet, 
-  Check, X, AlertTriangle, RefreshCw, Trash2, Eye, User, Building, ChevronDown, Ship, FileText
+  Check, X, AlertTriangle, RefreshCw, Trash2, Eye, User, Building, 
+  ChevronDown, Ship, FileText, Plus, ChevronRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getAuthHeaders, getCustomers, getCustomerTaxNumbers, getBillsList, type Customer, type CustomerTaxNumber, type BillOfLading } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
-import { useImport } from '../contexts/ImportContext'
+import { useImport, type ImportTask, type PreviewItem } from '../contexts/ImportContext'
 
 const API_BASE = getApiBaseUrl()
 
@@ -25,123 +26,544 @@ interface ImportRecord {
   createdAt: string
 }
 
-interface PreviewItem {
-  rowNo: number
-  containerNo: string
-  billNumber?: string
-  productCode?: string
-  palletCount?: number
-  referenceNo?: string
-  customerOrderNo?: string  // 客户单号
-  productName: string
-  productNameEn?: string
-  hsCode?: string
-  cartonCount?: number
-  quantity: number
-  unit: string
-  unitPrice: number
-  totalValue: number
-  grossWeight: number
-  netWeight?: number
-  unitNetWeight?: number  // 单件净重（新增）
-  originCountry?: string
-  material?: string
-  materialEn?: string
-  productImage?: string
-  loadingPosition?: string
-  dutyRate?: number
-  estimatedDuty?: number
-  error?: string
+// 任务卡片组件
+function TaskCard({ 
+  task, 
+  onUploadFile, 
+  onShowPreview, 
+  onConfirmImport,
+  onDelete,
+  onUpdateTask,
+  bills: initialBills,
+  loadingBills: initialLoadingBills,
+  customers,
+  loadingCustomers,
+}: {
+  task: ImportTask
+  onUploadFile: (taskId: string, file: File) => void
+  onShowPreview: (taskId: string) => void
+  onConfirmImport: (taskId: string) => void
+  onDelete: (taskId: string) => void
+  onUpdateTask: (taskId: string, updates: Partial<ImportTask>) => void
+  bills: BillOfLading[]
+  loadingBills: boolean
+  customers: Customer[]
+  loadingCustomers: boolean
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showBillDropdown, setShowBillDropdown] = useState(false)
+  const [billSearch, setBillSearch] = useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customerTaxNumbers, setCustomerTaxNumbers] = useState<CustomerTaxNumber[]>([])
+  const [loadingTaxNumbers, setLoadingTaxNumbers] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
+  
+  // 本地提单列表和加载状态（支持服务端搜索）
+  const [localBills, setLocalBills] = useState<BillOfLading[]>(initialBills)
+  const [localLoadingBills, setLocalLoadingBills] = useState(false)
+
+  // 当初始提单变化时更新本地列表
+  useEffect(() => {
+    if (!billSearch.trim()) {
+      setLocalBills(initialBills)
+    }
+  }, [initialBills, billSearch])
+
+  // 搜索提单（服务端搜索，防抖）
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (billSearch.trim()) {
+        setLocalLoadingBills(true)
+        try {
+          const response = await getBillsList({ 
+            pageSize: 100,
+            search: billSearch.trim()
+          })
+          if (response.errCode === 200) {
+            setLocalBills(response.data?.list || [])
+          }
+        } catch (error) {
+          console.error('搜索提单失败:', error)
+        } finally {
+          setLocalLoadingBills(false)
+        }
+      } else {
+        setLocalBills(initialBills)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [billSearch, initialBills])
+
+  // 使用本地状态
+  const filteredBills = localBills
+  const loadingBills = localLoadingBills || initialLoadingBills
+
+  // 过滤客户
+  const filteredCustomers = customers.filter(c => 
+    c.customerName?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.companyName?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.customerCode?.toLowerCase().includes(customerSearch.toLowerCase())
+  )
+
+  // 加载客户税号
+  const loadCustomerTaxNumbers = async (customerId: string) => {
+    setLoadingTaxNumbers(true)
+    try {
+      const response = await getCustomerTaxNumbers(customerId)
+      if (response.errCode === 200) {
+        setCustomerTaxNumbers(response.data || [])
+        const defaultTax = response.data?.find((t: CustomerTaxNumber) => t.isDefault)
+        if (defaultTax) {
+          onUpdateTask(task.id, { selectedTaxNumber: defaultTax })
+        }
+      }
+    } catch (error) {
+      console.error('加载客户税号失败:', error)
+    } finally {
+      setLoadingTaxNumbers(false)
+    }
+  }
+
+  // 当选择客户后加载税号
+  useEffect(() => {
+    if (task.selectedCustomer) {
+      loadCustomerTaxNumbers(task.selectedCustomer.id)
+    } else {
+      setCustomerTaxNumbers([])
+    }
+  }, [task.selectedCustomer?.id])
+
+  // 当选择提单后自动填充发货方信息
+  useEffect(() => {
+    if (task.selectedBill) {
+      const shipperText = task.selectedBill.shipper || ''
+      const shipperLines = shipperText.split('\n').filter(line => line.trim())
+      onUpdateTask(task.id, {
+        shipperInfo: {
+          name: shipperLines[0] || '',
+          address: shipperLines.slice(1).join(', ') || '',
+          contact: ''
+        }
+      })
+    }
+  }, [task.selectedBill?.id])
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const validTypes = ['.csv', '.xlsx', '.xls']
+    const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+    if (!validTypes.includes(fileExt)) {
+      alert('请上传 CSV 或 Excel 文件')
+      return
+    }
+
+    onUploadFile(task.id, file)
+  }
+
+  const getStatusBadge = () => {
+    const styles: Record<string, string> = {
+      pending: 'bg-gray-100 text-gray-600',
+      parsing: 'bg-blue-100 text-blue-700',
+      preview: 'bg-amber-100 text-amber-700',
+      importing: 'bg-purple-100 text-purple-700',
+      completed: 'bg-green-100 text-green-700',
+      error: 'bg-red-100 text-red-700'
+    }
+    const labels: Record<string, string> = {
+      pending: '待上传',
+      parsing: '解析中',
+      preview: '待确认',
+      importing: '导入中',
+      completed: '已完成',
+      error: '失败'
+    }
+    return (
+      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${styles[task.status]}`}>
+        {labels[task.status]}
+      </span>
+    )
+  }
+
+  const isProcessing = task.status === 'parsing' || task.status === 'importing'
+
+  return (
+    <div className={`border rounded-lg ${
+      task.status === 'error' ? 'border-red-200 bg-red-50' :
+      task.status === 'completed' ? 'border-green-200 bg-green-50' :
+      isProcessing ? 'border-blue-200 bg-blue-50' :
+      'border-gray-200 bg-white'
+    }`}>
+      {/* 任务头部 */}
+      <div 
+        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-3">
+          <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+          <div className="flex items-center gap-2">
+            {isProcessing && <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />}
+            <span className="text-sm font-medium text-gray-900">
+              {task.selectedBill?.billNumber || '未选择提单'}
+            </span>
+            {task.selectedBill?.containerNumber && (
+              <span className="text-xs text-gray-500">| 柜号: {task.selectedBill.containerNumber}</span>
+            )}
+          </div>
+          {getStatusBadge()}
+        </div>
+        <div className="flex items-center gap-2">
+          {task.fileName && (
+            <span className="text-xs text-gray-500 max-w-[150px] truncate">
+              {task.fileName}
+            </span>
+          )}
+          {!isProcessing && task.status !== 'completed' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(task.id)
+              }}
+              className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-600"
+              title="删除任务"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 任务详情 */}
+      {isExpanded && (
+        <div className="px-4 pb-4 border-t border-gray-100 overflow-visible">
+          {/* 进度/错误信息 */}
+          {task.progress && (
+            <div className="mt-3 px-3 py-2 bg-blue-50 rounded text-xs text-blue-700 flex items-center gap-2">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              {task.progress}
+            </div>
+          )}
+          {task.error && (
+            <div className="mt-3 px-3 py-2 bg-red-50 rounded text-xs text-red-700 flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {task.error}
+            </div>
+          )}
+          {task.status === 'completed' && (
+            <div className="mt-3 px-3 py-2 bg-green-50 rounded text-xs text-green-700 flex items-center gap-2">
+              <Check className="w-3.5 h-3.5" />
+              {task.progress || '导入成功'}
+            </div>
+          )}
+
+          {/* 提单选择 */}
+          {task.status === 'pending' && (
+            <div className="mt-3 relative z-30">
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                <Ship className="w-3.5 h-3.5 inline mr-1" />
+                绑定提单 <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div 
+                  className={`w-full px-3 py-2 border rounded text-sm bg-white cursor-pointer flex items-center justify-between ${
+                    task.selectedBill ? 'border-green-400' : 'border-gray-300'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowBillDropdown(!showBillDropdown)
+                  }}
+                >
+                  {task.selectedBill ? (
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-green-600" />
+                      <span className="text-gray-900 font-medium">{task.selectedBill.billNumber}</span>
+                      {task.selectedBill.orderNumber && (
+                        <span className="text-blue-600 text-xs">({task.selectedBill.orderNumber})</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">请选择要绑定的提单...</span>
+                  )}
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </div>
+                {showBillDropdown && (
+                  <div className="absolute z-[100] w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[400px] overflow-y-auto">
+                    <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                      <input
+                        type="text"
+                        value={billSearch}
+                        onChange={(e) => setBillSearch(e.target.value)}
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
+                        placeholder="搜索提单号/柜号/客户名..."
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    {loadingBills ? (
+                      <div className="p-3 text-center text-xs text-gray-400">
+                        <RefreshCw className="w-4 h-4 animate-spin inline-block mr-1" />
+                        加载中...
+                      </div>
+                    ) : filteredBills.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-gray-400">无匹配提单</div>
+                    ) : (
+                      filteredBills.map(bill => (
+                        <div
+                          key={bill.id}
+                          className={`px-3 py-2 cursor-pointer hover:bg-gray-50 border-b border-gray-50 ${
+                            task.selectedBill?.id === bill.id ? 'bg-primary-50' : ''
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onUpdateTask(task.id, { selectedBill: bill })
+                            setShowBillDropdown(false)
+                            setBillSearch('')
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">{bill.billNumber}</span>
+                              {bill.containerNumber && (
+                                <span className="text-xs text-gray-500 ml-2">柜号: {bill.containerNumber}</span>
+                              )}
+                            </div>
+                            {task.selectedBill?.id === bill.id && (
+                              <Check className="w-4 h-4 text-green-600" />
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            {bill.companyName || bill.customerName || '未关联客户'}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 发货方和进口商信息（折叠） */}
+          {task.status === 'pending' && task.selectedBill && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              {/* 发货方信息 */}
+              <div className="border border-gray-200 rounded p-2">
+                <div className="flex items-center gap-1 mb-2">
+                  <User className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-xs font-medium text-gray-700">发货方信息</span>
+                </div>
+                <input
+                  type="text"
+                  value={task.shipperInfo.name}
+                  onChange={(e) => onUpdateTask(task.id, { 
+                    shipperInfo: { ...task.shipperInfo, name: e.target.value }
+                  })}
+                  className="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-1"
+                  placeholder="发货方名称"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <input
+                  type="text"
+                  value={task.shipperInfo.address}
+                  onChange={(e) => onUpdateTask(task.id, { 
+                    shipperInfo: { ...task.shipperInfo, address: e.target.value }
+                  })}
+                  className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                  placeholder="地址"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+
+              {/* 进口商信息 */}
+              <div className="border border-gray-200 rounded p-2">
+                <div className="flex items-center gap-1 mb-2">
+                  <Building className="w-3.5 h-3.5 text-green-600" />
+                  <span className="text-xs font-medium text-gray-700">进口商信息</span>
+                </div>
+                <div className="relative mb-1">
+                  <div 
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-xs bg-white cursor-pointer flex items-center justify-between"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowCustomerDropdown(!showCustomerDropdown)
+                    }}
+                  >
+                    <span className={task.selectedCustomer ? 'text-gray-900' : 'text-gray-400'}>
+                      {task.selectedCustomer ? (task.selectedCustomer.companyName || task.selectedCustomer.customerName) : '选择客户'}
+                    </span>
+                    <ChevronDown className="w-3 h-3 text-gray-400" />
+                  </div>
+                  {showCustomerDropdown && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                      <div className="p-1 border-b border-gray-100">
+                        <input
+                          type="text"
+                          value={customerSearch}
+                          onChange={(e) => setCustomerSearch(e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                          placeholder="搜索客户..."
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      {loadingCustomers ? (
+                        <div className="p-2 text-center text-xs text-gray-400">加载中...</div>
+                      ) : filteredCustomers.length === 0 ? (
+                        <div className="p-2 text-center text-xs text-gray-400">无匹配客户</div>
+                      ) : (
+                        filteredCustomers.map(customer => (
+                          <div
+                            key={customer.id}
+                            className="px-2 py-1.5 text-xs cursor-pointer hover:bg-gray-50"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onUpdateTask(task.id, { selectedCustomer: customer, selectedTaxNumber: null })
+                              setShowCustomerDropdown(false)
+                              setCustomerSearch('')
+                            }}
+                          >
+                            {customer.companyName || customer.customerName}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                {task.selectedCustomer && (
+                  <select
+                    value={task.selectedTaxNumber?.id || ''}
+                    onChange={(e) => {
+                      const tax = customerTaxNumbers.find(t => String(t.id) === e.target.value)
+                      onUpdateTask(task.id, { selectedTaxNumber: tax || null })
+                    }}
+                    className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                    onClick={(e) => e.stopPropagation()}
+                    title="选择税号"
+                  >
+                    <option value="">选择税号</option>
+                    {customerTaxNumbers.map(tax => (
+                      <option key={tax.id} value={tax.id}>
+                        {tax.companyName} ({tax.taxType?.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 文件上传区域 */}
+          {task.status === 'pending' && task.selectedBill && (
+            <div className="mt-3">
+              <div 
+                className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary-400 cursor-pointer transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  fileInputRef.current?.click()
+                }}
+              >
+                <Upload className="w-6 h-6 text-gray-400 mx-auto mb-1" />
+                <p className="text-xs text-gray-500">点击上传文件</p>
+                <p className="text-[10px] text-gray-400">支持 CSV, Excel 格式</p>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileSelect}
+                className="hidden"
+                title="选择文件"
+              />
+            </div>
+          )}
+
+          {/* 预览/确认导入按钮 */}
+          {task.status === 'preview' && (
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onShowPreview(task.id)
+                }}
+                className="flex-1 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded text-xs hover:bg-gray-50 flex items-center justify-center gap-1"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                查看预览 ({task.previewData.length}条)
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onConfirmImport(task.id)
+                }}
+                className="flex-1 px-3 py-2 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 flex items-center justify-center gap-1"
+              >
+                <Check className="w-3.5 h-3.5" />
+                确认导入
+              </button>
+            </div>
+          )}
+
+          {/* 错误状态重试 */}
+          {task.status === 'error' && task.file && (
+            <div className="mt-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (task.file) {
+                    onUploadFile(task.id, task.file)
+                  }
+                }}
+                className="w-full px-3 py-2 bg-amber-500 text-white rounded text-xs hover:bg-amber-600 flex items-center justify-center gap-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                重试
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function DocumentImport() {
   const navigate = useNavigate()
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  
-  // 使用全局导入状态
   const { 
     state: importState, 
-    startParsing, 
-    setShowPreview: setGlobalShowPreview, 
-    setPreviewData: setGlobalPreviewData,
-    setPreviewFile: setGlobalPreviewFile,
-    setSelectedBill: setGlobalSelectedBill,
-    resetState: resetImportState 
+    addTask,
+    updateTask,
+    removeTask,
+    setActiveTask,
+    startParsing,
+    confirmImport,
   } = useImport()
   
   const [imports, setImports] = useState<ImportRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [localUploading, setLocalUploading] = useState(false) // 用于确认导入时的本地状态
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const pageSize = 20
   
-  // 从全局状态获取预览数据、文件和提单
-  const showPreview = importState.showPreview
-  const previewData = importState.previewData
-  const previewFile = importState.previewFile
-  const selectedBill = importState.selectedBill  // 从全局状态获取选中的提单
-  const uploading = importState.uploading || localUploading
-
-  // 提单选择相关状态
+  // 提单和客户数据
   const [bills, setBills] = useState<BillOfLading[]>([])
-  const [billSearch, setBillSearch] = useState('')
-  const [showBillDropdown, setShowBillDropdown] = useState(false)
   const [loadingBills, setLoadingBills] = useState(false)
-  
-  // 设置选中的提单（同时更新全局状态）
-  const setSelectedBill = (bill: BillOfLading | null) => {
-    setGlobalSelectedBill(bill)
-  }
-  
-  // 客户选择相关状态
   const [customers, setCustomers] = useState<Customer[]>([])
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [customerSearch, setCustomerSearch] = useState('')
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [loadingCustomers, setLoadingCustomers] = useState(false)
-  
-  // 进口商税号相关状态
-  const [customerTaxNumbers, setCustomerTaxNumbers] = useState<CustomerTaxNumber[]>([])
-  const [selectedTaxNumber, setSelectedTaxNumber] = useState<CustomerTaxNumber | null>(null)
-  const [loadingTaxNumbers, setLoadingTaxNumbers] = useState(false)
-  
-  // 发货方信息（从提单自动获取）
-  const [shipperInfo, setShipperInfo] = useState({
-    name: '',
-    address: '',
-    contact: ''
-  })
+
+  // 预览弹窗
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [previewTaskId, setPreviewTaskId] = useState<string | null>(null)
 
   useEffect(() => {
     loadImports()
     loadBills()
     loadCustomers()
   }, [page])
-  
-  // 当选择提单后，自动填充发货方信息
-  useEffect(() => {
-    if (selectedBill) {
-      // 解析shipper字段：第一行为名称，后续行为地址
-      const shipperText = selectedBill.shipper || ''
-      const shipperLines = shipperText.split('\n').filter(line => line.trim())
-      setShipperInfo({
-        name: shipperLines[0] || '',
-        address: shipperLines.slice(1).join(', ') || '',
-        contact: ''
-      })
-    }
-  }, [selectedBill])
-  
-  // 加载提单列表（支持服务端搜索）
-  const loadBills = async (search?: string) => {
+
+  const loadBills = async () => {
     setLoadingBills(true)
     try {
-      // 使用服务端搜索，支持搜索提单号、集装箱号等
-      const response = await getBillsList({ 
-        pageSize: 100,
-        search: search || undefined
-      })
+      const response = await getBillsList({ pageSize: 100 })
       if (response.errCode === 200) {
         setBills(response.data?.list || [])
       }
@@ -151,33 +573,7 @@ export default function DocumentImport() {
       setLoadingBills(false)
     }
   }
-  
-  // 当搜索词变化时，重新加载提单（防抖处理）
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (billSearch.trim()) {
-        loadBills(billSearch.trim())
-      } else {
-        loadBills()
-      }
-    }, 300) // 300ms 防抖
-    return () => clearTimeout(timer)
-  }, [billSearch])
-  
-  // 提单列表（已从服务端搜索，无需前端过滤）
-  const filteredBills = bills
-  
-  // 当选择客户后加载该客户的税号
-  useEffect(() => {
-    if (selectedCustomer) {
-      loadCustomerTaxNumbers(selectedCustomer.id)
-    } else {
-      setCustomerTaxNumbers([])
-      setSelectedTaxNumber(null)
-    }
-  }, [selectedCustomer])
-  
-  // 加载客户列表
+
   const loadCustomers = async () => {
     setLoadingCustomers(true)
     try {
@@ -191,33 +587,6 @@ export default function DocumentImport() {
       setLoadingCustomers(false)
     }
   }
-  
-  // 加载客户税号
-  const loadCustomerTaxNumbers = async (customerId: string) => {
-    setLoadingTaxNumbers(true)
-    try {
-      const response = await getCustomerTaxNumbers(customerId)
-      if (response.errCode === 200) {
-        setCustomerTaxNumbers(response.data || [])
-        // 自动选择默认税号
-        const defaultTax = response.data?.find((t: CustomerTaxNumber) => t.isDefault)
-        if (defaultTax) {
-          setSelectedTaxNumber(defaultTax)
-        }
-      }
-    } catch (error) {
-      console.error('加载客户税号失败:', error)
-    } finally {
-      setLoadingTaxNumbers(false)
-    }
-  }
-  
-  // 过滤客户
-  const filteredCustomers = customers.filter(c => 
-    c.customerName?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.companyName?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.customerCode?.toLowerCase().includes(customerSearch.toLowerCase())
-  )
 
   const loadImports = async () => {
     setLoading(true)
@@ -236,110 +605,20 @@ export default function DocumentImport() {
   }
 
   const handleDownloadTemplate = () => {
-    // 生成CSV模板 - 按最新客户Excel模板格式排列
-    // 第一行：元数据行（集装箱号）
     const metaRow = ['集装箱号', 'ECMU1234567']
-    
-    // 第二行：标题行 - 完全按照最新模板格式（19列）
     const headers = [
-      '序号*',             // serialNo
-      '客户单号*',         // customerOrderNo
-      '托盘件数*',         // palletCount
-      '唛头*',             // referenceNo
-      '英文品名*',         // productNameEn
-      'HS编码*',           // customerHsCode
-      '商品箱数CTNS*',     // cartonCount
-      '商品件数PCS*',      // quantity
-      '申报单价*',         // unitPrice
-      '申报总价*',         // totalValue
-      '总毛重KG*',         // grossWeight
-      '总净重KG*',         // netWeight
-      '单件净重*',         // unitNetWeight (新增)
-      '中文品名*',         // productName
-      '产品图片*',         // productImage
-      '中文材质*',         // material
-      '英文材质*',         // materialEn
-      '税率',              // dutyRate
-      '预估关税'           // estimatedDuty
+      '序号*', '客户单号*', '托盘件数*', '唛头*', '英文品名*', 'HS编码*',
+      '商品箱数CTNS*', '商品件数PCS*', '申报单价*', '申报总价*', '总毛重KG*',
+      '总净重KG*', '单件净重*', '中文品名*', '产品图片*', '中文材质*', '英文材质*',
+      '税率', '预估关税'
     ]
-    
-    // 示例数据：托盘1（客户单号5881234，包含2个产品）
-    const sampleData1 = [
-      '1',                          // 序号
-      '5881234',                    // 客户单号（托盘首行填写）
-      '2',                          // 托盘件数
-      '5881234-1',                  // 唛头
-      'Tea table',                  // 英文品名
-      '9403609000',                 // HS编码
-      '2',                          // 箱数
-      '3',                          // 件数
-      '150',                        // 申报单价
-      '450',                        // 申报总价
-      '32.5',                       // 总毛重KG
-      '29.25',                      // 总净重KG
-      '9.75',                       // 单件净重
-      '茶几桌',                      // 中文品名
-      '',                           // 产品图片
-      '复合板',                      // 中文材质
-      'Composite board',            // 英文材质
-      '',                           // 税率
-      ''                            // 预估关税
-    ]
-    
-    // 同一托盘下的第二个产品（客户单号留空）
-    const sampleData2 = [
-      '2',                          // 序号
-      '',                           // 客户单号（同托盘留空）
-      '',                           // 托盘件数（同托盘留空）
-      '5881234-2',                  // 唛头
-      'stool',                      // 英文品名
-      '9401710000',                 // HS编码
-      '1',                          // 箱数
-      '1',                          // 件数
-      '80',                         // 申报单价
-      '80',                         // 申报总价
-      '10',                         // 总毛重KG
-      '9',                          // 总净重KG
-      '9',                          // 单件净重
-      '椅子',                        // 中文品名
-      '',                           // 产品图片
-      '金属框架+PU',                 // 中文材质
-      'Metal+PU',                   // 英文材质
-      '',                           // 税率
-      ''                            // 预估关税
-    ]
-    
-    // 示例数据：托盘2（新的客户单号）
-    const sampleData3 = [
-      '3',                          // 序号
-      'EK5581210',                  // 客户单号（新托盘）
-      '3',                          // 托盘件数
-      'EK5581210-1',                // 唛头
-      'cultivator',                 // 英文品名
-      '8432299000',                 // HS编码
-      '3',                          // 箱数
-      '1',                          // 件数
-      '500',                        // 申报单价
-      '500',                        // 申报总价
-      '232',                        // 总毛重KG
-      '208.8',                      // 总净重KG
-      '208.8',                      // 单件净重
-      '耕田机',                      // 中文品名
-      '',                           // 产品图片
-      '不锈钢',                      // 中文材质
-      'Stainless steel',            // 英文材质
-      '',                           // 税率
-      ''                            // 预估关税
+    const sampleData = [
+      '1', '5881234', '2', '5881234-1', 'Tea table', '9403609000',
+      '2', '3', '150', '450', '32.5', '29.25', '9.75', '茶几桌', '', '复合板',
+      'Composite board', '', ''
     ]
 
-    const csvContent = [
-      metaRow.join(','),
-      headers.join(','),
-      sampleData1.join(','),
-      sampleData2.join(','),
-      sampleData3.join(',')
-    ].join('\n')
-
+    const csvContent = [metaRow.join(','), headers.join(','), sampleData.join(',')].join('\n')
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -351,177 +630,43 @@ export default function DocumentImport() {
     URL.revokeObjectURL(url)
   }
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // 检查文件类型
-    const validTypes = ['.csv', '.xlsx', '.xls']
-    const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
-    if (!validTypes.includes(fileExt)) {
-      alert('请上传 CSV 或 Excel 文件')
-      return
-    }
-
-    // 保存文件到全局状态（CSV 解析需要）
-    setGlobalPreviewFile(file)
-    
-    // 解析文件预览
-    if (fileExt === '.csv') {
-      await parseCSV(file)
-    } else {
-      // 对于Excel文件，发送到后端解析（startParsing 会保存文件）
-      await parseExcel(file)
-    }
+  const handleAddTask = () => {
+    addTask()
   }
 
-  const parseCSV = async (file: File) => {
-    const text = await file.text()
-    const lines = text.split('\n').filter(line => line.trim())
-    
-    if (lines.length < 2) {
-      alert('文件内容为空或格式不正确')
-      return
-    }
-
-    const headers = lines[0].split(',').map(h => h.trim())
-    const items: PreviewItem[] = []
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim())
-      const item: PreviewItem = {
-        rowNo: i,
-        containerNo: values[0] || '',
-        billNumber: values[1] || '',
-        productName: values[2] || '',
-        productNameEn: values[3] || '',
-        hsCode: values[4] || '',
-        quantity: parseFloat(values[5]) || 0,
-        unit: values[6] || '',
-        unitPrice: parseFloat(values[7]) || 0,
-        totalValue: parseFloat(values[8]) || 0,
-        grossWeight: parseFloat(values[9]) || 0,
-        netWeight: parseFloat(values[10]) || 0,
-        originCountry: values[11] || '',
-        material: values[12] || ''
-      }
-
-      // 校验必填项
-      const errors: string[] = []
-      if (!item.containerNo) errors.push('柜号必填')
-      if (!item.productName) errors.push('商品名称必填')
-      if (!item.quantity || item.quantity <= 0) errors.push('数量必须大于0')
-      if (!item.unit) errors.push('单位必填')
-      if (!item.unitPrice || item.unitPrice <= 0) errors.push('单价必须大于0')
-      if (!item.grossWeight || item.grossWeight <= 0) errors.push('毛重必须大于0')
-      if (!item.originCountry) errors.push('原产国必填')
-      
-      if (errors.length > 0) {
-        item.error = errors.join('; ')
-      }
-
-      items.push(item)
-    }
-
-    // 使用全局状态
-    setGlobalPreviewData(items)
-    setGlobalShowPreview(true)
+  const handleUploadFile = async (taskId: string, file: File) => {
+    await startParsing(taskId, file)
   }
 
-  const parseExcel = async (file: File) => {
-    // 使用全局状态管理上传，这样用户切换页面后状态不会丢失
-    await startParsing(file)
+  const handleShowPreview = (taskId: string) => {
+    setPreviewTaskId(taskId)
+    setShowPreviewModal(true)
   }
 
-  const handleConfirmImport = async () => {
-    if (!previewFile) return
-    
-    // 验证必须选择提单
-    if (!selectedBill) {
-      alert('请先选择要绑定的提单')
-      return
-    }
+  const handleConfirmImport = async (taskId: string) => {
+    const task = importState.tasks.find(t => t.id === taskId)
+    if (!task) return
 
-    const hasErrors = previewData.some(item => item.error)
+    const hasErrors = task.previewData.some(item => item.error)
     if (hasErrors) {
       if (!confirm('部分数据存在错误，是否仍要继续导入？错误数据将被跳过。')) {
         return
       }
     }
 
-    setLocalUploading(true)
-    const formData = new FormData()
-    formData.append('file', previewFile)
-    // 添加提单信息
-    formData.append('billId', selectedBill.id)
-    formData.append('billNumber', selectedBill.billNumber || '')
-    formData.append('containerNo', selectedBill.containerNumber || '')
-    formData.append('customerName', selectedBill.companyName || selectedBill.customerName || '')
-
-    try {
-      const res = await fetch(`${API_BASE}/api/cargo/documents/imports`, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await res.json()
-      if (data.errCode === 200) {
-        const importId = data.data?.importId
-
-        // 更新发货方和进口商信息
-        if (importId) {
-          try {
-            await fetch(`${API_BASE}/api/cargo/documents/imports/${importId}/shipper-importer`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({
-                // 发货方信息（从提单获取）
-                shipperName: shipperInfo.name || null,
-                shipperAddress: shipperInfo.address || null,
-                shipperContact: shipperInfo.contact || null,
-                // 进口商信息
-                importerCustomerId: selectedCustomer?.id || null,
-                importerName: selectedCustomer?.companyName || selectedCustomer?.customerName || null,
-                importerTaxId: selectedTaxNumber?.id || null,
-                importerTaxNumber: selectedTaxNumber?.taxNumber || null,
-                importerTaxType: selectedTaxNumber?.taxType || null,
-                importerCountry: selectedTaxNumber?.country || null,
-                importerCompanyName: selectedTaxNumber?.companyName || null,
-                importerAddress: selectedTaxNumber?.companyAddress || null
-              })
-            })
-          } catch (updateError) {
-            console.error('更新发货方和进口商信息失败:', updateError)
-          }
-        }
-
-        alert(`导入成功！共导入 ${data.data?.importedCount || 0} 条记录，已绑定提单: ${selectedBill.billNumber}`)
-        // 重置全局导入状态（包括文件）
-        resetImportState()
-        // 清空提单、发货方和进口商信息
-        setSelectedBill(null)
-        setShipperInfo({ name: '', address: '', contact: '' })
-        setSelectedCustomer(null)
-        setSelectedTaxNumber(null)
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ''
-        }
-        loadImports()
-      } else {
-        alert(data.msg || '导入失败')
-      }
-    } catch (error) {
-      console.error('导入失败:', error)
-      alert('导入失败')
-    } finally {
-      setLocalUploading(false)
+    const success = await confirmImport(taskId)
+    if (success) {
+      // 导入成功后，延迟2秒移除任务（让用户看到成功提示）
+      setTimeout(() => {
+        removeTask(taskId)
+      }, 2000)
+      loadImports()
     }
   }
 
-  const handleCancelPreview = () => {
-    // 重置全局导入状态（包括文件）
-    resetImportState()
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+  const handleDeleteTask = (taskId: string) => {
+    if (confirm('确定要删除此导入任务吗？')) {
+      removeTask(taskId)
     }
   }
 
@@ -577,6 +722,17 @@ export default function DocumentImport() {
   ]
 
   const totalPages = Math.ceil(total / pageSize)
+  const previewTask = previewTaskId ? importState.tasks.find(t => t.id === previewTaskId) : null
+
+  // 统计任务状态
+  const taskStats = {
+    total: importState.tasks.length,
+    pending: importState.tasks.filter(t => t.status === 'pending').length,
+    processing: importState.tasks.filter(t => t.status === 'parsing' || t.status === 'importing').length,
+    preview: importState.tasks.filter(t => t.status === 'preview').length,
+    completed: importState.tasks.filter(t => t.status === 'completed').length,
+    error: importState.tasks.filter(t => t.status === 'error').length,
+  }
 
   return (
     <div className="p-4 space-y-4">
@@ -588,374 +744,118 @@ export default function DocumentImport() {
         onTabChange={(path) => navigate(path)}
       />
 
-      {/* 导入区域 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      {/* 导入任务区域 */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 overflow-visible">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-gray-900">导入货物清单</h3>
-          <button
-            onClick={handleDownloadTemplate}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded"
-          >
-            <Download className="w-3.5 h-3.5" />
-            下载模板
-          </button>
-        </div>
-        
-        {/* 提单选择（必选） */}
-        <div className="mb-4 p-3 border border-primary-200 bg-primary-50 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <Ship className="w-4 h-4 text-primary-600" />
-            <span className="text-sm font-medium text-gray-900">绑定提单</span>
-            <span className="text-xs text-red-500">* 必选</span>
-          </div>
-          <div className="relative">
-            <div 
-              className={`w-full px-3 py-2 border rounded text-sm bg-white cursor-pointer flex items-center justify-between ${
-                selectedBill ? 'border-green-400' : 'border-gray-300'
-              }`}
-              onClick={() => setShowBillDropdown(!showBillDropdown)}
-            >
-              {selectedBill ? (
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-green-600" />
-                  <span className="text-gray-900 font-medium">{selectedBill.billNumber}</span>
-                  {selectedBill.orderNumber && (
-                    <span className="text-blue-600 text-xs">({selectedBill.orderNumber})</span>
-                  )}
-                  {selectedBill.containerNumber && (
-                    <span className="text-gray-500">| 柜号: {selectedBill.containerNumber}</span>
-                  )}
-                  {(selectedBill.companyName || selectedBill.customerName) && (
-                    <span className="text-gray-400 text-xs">({selectedBill.companyName || selectedBill.customerName})</span>
-                  )}
-                </div>
-              ) : (
-                <span className="text-gray-400">请选择要绑定的提单...</span>
-              )}
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            </div>
-            {showBillDropdown && (
-              <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
-                  <input
-                    type="text"
-                    value={billSearch}
-                    onChange={(e) => setBillSearch(e.target.value)}
-                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs"
-                    placeholder="搜索提单号/柜号/客户名..."
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-                {loadingBills ? (
-                  <div className="p-4 text-center text-xs text-gray-400">
-                    <RefreshCw className="w-4 h-4 animate-spin inline-block mr-1" />
-                    加载中...
-                  </div>
-                ) : filteredBills.length === 0 ? (
-                  <div className="p-4 text-center">
-                    <Ship className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                    <p className="text-xs text-gray-400">
-                      {bills.length === 0 ? '系统中暂无提单，请先创建提单' : '无匹配提单'}
-                    </p>
-                  </div>
-                ) : (
-                  filteredBills.map(bill => (
-                    <div
-                      key={bill.id}
-                      className={`px-3 py-2 cursor-pointer hover:bg-gray-50 border-b border-gray-50 ${
-                        selectedBill?.id === bill.id ? 'bg-primary-50' : ''
-                      }`}
-                      onClick={() => {
-                        setSelectedBill(bill)
-                        setShowBillDropdown(false)
-                        setBillSearch('')
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-sm font-medium text-gray-900">{bill.billNumber}</span>
-                          {bill.orderNumber && (
-                            <span className="text-xs text-blue-600 ml-1">({bill.orderNumber})</span>
-                          )}
-                          {bill.containerNumber && (
-                            <span className="text-xs text-gray-500 ml-2">柜号: {bill.containerNumber}</span>
-                          )}
-                        </div>
-                        {selectedBill?.id === bill.id && (
-                          <Check className="w-4 h-4 text-green-600" />
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5">
-                        {bill.companyName || bill.customerName || '未关联客户'}
-                        {bill.shipper && ` | 发货人: ${bill.shipper.split('\n')[0]}`}
-                      </div>
-                    </div>
-                  ))
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-medium text-gray-900">导入货物清单</h3>
+            {taskStats.total > 0 && (
+              <div className="flex items-center gap-2 text-xs">
+                {taskStats.processing > 0 && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                    {taskStats.processing} 处理中
+                  </span>
+                )}
+                {taskStats.preview > 0 && (
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded">
+                    {taskStats.preview} 待确认
+                  </span>
+                )}
+                {taskStats.error > 0 && (
+                  <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded">
+                    {taskStats.error} 失败
+                  </span>
                 )}
               </div>
             )}
           </div>
-          {bills.length === 0 && !loadingBills && (
-            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-              ⚠️ 系统中暂无提单，请先在"订单管理"中创建提单后再导入货物清单
-            </div>
-          )}
-        </div>
-        
-        {/* 发货方和进口商信息 */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          {/* 发货方信息（从提单自动获取，可手动编辑） */}
-          <div className="border border-gray-200 rounded-lg p-3">
-            <div className="flex items-center gap-2 mb-3">
-              <User className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-gray-900">发货方信息</span>
-              <span className="text-xs text-gray-400">(可编辑)</span>
-            </div>
-            <div className="space-y-2">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">发货方名称</label>
-                <input
-                  type="text"
-                  value={shipperInfo.name}
-                  onChange={(e) => setShipperInfo(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="输入发货方名称"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">地址</label>
-                <input
-                  type="text"
-                  value={shipperInfo.address}
-                  onChange={(e) => setShipperInfo(prev => ({ ...prev, address: e.target.value }))}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="输入发货方地址"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">联系方式</label>
-                <input
-                  type="text"
-                  value={shipperInfo.contact}
-                  onChange={(e) => setShipperInfo(prev => ({ ...prev, contact: e.target.value }))}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="输入联系方式（选填）"
-                />
-              </div>
-              {selectedBill?.shipper && (
-                <p className="text-[10px] text-gray-400 mt-1">
-                  💡 已从提单自动填充，如需修改可直接编辑
-                </p>
-              )}
-            </div>
-          </div>
-          
-          {/* 进口商信息 */}
-          <div className="border border-gray-200 rounded-lg p-3">
-            <div className="flex items-center gap-2 mb-3">
-              <Building className="w-4 h-4 text-green-600" />
-              <span className="text-sm font-medium text-gray-900">进口商信息</span>
-              <span className="text-xs text-gray-400">(关联客户税号)</span>
-            </div>
-            <div className="space-y-2">
-              {/* 客户选择 */}
-              <div className="relative">
-                <label className="block text-xs text-gray-500 mb-1">选择客户</label>
-                <div 
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs bg-white cursor-pointer flex items-center justify-between"
-                  onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-                >
-                  <span className={selectedCustomer ? 'text-gray-900' : 'text-gray-400'}>
-                    {selectedCustomer ? (selectedCustomer.companyName || selectedCustomer.customerName) : '请选择客户'}
-                  </span>
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                </div>
-                {showCustomerDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    <div className="p-2 border-b border-gray-100">
-                      <input
-                        type="text"
-                        value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
-                        placeholder="搜索客户..."
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                    {loadingCustomers ? (
-                      <div className="p-3 text-center text-xs text-gray-400">
-                        <RefreshCw className="w-4 h-4 animate-spin inline-block mr-1" />
-                        加载中...
-                      </div>
-                    ) : filteredCustomers.length === 0 ? (
-                      <div className="p-3 text-center text-xs text-gray-400">无匹配客户</div>
-                    ) : (
-                      filteredCustomers.map(customer => (
-                        <div
-                          key={customer.id}
-                          className={`px-3 py-2 text-xs cursor-pointer hover:bg-gray-50 ${
-                            selectedCustomer?.id === customer.id ? 'bg-primary-50 text-primary-700' : ''
-                          }`}
-                          onClick={() => {
-                            setSelectedCustomer(customer)
-                            setShowCustomerDropdown(false)
-                            setCustomerSearch('')
-                          }}
-                        >
-                          <div className="font-medium">{customer.companyName || customer.customerName}</div>
-                          <div className="text-gray-400">{customer.customerCode}</div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              {/* 税号选择 */}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">进口商税号</label>
-                {!selectedCustomer ? (
-                  <div className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-400">
-                    请先选择客户
-                  </div>
-                ) : loadingTaxNumbers ? (
-                  <div className="w-full px-2 py-1.5 border border-gray-200 rounded text-xs bg-gray-50 text-gray-400">
-                    <RefreshCw className="w-3 h-3 animate-spin inline-block mr-1" />
-                    加载税号中...
-                  </div>
-                ) : customerTaxNumbers.length === 0 ? (
-                  <div className="w-full px-2 py-1.5 border border-amber-200 rounded text-xs bg-amber-50 text-amber-600">
-                    该客户暂无税号，请在CRM客户管理中添加
-                  </div>
-                ) : (
-                  <select
-                    value={selectedTaxNumber?.id || ''}
-                    onChange={(e) => {
-                      const tax = customerTaxNumbers.find(t => String(t.id) === e.target.value)
-                      setSelectedTaxNumber(tax || null)
-                    }}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-                    title="选择进口商税号"
-                  >
-                    <option value="">请选择税号</option>
-                    {/* 按公司名称分组，每个公司显示一行 */}
-                    {(() => {
-                      const grouped = customerTaxNumbers.reduce((acc, tax) => {
-                        const key = tax.companyName || '未命名公司'
-                        if (!acc[key]) {
-                          acc[key] = { companyName: key, taxes: [], defaultTax: null }
-                        }
-                        acc[key].taxes.push(tax)
-                        if (tax.isDefault) {
-                          acc[key].defaultTax = tax
-                        }
-                        return acc
-                      }, {} as Record<string, { companyName: string; taxes: CustomerTaxNumber[]; defaultTax: CustomerTaxNumber | null }>)
-                      
-                      return Object.values(grouped).map(group => {
-                        // 优先使用默认税号，否则使用第一个税号
-                        const primaryTax = group.defaultTax || group.taxes[0]
-                        // 显示所有税号类型
-                        const taxTypes = group.taxes.map(t => t.taxType?.toUpperCase()).join('/')
-                        return (
-                          <option key={primaryTax.id} value={primaryTax.id}>
-                            {group.companyName} ({taxTypes})
-                          </option>
-                        )
-                      })
-                    })()}
-                  </select>
-                )}
-              </div>
-              
-              {/* 显示选中的税号详情 */}
-              {selectedTaxNumber && (
-                <div className="p-2 bg-green-50 rounded text-xs text-green-700">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="font-medium">{selectedTaxNumber.taxType?.toUpperCase()}</span>
-                    <span className="font-mono">{selectedTaxNumber.taxNumber}</span>
-                    {selectedTaxNumber.isVerified && (
-                      <Check className="w-3 h-3 text-green-600" />
-                    )}
-                  </div>
-                  {selectedTaxNumber.companyName && (
-                    <div className="text-green-600">{selectedTaxNumber.companyName}</div>
-                  )}
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded"
+            >
+              <Download className="w-3.5 h-3.5" />
+              下载模板
+            </button>
+            <button
+              onClick={handleAddTask}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary-600 text-white hover:bg-primary-700 rounded"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              添加任务
+            </button>
           </div>
         </div>
 
-        <div 
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-            !selectedBill
-              ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
-              : 'border-gray-300 hover:border-primary-400 cursor-pointer'
-          }`}
-          onClick={() => selectedBill && !uploading && fileInputRef.current?.click()}
-        >
-          {!selectedBill ? (
-            <>
-              <Ship className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-400 mb-1">请先选择要绑定的提单</p>
-              <p className="text-xs text-gray-300">选择提单后才能上传货物清单</p>
-            </>
-          ) : (
-            <>
-              <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-sm text-gray-600 mb-1">点击或拖拽文件到此处上传</p>
-              <p className="text-xs text-gray-400">支持 CSV, Excel (.xlsx, .xls) 格式</p>
-              <p className="text-xs text-green-600 mt-2">
-                已选择提单: {selectedBill.billNumber}
-              </p>
-              {importState.uploading && (
-                <p className="text-xs text-primary-500 mt-1 animate-pulse">
-                  ⏳ 文件正在解析中，您可以切换到其他页面...
-                </p>
-              )}
-            </>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={handleFileSelect}
-            className="hidden"
-            title="选择文件"
-            disabled={uploading || !selectedBill}
-          />
-        </div>
+        {/* 任务列表 */}
+        {importState.tasks.length === 0 ? (
+          <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
+            <FileSpreadsheet className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-500 mb-2">暂无导入任务</p>
+            <p className="text-xs text-gray-400 mb-4">点击"添加任务"创建新的导入任务，支持多个任务并行处理</p>
+            <button
+              onClick={handleAddTask}
+              className="inline-flex items-center gap-1 px-4 py-2 text-sm bg-primary-600 text-white hover:bg-primary-700 rounded"
+            >
+              <Plus className="w-4 h-4" />
+              添加第一个任务
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3 overflow-visible">
+            {importState.tasks.map(task => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onUploadFile={handleUploadFile}
+                onShowPreview={handleShowPreview}
+                onConfirmImport={handleConfirmImport}
+                onDelete={handleDeleteTask}
+                onUpdateTask={updateTask}
+                bills={bills}
+                loadingBills={loadingBills}
+                customers={customers}
+                loadingCustomers={loadingCustomers}
+              />
+            ))}
+          </div>
+        )}
 
+        {/* 模板说明 */}
         <div className="mt-4 p-3 bg-blue-50 rounded text-xs text-blue-700">
-          <p className="font-medium mb-1">模板说明：</p>
+          <p className="font-medium mb-1">使用说明：</p>
           <ul className="space-y-0.5 text-blue-600">
-            <li>• <span className="font-medium">模板格式</span>：第1行为集装箱号，第2行为列标题（19列），第3行开始为数据</li>
-            <li>• <span className="font-medium">必填字段</span>：序号*、客户单号*、托盘件数*、唛头*、英文品名*、HS编码*、商品箱数CTNS*、商品件数PCS*、申报单价*、申报总价*、总毛重KG*、总净重KG*、单件净重*、中文品名*、中文材质*、英文材质*</li>
-            <li>• <span className="font-medium">可选字段</span>：产品图片*、税率、预估关税</li>
-            <li>• <span className="font-medium">一托多品</span>：同一托盘下有多个产品时，客户单号和托盘件数只需在第一行填写，后续行会自动继承</li>
-            <li>• <span className="font-medium">支持格式</span>：Excel(.xlsx/.xls) 和 CSV，建议使用Excel格式（支持图片导入）</li>
+            <li>• 点击"添加任务"可创建多个导入任务，支持<span className="font-medium">并行处理</span></li>
+            <li>• 每个任务需要先选择提单，然后上传文件</li>
+            <li>• 文件解析和确认导入都可以同时进行多个</li>
+            <li>• 右下角会显示当前处理进度，可以切换到其他页面</li>
           </ul>
         </div>
       </div>
 
       {/* 预览弹窗 */}
-      {showPreview && (
+      {showPreviewModal && previewTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col mx-4">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">数据预览</h3>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  数据预览 - {previewTask.selectedBill?.billNumber}
+                </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  共 {previewData.length} 条记录
-                  {previewData.filter(i => i.error).length > 0 && (
+                  共 {previewTask.previewData.length} 条记录
+                  {previewTask.previewData.filter(i => i.error).length > 0 && (
                     <span className="text-red-500 ml-2">
-                      （{previewData.filter(i => i.error).length} 条有错误）
+                      （{previewTask.previewData.filter(i => i.error).length} 条有错误）
                     </span>
                   )}
                 </p>
               </div>
-              <button onClick={handleCancelPreview} className="p-1 hover:bg-gray-100 rounded" title="关闭预览">
+              <button 
+                onClick={() => setShowPreviewModal(false)} 
+                className="p-1 hover:bg-gray-100 rounded" 
+                title="关闭预览"
+              >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
@@ -980,7 +880,7 @@ export default function DocumentImport() {
                   </tr>
                 </thead>
                 <tbody>
-                  {previewData.map((item) => (
+                  {previewTask.previewData.map((item) => (
                     <tr 
                       key={item.rowNo} 
                       className={`border-b ${item.error ? 'bg-red-50' : 'hover:bg-gray-50'}`}
@@ -1037,18 +937,21 @@ export default function DocumentImport() {
 
             <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
               <button
-                onClick={handleCancelPreview}
+                onClick={() => setShowPreviewModal(false)}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
               >
-                取消
+                关闭
               </button>
               <button
-                onClick={handleConfirmImport}
-                disabled={uploading}
+                onClick={() => {
+                  setShowPreviewModal(false)
+                  handleConfirmImport(previewTask.id)
+                }}
+                disabled={previewTask.status === 'importing'}
                 className="px-4 py-2 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1"
               >
-                {uploading && <RefreshCw className="w-4 h-4 animate-spin" />}
-                {uploading ? '导入中...' : '确认导入'}
+                {previewTask.status === 'importing' && <RefreshCw className="w-4 h-4 animate-spin" />}
+                {previewTask.status === 'importing' ? '导入中...' : '确认导入'}
               </button>
             </div>
           </div>
