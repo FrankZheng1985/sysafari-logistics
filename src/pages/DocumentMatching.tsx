@@ -97,6 +97,12 @@ export default function DocumentMatching() {
   // 批次筛选：未匹配批次 / 已匹配批次
   const [batchFilter, setBatchFilter] = useState<'unmatched' | 'matched'>('unmatched')
 
+  // 已匹配商品列表
+  const [matchedItems, setMatchedItems] = useState<ReviewItem[]>([])
+  const [matchedTotal, setMatchedTotal] = useState(0)
+  const [matchedPage, setMatchedPage] = useState(1)
+  const [loadingMatched, setLoadingMatched] = useState(false)
+
   // 整个提单的原产地设置弹窗
   const [showOriginModal, setShowOriginModal] = useState(false)
   const [batchOriginCountry, setBatchOriginCountry] = useState('')
@@ -132,9 +138,17 @@ export default function DocumentMatching() {
   useEffect(() => {
     if (selectedBatch) {
       loadReviewItems()
+      loadMatchedItems()
       checkPriceAnomalies()
     }
   }, [selectedBatch, page])
+
+  // 已匹配列表分页变化时重新加载
+  useEffect(() => {
+    if (selectedBatch && batchFilter === 'matched') {
+      loadMatchedItems()
+    }
+  }, [matchedPage])
 
   // 价格异常检测
   const checkPriceAnomalies = async () => {
@@ -193,6 +207,24 @@ export default function DocumentMatching() {
       console.error('加载待审核列表失败:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 加载已匹配的商品列表
+  const loadMatchedItems = async () => {
+    if (!selectedBatch) return
+    setLoadingMatched(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/matched?importId=${selectedBatch.id}&page=${matchedPage}&pageSize=${pageSize}`)
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setMatchedItems(data.data?.list || [])
+        setMatchedTotal(data.data?.total || 0)
+      }
+    } catch (error) {
+      console.error('加载已匹配列表失败:', error)
+    } finally {
+      setLoadingMatched(false)
     }
   }
 
@@ -696,11 +728,18 @@ export default function DocumentMatching() {
                       加载中...
                     </td>
                   </tr>
-                ) : items.length === 0 ? (
+                ) : items.length === 0 && matchedItems.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
                       没有待审核项目
+                    </td>
+                  </tr>
+                ) : items.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
+                      <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
+                      所有商品已审核完成，请查看下方已匹配列表
                     </td>
                   </tr>
                 ) : (
@@ -855,6 +894,120 @@ export default function DocumentMatching() {
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 已匹配商品列表 */}
+      {selectedBatch && matchedItems.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 mt-4">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-green-50">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <h3 className="text-sm font-medium text-gray-900">
+                已匹配商品 ({matchedTotal}条)
+              </h3>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">行号</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">商品名称</th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-500">原产地</th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-500">材质</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">客户HS</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">匹配HS</th>
+                  <th className="px-3 py-2 text-center font-medium text-gray-500">状态</th>
+                  <th className="px-3 py-2 text-right font-medium text-gray-500">关税率</th>
+                  <th className="px-3 py-2 text-right font-medium text-gray-500">货值</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingMatched ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+                      加载中...
+                    </td>
+                  </tr>
+                ) : (
+                  matchedItems.map(item => (
+                    <tr key={item.id} className="border-b hover:bg-gray-50">
+                      <td className="px-3 py-2 text-gray-500">{item.itemNo}</td>
+                      <td className="px-3 py-2">
+                        <div className="max-w-[200px]">
+                          <span className="font-medium truncate" title={item.productName}>{item.productName}</span>
+                          {item.productNameEn && (
+                            <div className="text-gray-400 text-[10px] truncate">{item.productNameEn}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-flex items-center justify-center min-w-[32px] px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          item.originCountry === 'CN' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {item.originCountry || '-'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="text-gray-600 text-[10px] truncate max-w-[60px] inline-block" title={item.material || ''}>
+                          {item.material ? (item.material.length > 8 ? item.material.slice(0, 8) + '...' : item.material) : '-'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="font-mono text-gray-500">{item.customerHsCode || '-'}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="font-mono text-green-600 font-medium">{item.matchedHsCode}</span>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded text-[10px] font-medium ${
+                          item.matchStatus === 'auto_approved' 
+                            ? 'bg-blue-100 text-blue-700' 
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {item.matchStatus === 'auto_approved' ? '自动匹配' : '人工审核'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={item.dutyRate > 0 ? 'text-amber-600 font-medium' : 'text-gray-500'}>
+                          {item.dutyRate}%
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium">€{item.totalValue?.toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 已匹配列表分页 */}
+          {matchedTotal > pageSize && (
+            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-xs">
+              <span className="text-gray-500">
+                共 {matchedTotal} 条，第 {matchedPage} / {Math.ceil(matchedTotal / pageSize)} 页
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setMatchedPage(p => Math.max(1, p - 1))}
+                  disabled={matchedPage === 1}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
+                >
+                  上一页
+                </button>
+                <button
+                  onClick={() => setMatchedPage(p => Math.min(Math.ceil(matchedTotal / pageSize), p + 1))}
+                  disabled={matchedPage === Math.ceil(matchedTotal / pageSize)}
                   className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50"
                 >
                   下一页
