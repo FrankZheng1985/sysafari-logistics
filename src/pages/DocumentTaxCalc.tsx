@@ -1871,7 +1871,7 @@ export default function DocumentTaxCalc() {
                 {taxDetails.items.length > 0 && (
                   <tfoot className="bg-gray-50">
                     <tr>
-                      {/* 合并前8列：行号、图片、客户单号、托盘、唛头、商品名称、HS编码、原产地 */}
+                      {/* 合并前8列：行号、图片、客户单号、托盘、唛头、商品名称、HS编码、原产地 - v2 */}
                       <td colSpan={8} className="px-3 py-2 font-medium text-gray-700">合计</td>
                       {/* 第9列：货值 */}
                       <td className="px-3 py-2 text-right font-medium">{formatCurrency(taxDetails.summary.totalValue)}</td>
