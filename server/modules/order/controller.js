@@ -460,6 +460,11 @@ export async function voidBill(req, res) {
     const { id } = req.params
     const { reason } = req.body
     
+    // 验证作废原因必填
+    if (!reason || reason.trim() === '') {
+      return badRequest(res, '作废原因不能为空')
+    }
+    
     const existing = await model.getBillById(id)
     if (!existing) {
       return notFound(res, '提单不存在')
@@ -469,7 +474,7 @@ export async function voidBill(req, res) {
       return badRequest(res, '提单已作废')
     }
     
-    const voided = await model.voidBill(id, reason || '', req.user?.name || '系统')
+    const voided = await model.voidBill(id, reason.trim(), req.user?.name || '系统')
     if (!voided) {
       return serverError(res, '作废失败')
     }

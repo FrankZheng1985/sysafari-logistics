@@ -262,6 +262,11 @@ export default function BillDetails() {
   const [customsReleaseDate, setCustomsReleaseDate] = useState('')
   const [customsReleaseSubmitting, setCustomsReleaseSubmitting] = useState(false)
   
+  // 作废订单模态窗口状态
+  const [showVoidModal, setShowVoidModal] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+  const [voidSubmitting, setVoidSubmitting] = useState(false)
+  
   // 点击外部关闭下拉菜单
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -2265,21 +2270,9 @@ export default function BillDetails() {
                         )}
                         {canEdit && !billDetail.isVoid ? (
                           <button
-                            onClick={async () => {
-                              if (!confirm(`确定要作废订单 ${billDetail.billNumber} 吗？`)) return
-                              try {
-                                const response = await voidBill(String(billDetail.id), '用户手动作废')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, isVoid: true, voidReason: '用户手动作废' })
-                                  loadOperationLogs()
-                                  alert('订单已作废')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
-                                }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
-                              }
+                            onClick={() => {
+                              setVoidReason('')
+                              setShowVoidModal(true)
                             }}
                             className="px-3 py-1.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 flex items-center gap-1"
                           >
@@ -2937,6 +2930,104 @@ export default function BillDetails() {
                 className="px-3 py-1.5 text-xs text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {customsReleaseSubmitting ? '提交中...' : '确认放行'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 作废订单弹窗 */}
+      {showVoidModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            {/* 弹窗头部 */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                <Ban className="w-5 h-5 text-red-500" />
+                作废订单
+              </h3>
+              <button
+                onClick={() => setShowVoidModal(false)}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                title="关闭"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            {/* 弹窗内容 */}
+            <div className="p-5">
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-700">
+                  确定要作废订单 <span className="font-medium">{billDetail?.billNumber}</span> 吗？
+                </p>
+                <p className="text-xs text-amber-600 mt-1">作废后可在"作废记录"中查看并恢复</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  作废原因 <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  placeholder="请输入作废原因（必填）"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                />
+                {voidReason.trim() === '' && (
+                  <p className="mt-1 text-xs text-red-500">请填写作废原因</p>
+                )}
+              </div>
+            </div>
+            
+            {/* 弹窗底部 */}
+            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+              <button
+                onClick={() => setShowVoidModal(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  if (voidReason.trim() === '') {
+                    alert('请填写作废原因')
+                    return
+                  }
+                  
+                  setVoidSubmitting(true)
+                  try {
+                    const response = await voidBill(String(billDetail?.id), voidReason.trim())
+                    if (response.errCode === 200) {
+                      setBillDetail({ ...billDetail!, isVoid: true, voidReason: voidReason.trim() })
+                      loadOperationLogs()
+                      setShowVoidModal(false)
+                      alert('订单已作废')
+                    } else {
+                      alert(`操作失败: ${response.msg}`)
+                    }
+                  } catch (error) {
+                    console.error('操作失败:', error)
+                    alert('操作失败，请稍后重试')
+                  } finally {
+                    setVoidSubmitting(false)
+                  }
+                }}
+                disabled={voidSubmitting || voidReason.trim() === ''}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+              >
+                {voidSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    处理中...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4" />
+                    确认作废
+                  </>
+                )}
               </button>
             </div>
           </div>

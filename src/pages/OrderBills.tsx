@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { FileText, Plus, RefreshCw, Archive, Trash2, CheckCircle, RotateCcw, Copy } from 'lucide-react'
+import { FileText, Plus, RefreshCw, Archive, Trash2, CheckCircle, RotateCcw, Copy, Ban, X, Loader2 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import ColumnSettingsModal from '../components/ColumnSettingsModal'
@@ -35,6 +35,12 @@ export default function OrderBills() {
   // 作废申请模态框状态
   const [voidApplyModalVisible, setVoidApplyModalVisible] = useState(false)
   const [selectedBillForVoid, setSelectedBillForVoid] = useState<BillOfLading | null>(null)
+  
+  // 直接作废弹窗状态（无操作记录时使用）
+  const [directVoidModalVisible, setDirectVoidModalVisible] = useState(false)
+  const [directVoidReason, setDirectVoidReason] = useState('')
+  const [directVoidSubmitting, setDirectVoidSubmitting] = useState(false)
+  const [selectedBillForDirectVoid, setSelectedBillForDirectVoid] = useState<BillOfLading | null>(null)
   
   // 从 URL 参数读取筛选状态
   const getInitialFilters = (): Record<string, string[]> => {
@@ -156,20 +162,41 @@ export default function OrderBills() {
         setSelectedBillForVoid(bill)
         setVoidApplyModalVisible(true)
       } else {
-        // 没有操作记录，直接作废
-        if (!window.confirm(`确定要作废提单 ${bill.billNumber} 吗？`)) return
-        
-        const response = await voidBill(bill.id, '用户手动作废')
-        if (response.errCode === 200) {
-          alert('提单作废成功')
-          setRefreshKey(prev => prev + 1)
-        } else {
-          alert(response.msg || '作废失败')
-        }
+        // 没有操作记录，打开直接作废弹窗
+        setSelectedBillForDirectVoid(bill)
+        setDirectVoidReason('')
+        setDirectVoidModalVisible(true)
       }
     } catch (error) {
       console.error('作废提单失败:', error)
       alert('作废失败，请稍后重试')
+    }
+  }
+  
+  // 执行直接作废
+  const handleDirectVoidSubmit = async () => {
+    if (!selectedBillForDirectVoid) return
+    if (directVoidReason.trim() === '') {
+      alert('请填写作废原因')
+      return
+    }
+    
+    setDirectVoidSubmitting(true)
+    try {
+      const response = await voidBill(selectedBillForDirectVoid.id, directVoidReason.trim())
+      if (response.errCode === 200) {
+        alert('提单作废成功')
+        setDirectVoidModalVisible(false)
+        setSelectedBillForDirectVoid(null)
+        setRefreshKey(prev => prev + 1)
+      } else {
+        alert(response.msg || '作废失败')
+      }
+    } catch (error) {
+      console.error('作废提单失败:', error)
+      alert('作废失败，请稍后重试')
+    } finally {
+      setDirectVoidSubmitting(false)
     }
   }
   
@@ -1010,6 +1037,87 @@ export default function OrderBills() {
           billId={selectedBillForVoid.id}
           billNumber={selectedBillForVoid.billNumber}
         />
+      )}
+
+      {/* 直接作废弹窗 */}
+      {directVoidModalVisible && selectedBillForDirectVoid && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            {/* 弹窗头部 */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                <Ban className="w-5 h-5 text-red-500" />
+                作废提单
+              </h3>
+              <button
+                onClick={() => {
+                  setDirectVoidModalVisible(false)
+                  setSelectedBillForDirectVoid(null)
+                }}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                title="关闭"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            {/* 弹窗内容 */}
+            <div className="p-5">
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-700">
+                  确定要作废提单 <span className="font-medium">{selectedBillForDirectVoid.billNumber}</span> 吗？
+                </p>
+                <p className="text-xs text-amber-600 mt-1">作废后可在"作废记录"中查看并恢复</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  作废原因 <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={directVoidReason}
+                  onChange={(e) => setDirectVoidReason(e.target.value)}
+                  placeholder="请输入作废原因（必填）"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                />
+                {directVoidReason.trim() === '' && (
+                  <p className="mt-1 text-xs text-red-500">请填写作废原因</p>
+                )}
+              </div>
+            </div>
+            
+            {/* 弹窗底部 */}
+            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+              <button
+                onClick={() => {
+                  setDirectVoidModalVisible(false)
+                  setSelectedBillForDirectVoid(null)
+                }}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDirectVoidSubmit}
+                disabled={directVoidSubmitting || directVoidReason.trim() === ''}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+              >
+                {directVoidSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    处理中...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4" />
+                    确认作废
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </PageContainer>
   )
