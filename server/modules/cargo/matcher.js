@@ -104,13 +104,50 @@ export async function matchHsCode(item) {
   }
 }
 
+// 常见中文国家名到ISO代码的映射
+const COUNTRY_NAME_TO_CODE = {
+  '中国': 'CN',
+  '美国': 'US',
+  '德国': 'DE',
+  '日本': 'JP',
+  '韩国': 'KR',
+  '英国': 'GB',
+  '法国': 'FR',
+  '意大利': 'IT',
+  '西班牙': 'ES',
+  '越南': 'VN',
+  '印度': 'IN',
+  '泰国': 'TH',
+  '马来西亚': 'MY',
+  '印度尼西亚': 'ID',
+  '台湾': 'TW',
+  '香港': 'HK',
+}
+
+/**
+ * 将原产国名称转换为ISO代码
+ */
+function normalizeCountryCode(country) {
+  if (!country) return 'CN'
+  const trimmed = country.trim()
+  // 如果已经是2位代码，直接返回
+  if (/^[A-Z]{2}$/i.test(trimmed)) {
+    return trimmed.toUpperCase()
+  }
+  // 查找中文名称映射
+  return COUNTRY_NAME_TO_CODE[trimmed] || trimmed
+}
+
 /**
  * 精确匹配HS编码
  * @param {string} hsCode - HS编码
- * @param {string} originCountry - 原产国代码，用于查询特定税率（如反倾销税）
+ * @param {string} originCountry - 原产国代码或名称，用于查询特定税率（如反倾销税）
  */
 async function doExactMatch(hsCode, originCountry = 'CN') {
   const db = getDatabase()
+  
+  // 规范化原产国代码（支持中文名称转换为ISO代码）
+  originCountry = normalizeCountryCode(originCountry)
   
   // 首先尝试匹配特定原产国的税率（可能包含反倾销税等）
   let row = await db.prepare(`
