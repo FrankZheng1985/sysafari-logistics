@@ -61,7 +61,20 @@ async function migrate() {
     console.log(`  找到 ${groupsResult.rows.length} 个公司税号组合`)
     
     let migratedCount = 0
+    let skippedCount = 0
     for (const group of groupsResult.rows) {
+      // 检查客户是否存在
+      const customerResult = await client.query(
+        'SELECT id FROM customers WHERE id = $1',
+        [group.customer_id]
+      )
+      
+      if (customerResult.rows.length === 0) {
+        console.log(`  ⏭️ 跳过无效客户: ${group.company_name} (客户ID: ${group.customer_id})`)
+        skippedCount++
+        continue
+      }
+      
       // 检查是否已存在
       const existingResult = await client.query(
         'SELECT id FROM customer_tax_info WHERE customer_id = $1 AND company_name = $2',
