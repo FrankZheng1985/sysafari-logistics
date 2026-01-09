@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   FileCheck, CheckCircle, XCircle, RefreshCw, Search,
@@ -6,7 +6,7 @@ import {
   Save, MapPin, Package, FileText, Globe, Zap
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl, getAuthHeaders, lookupTaricRealtime } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders, lookupTaricRealtime, getTaricCountryCodes } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -139,8 +139,17 @@ export default function DocumentMatching() {
     savedToDb: string
   } | null>(null)
 
+  // 国家选择器
+  const [countries, setCountries] = useState<{ code: string; name: string }[]>([])
+  const [countrySearch, setCountrySearch] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+  const [loadingCountries, setLoadingCountries] = useState(false)
+  const countryInputRef = useRef<HTMLInputElement>(null)
+  const countryDropdownRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     loadBatches()
+    loadCountries()
   }, [])
 
   useEffect(() => {
@@ -151,6 +160,22 @@ export default function DocumentMatching() {
       }
     }
   }, [importIdParam, batches])
+
+  // 点击外部关闭国家下拉框
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        countryDropdownRef.current &&
+        !countryDropdownRef.current.contains(event.target as Node) &&
+        countryInputRef.current &&
+        !countryInputRef.current.contains(event.target as Node)
+      ) {
+        setShowCountryDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     if (selectedBatch) {
@@ -187,6 +212,41 @@ export default function DocumentMatching() {
     } finally {
       setCheckingPrice(false)
     }
+  }
+
+  // 加载国家列表
+  const loadCountries = async () => {
+    setLoadingCountries(true)
+    try {
+      const response = await getTaricCountryCodes()
+      if (response.errCode === 200 && response.data) {
+        setCountries(response.data.countries || [])
+      }
+    } catch (err) {
+      console.error('加载国家代码失败:', err)
+    } finally {
+      setLoadingCountries(false)
+    }
+  }
+
+  // 过滤国家列表
+  const filteredCountries = countries.filter((c) => {
+    if (!countrySearch) return true
+    const search = countrySearch.toUpperCase()
+    return c.code.toUpperCase().includes(search) || c.name.toUpperCase().includes(search)
+  })
+
+  // 选择国家
+  const handleSelectCountry = (code: string, name: string) => {
+    setQueryOriginCountry(code)
+    setCountrySearch(code ? `${code} - ${name}` : '')
+    setShowCountryDropdown(false)
+  }
+
+  // 清除国家选择
+  const handleClearCountry = () => {
+    setQueryOriginCountry('')
+    setCountrySearch('')
   }
 
   // 实时查询HS编码税率
@@ -733,16 +793,71 @@ export default function DocumentMatching() {
                   onKeyDown={(e) => e.key === 'Enter' && handleQueryHs()}
                 />
               </div>
-              <div className="w-40">
+              <div className="w-48 relative">
                 <label className="block text-xs text-gray-600 mb-1">原产国 (可选)</label>
-                <input
-                  type="text"
-                  value={queryOriginCountry}
-                  onChange={(e) => setQueryOriginCountry(e.target.value.toUpperCase().slice(0, 2))}
-                  placeholder="如: CN"
-                  className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  onKeyDown={(e) => e.key === 'Enter' && handleQueryHs()}
-                />
+                <div className="relative">
+                  <input
+                    ref={countryInputRef}
+                    type="text"
+                    value={countrySearch}
+                    onChange={(e) => {
+                      setCountrySearch(e.target.value)
+                      setShowCountryDropdown(true)
+                      if (!e.target.value) {
+                        setQueryOriginCountry('')
+                      }
+                    }}
+                    onFocus={() => setShowCountryDropdown(true)}
+                    placeholder={loadingCountries ? '加载中...' : '输入国家代码或名称'}
+                    disabled={loadingCountries}
+                    className="w-full px-3 py-1.5 pr-8 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setShowCountryDropdown(false)
+                        handleQueryHs()
+                      }
+                    }}
+                  />
+                  {countrySearch && (
+                    <button
+                      type="button"
+                      onClick={handleClearCountry}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {/* 国家下拉列表 */}
+                {showCountryDropdown && !loadingCountries && (
+                  <div
+                    ref={countryDropdownRef}
+                    className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto"
+                  >
+                    <div
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm text-gray-500"
+                      onClick={() => handleSelectCountry('', '')}
+                    >
+                      全部国家
+                    </div>
+                    {filteredCountries.length > 0 ? (
+                      filteredCountries.slice(0, 50).map((c) => (
+                        <div
+                          key={c.code}
+                          className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm ${
+                            queryOriginCountry === c.code ? 'bg-blue-100 text-blue-700' : ''
+                          }`}
+                          onClick={() => handleSelectCountry(c.code, c.name)}
+                        >
+                          <span className="font-medium">{c.code}</span>
+                          <span className="text-gray-500 ml-1">- {c.name}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-400">无匹配结果</div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 onClick={handleQueryHs}
