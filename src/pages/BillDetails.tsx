@@ -14,7 +14,7 @@ import FeeModal from '../components/FeeModal'
 import OrderFeePanel from '../components/OrderFeePanel'
 import OrderDocuments from '../components/OrderDocuments'
 import CreateBillModal from '../components/CreateBillModal'
-import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, deleteFee, getApiBaseUrl, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
+import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, deleteFee, getApiBaseUrl, getAuthHeaders, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
 import { getBillById as getBillByIdFromMock } from '../data/mockOrders'
 
 interface Declaration {
@@ -655,12 +655,11 @@ export default function BillDetails() {
     const newDescription = `复制自${fee.feeType === 'receivable' ? '应收' : '应付'}费用: ${fee.feeName}`
     try {
       const API_BASE = getApiBaseUrl()
-      const token = localStorage.getItem('token')
       const response = await fetch(`${API_BASE}/api/fees`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...getAuthHeaders()
         },
         body: JSON.stringify({
           billId: fee.billId,
