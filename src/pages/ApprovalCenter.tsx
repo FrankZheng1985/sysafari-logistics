@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatDateTime } from '../utils/dateFormat'
 
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+import { invalidateNotificationCache } from '../utils/apiCache'
 
 // API 基础地址
 const API_BASE_URL = getApiBaseUrl()
@@ -208,6 +209,10 @@ export default function ApprovalCenter() {
         setApprovalComment('')
         loadRequests()
         loadPendingCount()
+        // 清除通知缓存，让铃铛数量立即更新
+        if (user?.id) {
+          invalidateNotificationCache(user.id, user.role)
+        }
       } else {
         alert(data.msg || '审批失败')
       }
@@ -243,6 +248,10 @@ export default function ApprovalCenter() {
         setRejectionReason('')
         loadRequests()
         loadPendingCount()
+        // 清除通知缓存，让铃铛数量立即更新
+        if (user?.id) {
+          invalidateNotificationCache(user.id, user.role)
+        }
       } else {
         alert(data.msg || '操作失败')
       }

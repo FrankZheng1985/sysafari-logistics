@@ -766,11 +766,16 @@ export async function createFee(req, res) {
       createdBy: userId
     }
     
+    // 检查是否是追加费用（前端传递的标记或提单已确认收款）
+    const isSupplementFromFrontend = req.body.isSupplementFee === true || req.body.needApproval === true
+    
     // 检查提单是否已确认收款（追加费用逻辑）
     if (billId) {
       const isConfirmed = await model.isBillPaymentConfirmed(billId)
       
-      if (isConfirmed) {
+      // 条件1: 提单已确认收款（传统追加费用逻辑）
+      // 条件2: 前端明确标记为追加费用（从追加费用页面添加）
+      if (isConfirmed || isSupplementFromFrontend) {
         // 标记为追加费用
         feeData.isSupplementary = 1
         feeData.approvalSubmittedAt = new Date().toISOString()
@@ -786,18 +791,20 @@ export async function createFee(req, res) {
           userName,
           userRole: req.user?.role,
           permissions: (req.user?.permissions || []).filter(p => p.startsWith('finance:')),
-          isFinance
+          isFinance,
+          isSupplementFromFrontend,
+          isConfirmed
         })
         
+        // 财务人员：直接生效
+        // 非财务人员：需要审批
         if (isFinance) {
-          // 财务人员：直接生效
           feeData.approvalStatus = 'approved'
           feeData.approvedAt = new Date().toISOString()
           feeData.approvedBy = userId
           feeData.approvedByName = userName
           console.log('[createFee] 财务人员创建，直接生效')
         } else {
-          // 非财务人员：待审批
           feeData.approvalStatus = 'pending'
           console.log('[createFee] 非财务人员创建，需要审批')
         }

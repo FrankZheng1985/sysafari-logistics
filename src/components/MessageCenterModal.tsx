@@ -29,6 +29,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSocket, type Conversation } from '../contexts/SocketContext'
 import { ConversationList, ChatWindow, NewChatModal } from './Chat'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+import { invalidateNotificationCache } from '../utils/apiCache'
 
 const API_BASE = getApiBaseUrl()
 
@@ -226,6 +227,10 @@ export default function MessageCenterModal({ visible, onClose }: MessageCenterMo
       if (data.errCode === 200) {
         fetchApprovals()
         fetchStats()
+        // 清除通知缓存，让铃铛数量立即更新
+        if (user?.id) {
+          invalidateNotificationCache(user.id, user.role)
+        }
       } else {
         alert(data.msg || '操作失败')
       }
