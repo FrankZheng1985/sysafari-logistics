@@ -1227,12 +1227,66 @@ export async function parseAndPreview(fileContentOrPath, fileType, isFilePath = 
 }
 
 /**
- * 创建货物导入批次
+ * 检查是否存在相同集装箱号的导入批次
+ * @param {string} containerNo - 集装箱号
+ * @returns {Promise<Array>} 存在的批次列表
  */
-export async function createImportBatch(data) {
+export async function findExistingImportsByContainer(containerNo) {
+  if (!containerNo) return []
+  
   const db = getDatabase()
-  const importNo = generateImportNo()
+  const rows = await db.prepare(`
+    SELECT id, import_no, container_no, total_items, status, created_at
+    FROM cargo_imports 
+    WHERE container_no = $1
+    ORDER BY created_at DESC
+  `).all(containerNo.trim())
+  
+  return rows || []
+}
+
+/**
+ * 删除指定的导入批次（包括关联的货物明细）
+ * @param {Array<number>} importIds - 要删除的批次ID列表
+ * @returns {Promise<number>} 删除的批次数量
+ */
+export async function deleteImportsByIds(importIds) {
+  if (!importIds || importIds.length === 0) return 0
+  
+  const db = getDatabase()
+  
+  // 由于外键CASCADE设置，删除主表会自动删除明细
+  const placeholders = importIds.map((_, i) => `$${i + 1}`).join(',')
+  await db.prepare(`
+    DELETE FROM cargo_imports WHERE id IN (${placeholders})
+  `).run(...importIds)
+  
+  console.log(`已删除 ${importIds.length} 个旧的导入批次`)
+  return importIds.length
+}
+
+/**
+ * 创建货物导入批次
+ * @param {Object} data - 批次数据
+ * @param {Object} options - 选项
+ * @param {boolean} options.overwriteExisting - 是否覆盖已存在的同集装箱号批次（默认true）
+ */
+export async function createImportBatch(data, options = {}) {
+  const { overwriteExisting = true } = options
+  const db = getDatabase()
   const now = new Date().toISOString()
+  
+  // 如果开启覆盖模式，检查并删除已存在的同集装箱号批次
+  if (overwriteExisting && data.containerNo) {
+    const existingImports = await findExistingImportsByContainer(data.containerNo)
+    if (existingImports.length > 0) {
+      const idsToDelete = existingImports.map(imp => imp.id)
+      console.log(`发现 ${existingImports.length} 个相同集装箱号(${data.containerNo})的批次，将覆盖更新`)
+      await deleteImportsByIds(idsToDelete)
+    }
+  }
+  
+  const importNo = generateImportNo()
 
   const result = await db.prepare(`
     INSERT INTO cargo_imports (
@@ -1890,6 +1944,8 @@ export default {
   mapFieldNames,
   validateItem,
   parseAndPreview,
+  findExistingImportsByContainer,
+  deleteImportsByIds,
   createImportBatch,
   insertCargoItems,
   getImportList,

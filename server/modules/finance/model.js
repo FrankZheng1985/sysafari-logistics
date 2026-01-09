@@ -346,10 +346,37 @@ export async function updateInvoice(id, data) {
 /**
  * 删除发票（软删除）
  * 只标记为已删除，不真正删除记录，确保发票号不会被重复使用
+ * 同时重置关联费用的开票状态，使其回到"待开票"
  */
 export async function deleteInvoice(id) {
   const db = getDatabase()
-  // 软删除：标记为已删除，记录删除时间
+  
+  // 1. 获取发票记录，获取关联的费用ID
+  const invoice = await db.prepare('SELECT fee_ids FROM invoices WHERE id = ?').get(id)
+  
+  // 2. 如果有关联费用，重置它们的开票状态
+  if (invoice && invoice.fee_ids) {
+    try {
+      const feeIds = JSON.parse(invoice.fee_ids)
+      if (Array.isArray(feeIds) && feeIds.length > 0) {
+        for (const feeId of feeIds) {
+          await db.prepare(`
+            UPDATE fees SET 
+              invoice_status = 'not_invoiced',
+              invoice_number = NULL,
+              invoice_date = NULL,
+              updated_at = NOW()
+            WHERE id = ?
+          `).run(feeId)
+        }
+        console.log(`[deleteInvoice] 已重置 ${feeIds.length} 条费用记录的开票状态`)
+      }
+    } catch (e) {
+      console.error('[deleteInvoice] 解析 fee_ids 失败:', e)
+    }
+  }
+  
+  // 3. 软删除：标记为已删除，记录删除时间
   const result = await db.prepare(`
     UPDATE invoices 
     SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW() 
