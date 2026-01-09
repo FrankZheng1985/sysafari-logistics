@@ -719,7 +719,8 @@ export default function CreateInvoice() {
     try {
       // 获取该供应商的所有应付费用（跨订单），采购发票只显示应付费用
       // 使用供应商名称查询（兼容不同ID格式）
-      const response = await fetch(`${API_BASE}/api/fees?supplierName=${encodeURIComponent(supplierName)}&feeType=payable&pageSize=500`)
+      // excludeInvoiced=true 排除已开票的费用，避免重复开票
+      const response = await fetch(`${API_BASE}/api/fees?supplierName=${encodeURIComponent(supplierName)}&feeType=payable&excludeInvoiced=true&pageSize=500`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         // 按订单分组显示费用，并标记选中状态
@@ -1383,10 +1384,29 @@ export default function CreateInvoice() {
       const data = await response.json()
       
       if (data.errCode === 200) {
-        alert(isEditMode ? '发票更新成功' : '发票创建成功')
+        const invoiceNumber = data.data?.invoiceNumber || ''
+        
         if (isEditMode && editInvoiceId) {
+          // 编辑模式：跳转到发票详情
+          alert('发票更新成功')
           navigate(`/finance/invoices/${editInvoiceId}`)
+        } else if (formData.invoiceType === 'purchase' && selectedSupplier) {
+          // 采购发票创建成功：刷新费用列表，允许继续添加
+          alert(`发票 ${invoiceNumber} 创建成功！已开票的费用已从列表中移除，您可以继续选择其他费用创建新发票。`)
+          
+          // 清空已选择的费用和发票项
+          setFormData(prev => ({
+            ...prev,
+            items: [],
+            supplierInvoiceNumber: '',
+            supplierInvoiceDate: ''
+          }))
+          
+          // 重新获取供应商费用列表（已开票的会被自动过滤）
+          await fetchSupplierFees(selectedSupplier.id, selectedSupplier.supplierName)
         } else {
+          // 销售发票：跳转到发票列表
+          alert('发票创建成功')
           navigate('/finance/invoices')
         }
       } else {

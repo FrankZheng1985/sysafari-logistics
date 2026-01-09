@@ -678,7 +678,7 @@ export async function viewPaymentReceipt(req, res) {
  */
 export async function getFees(req, res) {
   try {
-    const { category, feeName, billId, customerId, supplierId, supplierName, feeType, startDate, endDate, search, page, pageSize } = req.query
+    const { category, feeName, billId, customerId, supplierId, supplierName, feeType, startDate, endDate, search, excludeInvoiced, page, pageSize } = req.query
     
     const result = await model.getFees({
       category,
@@ -691,6 +691,7 @@ export async function getFees(req, res) {
       startDate,
       endDate,
       search,
+      excludeInvoiced, // 排除已开票的费用（创建发票时使用）
       page: parseInt(page) || 1,
       pageSize: parseInt(pageSize) || 20
     })

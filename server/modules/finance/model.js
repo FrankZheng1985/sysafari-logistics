@@ -243,10 +243,27 @@ export async function createInvoice(data) {
     ? JSON.stringify(data.containerNumbers) 
     : JSON.stringify([])
   
-  // 处理 items 数组
+  // 处理 items 数组并提取费用IDs
   const items = typeof data.items === 'string' 
     ? data.items 
     : (Array.isArray(data.items) ? JSON.stringify(data.items) : null)
+  
+  // 解析 items 获取所有关联的费用IDs
+  let feeIds = []
+  try {
+    const parsedItems = typeof data.items === 'string' ? JSON.parse(data.items) : data.items
+    if (Array.isArray(parsedItems)) {
+      parsedItems.forEach(item => {
+        if (item.feeId) {
+          // feeId 可能是逗号分隔的多个ID（合并费用时）
+          const ids = item.feeId.split(',').map(id => id.trim()).filter(id => id)
+          feeIds.push(...ids)
+        }
+      })
+    }
+  } catch (e) {
+    console.error('[createInvoice] 解析 items 失败:', e)
+  }
   
   const result = await db.prepare(`
     INSERT INTO invoices (
@@ -280,6 +297,26 @@ export async function createInvoice(data) {
     data.language || 'en',  // 发票语言，默认英文
     data.createdBy || null
   )
+  
+  // 更新关联费用的开票状态
+  if (feeIds.length > 0) {
+    const uniqueFeeIds = [...new Set(feeIds)]
+    for (const feeId of uniqueFeeIds) {
+      try {
+        await db.prepare(`
+          UPDATE fees SET 
+            invoice_status = 'invoiced',
+            invoice_number = ?,
+            invoice_date = ?,
+            updated_at = NOW()
+          WHERE id = ?
+        `).run(invoiceNumber, data.invoiceDate || new Date().toISOString().split('T')[0], feeId)
+      } catch (e) {
+        console.error(`[createInvoice] 更新费用 ${feeId} 开票状态失败:`, e)
+      }
+    }
+    console.log(`[createInvoice] 已更新 ${uniqueFeeIds.length} 条费用记录的开票状态`)
+  }
   
   return { id, invoiceNumber }
 }
@@ -1010,12 +1047,13 @@ export async function deletePayment(id) {
 /**
  * 获取费用列表（按订单分组分页）
  * 当按 billId 精确查询时，直接返回该订单的费用（不使用分组逻辑）
+ * @param {boolean} excludeInvoiced - 是否排除已开票的费用（用于创建发票时）
  */
 export async function getFees(params = {}) {
   const db = getDatabase()
   const { 
     category, feeName, billId, customerId, supplierId, supplierName, feeType,
-    startDate, endDate, search,
+    startDate, endDate, search, excludeInvoiced,
     page = 1, pageSize = 20 
   } = params
   
@@ -1036,6 +1074,11 @@ export async function getFees(params = {}) {
   // 构建基础 WHERE 条件
   let whereClause = 'WHERE 1=1'
   const queryParams = []
+  
+  // 排除已开票的费用（用于创建发票时，避免重复开票）
+  if (excludeInvoiced === 'true' || excludeInvoiced === true) {
+    whereClause += " AND (f.invoice_status IS NULL OR f.invoice_status != 'invoiced')"
+  }
   
   if (feeType) {
     whereClause += ' AND f.fee_type = ?'
