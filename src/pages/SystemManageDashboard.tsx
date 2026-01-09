@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { 
   Settings, Users, Shield, Image, Database, FileText,
-  ToggleLeft, ArrowRight, Activity, Server, Lock, Key, Link2, Receipt, Bell
+  ToggleLeft, ArrowRight, Activity, Server, Lock, Key, Link2, Receipt, Bell,
+  MessageCircle, Upload, CheckCircle
 } from 'lucide-react'
 
 interface SystemCard {
@@ -14,6 +15,22 @@ interface SystemCard {
 }
 
 const systemModules: SystemCard[] = [
+  {
+    path: '/system/info-center',
+    label: '信息中心',
+    description: '系统公告、通知和消息管理',
+    icon: MessageCircle,
+    color: 'text-cyan-600',
+    bgColor: 'bg-cyan-50 hover:bg-cyan-100',
+  },
+  {
+    path: '/system/data-import',
+    label: '数据导入',
+    description: '批量导入客户、订单等业务数据',
+    icon: Upload,
+    color: 'text-emerald-600',
+    bgColor: 'bg-emerald-50 hover:bg-emerald-100',
+  },
   {
     path: '/system/menu-settings',
     label: '板块开关',
@@ -31,12 +48,20 @@ const systemModules: SystemCard[] = [
     bgColor: 'bg-green-50 hover:bg-green-100',
   },
   {
-    path: '/system/security-settings',
-    label: '安全设置',
-    description: '配置密码策略、登录安全和访问控制',
+    path: '/system/security-center',
+    label: '安全管理中心',
+    description: '综合安全管理、日志审计和风险监控',
     icon: Shield,
     color: 'text-red-600',
     bgColor: 'bg-red-50 hover:bg-red-100',
+  },
+  {
+    path: '/system/approval-settings',
+    label: '审批权限设置',
+    description: '配置审批流程和审批人权限',
+    icon: CheckCircle,
+    color: 'text-violet-600',
+    bgColor: 'bg-violet-50 hover:bg-violet-100',
   },
   {
     path: '/system/logo-manage',
@@ -135,7 +160,7 @@ export default function SystemManageDashboard() {
             <Key className="w-4 h-4" />
             管理功能
           </h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             {systemModules.map((module) => (
               <div
                 key={module.path}
