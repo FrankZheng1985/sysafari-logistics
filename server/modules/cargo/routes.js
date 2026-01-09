@@ -53,11 +53,24 @@ router.get('/documents/imports/:id', controller.getImportById)
 // 获取货物明细
 router.get('/documents/imports/:id/items', controller.getImportItems)
 
+// Multer 错误处理中间件
+const handleMulterError = (err, req, res, next) => {
+  if (err) {
+    console.error('[Multer Error]', err.message)
+    return res.status(400).json({
+      errCode: 400,
+      msg: err.message || '文件上传失败',
+      data: null
+    })
+  }
+  next()
+}
+
 // 上传导入文件
-router.post('/documents/imports', upload.single('file'), controller.createImport)
+router.post('/documents/imports', upload.single('file'), handleMulterError, controller.createImport)
 
 // 预览导入文件
-router.post('/documents/imports/preview', upload.single('file'), controller.previewImport)
+router.post('/documents/imports/preview', upload.single('file'), handleMulterError, controller.previewImport)
 
 // 删除导入批次
 router.delete('/documents/imports/:id', controller.deleteImport)
