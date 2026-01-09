@@ -553,31 +553,44 @@ export async function batchApprove(itemIds, action, reviewNote, reviewedBy) {
 
 /**
  * 更新历史匹配记录
+ * 人工审核通过的结果会记录或更新到 hs_match_history 表
+ * - 如果商品名+材质已存在，更新 HS 编码并增加匹配次数
+ * - 如果不存在，插入新记录
  */
 export async function updateMatchHistory(productName, productNameEn, material, hsCode) {
   const db = getDatabase()
   const now = new Date().toISOString()
   
-  // 检查是否存在
+  // 检查是否存在（基于商品名+材质）
   const existing = await db.prepare(`
-    SELECT id FROM hs_match_history 
+    SELECT id, matched_hs_code FROM hs_match_history 
     WHERE product_name = ? AND (material = ? OR (material IS NULL AND ? IS NULL))
   `).get(productName, material || null, material || null)
   
   if (existing) {
-    // 更新现有记录
+    // 更新现有记录：更新 HS 编码、英文名、匹配次数
+    // 人工审核的 HS 编码会覆盖之前的记录（以人工审核为准）
     await db.prepare(`
       UPDATE hs_match_history SET
+        matched_hs_code = ?,
+        product_name_en = COALESCE(?, product_name_en),
         match_count = match_count + 1,
         last_matched_at = ?
       WHERE id = ?
-    `).run(now, existing.id)
+    `).run(hsCode, productNameEn, now, existing.id)
+    
+    // 如果 HS 编码发生变化，记录日志
+    if (existing.matched_hs_code !== hsCode) {
+      console.log(`[HS匹配记录更新] 商品: ${productName}, 材质: ${material || '无'}, HS编码: ${existing.matched_hs_code} -> ${hsCode}`)
+    }
   } else {
     // 插入新记录
     await db.prepare(`
       INSERT INTO hs_match_history (product_name, product_name_en, material, matched_hs_code, match_count, last_matched_at, created_at)
       VALUES (?, ?, ?, ?, 1, ?, ?)
     `).run(productName, productNameEn, material, hsCode, now, now)
+    
+    console.log(`[HS匹配记录新增] 商品: ${productName}, 材质: ${material || '无'}, HS编码: ${hsCode}`)
   }
 }
 
