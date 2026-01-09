@@ -655,9 +655,13 @@ export default function BillDetails() {
     const newDescription = `复制自${fee.feeType === 'receivable' ? '应收' : '应付'}费用: ${fee.feeName}`
     try {
       const API_BASE = getApiBaseUrl()
+      const token = localStorage.getItem('token')
       const response = await fetch(`${API_BASE}/api/fees`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           billId: fee.billId,
           billNumber: fee.billNumber,
