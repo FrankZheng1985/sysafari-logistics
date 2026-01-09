@@ -1099,61 +1099,80 @@ export default function FeeModal({
           {/* 关联订单 */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              关联订单（可选）
+              {defaultBillId ? '关联订单' : '关联订单（可选）'}
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={formData.billNumber || billSearch}
-                onChange={(e) => {
-                  setBillSearch(e.target.value)
-                  setFormData(prev => ({ ...prev, billId: '', billNumber: '' }))
-                  setShowBillDropdown(true)
-                }}
-                onFocus={() => setShowBillDropdown(true)}
-                placeholder="搜索提单号..."
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-              />
-              {formData.billNumber && (
-                <button
-                  onClick={() => setFormData(prev => ({ 
-                    ...prev, 
-                    billId: '', 
-                    billNumber: '',
-                    customerId: '',
-                    customerName: ''
-                  }))}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  title="清除选择"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-              
-              {showBillDropdown && !formData.billNumber && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredBills.length > 0 ? (
-                    filteredBills.slice(0, 10).map(bill => (
-                      <div
-                        key={bill.id}
-                        onClick={() => handleBillSelect(bill)}
-                        className="px-3 py-2 hover:bg-gray-50 cursor-pointer"
-                      >
-                        <div className="font-medium text-sm">{bill.billNumber}</div>
-                        <div className="text-xs text-gray-500">
-                          {bill.containerNumber} | {bill.customerName || '未关联客户'}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="px-3 py-2 text-sm text-gray-400 text-center">
-                      无匹配订单
-                    </div>
-                  )}
+            
+            {/* 如果传入了默认订单ID，显示为只读模式 */}
+            {defaultBillId ? (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-primary-600" />
+                  <span className="font-medium text-sm text-gray-900">{formData.billNumber}</span>
                 </div>
-              )}
-            </div>
-            {formData.feeType === 'receivable' && formData.customerName && (
+                {formData.customerName && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    客户：{formData.customerName}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* 没有传入默认订单时，显示可选择的搜索框 */
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.billNumber || billSearch}
+                  onChange={(e) => {
+                    setBillSearch(e.target.value)
+                    setFormData(prev => ({ ...prev, billId: '', billNumber: '' }))
+                    setShowBillDropdown(true)
+                  }}
+                  onFocus={() => setShowBillDropdown(true)}
+                  placeholder="搜索提单号..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                />
+                {formData.billNumber && (
+                  <button
+                    onClick={() => setFormData(prev => ({ 
+                      ...prev, 
+                      billId: '', 
+                      billNumber: '',
+                      customerId: '',
+                      customerName: ''
+                    }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    title="清除选择"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                
+                {showBillDropdown && !formData.billNumber && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {filteredBills.length > 0 ? (
+                      filteredBills.slice(0, 10).map(bill => (
+                        <div
+                          key={bill.id}
+                          onClick={() => handleBillSelect(bill)}
+                          className="px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <div className="font-medium text-sm">{bill.billNumber}</div>
+                          <div className="text-xs text-gray-500">
+                            {bill.containerNumber} | {bill.customerName || '未关联客户'}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-gray-400 text-center">
+                        无匹配订单
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* 非只读模式下显示客户信息 */}
+            {!defaultBillId && formData.feeType === 'receivable' && formData.customerName && (
               <div className="mt-1 text-xs text-gray-500">
                 客户：{formData.customerName}
               </div>
