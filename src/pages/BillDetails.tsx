@@ -1519,34 +1519,32 @@ export default function BillDetails() {
                               <span className="text-sm font-semibold text-blue-600">
                                 €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                               </span>
-                              {/* 操作按钮 */}
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {canEdit && (
-                                  <>
-                                    <button
-                                      onClick={() => handleEditFee(fee)}
-                                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                      title="编辑"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleCopyFee(fee, 'payable')}
-                                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
-                                      title="复制到应付"
-                                    >
-                                      <Copy className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteFee(fee.id)}
-                                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                      title="删除"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
+                              {/* 操作按钮 - 始终显示 */}
+                              {canEdit && (
+                                <div className="flex items-center gap-1 ml-2">
+                                  <button
+                                    onClick={() => handleEditFee(fee)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="编辑"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleCopyFee(fee, 'payable')}
+                                    className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                    title="复制到应付"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteFee(fee.id)}
+                                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                    title="删除"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center justify-between mt-1">
@@ -1606,34 +1604,32 @@ export default function BillDetails() {
                               <span className="text-sm font-semibold text-orange-600">
                                 €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                               </span>
-                              {/* 操作按钮 */}
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {canEdit && (
-                                  <>
-                                    <button
-                                      onClick={() => handleEditFee(fee)}
-                                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                      title="编辑"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleCopyFee(fee, 'receivable')}
-                                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                      title="复制到应收"
-                                    >
-                                      <Copy className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteFee(fee.id)}
-                                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                      title="删除"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
+                              {/* 操作按钮 - 始终显示 */}
+                              {canEdit && (
+                                <div className="flex items-center gap-1 ml-2">
+                                  <button
+                                    onClick={() => handleEditFee(fee)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="编辑"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleCopyFee(fee, 'receivable')}
+                                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                    title="复制到应收"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteFee(fee.id)}
+                                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                    title="删除"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center justify-between mt-1">
