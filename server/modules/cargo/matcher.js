@@ -225,14 +225,15 @@ async function matchFromHistory(productName, productNameEn, material) {
   const db = getDatabase()
   
   // 首先尝试精确匹配商品名+材质
+  // 使用 IS NOT DISTINCT FROM 来正确处理 NULL 值比较（PostgreSQL 兼容）
   let row = await db.prepare(`
     SELECT matched_hs_code, match_count
     FROM hs_match_history 
-    WHERE product_name = ? 
-      AND (material = ? OR (material IS NULL AND ? IS NULL))
+    WHERE product_name = $1 
+      AND material IS NOT DISTINCT FROM $2
     ORDER BY match_count DESC
     LIMIT 1
-  `).get(productName, material || null, material || null)
+  `).get(productName, material || null)
   
   if (row) {
     return row
@@ -562,10 +563,11 @@ export async function updateMatchHistory(productName, productNameEn, material, h
   const now = new Date().toISOString()
   
   // 检查是否存在（基于商品名+材质）
+  // 使用 IS NOT DISTINCT FROM 来正确处理 NULL 值比较（PostgreSQL 兼容）
   const existing = await db.prepare(`
     SELECT id, matched_hs_code FROM hs_match_history 
-    WHERE product_name = ? AND (material = ? OR (material IS NULL AND ? IS NULL))
-  `).get(productName, material || null, material || null)
+    WHERE product_name = $1 AND material IS NOT DISTINCT FROM $2
+  `).get(productName, material || null)
   
   if (existing) {
     // 更新现有记录：更新 HS 编码、英文名、匹配次数
