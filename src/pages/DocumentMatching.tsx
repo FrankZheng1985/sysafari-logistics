@@ -3,10 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   FileCheck, CheckCircle, XCircle, RefreshCw, Search,
   ChevronDown, AlertTriangle, Edit2, Check, X,
-  Save, MapPin, Package, FileText, Globe
+  Save, MapPin, Package, FileText, Globe, Zap
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders, lookupTaricRealtime } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -122,6 +122,23 @@ export default function DocumentMatching() {
   const [checkingPrice, setCheckingPrice] = useState(false)
   const [anomalyCount, setAnomalyCount] = useState(0)
 
+  // 实时查询HS编码
+  const [queryHsCode, setQueryHsCode] = useState('')
+  const [queryOriginCountry, setQueryOriginCountry] = useState('')
+  const [queryLoading, setQueryLoading] = useState(false)
+  const [queryError, setQueryError] = useState<string | null>(null)
+  const [queryResult, setQueryResult] = useState<{
+    hsCode: string
+    description: string
+    descriptionCn: string
+    dutyRate: string
+    vatRate: string
+    antiDumpingRate: string
+    countervailingRate: string
+    dataSource: string
+    savedToDb: string
+  } | null>(null)
+
   useEffect(() => {
     loadBatches()
   }, [])
@@ -169,6 +186,41 @@ export default function DocumentMatching() {
       console.error('价格异常检测失败:', error)
     } finally {
       setCheckingPrice(false)
+    }
+  }
+
+  // 实时查询HS编码税率
+  const handleQueryHs = async () => {
+    if (!queryHsCode || queryHsCode.length < 6) {
+      setQueryError('请输入至少6位的 HS 编码')
+      return
+    }
+
+    setQueryLoading(true)
+    setQueryError(null)
+    setQueryResult(null)
+
+    try {
+      const response = await lookupTaricRealtime(queryHsCode, queryOriginCountry || undefined, true)
+      if (response.errCode === 200 && response.data) {
+        setQueryResult({
+          hsCode: response.data.hsCode || queryHsCode,
+          description: response.data.description || '',
+          descriptionCn: response.data.descriptionCn || '',
+          dutyRate: response.data.dutyRate || '0',
+          vatRate: response.data.vatRate || '0',
+          antiDumpingRate: response.data.antiDumpingRate || '0',
+          countervailingRate: response.data.countervailingRate || '0',
+          dataSource: response.data.dataSource || 'unknown',
+          savedToDb: response.data.savedToDb || ''
+        })
+      } else {
+        setQueryError(response.msg || '查询失败')
+      }
+    } catch (err) {
+      setQueryError(err instanceof Error ? err.message : '查询失败')
+    } finally {
+      setQueryLoading(false)
     }
   }
 
@@ -653,6 +705,128 @@ export default function DocumentMatching() {
             <p className="text-xs text-red-700 mt-1">
               以下商品的申报价格与历史记录差异超过±5%，请仔细核对后再审核通过
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* HS编码实时查询 */}
+      {selectedBatch && (
+        <div className="bg-white rounded-lg border border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+                <Globe className="w-4 h-4 text-white" />
+              </div>
+              <h3 className="text-sm font-medium text-gray-900">HS编码实时查询</h3>
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">EU TARIC</span>
+            </div>
+            
+            <div className="flex items-end gap-3">
+              <div className="flex-1 max-w-xs">
+                <label className="block text-xs text-gray-600 mb-1">HS 编码 (8-10位)</label>
+                <input
+                  type="text"
+                  value={queryHsCode}
+                  onChange={(e) => setQueryHsCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="如: 6109100010"
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  onKeyDown={(e) => e.key === 'Enter' && handleQueryHs()}
+                />
+              </div>
+              <div className="w-40">
+                <label className="block text-xs text-gray-600 mb-1">原产国 (可选)</label>
+                <input
+                  type="text"
+                  value={queryOriginCountry}
+                  onChange={(e) => setQueryOriginCountry(e.target.value.toUpperCase().slice(0, 2))}
+                  placeholder="如: CN"
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  onKeyDown={(e) => e.key === 'Enter' && handleQueryHs()}
+                />
+              </div>
+              <button
+                onClick={handleQueryHs}
+                disabled={queryLoading || !queryHsCode}
+                className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                {queryLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                {queryLoading ? '查询中...' : '实时查询'}
+              </button>
+              {queryResult && (
+                <button
+                  onClick={() => { setQueryResult(null); setQueryHsCode(''); setQueryOriginCountry(''); }}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded text-sm hover:bg-gray-50"
+                >
+                  清空
+                </button>
+              )}
+            </div>
+
+            {/* 错误提示 */}
+            {queryError && (
+              <div className="mt-3 p-2 bg-red-50 text-red-700 rounded text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                {queryError}
+              </div>
+            )}
+
+            {/* 查询结果 */}
+            {queryResult && (
+              <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-700">查询结果</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      queryResult.dataSource === 'taric' || queryResult.dataSource === 'eu_api'
+                        ? 'bg-blue-100 text-blue-700'
+                        : queryResult.dataSource === 'local_database'
+                        ? 'bg-gray-100 text-gray-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {queryResult.dataSource === 'taric' || queryResult.dataSource === 'eu_api' ? '🇪🇺 EU TARIC' :
+                       queryResult.dataSource === 'local_database' ? '📦 本地数据库' : queryResult.dataSource}
+                    </span>
+                    {queryResult.savedToDb && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                        queryResult.savedToDb === 'inserted' ? 'bg-green-100 text-green-700' :
+                        queryResult.savedToDb === 'updated' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {queryResult.savedToDb === 'inserted' ? '✓ 已新增' :
+                         queryResult.savedToDb === 'updated' ? '✓ 已更新' : 
+                         queryResult.savedToDb === 'exists' ? '已存在' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="p-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-gray-500">HS编码:</span>
+                      <span className="ml-2 font-mono font-medium text-blue-600">{queryResult.hsCode}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">关税率:</span>
+                      <span className="ml-2 font-medium text-amber-600">{queryResult.dutyRate}%</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">增值税:</span>
+                      <span className="ml-2 font-medium">{queryResult.vatRate}%</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">反倾销税:</span>
+                      <span className="ml-2 font-medium">{queryResult.antiDumpingRate}%</span>
+                    </div>
+                  </div>
+                  {queryResult.descriptionCn && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <span className="text-gray-500 text-xs">商品描述:</span>
+                      <p className="text-xs text-gray-700 mt-1">{queryResult.descriptionCn}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
