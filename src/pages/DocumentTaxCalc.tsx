@@ -1871,27 +1871,27 @@ export default function DocumentTaxCalc() {
                 {taxDetails.items.length > 0 && (
                   <tfoot className="bg-gray-50">
                     <tr>
-                      {/* 合并前5列：行号、图片、商品名称、HS编码、原产地 */}
-                      <td colSpan={5} className="px-3 py-2 font-medium text-gray-700">合计</td>
-                      {/* 第6列：货值 */}
+                      {/* 合并前8列：行号、图片、客户单号、托盘、唛头、商品名称、HS编码、原产地 */}
+                      <td colSpan={8} className="px-3 py-2 font-medium text-gray-700">合计</td>
+                      {/* 第9列：货值 */}
                       <td className="px-3 py-2 text-right font-medium">{formatCurrency(taxDetails.summary.totalValue)}</td>
-                      {/* 第7列：海关计税价格 */}
+                      {/* 第10列：海关计税价格 */}
                       <td className="px-3 py-2 text-right font-medium text-primary-600">{formatCurrency(taxDetails.summary.totalCustomsValue || taxDetails.summary.totalValue)}</td>
-                      {/* 第8列：关税率（空） */}
+                      {/* 第11列：关税率（空） */}
                       <td></td>
-                      {/* 第9列：关税 */}
+                      {/* 第12列：关税 */}
                       <td className="px-3 py-2 text-right font-medium text-blue-600">{formatCurrency(taxDetails.summary.totalDuty)}</td>
-                      {/* 第10列：增值税率（空） */}
+                      {/* 第13列：增值税率（空） */}
                       <td></td>
-                      {/* 第11列：增值税 */}
+                      {/* 第14列：增值税 */}
                       <td className={`px-3 py-2 text-right font-medium ${isDeferred ? 'text-gray-400' : 'text-amber-600'}`}>
                         {formatCurrency(taxDetails.summary.totalVat)}
                       </td>
-                      {/* 第12列：其他税 */}
+                      {/* 第15列：其他税 */}
                       <td className="px-3 py-2 text-right font-medium text-purple-600">{formatCurrency(taxDetails.summary.totalOtherTax)}</td>
-                      {/* 第13列：税费合计 */}
+                      {/* 第16列：税费合计 */}
                       <td className="px-3 py-2 text-right font-bold text-green-600">{formatCurrency(taxDetails.summary.totalTax)}</td>
-                      {/* 第14列：操作（空） */}
+                      {/* 第17列：操作（空） */}
                       <td></td>
                     </tr>
                   </tfoot>
