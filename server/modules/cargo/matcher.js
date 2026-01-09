@@ -465,6 +465,21 @@ export async function approveMatch(itemId, hsCode, reviewNote, reviewedBy) {
   const db = getDatabase()
   const now = new Date().toISOString()
   
+  // HS编码格式验证：必须是8-10位数字
+  if (hsCode) {
+    // 移除可能的空格
+    hsCode = hsCode.trim()
+    // 检查长度，如果超过10位则截取前10位
+    if (hsCode.length > 10) {
+      console.warn(`[HS编码验证] 编码过长(${hsCode.length}位)，截取前10位: ${hsCode} -> ${hsCode.slice(0, 10)}`)
+      hsCode = hsCode.slice(0, 10)
+    }
+    // 检查是否为纯数字
+    if (!/^\d{8,10}$/.test(hsCode)) {
+      throw new Error(`HS编码格式错误：${hsCode}，必须是8-10位数字`)
+    }
+  }
+  
   // 先获取商品的原产国信息
   const itemInfo = await db.prepare(`
     SELECT origin_country FROM cargo_items WHERE id = ?
