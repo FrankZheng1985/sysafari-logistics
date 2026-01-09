@@ -50,6 +50,7 @@ export interface ImportTask {
   progress: string              // 进度描述
   previewData: PreviewItem[]
   error?: string
+  errorType?: 'parsing' | 'import'  // 错误类型：解析错误或导入错误
   createdAt: Date
   // 发货方和进口商信息
   shipperInfo: ShipperInfo
@@ -210,6 +211,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                   status: 'error' as const, 
                   progress: '',
                   error: data.msg || '解析文件失败',
+                  errorType: 'parsing' as const,
                 }
               : task
           ),
@@ -231,6 +233,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                 status: 'error' as const, 
                 progress: '',
                 error: error instanceof Error ? error.message : '解析文件失败',
+                errorType: 'parsing' as const,
               }
             : task
         ),
@@ -321,6 +324,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                   status: 'error' as const, 
                   progress: '',
                   error: data.msg || '导入失败',
+                  errorType: 'import' as const,
                 }
               : t
           ),
@@ -338,6 +342,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                 status: 'error' as const, 
                 progress: '',
                 error: error instanceof Error ? error.message : '导入失败',
+                errorType: 'import' as const,
               }
             : t
         ),

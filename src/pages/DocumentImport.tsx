@@ -527,14 +527,19 @@ function TaskCard({
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (task.file) {
+                  // 根据错误类型决定重试行为
+                  if (task.errorType === 'import') {
+                    // 导入失败：直接重新导入，不需要重新解析
+                    onConfirmImport(task.id)
+                  } else if (task.file) {
+                    // 解析失败：重新解析文件
                     onUploadFile(task.id, task.file)
                   }
                 }}
                 className="w-full px-3 py-2 bg-amber-500 text-white rounded text-xs hover:bg-amber-600 flex items-center justify-center gap-1"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                重试
+                {task.errorType === 'import' ? '重新导入' : '重试'}
               </button>
             </div>
           )}

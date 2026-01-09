@@ -737,8 +737,65 @@ export async function regenerateInvoiceFiles(invoiceId) {
   let invoiceData = null
   let fees = [] // 存储原始费用记录，用于 Excel
 
-  if (feeIds.length > 0) {
-    // 有关联费用记录，使用费用数据（但要过滤费用类型）
+  // 【重要】优先使用 items 字段，因为它包含用户保存的完整数据（包括手动添加的项目）
+  // 只有在 items 为空时，才从 fees 表或 bill_id 获取数据
+  let parsedItems = []
+  try {
+    parsedItems = JSON.parse(invoice.items || '[]')
+  } catch {
+    parsedItems = []
+  }
+
+  if (parsedItems.length > 0) {
+    // 从 items 字段获取费用明细（包含手动添加的项目）
+    console.log(`[regenerateInvoiceFiles] 从 items 字段获取到 ${parsedItems.length} 条费用明细`)
+    const feeGroups = {}
+    parsedItems.forEach(item => {
+      const feeName = item.description?.trim() || item.fee_name?.trim() || '费用'
+      const amount = parseFloat(item.amount) || 0
+      const discountAmt = parseFloat(item.discountAmount) || 0
+      const finalAmt = item.finalAmount !== undefined 
+        ? parseFloat(item.finalAmount) 
+        : (amount - discountAmt)
+      if (!feeGroups[feeName]) {
+        feeGroups[feeName] = {
+          description: feeName,
+          quantity: 0,
+          totalAmount: 0,
+          totalDiscount: 0,
+          totalFinal: 0
+        }
+      }
+      feeGroups[feeName].quantity += (item.quantity || 1)
+      feeGroups[feeName].totalAmount += amount
+      feeGroups[feeName].totalDiscount += discountAmt
+      feeGroups[feeName].totalFinal += finalAmt
+    })
+
+    items = Object.values(feeGroups).map(group => ({
+      description: group.description,
+      quantity: group.quantity,
+      unitValue: group.totalAmount / group.quantity,
+      amount: group.totalAmount,
+      discountAmount: group.totalDiscount,
+      finalAmount: group.totalFinal
+    }))
+    console.log(`[regenerateInvoiceFiles] 合并后 items: ${items.length} 条`)
+    
+    // 同时获取 fees 用于 Excel（如果有的话）
+    if (feeIds.length > 0) {
+      const placeholders = feeIds.map(() => '?').join(',')
+      fees = await db.prepare(`
+        SELECT f.*, b.container_number, b.bill_number
+        FROM fees f
+        LEFT JOIN bills_of_lading b ON f.bill_id = b.id
+        WHERE f.id IN (${placeholders}) 
+          AND (f.fee_type = ? OR f.fee_type IS NULL)
+        ORDER BY f.fee_name
+      `).all(...feeIds, targetFeeType)
+    }
+  } else if (feeIds.length > 0) {
+    // items 为空，有关联费用记录，使用费用数据（但要过滤费用类型）
     const placeholders = feeIds.map(() => '?').join(',')
     fees = await db.prepare(`
       SELECT f.*, b.container_number, b.bill_number
@@ -754,7 +811,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }
     console.log(`[regenerateInvoiceFiles] 从 fee_ids 获取到 ${fees.length} 条${targetFeeType}费用`)
   } else if (invoice.bill_number || invoice.bill_id) {
-    // fee_ids 为空，从关联的提单获取费用
+    // items 和 fee_ids 都为空，从关联的提单获取费用
     // 支持多个提单（bill_number 逗号分隔）
     let billIds = []
     
@@ -848,58 +905,15 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }
   }
   
-  // 如果还是没有费用数据，尝试其他方式
+  // 如果还是没有费用数据，使用后备方案
   if (items.length === 0) {
-    // 尝试从 items 字段读取
-    let parsedItems = []
-    try {
-      parsedItems = JSON.parse(invoice.items || '[]')
-    } catch {
-      parsedItems = []
-    }
-
-    if (parsedItems.length > 0) {
-      // 从 items 字段获取费用明细
-      const feeGroups = {}
-      parsedItems.forEach(item => {
-        const feeName = item.description?.trim() || item.fee_name?.trim() || '费用'
-        const amount = parseFloat(item.amount) || 0
-        const discountAmt = parseFloat(item.discountAmount) || 0
-        const finalAmt = item.finalAmount !== undefined 
-          ? parseFloat(item.finalAmount) 
-          : (amount - discountAmt)
-        if (!feeGroups[feeName]) {
-          feeGroups[feeName] = {
-            description: feeName,
-            quantity: 0,
-            totalAmount: 0,
-            totalDiscount: 0,
-            totalFinal: 0
-          }
-        }
-        feeGroups[feeName].quantity += 1
-        feeGroups[feeName].totalAmount += amount
-        feeGroups[feeName].totalDiscount += discountAmt
-        feeGroups[feeName].totalFinal += finalAmt
-      })
-
-      items = Object.values(feeGroups).map(group => ({
-        description: group.description,
-        quantity: group.quantity,
-        unitValue: group.totalAmount / group.quantity,
-        amount: group.totalAmount,
-        discountAmount: group.totalDiscount,
-        finalAmount: group.totalFinal
-      }))
-    } else {
-      // 最后的后备方案
-      items = [{
-        description: '服务费',
-        quantity: 1,
-        unitValue: parseFloat(invoice.total_amount) || 0,
-        amount: parseFloat(invoice.total_amount) || 0
-      }]
-    }
+    items = [{
+      description: '服务费',
+      quantity: 1,
+      unitValue: parseFloat(invoice.total_amount) || 0,
+      amount: parseFloat(invoice.total_amount) || 0
+    }]
+    console.log(`[regenerateInvoiceFiles] 使用后备方案，生成默认费用项`)
   }
 
   // 获取关联订单的柜号
@@ -995,8 +1009,26 @@ export async function regenerateInvoiceFiles(invoiceId) {
   const invoiceTotal = parseFloat(invoice.total_amount) || 0
   const totalDiscountForExcel = invoiceSubtotal - invoiceTotal
   
-  if (fees && fees.length > 0) {
-    // 有原始费用记录，显示所有费用明细（按集装箱号排序）
+  // 【重要】优先使用 parsedItems（从 items 字段解析的原始数据），包含手动添加的项目
+  if (parsedItems && parsedItems.length > 0) {
+    // 使用 items 字段的数据（包含手动添加的项目）
+    console.log(`[regenerateInvoiceFiles] Excel 使用 items 字段数据，共 ${parsedItems.length} 条`)
+    excelItems = parsedItems.map(item => ({
+      containerNumber: item.containerNumber || '',
+      billNumber: item.billNumber || '',
+      feeName: item.description || 'Other',
+      feeNameEn: item.descriptionEn || null,
+      amount: parseFloat(item.amount) || 0,
+      discountAmount: parseFloat(item.discountAmount) || 0,
+      finalAmount: item.finalAmount !== undefined 
+        ? parseFloat(item.finalAmount) 
+        : (parseFloat(item.amount) || 0) - (parseFloat(item.discountAmount) || 0)
+    }))
+    // 按集装箱号排序
+    excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
+  } else if (fees && fees.length > 0) {
+    // items 为空，使用 fees 表数据
+    console.log(`[regenerateInvoiceFiles] Excel 使用 fees 表数据，共 ${fees.length} 条`)
     
     // 统计每个费用类型出现的次数
     const feeTypeCounts = {}
@@ -1042,7 +1074,7 @@ export async function regenerateInvoiceFiles(invoiceId) {
     // 按集装箱号排序，让同一个柜子的费用显示在一起
     excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
   } else {
-    // 使用 items 字段
+    // 最后使用已处理的 items 数据
     excelItems = items.map(item => ({
       containerNumber: item.containerNumber || '',
       billNumber: item.billNumber || '',
