@@ -449,9 +449,10 @@ function TaskCard({
                 </div>
                 {task.selectedCustomer && (
                   <select
-                    value={task.selectedTaxNumber?.id || ''}
+                    value={task.selectedTaxNumber?.companyName || ''}
                     onChange={(e) => {
-                      const tax = customerTaxNumbers.find(t => String(t.id) === e.target.value)
+                      // 选择公司名后，找到该公司的第一个税号记录
+                      const tax = customerTaxNumbers.find(t => t.companyName === e.target.value)
                       onUpdateTask(task.id, { selectedTaxNumber: tax || null })
                     }}
                     className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
@@ -459,9 +460,10 @@ function TaskCard({
                     title="选择税号"
                   >
                     <option value="">选择税号</option>
-                    {customerTaxNumbers.map(tax => (
-                      <option key={tax.id} value={tax.id}>
-                        {tax.companyName} ({tax.taxType?.toUpperCase()})
+                    {/* 按公司名分组，每个公司只显示一行 */}
+                    {[...new Set(customerTaxNumbers.map(t => t.companyName).filter(Boolean))].map(companyName => (
+                      <option key={companyName} value={companyName}>
+                        {companyName}
                       </option>
                     ))}
                   </select>
