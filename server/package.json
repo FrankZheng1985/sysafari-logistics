@@ -13,6 +13,7 @@
     "add-production-users": "node scripts/add-production-users.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "ali-oss": "^6.23.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
