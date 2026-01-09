@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useTabs } from '../contexts/TabsContext'
 import { useAuth } from '../contexts/AuthContext'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Copy, Lock } from 'lucide-react'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Edit2, Copy, Lock } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { copyToClipboard } from '../components/Toast'
 import { formatDate, formatDateTime } from '../utils/dateFormat'
@@ -14,7 +14,7 @@ import FeeModal from '../components/FeeModal'
 import OrderFeePanel from '../components/OrderFeePanel'
 import OrderDocuments from '../components/OrderDocuments'
 import CreateBillModal from '../components/CreateBillModal'
-import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
+import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, deleteFee, getApiBaseUrl, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
 import { getBillById as getBillByIdFromMock } from '../data/mockOrders'
 
 interface Declaration {
@@ -237,6 +237,7 @@ export default function BillDetails() {
   const [currentFeeType, setCurrentFeeType] = useState<'receivable' | 'payable'>('receivable')
   const [billFees, setBillFees] = useState<any[]>([])
   const [feesLoading, setFeesLoading] = useState(false)
+  const [editingFee, setEditingFee] = useState<any | null>(null)  // 编辑中的费用
   
   // 预计提货时间模态窗口状态
   const [showPickupTimeModal, setShowPickupTimeModal] = useState(false)
@@ -622,6 +623,67 @@ export default function BillDetails() {
       console.error('加载费用列表失败:', error)
     } finally {
       setFeesLoading(false)
+    }
+  }
+
+  // 删除费用
+  const handleDeleteFee = async (feeId: string) => {
+    if (!confirm('确定要删除这条费用记录吗？')) return
+    try {
+      const response = await deleteFee(feeId)
+      if (response.errCode === 200) {
+        loadBillFees()
+        alert('删除成功')
+      } else {
+        alert(`删除失败: ${response.msg}`)
+      }
+    } catch (error) {
+      console.error('删除费用失败:', error)
+      alert('删除失败，请稍后重试')
+    }
+  }
+
+  // 编辑费用
+  const handleEditFee = (fee: any) => {
+    setEditingFee(fee)
+    setCurrentFeeType(fee.feeType || 'receivable')
+    setShowFeeModal(true)
+  }
+
+  // 复制费用到另一种类型
+  const handleCopyFee = async (fee: any, targetType: 'receivable' | 'payable') => {
+    const newDescription = `复制自${fee.feeType === 'receivable' ? '应收' : '应付'}费用: ${fee.feeName}`
+    try {
+      const API_BASE = getApiBaseUrl()
+      const response = await fetch(`${API_BASE}/api/fees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          billId: fee.billId,
+          billNumber: fee.billNumber,
+          customerId: targetType === 'receivable' ? (fee.customerId || billDetail?.customerId) : null,
+          customerName: targetType === 'receivable' ? (fee.customerName || billDetail?.customerName) : null,
+          supplierId: targetType === 'payable' ? fee.supplierId : null,
+          supplierName: targetType === 'payable' ? fee.supplierName : null,
+          feeType: targetType,
+          category: fee.category,
+          feeName: fee.feeName,
+          amount: fee.amount,
+          currency: fee.currency || 'EUR',
+          feeDate: new Date().toISOString().split('T')[0],
+          description: newDescription
+        })
+      })
+      const result = await response.json()
+      if (result.errCode === 200) {
+        loadBillFees()
+        alert(`已复制到${targetType === 'receivable' ? '应收' : '应付'}费用`)
+      } else {
+        alert(`复制失败: ${result.msg}`)
+      }
+    } catch (error) {
+      console.error('复制费用失败:', error)
+      alert('复制失败，请稍后重试')
     }
   }
 
@@ -1382,6 +1444,7 @@ export default function BillDetails() {
               )}
               <button
                 onClick={() => {
+                  setEditingFee(null)
                   setCurrentFeeType('receivable')
                   setShowFeeModal(true)
                 }}
@@ -1398,6 +1461,7 @@ export default function BillDetails() {
               </button>
               <button
                 onClick={() => {
+                  setEditingFee(null)
                   setCurrentFeeType('payable')
                   setShowFeeModal(true)
                 }}
@@ -1448,12 +1512,42 @@ export default function BillDetails() {
                   ) : billFees.filter(f => f.feeType === 'receivable').length > 0 ? (
                     <div className="divide-y divide-gray-100">
                       {billFees.filter(f => f.feeType === 'receivable').map((fee) => (
-                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50">
+                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50 group">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-gray-900">{fee.feeName}</span>
-                            <span className="text-sm font-semibold text-blue-600">
-                              €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-blue-600">
+                                €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                              </span>
+                              {/* 操作按钮 */}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {canEdit && (
+                                  <>
+                                    <button
+                                      onClick={() => handleEditFee(fee)}
+                                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="编辑"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleCopyFee(fee, 'payable')}
+                                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                      title="复制到应付"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFee(fee.id)}
+                                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="删除"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
                           <div className="flex items-center justify-between mt-1">
                             <div className="flex items-center gap-2">
@@ -1505,12 +1599,42 @@ export default function BillDetails() {
                   ) : billFees.filter(f => f.feeType === 'payable').length > 0 ? (
                     <div className="divide-y divide-gray-100">
                       {billFees.filter(f => f.feeType === 'payable').map((fee) => (
-                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50">
+                        <div key={fee.id} className="px-4 py-3 hover:bg-gray-50 group">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium text-gray-900">{fee.feeName}</span>
-                            <span className="text-sm font-semibold text-orange-600">
-                              €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-orange-600">
+                                €{(parseFloat(fee.amount) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                              </span>
+                              {/* 操作按钮 */}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {canEdit && (
+                                  <>
+                                    <button
+                                      onClick={() => handleEditFee(fee)}
+                                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="编辑"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleCopyFee(fee, 'receivable')}
+                                      className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                      title="复制到应收"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFee(fee.id)}
+                                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="删除"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
                           <div className="flex items-center justify-between mt-1">
                             <div className="flex items-center gap-2">
@@ -2119,6 +2243,7 @@ export default function BillDetails() {
                         customerName={billDetail.customerName}
                         onAddFee={(feeType) => {
                           if (!canEdit) return
+                          setEditingFee(null)
                           setCurrentFeeType(feeType)
                           setShowFeeModal(true)
                         }}
@@ -2228,7 +2353,10 @@ export default function BillDetails() {
                   )}
                   <div className="flex flex-wrap gap-2">
                     <button
-                      onClick={() => setShowFeeModal(true)}
+                      onClick={() => {
+                        setEditingFee(null)
+                        setShowFeeModal(true)
+                      }}
                       disabled={!canEdit}
                       className={`flex-1 px-3 py-2 text-xs rounded-lg flex items-center justify-center gap-1 ${
                         canEdit 
@@ -2819,11 +2947,16 @@ export default function BillDetails() {
       {/* 费用录入弹窗 */}
       <FeeModal
         visible={showFeeModal}
-        onClose={() => setShowFeeModal(false)}
+        onClose={() => {
+          setShowFeeModal(false)
+          setEditingFee(null)
+        }}
         onSuccess={() => {
           setShowFeeModal(false)
+          setEditingFee(null)
           loadBillFees()
         }}
+        editingFee={editingFee}
         defaultBillId={billDetail?.id}
         defaultBillNumber={billDetail?.billNumber}
         defaultCustomerId={billDetail?.customerId}

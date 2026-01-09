@@ -210,7 +210,7 @@ const FEE_SOURCES = [
     bg: 'bg-blue-50',
     borderColor: 'border-blue-200',
     hoverBg: 'hover:bg-blue-100',
-    description: '自定义费用项（需审批）'
+    description: '自定义费用项'
   },
 ]
 
@@ -856,7 +856,7 @@ export default function FeeModal({
       try {
         for (const item of selectedManualCategories) {
           try {
-            const description = `[手动录入-待审批] ${item.description || ''}`.trim()
+            const description = item.description || ''
             const response = await fetch(`${API_BASE}/api/fees`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -875,32 +875,12 @@ export default function FeeModal({
                 feeDate: formData.feeDate,
                 description: description,
                 feeSource: 'manual',
-                needApproval: true
+                needApproval: false
               })
             })
             const data = await response.json()
             if (data.errCode === 200) {
               successCount++
-              // 创建审批申请
-              try {
-                await fetch(`${API_BASE}/api/fee-item-approvals`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                  body: JSON.stringify({
-                    feeId: data.data?.id,
-                    feeName: item.feeName,
-                    category: item.value,
-                    amount: parseFloat(item.amount),
-                    currency: item.currency,
-                    supplierId: formData.supplierId || null,
-                    supplierName: formData.supplierName || '',
-                    description: item.description,
-                    status: 'pending'
-                  })
-                })
-              } catch (err) {
-                console.log('创建审批记录失败:', err)
-              }
             } else {
               failCount++
             }
@@ -945,11 +925,8 @@ export default function FeeModal({
         method
       })
       
-      // 构建描述信息，包含费用来源
-      let description = formData.description || ''
-      if (isManualEntry && !editingFee) {
-        description = `[手动录入-待审批] ${description}`.trim()
-      }
+      // 构建描述信息
+      const description = formData.description || ''
       
       const response = await fetch(url, {
         method,
@@ -968,39 +945,15 @@ export default function FeeModal({
           currency: formData.currency,
           feeDate: formData.feeDate,
           description: description,
-          // 标记费用来源和审批状态
+          // 标记费用来源
           feeSource: feeSource,
-          needApproval: isManualEntry && !editingFee
+          needApproval: false
         })
       })
       
       const data = await response.json()
       
       if (data.errCode === 200) {
-        // 如果是手动录入的新费用项，提示需要审批
-        if (isManualEntry && !editingFee) {
-          // 创建审批申请
-          try {
-            await fetch(`${API_BASE}/api/fee-item-approvals`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-              body: JSON.stringify({
-                feeId: data.data?.id,
-                feeName: formData.feeName,
-                category: formData.category,
-                amount: parseFloat(formData.amount),
-                currency: formData.currency,
-                supplierId: formData.supplierId || null,
-                supplierName: formData.supplierName || '',
-                description: formData.description,
-                status: 'pending'
-              })
-            })
-          } catch (err) {
-            console.log('创建审批记录失败（可能API未实现）:', err)
-          }
-        }
-        
         // 清空多选状态
         setSelectedManualCategories([])
         onSuccess?.()
@@ -1440,9 +1393,8 @@ export default function FeeModal({
                 </span>
               )}
               {feeSource === 'manual' && (
-                <span className="flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 text-amber-500" />
-                  手动录入的新费用项需经理审批后才能成为常规费用
+                <span className="flex items-center gap-1 text-blue-600">
+                  手动录入自定义费用项
                 </span>
               )}
             </div>
@@ -1746,7 +1698,7 @@ export default function FeeModal({
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-medium text-gray-700">
                       已选择 <span className="text-primary-600 font-bold">{selectedManualCategories.length}</span> 项费用
-                      <span className="ml-2 text-amber-500 text-xs font-normal">(手动录入·需审批)</span>
+                      <span className="ml-2 text-blue-500 text-xs font-normal">(手动录入)</span>
                     </label>
                     <button
                       type="button"
@@ -1855,8 +1807,8 @@ export default function FeeModal({
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       费用名称 <span className="text-red-500">*</span>
                       {isManualEntry && formData.feeName && (
-                        <span className="ml-2 text-amber-500 text-xs font-normal">
-                          (手动录入·需审批)
+                        <span className="ml-2 text-blue-500 text-xs font-normal">
+                          (手动录入)
                         </span>
                       )}
                     </label>
@@ -1871,14 +1823,11 @@ export default function FeeModal({
                             setIsManualEntry(true)
                           }
                         }}
-                        placeholder={isManualEntry ? "请输入费用名称（新费用项需审批）" : "请输入费用名称"}
+                        placeholder="请输入费用名称"
                         className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                           errors.feeName ? 'border-red-500' : 'border-gray-300'
-                        } ${isManualEntry && formData.feeName ? 'border-amber-300 bg-amber-50' : ''}`}
+                        } ${isManualEntry && formData.feeName ? 'border-blue-300 bg-blue-50' : ''}`}
                       />
-                      {isManualEntry && formData.feeName && (
-                        <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
-                      )}
                     </div>
                     {errors.feeName && <p className="mt-1 text-xs text-red-500">{errors.feeName}</p>}
                   </div>
@@ -2193,14 +2142,9 @@ export default function FeeModal({
                 <span>将批量创建 {pendingFeeItems.length} 条费用记录</span>
               </div>
             ) : isManualEntry && selectedManualCategories.length > 1 ? (
-              <div className="flex items-center gap-2 text-xs text-amber-600">
+              <div className="flex items-center gap-2 text-xs text-blue-600">
                 <Package className="w-4 h-4" />
-                <span>将批量创建 {selectedManualCategories.length} 条费用记录（需审批）</span>
-              </div>
-            ) : isManualEntry && formData.feeName && !editingFee ? (
-              <div className="flex items-center gap-2 text-xs text-amber-600">
-                <AlertCircle className="w-4 h-4" />
-                <span>手动录入的费用项将提交审批</span>
+                <span>将批量创建 {selectedManualCategories.length} 条费用记录</span>
               </div>
             ) : null}
           </div>
@@ -2241,7 +2185,7 @@ export default function FeeModal({
               <button
                 onClick={handleSubmit}
                 disabled={submitting || selectedManualCategories.some(item => !item.feeName || !item.amount)}
-                className="px-4 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {submitting ? (
                   <>
@@ -2259,21 +2203,12 @@ export default function FeeModal({
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${
-                  isManualEntry && formData.feeName && !editingFee
-                    ? 'bg-amber-500 hover:bg-amber-600'
-                    : 'bg-primary-600 hover:bg-primary-700'
-                }`}
+                className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 bg-primary-600 hover:bg-primary-700"
               >
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     保存中...
-                  </>
-                ) : isManualEntry && formData.feeName && !editingFee ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    保存并提交审批
                   </>
                 ) : (
                   '保存'
