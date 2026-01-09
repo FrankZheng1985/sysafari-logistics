@@ -37,9 +37,11 @@ interface Invoice {
 
 interface HistoryStats {
   totalCount: number
-  paidCount: number
+  salesPaidCount: number      // 已收款的销售发票数量
+  purchasePaidCount: number   // 已付款的采购发票数量
   cancelledCount: number
-  totalPaidAmount: number
+  totalReceivedAmount: number // 累计收款金额（销售发票）
+  totalPaidOutAmount: number  // 累计付款金额（采购发票）
 }
 
 export default function FinanceInvoiceHistory() {
@@ -109,9 +111,11 @@ export default function FinanceInvoiceHistory() {
         const purchaseStats = data.data?.purchase || {}
         setStats({
           totalCount: (salesStats.paidCount || 0) + (purchaseStats.paidCount || 0),
-          paidCount: (salesStats.paidCount || 0) + (purchaseStats.paidCount || 0),
+          salesPaidCount: salesStats.paidCount || 0,        // 已收款的销售发票数量
+          purchasePaidCount: purchaseStats.paidCount || 0,  // 已付款的采购发票数量
           cancelledCount: 0, // 后端可以扩展返回此数据
-          totalPaidAmount: (salesStats.paidAmount || 0) + (purchaseStats.paidAmount || 0),
+          totalReceivedAmount: salesStats.paidAmount || 0,   // 累计收款金额（销售发票）
+          totalPaidOutAmount: purchaseStats.paidAmount || 0, // 累计付款金额（采购发票）
         })
       }
     } catch (error) {
@@ -307,22 +311,26 @@ export default function FinanceInvoiceHistory() {
           <History className="w-5 h-5 text-green-600" />
           <span className="text-sm font-medium text-gray-700">历史发票统计</span>
         </div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-5 gap-4">
           <div>
             <div className="text-xs text-gray-500">已完成发票</div>
             <div className="text-lg font-semibold text-gray-900">{stats?.totalCount || 0} 张</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">已结清发票</div>
-            <div className="text-lg font-semibold text-green-600">{stats?.paidCount || 0} 张</div>
+            <div className="text-xs text-gray-500">已收款发票</div>
+            <div className="text-lg font-semibold text-blue-600">{stats?.salesPaidCount || 0} 张</div>
           </div>
           <div>
-            <div className="text-xs text-gray-500">已取消发票</div>
-            <div className="text-lg font-semibold text-gray-400">{stats?.cancelledCount || 0} 张</div>
+            <div className="text-xs text-gray-500">已付款发票</div>
+            <div className="text-lg font-semibold text-orange-600">{stats?.purchasePaidCount || 0} 张</div>
           </div>
           <div>
             <div className="text-xs text-gray-500">累计收款金额</div>
-            <div className="text-lg font-semibold text-primary-600">{formatCurrency(stats?.totalPaidAmount || 0)}</div>
+            <div className="text-lg font-semibold text-primary-600">{formatCurrency(stats?.totalReceivedAmount || 0)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">累计付款金额</div>
+            <div className="text-lg font-semibold text-orange-600">{formatCurrency(stats?.totalPaidOutAmount || 0)}</div>
           </div>
         </div>
       </div>
