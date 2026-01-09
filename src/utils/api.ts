@@ -5279,6 +5279,9 @@ export async function deleteFee(id: string): Promise<ApiResponse<void>> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/fees/${id}`, {
       method: 'DELETE',
+      headers: {
+        ...getAuthHeaders()
+      }
     })
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
