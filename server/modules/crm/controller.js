@@ -875,6 +875,89 @@ export async function deleteCustomerTaxNumber(req, res) {
   }
 }
 
+// ==================== 客户公司税号信息管理（新版：每个公司一条记录） ====================
+
+/**
+ * 获取客户公司税号列表（新版）
+ */
+export async function getCustomerTaxInfoList(req, res) {
+  try {
+    const { customerId } = req.params
+    
+    if (!customerId) {
+      return badRequest(res, '客户ID不能为空')
+    }
+    
+    const taxInfoList = await model.getCustomerTaxInfoList(customerId)
+    return success(res, taxInfoList)
+  } catch (error) {
+    console.error('获取客户公司税号列表失败:', error)
+    return serverError(res, '获取客户公司税号列表失败')
+  }
+}
+
+/**
+ * 创建客户公司税号信息（新版）
+ */
+export async function createCustomerTaxInfo(req, res) {
+  try {
+    const { customerId } = req.params
+    const { companyName } = req.body
+    
+    if (!customerId) {
+      return badRequest(res, '客户ID不能为空')
+    }
+    if (!companyName) {
+      return badRequest(res, '公司名称不能为空')
+    }
+    
+    const result = await model.createCustomerTaxInfo(customerId, req.body)
+    return success(res, result, '公司税号信息创建成功')
+  } catch (error) {
+    console.error('创建客户公司税号信息失败:', error)
+    if (error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '创建客户公司税号信息失败')
+  }
+}
+
+/**
+ * 更新客户公司税号信息（新版）
+ */
+export async function updateCustomerTaxInfo(req, res) {
+  try {
+    const { taxInfoId } = req.params
+    
+    const result = await model.updateCustomerTaxInfo(taxInfoId, req.body)
+    if (!result) {
+      return notFound(res, '公司税号信息不存在')
+    }
+    return success(res, result, '公司税号信息更新成功')
+  } catch (error) {
+    console.error('更新客户公司税号信息失败:', error)
+    if (error.message.includes('已存在')) {
+      return badRequest(res, error.message)
+    }
+    return serverError(res, '更新客户公司税号信息失败')
+  }
+}
+
+/**
+ * 删除客户公司税号信息（新版）
+ */
+export async function deleteCustomerTaxInfo(req, res) {
+  try {
+    const { taxInfoId } = req.params
+    
+    await model.deleteCustomerTaxInfo(taxInfoId)
+    return success(res, null, '公司税号信息删除成功')
+  } catch (error) {
+    console.error('删除客户公司税号信息失败:', error)
+    return serverError(res, '删除客户公司税号信息失败')
+  }
+}
+
 // ==================== 共享税号管理（公司级税号库） ====================
 
 /**

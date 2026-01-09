@@ -6,7 +6,7 @@ import {
   ChevronDown, Ship, FileText, Plus, ChevronRight
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
-import { getApiBaseUrl, getAuthHeaders, getCustomers, getCustomerTaxNumbers, getBillsList, type Customer, type CustomerTaxNumber, type BillOfLading } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders, getCustomers, getCustomerTaxInfoList, getBillsList, type Customer, type CustomerTaxInfo, type BillOfLading } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
 import { useImport, type ImportTask, type PreviewItem } from '../contexts/ImportContext'
 
@@ -55,7 +55,7 @@ function TaskCard({
   const [billSearch, setBillSearch] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
-  const [customerTaxNumbers, setCustomerTaxNumbers] = useState<CustomerTaxNumber[]>([])
+  const [customerTaxInfoList, setCustomerTaxInfoList] = useState<CustomerTaxInfo[]>([])
   const [loadingTaxNumbers, setLoadingTaxNumbers] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
   
@@ -106,31 +106,31 @@ function TaskCard({
     c.customerCode?.toLowerCase().includes(customerSearch.toLowerCase())
   )
 
-  // 加载客户税号
-  const loadCustomerTaxNumbers = async (customerId: string) => {
+  // 加载客户公司税号信息（新版）
+  const loadCustomerTaxInfo = async (customerId: string) => {
     setLoadingTaxNumbers(true)
     try {
-      const response = await getCustomerTaxNumbers(customerId)
+      const response = await getCustomerTaxInfoList(customerId)
       if (response.errCode === 200) {
-        setCustomerTaxNumbers(response.data || [])
-        const defaultTax = response.data?.find((t: CustomerTaxNumber) => t.isDefault)
+        setCustomerTaxInfoList(response.data || [])
+        const defaultTax = response.data?.find((t: CustomerTaxInfo) => t.isDefault)
         if (defaultTax) {
           onUpdateTask(task.id, { selectedTaxNumber: defaultTax })
         }
       }
     } catch (error) {
-      console.error('加载客户税号失败:', error)
+      console.error('加载客户公司税号信息失败:', error)
     } finally {
       setLoadingTaxNumbers(false)
     }
   }
 
-  // 当选择客户后加载税号
+  // 当选择客户后加载公司税号信息
   useEffect(() => {
     if (task.selectedCustomer) {
-      loadCustomerTaxNumbers(task.selectedCustomer.id)
+      loadCustomerTaxInfo(task.selectedCustomer.id)
     } else {
-      setCustomerTaxNumbers([])
+      setCustomerTaxInfoList([])
     }
   }, [task.selectedCustomer?.id])
 
@@ -449,21 +449,19 @@ function TaskCard({
                 </div>
                 {task.selectedCustomer && (
                   <select
-                    value={task.selectedTaxNumber?.companyName || ''}
+                    value={task.selectedTaxNumber?.id || ''}
                     onChange={(e) => {
-                      // 选择公司名后，找到该公司的第一个税号记录
-                      const tax = customerTaxNumbers.find(t => t.companyName === e.target.value)
-                      onUpdateTask(task.id, { selectedTaxNumber: tax || null })
+                      const taxInfo = customerTaxInfoList.find(t => String(t.id) === e.target.value)
+                      onUpdateTask(task.id, { selectedTaxNumber: taxInfo || null })
                     }}
                     className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
                     onClick={(e) => e.stopPropagation()}
-                    title="选择税号"
+                    title="选择公司税号"
                   >
-                    <option value="">选择税号</option>
-                    {/* 按公司名分组，每个公司只显示一行 */}
-                    {[...new Set(customerTaxNumbers.map(t => t.companyName).filter(Boolean))].map(companyName => (
-                      <option key={companyName} value={companyName}>
-                        {companyName}
+                    <option value="">选择公司税号</option>
+                    {customerTaxInfoList.map(taxInfo => (
+                      <option key={taxInfo.id} value={taxInfo.id}>
+                        {taxInfo.companyName}
                       </option>
                     ))}
                   </select>

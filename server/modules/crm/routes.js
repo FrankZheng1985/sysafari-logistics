@@ -139,6 +139,20 @@ router.put('/customers/:customerId/tax-numbers/:taxId', controller.updateCustome
 // 删除客户税号
 router.delete('/customers/:customerId/tax-numbers/:taxId', controller.deleteCustomerTaxNumber)
 
+// ==================== 客户公司税号信息路由（新版：每个公司一条记录） ====================
+
+// 获取客户公司税号列表
+router.get('/customers/:customerId/tax-info', controller.getCustomerTaxInfoList)
+
+// 创建客户公司税号信息
+router.post('/customers/:customerId/tax-info', controller.createCustomerTaxInfo)
+
+// 更新客户公司税号信息
+router.put('/customers/:customerId/tax-info/:taxInfoId', controller.updateCustomerTaxInfo)
+
+// 删除客户公司税号信息
+router.delete('/customers/:customerId/tax-info/:taxInfoId', controller.deleteCustomerTaxInfo)
+
 // ==================== 税号验证路由 ====================
 
 // VAT税号验证

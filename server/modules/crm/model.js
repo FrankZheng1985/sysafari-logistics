@@ -1383,6 +1383,159 @@ export async function deleteCustomerTaxNumber(taxId) {
   return { success: true }
 }
 
+// ==================== 客户公司税号信息管理（新版：每个公司一条记录） ====================
+
+/**
+ * 获取客户公司税号列表（新版）
+ */
+export async function getCustomerTaxInfoList(customerId) {
+  const db = getDatabase()
+  const rows = await db.prepare(`
+    SELECT * FROM customer_tax_info 
+    WHERE customer_id = ? 
+    ORDER BY is_default DESC, created_at DESC
+  `).all(customerId)
+  
+  return rows.map(row => ({
+    id: row.id,
+    customerId: row.customer_id,
+    companyName: row.company_name,
+    companyShortName: row.company_short_name,
+    companyAddress: row.company_address,
+    country: row.country,
+    eoriNumber: row.eori_number,
+    eoriVerified: row.eori_verified === 1,
+    eoriVerifiedAt: row.eori_verified_at,
+    vatNumber: row.vat_number,
+    vatVerified: row.vat_verified === 1,
+    vatVerifiedAt: row.vat_verified_at,
+    isDefault: row.is_default === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }))
+}
+
+/**
+ * 创建客户公司税号信息（新版）
+ */
+export async function createCustomerTaxInfo(customerId, data) {
+  const db = getDatabase()
+  
+  // 检查公司名是否已存在
+  const existing = await db.prepare(`
+    SELECT id FROM customer_tax_info 
+    WHERE customer_id = ? AND company_name = ?
+  `).get(customerId, data.companyName)
+  
+  if (existing) {
+    throw new Error(`该客户已存在公司 "${data.companyName}" 的税号信息`)
+  }
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_tax_info SET is_default = 0 
+      WHERE customer_id = ?
+    `).run(customerId)
+  }
+  
+  const result = await db.prepare(`
+    INSERT INTO customer_tax_info (
+      customer_id, company_name, company_short_name, company_address, country,
+      eori_number, eori_verified, eori_verified_at,
+      vat_number, vat_verified, vat_verified_at,
+      is_default
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    customerId,
+    data.companyName,
+    data.companyShortName || null,
+    data.companyAddress || null,
+    data.country || null,
+    data.eoriNumber || null,
+    data.eoriVerified ? 1 : 0,
+    data.eoriVerifiedAt || null,
+    data.vatNumber || null,
+    data.vatVerified ? 1 : 0,
+    data.vatVerifiedAt || null,
+    data.isDefault ? 1 : 0
+  )
+  
+  return { id: result?.id }
+}
+
+/**
+ * 更新客户公司税号信息（新版）
+ */
+export async function updateCustomerTaxInfo(taxInfoId, data) {
+  const db = getDatabase()
+  
+  const current = await db.prepare('SELECT customer_id, company_name FROM customer_tax_info WHERE id = ?').get(taxInfoId)
+  if (!current) return null
+  
+  // 如果修改了公司名，检查是否重复
+  if (data.companyName && data.companyName !== current.company_name) {
+    const existing = await db.prepare(`
+      SELECT id FROM customer_tax_info 
+      WHERE customer_id = ? AND company_name = ? AND id != ?
+    `).get(current.customer_id, data.companyName, taxInfoId)
+    
+    if (existing) {
+      throw new Error(`该客户已存在公司 "${data.companyName}" 的税号信息`)
+    }
+  }
+  
+  // 如果设为默认，先取消其他默认
+  if (data.isDefault) {
+    await db.prepare(`
+      UPDATE customer_tax_info SET is_default = 0 
+      WHERE customer_id = ?
+    `).run(current.customer_id)
+  }
+  
+  await db.prepare(`
+    UPDATE customer_tax_info SET
+      company_name = COALESCE(?, company_name),
+      company_short_name = COALESCE(?, company_short_name),
+      company_address = COALESCE(?, company_address),
+      country = COALESCE(?, country),
+      eori_number = COALESCE(?, eori_number),
+      eori_verified = COALESCE(?, eori_verified),
+      eori_verified_at = COALESCE(?, eori_verified_at),
+      vat_number = COALESCE(?, vat_number),
+      vat_verified = COALESCE(?, vat_verified),
+      vat_verified_at = COALESCE(?, vat_verified_at),
+      is_default = ?,
+      updated_at = NOW()
+    WHERE id = ?
+  `).run(
+    data.companyName,
+    data.companyShortName,
+    data.companyAddress,
+    data.country,
+    data.eoriNumber,
+    data.eoriVerified !== undefined ? (data.eoriVerified ? 1 : 0) : null,
+    data.eoriVerifiedAt,
+    data.vatNumber,
+    data.vatVerified !== undefined ? (data.vatVerified ? 1 : 0) : null,
+    data.vatVerifiedAt,
+    data.isDefault ? 1 : 0,
+    taxInfoId
+  )
+  
+  return { id: taxInfoId }
+}
+
+/**
+ * 删除客户公司税号信息（新版）
+ */
+export async function deleteCustomerTaxInfo(taxInfoId) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM customer_tax_info WHERE id = ?').run(taxInfoId)
+  return { success: true }
+}
+
 // ==================== 共享税号管理（公司级税号库） ====================
 
 /**
@@ -3833,11 +3986,17 @@ export default {
   updateCustomerAddress,
   deleteCustomerAddress,
   
-  // 客户税号
+  // 客户税号（旧版：每个税号一条记录）
   getCustomerTaxNumbers,
   createCustomerTaxNumber,
   updateCustomerTaxNumber,
   deleteCustomerTaxNumber,
+  
+  // 客户公司税号信息（新版：每个公司一条记录）
+  getCustomerTaxInfoList,
+  createCustomerTaxInfo,
+  updateCustomerTaxInfo,
+  deleteCustomerTaxInfo,
   
   // 共享税号（公司级税号库）
   getSharedTaxNumbers,

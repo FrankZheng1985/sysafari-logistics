@@ -5008,6 +5008,103 @@ export async function deleteCustomerTaxNumber(customerId: string, taxId: number)
   }
 }
 
+// ==================== 客户公司税号信息 API（新版：每个公司一条记录） ====================
+
+/**
+ * 公司税号信息（新版）
+ */
+export interface CustomerTaxInfo {
+  id?: number
+  customerId?: string
+  companyName: string
+  companyShortName?: string
+  companyAddress?: string
+  country?: string
+  eoriNumber?: string
+  eoriVerified?: boolean
+  eoriVerifiedAt?: string
+  vatNumber?: string
+  vatVerified?: boolean
+  vatVerifiedAt?: string
+  isDefault?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * 获取客户公司税号列表（新版）
+ */
+export async function getCustomerTaxInfoList(customerId: string): Promise<ApiResponse<CustomerTaxInfo[]>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-info`)
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取客户公司税号列表失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 创建客户公司税号信息（新版）
+ */
+export async function createCustomerTaxInfo(customerId: string, data: CustomerTaxInfo): Promise<ApiResponse<{ id: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('创建客户公司税号信息失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 更新客户公司税号信息（新版）
+ */
+export async function updateCustomerTaxInfo(customerId: string, taxInfoId: number, data: Partial<CustomerTaxInfo>): Promise<ApiResponse<{ id: number }>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-info/${taxInfoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('更新客户公司税号信息失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 删除客户公司税号信息（新版）
+ */
+export async function deleteCustomerTaxInfo(customerId: string, taxInfoId: number): Promise<ApiResponse<null>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/customers/${customerId}/tax-info/${taxInfoId}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('删除客户公司税号信息失败:', error)
+    throw error
+  }
+}
+
 // ==================== 税号验证 API 接口 ====================
 
 /**

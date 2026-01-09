@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import { getApiBaseUrl, getAuthHeaders, type BillOfLading, type Customer, type CustomerTaxNumber } from '../utils/api'
+import { getApiBaseUrl, getAuthHeaders, type BillOfLading, type Customer, type CustomerTaxInfo } from '../utils/api'
 
 const API_BASE = getApiBaseUrl()
 
@@ -54,7 +54,7 @@ export interface ImportTask {
   // 发货方和进口商信息
   shipperInfo: ShipperInfo
   selectedCustomer: Customer | null
-  selectedTaxNumber: CustomerTaxNumber | null
+  selectedTaxNumber: CustomerTaxInfo | null
 }
 
 // 全局状态
@@ -269,8 +269,8 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                 importerCustomerId: task.selectedCustomer?.id || null,
                 importerName: task.selectedCustomer?.companyName || task.selectedCustomer?.customerName || null,
                 importerTaxId: task.selectedTaxNumber?.id || null,
-                importerTaxNumber: task.selectedTaxNumber?.taxNumber || null,
-                importerTaxType: task.selectedTaxNumber?.taxType || null,
+                importerEoriNumber: task.selectedTaxNumber?.eoriNumber || null,
+                importerVatNumber: task.selectedTaxNumber?.vatNumber || null,
                 importerCountry: task.selectedTaxNumber?.country || null,
                 importerCompanyName: task.selectedTaxNumber?.companyName || null,
                 importerAddress: task.selectedTaxNumber?.companyAddress || null
