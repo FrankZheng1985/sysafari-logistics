@@ -503,15 +503,42 @@ export async function approveMatch(itemId, hsCode, reviewNote, reviewedBy) {
   
   // 获取货物信息并更新历史匹配记录
   const item = await db.prepare(`
-    SELECT product_name, product_name_en, material
+    SELECT import_id, product_name, product_name_en, material
     FROM cargo_items WHERE id = ?
   `).get(itemId)
   
   if (item) {
     await updateMatchHistory(item.product_name, item.product_name_en, item.material, hsCode)
+    // 更新导入批次的统计信息
+    await updateImportStats(item.import_id)
   }
   
   return true
+}
+
+/**
+ * 更新导入批次的统计信息
+ */
+async function updateImportStats(importId) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  // 统计已匹配和待审核数量
+  const stats = await db.prepare(`
+    SELECT 
+      COUNT(CASE WHEN match_status IN ('approved', 'auto_approved') THEN 1 END) as matched,
+      COUNT(CASE WHEN match_status IN ('review', 'pending', 'no_match') THEN 1 END) as pending
+    FROM cargo_items WHERE import_id = $1
+  `).get(importId)
+  
+  // 更新批次统计
+  await db.prepare(`
+    UPDATE cargo_imports SET
+      matched_items = $1,
+      pending_items = $2,
+      updated_at = $3
+    WHERE id = $4
+  `).run(stats?.matched || 0, stats?.pending || 0, now, importId)
 }
 
 /**
@@ -526,6 +553,9 @@ export async function batchApprove(itemIds, action, reviewNote, reviewedBy) {
     status = 'rejected'
   }
   
+  // 收集需要更新统计的批次ID
+  const importIds = new Set()
+  
   for (const itemId of itemIds) {
     await db.prepare(`
       UPDATE cargo_items SET
@@ -539,14 +569,28 @@ export async function batchApprove(itemIds, action, reviewNote, reviewedBy) {
     // 如果是批准，更新历史匹配记录
     if (status === 'approved') {
       const item = await db.prepare(`
-        SELECT product_name, product_name_en, material, matched_hs_code
+        SELECT import_id, product_name, product_name_en, material, matched_hs_code
         FROM cargo_items WHERE id = ?
       `).get(itemId)
       
-      if (item && item.matched_hs_code) {
-        await updateMatchHistory(item.product_name, item.product_name_en, item.material, item.matched_hs_code)
+      if (item) {
+        importIds.add(item.import_id)
+        if (item.matched_hs_code) {
+          await updateMatchHistory(item.product_name, item.product_name_en, item.material, item.matched_hs_code)
+        }
+      }
+    } else {
+      // 获取 import_id 用于更新统计
+      const item = await db.prepare('SELECT import_id FROM cargo_items WHERE id = ?').get(itemId)
+      if (item) {
+        importIds.add(item.import_id)
       }
     }
+  }
+  
+  // 更新所有相关批次的统计信息
+  for (const importId of importIds) {
+    await updateImportStats(importId)
   }
   
   return { updatedCount: itemIds.length }
