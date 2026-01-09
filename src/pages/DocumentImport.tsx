@@ -134,20 +134,38 @@ function TaskCard({
     }
   }, [task.selectedCustomer?.id])
 
-  // 当选择提单后自动填充发货方信息
+  // 当选择提单后自动填充发货方信息和进口商信息
   useEffect(() => {
     if (task.selectedBill) {
+      // 填充发货方信息
       const shipperText = task.selectedBill.shipper || ''
       const shipperLines = shipperText.split('\n').filter(line => line.trim())
+      
+      // 根据提单的客户ID自动匹配进口商
+      const billCustomerId = task.selectedBill.customerId
+      const billCustomerName = task.selectedBill.companyName || task.selectedBill.customerName
+      
+      // 在客户列表中查找匹配的客户
+      let matchedCustomer: Customer | null = null
+      if (billCustomerId) {
+        matchedCustomer = customers.find(c => c.id === billCustomerId) || null
+      } else if (billCustomerName) {
+        // 如果没有customerId，尝试通过名称匹配
+        matchedCustomer = customers.find(c => 
+          c.companyName === billCustomerName || c.customerName === billCustomerName
+        ) || null
+      }
+      
       onUpdateTask(task.id, {
         shipperInfo: {
           name: shipperLines[0] || '',
           address: shipperLines.slice(1).join(', ') || '',
           contact: ''
-        }
+        },
+        selectedCustomer: matchedCustomer
       })
     }
-  }, [task.selectedBill?.id])
+  }, [task.selectedBill?.id, customers])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
