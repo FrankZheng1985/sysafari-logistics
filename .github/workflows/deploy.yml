@@ -1,4 +1,4 @@
-name: Deploy to Aliyun ECS
+name: Deploy to Aliyun ECS + OSS + CDN
 
 on:
   push:
@@ -20,16 +20,18 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+          timeout: 600s
           script: |
             echo "=========================================="
             echo "  开始部署生产环境和演示环境"
+            echo "  包含: ECS + OSS + CDN 同步"
             echo "=========================================="
             
             # ==========================================
-            # 1. 部署生产环境
+            # 1. 部署生产环境 (ECS)
             # ==========================================
             echo ""
-            echo "📦 [1/2] 部署生产环境..."
+            echo "📦 [1/4] 部署生产环境后端..."
             cd /var/www/sysafari-logistics
             
             # 拉取最新代码
@@ -61,13 +63,83 @@ jobs:
             rm -rf /var/www/prod/dist/*
             cp -r dist/* /var/www/prod/dist/
             
-            echo "✅ 生产环境部署完成！"
+            echo "✅ 生产环境 ECS 部署完成！"
             
             # ==========================================
-            # 2. 部署演示环境
+            # 2. 同步生产环境到 OSS
             # ==========================================
             echo ""
-            echo "📦 [2/2] 部署演示环境..."
+            echo "📦 [2/4] 同步生产环境前端到 OSS..."
+            
+            # 检查 ossutil 是否可用
+            if command -v ossutil &> /dev/null; then
+              OSS_BUCKET="sysafari-logistics"
+              
+              # 上传静态资源（长期缓存）
+              echo "  上传 assets 目录..."
+              ossutil cp -r /var/www/prod/dist/assets/ oss://${OSS_BUCKET}/assets/ \
+                --acl public-read \
+                --meta "Cache-Control:public, max-age=31536000, immutable" \
+                --force 2>/dev/null || echo "  ⚠️ assets 上传失败"
+              
+              # 上传其他静态文件
+              echo "  上传其他静态文件..."
+              for file in /var/www/prod/dist/*.js /var/www/prod/dist/*.css /var/www/prod/dist/*.ico /var/www/prod/dist/*.svg /var/www/prod/dist/*.png; do
+                if [ -f "$file" ]; then
+                  filename=$(basename "$file")
+                  ossutil cp "$file" "oss://${OSS_BUCKET}/${filename}" \
+                    --acl public-read \
+                    --meta "Cache-Control:public, max-age=31536000, immutable" \
+                    --force 2>/dev/null || true
+                fi
+              done
+              
+              # 上传 index.html（不缓存，确保用户获取最新版本）
+              echo "  上传 index.html..."
+              ossutil cp /var/www/prod/dist/index.html oss://${OSS_BUCKET}/index.html \
+                --acl public-read \
+                --meta "Cache-Control:no-cache, no-store, must-revalidate" \
+                --force
+              
+              echo "✅ 生产环境 OSS 同步完成！"
+            else
+              echo "⚠️ ossutil 未安装，跳过 OSS 同步"
+              echo "  请在服务器上安装 ossutil 并配置凭证"
+            fi
+            
+            # ==========================================
+            # 3. 刷新生产环境 CDN 缓存
+            # ==========================================
+            echo ""
+            echo "📦 [3/4] 刷新生产环境 CDN 缓存..."
+            
+            if command -v aliyun &> /dev/null; then
+              CDN_DOMAIN="erp.xianfeng-eu.com"
+              
+              # 刷新目录缓存
+              echo "  刷新目录缓存..."
+              aliyun cdn RefreshObjectCaches \
+                --ObjectPath "https://${CDN_DOMAIN}/" \
+                --ObjectType Directory 2>/dev/null && echo "  ✓ 目录缓存已刷新" || echo "  ⚠️ 目录缓存刷新失败"
+              
+              # 刷新 index.html（关键文件单独刷新）
+              echo "  刷新 index.html..."
+              aliyun cdn RefreshObjectCaches \
+                --ObjectPath "https://${CDN_DOMAIN}/index.html" \
+                --ObjectType File 2>/dev/null && echo "  ✓ index.html 缓存已刷新" || echo "  ⚠️ index.html 缓存刷新失败"
+              
+              echo "✅ 生产环境 CDN 缓存刷新完成！"
+            else
+              echo "⚠️ aliyun CLI 未安装，跳过 CDN 刷新"
+              echo "  请在阿里云控制台手动刷新 CDN 缓存"
+              echo "  URL: https://erp.xianfeng-eu.com/"
+            fi
+            
+            # ==========================================
+            # 4. 部署演示环境
+            # ==========================================
+            echo ""
+            echo "📦 [4/4] 部署演示环境..."
             
             # 检查演示环境目录是否存在
             if [ -d "/var/www/demo" ]; then
@@ -81,7 +153,56 @@ jobs:
               npm install --production
               pm2 restart sysafari-demo || echo "⚠️ 演示环境 PM2 服务未运行，跳过重启"
               
-              echo "✅ 演示环境后端部署完成！"
+              # 构建演示环境前端
+              cd /var/www/demo
+              rm -f .env .env.local .env.production .env.production.local 2>/dev/null || true
+              echo "VITE_API_BASE_URL=https://demo-api.xianfeng-eu.com" > .env.production
+              rm -rf node_modules/.vite 2>/dev/null || true
+              rm -rf dist 2>/dev/null || true
+              npm install
+              npm run build
+              
+              # 同步演示环境到 OSS
+              if command -v ossutil &> /dev/null; then
+                DEMO_BUCKET="sysafari-logistics-demo"
+                
+                echo "  同步演示环境到 OSS..."
+                ossutil cp -r /var/www/demo/dist/assets/ oss://${DEMO_BUCKET}/assets/ \
+                  --acl public-read \
+                  --meta "Cache-Control:public, max-age=31536000, immutable" \
+                  --force 2>/dev/null || true
+                
+                for file in /var/www/demo/dist/*.js /var/www/demo/dist/*.css /var/www/demo/dist/*.ico /var/www/demo/dist/*.svg /var/www/demo/dist/*.png; do
+                  if [ -f "$file" ]; then
+                    filename=$(basename "$file")
+                    ossutil cp "$file" "oss://${DEMO_BUCKET}/${filename}" \
+                      --acl public-read \
+                      --meta "Cache-Control:public, max-age=31536000, immutable" \
+                      --force 2>/dev/null || true
+                  fi
+                done
+                
+                ossutil cp /var/www/demo/dist/index.html oss://${DEMO_BUCKET}/index.html \
+                  --acl public-read \
+                  --meta "Cache-Control:no-cache, no-store, must-revalidate" \
+                  --force 2>/dev/null || true
+                
+                echo "  ✓ 演示环境 OSS 同步完成"
+              fi
+              
+              # 刷新演示环境 CDN
+              if command -v aliyun &> /dev/null; then
+                DEMO_CDN="demo.xianfeng-eu.com"
+                aliyun cdn RefreshObjectCaches \
+                  --ObjectPath "https://${DEMO_CDN}/" \
+                  --ObjectType Directory 2>/dev/null || true
+                aliyun cdn RefreshObjectCaches \
+                  --ObjectPath "https://${DEMO_CDN}/index.html" \
+                  --ObjectType File 2>/dev/null || true
+                echo "  ✓ 演示环境 CDN 缓存已刷新"
+              fi
+              
+              echo "✅ 演示环境部署完成！"
             else
               echo "⚠️ 演示环境目录不存在，跳过演示环境部署"
             fi
@@ -92,7 +213,16 @@ jobs:
             echo ""
             echo "=========================================="
             echo "✅ 全部部署完成！"
+            echo "=========================================="
+            echo ""
+            echo "📍 访问地址:"
             echo "  生产环境: https://erp.xianfeng-eu.com"
             echo "  演示环境: https://demo.xianfeng-eu.com"
+            echo ""
+            echo "📍 部署内容:"
+            echo "  ✓ ECS 后端服务"
+            echo "  ✓ ECS Nginx 前端"
+            echo "  ✓ OSS 静态文件"
+            echo "  ✓ CDN 缓存刷新"
             echo "=========================================="
 
