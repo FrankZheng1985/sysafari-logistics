@@ -2797,6 +2797,28 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_invoices_parent_invoice ON invoices(parent_invoice_number)`)
     console.log('  ✅ 发票追加关联字段就绪')
 
+    // invoices 表添加软删除字段（删除发票后回流到待开票）
+    const invoiceSoftDeleteFields = [
+      { name: 'is_deleted', type: 'BOOLEAN DEFAULT FALSE', comment: '是否已删除' },
+      { name: 'deleted_at', type: 'TIMESTAMP', comment: '删除时间' }
+    ]
+    
+    for (const field of invoiceSoftDeleteFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'invoices' AND column_name = $1
+      `, [field.name])
+      if (colCheck.rows.length === 0) {
+        await client.query(`ALTER TABLE invoices ADD COLUMN ${field.name} ${field.type}`)
+        console.log(`    + invoices.${field.name} 字段已添加 (${field.comment})`)
+      }
+    }
+    // 创建软删除索引
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_invoices_is_deleted ON invoices(is_deleted)`)
+    // 更新现有数据
+    await client.query(`UPDATE invoices SET is_deleted = FALSE WHERE is_deleted IS NULL`)
+    console.log('  ✅ 发票软删除字段就绪')
+
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）
     try {

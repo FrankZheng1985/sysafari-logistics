@@ -63,14 +63,16 @@ export async function getBills(params = {}) {
                    AND (b.status IN ('已完成', '已归档', '已取消') 
                         OR b.delivery_status IN ('已送达', '异常关闭'))`
         
-        // 如果是为新建发票筛选，排除已经开具发票的订单（未取消的发票）
+        // 如果是为新建发票筛选，排除已经开具发票的订单（未取消/未删除的发票）
         if (forInvoiceType) {
-          // 排除该类型已有未取消发票的订单（只要开过票且未取消，就不再显示）
+          // 排除该类型已有未取消且未删除发票的订单
           // 注意：bill_id 可能是逗号分隔的多个订单ID，需要用 LIKE 匹配
+          // 修复：同时排除 is_deleted = TRUE 的发票，确保删除发票后订单能回流到待开票
           query += ` AND NOT EXISTS (
             SELECT 1 FROM invoices 
             WHERE invoice_type = ? 
               AND status != 'cancelled' 
+              AND (is_deleted IS NULL OR is_deleted = FALSE)
               AND bill_id IS NOT NULL
               AND (
                 bill_id = b.id 
