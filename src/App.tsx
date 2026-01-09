@@ -125,6 +125,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { SocketProvider } from './contexts/SocketContext'
 import { TabsProvider } from './contexts/TabsContext'
 import { KeepAliveProvider } from './contexts/KeepAliveContext'
+import { ImportProvider } from './contexts/ImportContext'
 import { ToastProvider } from './components/Toast'
 import { Loader2 } from 'lucide-react'
 // Vercel Speed Insights 已移除 - 系统已迁移至阿里云
@@ -316,7 +317,9 @@ function App() {
                   <SocketProvider>
                     <TabsProvider>
                       <KeepAliveProvider>
-                        <AppRoutes />
+                        <ImportProvider>
+                          <AppRoutes />
+                        </ImportProvider>
                       </KeepAliveProvider>
                     </TabsProvider>
                   </SocketProvider>

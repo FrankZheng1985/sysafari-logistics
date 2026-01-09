@@ -1333,62 +1333,94 @@ export async function createImportBatch(data, options = {}) {
 }
 
 /**
- * 批量插入货物明细
+ * 批量插入货物明细（优化版：使用多行 INSERT 批量插入）
+ * PostgreSQL 支持一条 INSERT 插入多行，大幅提升性能
  */
 export async function insertCargoItems(importId, items) {
-  const db = getDatabase()
+  const { query } = await import('../../config/database.js')
   const now = new Date().toISOString()
   let insertedCount = 0
   let skippedCount = 0
 
+  // 过滤掉有错误的数据
+  const validItems = []
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
-    
-    // 跳过有错误的数据
     if (item.error) {
       skippedCount++
       continue
     }
+    validItems.push({
+      ...item,
+      itemNo: item.rowNo || (i + 1)
+    })
+  }
 
-    await db.prepare(`
-      INSERT INTO cargo_items (
-        import_id, item_no, product_name, product_name_en, customer_hs_code,
-        quantity, unit_code, unit_name, unit_price, total_value,
-        gross_weight, net_weight, origin_country, material,
-        product_image, customer_order_no, pallet_count, reference_no,
-        match_status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      importId,
-      item.rowNo || (i + 1),
-      item.productName,
-      item.productNameEn || null,
-      item.hsCode || null,
-      item.quantity,
-      item.unit,
-      item.unit,
-      item.unitPrice,
-      item.totalValue,
-      item.grossWeight,
-      item.netWeight || null,
-      item.originCountry,
-      item.material || null,
-      item.productImage || null,
-      item.customerOrderNo || null,
-      item.palletCount || null,
-      item.referenceNo || null,
-      'pending',
-      now
-    )
-    insertedCount++
+  // 使用多行 INSERT 批量插入（一次插入最多 50 条）
+  if (validItems.length > 0) {
+    const BATCH_SIZE = 50  // 每批插入的数量
+    
+    for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
+      const batch = validItems.slice(i, i + BATCH_SIZE)
+      
+      // 构建 VALUES 子句和参数数组
+      const values = []
+      const params = []
+      let paramIndex = 1
+      
+      for (const item of batch) {
+        const placeholders = []
+        for (let j = 0; j < 20; j++) {
+          placeholders.push(`$${paramIndex++}`)
+        }
+        values.push(`(${placeholders.join(', ')})`)
+        
+        params.push(
+          importId,
+          item.itemNo,
+          item.productName,
+          item.productNameEn || null,
+          item.hsCode || null,
+          item.quantity,
+          item.unit,
+          item.unit,
+          item.unitPrice,
+          item.totalValue,
+          item.grossWeight,
+          item.netWeight || null,
+          item.originCountry,
+          item.material || null,
+          item.productImage || null,
+          item.customerOrderNo || null,
+          item.palletCount || null,
+          item.referenceNo || null,
+          'pending',
+          now
+        )
+      }
+      
+      // 执行批量插入
+      const sql = `
+        INSERT INTO cargo_items (
+          import_id, item_no, product_name, product_name_en, customer_hs_code,
+          quantity, unit_code, unit_name, unit_price, total_value,
+          gross_weight, net_weight, origin_country, material,
+          product_image, customer_order_no, pallet_count, reference_no,
+          match_status, created_at
+        ) VALUES ${values.join(', ')}
+      `
+      
+      await query(sql, params)
+    }
+    
+    insertedCount = validItems.length
   }
 
   // 更新导入批次的商品总数
-  await db.prepare(`
-    UPDATE cargo_imports 
-    SET total_items = ?, updated_at = ?
-    WHERE id = ?
-  `).run(insertedCount, now, importId)
+  await query(
+    'UPDATE cargo_imports SET total_items = $1, updated_at = $2 WHERE id = $3',
+    [insertedCount, now, importId]
+  )
 
   return { insertedCount, skippedCount }
 }

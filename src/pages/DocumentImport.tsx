@@ -7,6 +7,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getAuthHeaders, getCustomers, getCustomerTaxNumbers, getBillsList, type Customer, type CustomerTaxNumber, type BillOfLading } from '../utils/api'
 import { formatDateTime } from '../utils/dateFormat'
+import { useImport } from '../contexts/ImportContext'
 
 const API_BASE = getApiBaseUrl()
 
@@ -57,22 +58,41 @@ export default function DocumentImport() {
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
+  // 使用全局导入状态
+  const { 
+    state: importState, 
+    startParsing, 
+    setShowPreview: setGlobalShowPreview, 
+    setPreviewData: setGlobalPreviewData,
+    setPreviewFile: setGlobalPreviewFile,
+    setSelectedBill: setGlobalSelectedBill,
+    resetState: resetImportState 
+  } = useImport()
+  
   const [imports, setImports] = useState<ImportRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [uploading, setUploading] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
-  const [previewData, setPreviewData] = useState<PreviewItem[]>([])
-  const [previewFile, setPreviewFile] = useState<File | null>(null)
+  const [localUploading, setLocalUploading] = useState(false) // 用于确认导入时的本地状态
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const pageSize = 20
+  
+  // 从全局状态获取预览数据、文件和提单
+  const showPreview = importState.showPreview
+  const previewData = importState.previewData
+  const previewFile = importState.previewFile
+  const selectedBill = importState.selectedBill  // 从全局状态获取选中的提单
+  const uploading = importState.uploading || localUploading
 
-  // 提单选择相关状态（必选）
+  // 提单选择相关状态
   const [bills, setBills] = useState<BillOfLading[]>([])
-  const [selectedBill, setSelectedBill] = useState<BillOfLading | null>(null)
   const [billSearch, setBillSearch] = useState('')
   const [showBillDropdown, setShowBillDropdown] = useState(false)
   const [loadingBills, setLoadingBills] = useState(false)
+  
+  // 设置选中的提单（同时更新全局状态）
+  const setSelectedBill = (bill: BillOfLading | null) => {
+    setGlobalSelectedBill(bill)
+  }
   
   // 客户选择相关状态
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -343,13 +363,14 @@ export default function DocumentImport() {
       return
     }
 
-    setPreviewFile(file)
+    // 保存文件到全局状态（CSV 解析需要）
+    setGlobalPreviewFile(file)
     
     // 解析文件预览
     if (fileExt === '.csv') {
       await parseCSV(file)
     } else {
-      // 对于Excel文件，发送到后端解析
+      // 对于Excel文件，发送到后端解析（startParsing 会保存文件）
       await parseExcel(file)
     }
   }
@@ -402,35 +423,14 @@ export default function DocumentImport() {
       items.push(item)
     }
 
-    setPreviewData(items)
-    setShowPreview(true)
+    // 使用全局状态
+    setGlobalPreviewData(items)
+    setGlobalShowPreview(true)
   }
 
   const parseExcel = async (file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('preview', 'true')
-
-    setUploading(true) // 显示加载状态
-    
-    try {
-      const res = await fetch(`${API_BASE}/api/cargo/documents/imports/preview`, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await res.json()
-      if (data.errCode === 200) {
-        setPreviewData(data.data?.items || [])
-        setShowPreview(true)
-      } else {
-        alert(data.msg || '解析文件失败')
-      }
-    } catch (error) {
-      console.error('解析文件失败:', error)
-      alert('解析文件失败: ' + (error instanceof Error ? error.message : '未知错误'))
-    } finally {
-      setUploading(false) // 隐藏加载状态
-    }
+    // 使用全局状态管理上传，这样用户切换页面后状态不会丢失
+    await startParsing(file)
   }
 
   const handleConfirmImport = async () => {
@@ -449,7 +449,7 @@ export default function DocumentImport() {
       }
     }
 
-    setUploading(true)
+    setLocalUploading(true)
     const formData = new FormData()
     formData.append('file', previewFile)
     // 添加提单信息
@@ -495,9 +495,8 @@ export default function DocumentImport() {
         }
 
         alert(`导入成功！共导入 ${data.data?.importedCount || 0} 条记录，已绑定提单: ${selectedBill.billNumber}`)
-        setShowPreview(false)
-        setPreviewData([])
-        setPreviewFile(null)
+        // 重置全局导入状态（包括文件）
+        resetImportState()
         // 清空提单、发货方和进口商信息
         setSelectedBill(null)
         setShipperInfo({ name: '', address: '', contact: '' })
@@ -514,14 +513,13 @@ export default function DocumentImport() {
       console.error('导入失败:', error)
       alert('导入失败')
     } finally {
-      setUploading(false)
+      setLocalUploading(false)
     }
   }
 
   const handleCancelPreview = () => {
-    setShowPreview(false)
-    setPreviewData([])
-    setPreviewFile(null)
+    // 重置全局导入状态（包括文件）
+    resetImportState()
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -893,9 +891,7 @@ export default function DocumentImport() {
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
             !selectedBill
               ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
-              : uploading 
-                ? 'border-primary-400 bg-primary-50' 
-                : 'border-gray-300 hover:border-primary-400 cursor-pointer'
+              : 'border-gray-300 hover:border-primary-400 cursor-pointer'
           }`}
           onClick={() => selectedBill && !uploading && fileInputRef.current?.click()}
         >
@@ -905,12 +901,6 @@ export default function DocumentImport() {
               <p className="text-sm text-gray-400 mb-1">请先选择要绑定的提单</p>
               <p className="text-xs text-gray-300">选择提单后才能上传货物清单</p>
             </>
-          ) : uploading ? (
-            <>
-              <RefreshCw className="w-12 h-12 text-primary-500 mx-auto mb-3 animate-spin" />
-              <p className="text-sm text-primary-600 mb-1">正在解析文件...</p>
-              <p className="text-xs text-primary-400">请稍候，正在读取数据和图片</p>
-            </>
           ) : (
             <>
               <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-3" />
@@ -919,6 +909,11 @@ export default function DocumentImport() {
               <p className="text-xs text-green-600 mt-2">
                 已选择提单: {selectedBill.billNumber}
               </p>
+              {importState.uploading && (
+                <p className="text-xs text-primary-500 mt-1 animate-pulse">
+                  ⏳ 文件正在解析中，您可以切换到其他页面...
+                </p>
+              )}
             </>
           )}
           <input
