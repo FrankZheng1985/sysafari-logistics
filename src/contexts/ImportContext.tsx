@@ -167,13 +167,24 @@ export function ImportProvider({ children }: { children: ReactNode }) {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('preview', 'true')
+    
+    // 调试日志
+    console.log('[ImportContext] 开始解析文件:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      isFile: file instanceof File
+    })
 
     try {
       const res = await fetch(`${API_BASE}/api/cargo/documents/imports/preview`, {
         method: 'POST',
         body: formData
       })
+      
+      console.log('[ImportContext] 请求响应状态:', res.status)
       const data = await res.json()
+      console.log('[ImportContext] 响应数据:', data)
       
       if (data.errCode === 200) {
         setState(prev => ({
@@ -205,7 +216,12 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         }))
       }
     } catch (error) {
-      console.error('解析文件失败:', error)
+      console.error('[ImportContext] 解析文件失败:', error)
+      console.error('[ImportContext] 文件信息:', {
+        fileName: file?.name,
+        fileSize: file?.size,
+        isFile: file instanceof File
+      })
       setState(prev => ({
         ...prev,
         tasks: prev.tasks.map(task => 
