@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { 
   MapPin, TrendingUp, AlertTriangle, XCircle, RefreshCw, 
-  Loader2, CheckCircle, Info, ExternalLink, BarChart3, Upload, X
+  Loader2, CheckCircle, Info, ExternalLink, BarChart3, Upload, X,
+  Key, Eye, EyeOff, Save
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 
@@ -232,6 +233,126 @@ function SyncModal({
   )
 }
 
+// API密钥设置模态框
+function ApiKeyModal({
+  isOpen,
+  onClose,
+  onSave,
+  currentKeyMasked
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (apiKey: string) => Promise<void>
+  currentKeyMasked?: string
+}) {
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!isOpen) return null
+
+  const handleSave = async () => {
+    if (!apiKey.trim()) {
+      setError('请输入API密钥')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      await onSave(apiKey.trim())
+      setApiKey('')
+      onClose()
+    } catch (err) {
+      setError((err as Error).message || '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <Key className="w-5 h-5 text-amber-600" />
+            <h3 className="font-medium text-gray-900">设置 HERE API 密钥</h3>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* 当前状态 */}
+          {currentKeyMasked && (
+            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+              <CheckCircle className="w-4 h-4" />
+              <span>当前已配置密钥: {currentKeyMasked}</span>
+            </div>
+          )}
+
+          {/* 提示 */}
+          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
+            <Info className="w-4 h-4" />
+            <span>从 <a href="https://developer.here.com/projects" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">HERE Developer</a> 获取 API Key</span>
+          </div>
+
+          {/* API Key 输入 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              API Key <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="请输入HERE API Key"
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* 错误提示 */}
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+              <AlertTriangle className="w-4 h-4" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {saving ? '保存中...' : '保存'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // 主组件
 export default function HereApiUsageCard() {
   const [stats, setStats] = useState<UsageStats | null>(null)
@@ -240,6 +361,8 @@ export default function HereApiUsageCard() {
   const [refreshing, setRefreshing] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [showSyncModal, setShowSyncModal] = useState(false)
+  const [showKeyModal, setShowKeyModal] = useState(false)
+  const [apiKeyMasked, setApiKeyMasked] = useState<string | undefined>(undefined)
   
   const fetchStats = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -303,8 +426,46 @@ export default function HereApiUsageCard() {
     await fetchStats(true)
   }
   
+  // 获取API密钥状态
+  const fetchApiKeyStatus = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch(`${API_BASE}/api/api-integrations/here_geocoding`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
+      const data = await res.json()
+      if (data.errCode === 200 && data.data) {
+        setApiKeyMasked(data.data.api_key_masked)
+      }
+    } catch (err) {
+      console.error('获取API密钥状态失败:', err)
+    }
+  }
+
+  // 保存API密钥
+  const handleSaveApiKey = async (apiKey: string) => {
+    const token = localStorage.getItem('token')
+    const res = await fetch(`${API_BASE}/api/api-integrations/here_geocoding`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ apiKey })
+    })
+    const data = await res.json()
+
+    if (data.errCode !== 200) {
+      throw new Error(data.msg || '保存失败')
+    }
+
+    // 更新密钥显示状态
+    await fetchApiKeyStatus()
+  }
+
   useEffect(() => {
     fetchStats()
+    fetchApiKeyStatus()
   }, [])
   
   if (loading) {
@@ -353,6 +514,13 @@ export default function HereApiUsageCard() {
           <span className={`px-2 py-0.5 rounded text-xs font-medium ${overallConfig.color} ${overallConfig.bgColor}`}>
             {overallConfig.label}
           </span>
+          <button
+            onClick={() => setShowKeyModal(true)}
+            className={`p-1.5 hover:bg-gray-100 rounded-lg transition-colors ${apiKeyMasked ? '' : 'text-amber-500'}`}
+            title={apiKeyMasked ? '修改API密钥' : '设置API密钥'}
+          >
+            <Key className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setShowSyncModal(true)}
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
@@ -456,6 +624,14 @@ export default function HereApiUsageCard() {
         onClose={() => setShowSyncModal(false)}
         onSync={handleSync}
         currentStats={stats.stats}
+      />
+
+      {/* API密钥设置对话框 */}
+      <ApiKeyModal
+        isOpen={showKeyModal}
+        onClose={() => setShowKeyModal(false)}
+        onSave={handleSaveApiKey}
+        currentKeyMasked={apiKeyMasked}
       />
     </div>
   )

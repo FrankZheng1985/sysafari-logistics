@@ -2,11 +2,13 @@
  * 发票模板配置
  * 
  * 包含PDF发票和Excel明细的模板定义
+ * 支持从数据库读取动态模板配置
  */
 
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fs from 'fs'
+import { getDatabase } from '../../config/database.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -18,7 +20,7 @@ function getChineseFontURL() {
   return 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap'
 }
 
-// 公司信息配置
+// 默认公司信息配置（当数据库没有模板时使用）
 export const COMPANY_INFO = {
   name: 'Xianfeng International Logistics',
   slogan: 'PRECISION LOGISTICS, TRUSTED CHOICE',
@@ -33,6 +35,194 @@ export const COMPANY_INFO = {
     bankAddress: '10 Des Voeux Road, Central, Hong Kong',
     swiftCode: 'BEASKHHH',
     clearingNo: '015 (for local interbank transfers)'
+  }
+}
+
+/**
+ * 根据模版ID从数据库获取发票模板
+ * @param {number|null} templateId - 模板ID，null则获取默认模板
+ * @param {string} language - 语言代码，如 'en', 'zh'
+ * @returns {Promise<Object|null>} 模板内容（包含语言内容和图片URL）
+ */
+export async function getInvoiceTemplateById(templateId, language = 'en') {
+  try {
+    const db = getDatabase()
+    
+    // 如果没有指定 templateId，使用默认模板
+    let template
+    if (templateId) {
+      template = await db.prepare(`
+        SELECT content, languages, logo_url, stamp_url 
+        FROM invoice_templates 
+        WHERE id = ? AND is_deleted = false
+        LIMIT 1
+      `).get(templateId)
+    }
+    
+    // 如果指定的模板不存在，回退到默认模板
+    if (!template) {
+      template = await db.prepare(`
+        SELECT content, languages, logo_url, stamp_url 
+        FROM invoice_templates 
+        WHERE is_default = true AND is_deleted = false 
+        LIMIT 1
+      `).get()
+    }
+    
+    if (!template) {
+      return null
+    }
+    
+    const content = template.content
+    let langContent = null
+    
+    // 获取指定语言的内容
+    if (content && content[language]) {
+      langContent = content[language]
+    } else if (content) {
+      // 降级策略：优先英语，其次中文
+      if (content['en']) langContent = content['en']
+      else if (content['zh']) langContent = content['zh']
+      else {
+        // 返回第一个可用的语言
+        const availableLangs = Object.keys(content)
+        if (availableLangs.length > 0) {
+          langContent = content[availableLangs[0]]
+        }
+      }
+    }
+    
+    if (!langContent) {
+      return null
+    }
+    
+    // 添加图片URL到返回结果
+    return {
+      ...langContent,
+      logoUrl: template.logo_url,
+      stampUrl: template.stamp_url
+    }
+  } catch (error) {
+    console.error('根据ID获取发票模板失败:', error)
+    return null
+  }
+}
+
+/**
+ * 从数据库获取默认发票模板
+ * @param {string} language - 语言代码，如 'en', 'zh'
+ * @returns {Promise<Object|null>} 模板内容（包含语言内容和图片URL）
+ */
+export async function getInvoiceTemplateFromDB(language = 'en') {
+  try {
+    const db = getDatabase()
+    const template = await db.prepare(`
+      SELECT content, languages, logo_url, stamp_url 
+      FROM invoice_templates 
+      WHERE is_default = true AND is_deleted = false 
+      LIMIT 1
+    `).get()
+    
+    if (!template) {
+      return null
+    }
+    
+    const content = template.content
+    let langContent = null
+    
+    // 获取指定语言的内容
+    if (content && content[language]) {
+      langContent = content[language]
+    } else if (content) {
+      // 降级策略：优先英语，其次中文
+      if (content['en']) langContent = content['en']
+      else if (content['zh']) langContent = content['zh']
+      else {
+        // 返回第一个可用的语言
+        const availableLangs = Object.keys(content)
+        if (availableLangs.length > 0) {
+          langContent = content[availableLangs[0]]
+        }
+      }
+    }
+    
+    if (!langContent) {
+      return null
+    }
+    
+    // 添加图片URL到返回结果
+    return {
+      ...langContent,
+      logoUrl: template.logo_url,
+      stampUrl: template.stamp_url
+    }
+  } catch (error) {
+    console.error('从数据库获取发票模板失败:', error)
+    return null
+  }
+}
+
+/**
+ * 将数据库模板格式转换为发票生成器需要的格式
+ * @param {Object} dbTemplate - 数据库模板内容
+ * @returns {Object} 转换后的公司信息格式
+ */
+export function convertTemplateToCompanyInfo(dbTemplate) {
+  if (!dbTemplate) {
+    return COMPANY_INFO
+  }
+  
+  return {
+    name: dbTemplate.companyName || COMPANY_INFO.name,
+    slogan: dbTemplate.companySlogan || COMPANY_INFO.slogan || 'PRECISION LOGISTICS, TRUSTED CHOICE',
+    registrationNo: dbTemplate.registrationNumber || COMPANY_INFO.registrationNo,
+    address: [
+      dbTemplate.companyAddress,
+      dbTemplate.companyCity,
+      dbTemplate.companyPostcode,
+      dbTemplate.companyCountry
+    ].filter(Boolean).join(', ') || COMPANY_INFO.address,
+    phone: dbTemplate.companyPhone || '',
+    email: dbTemplate.companyEmail || '',
+    website: dbTemplate.companyWebsite || '',
+    taxNumber: dbTemplate.taxNumber || '',
+    
+    // 银行信息
+    bank: {
+      accountName: dbTemplate.accountName || COMPANY_INFO.bank.accountName,
+      accountNumber: dbTemplate.accountNumber || COMPANY_INFO.bank.accountNumber,
+      bankName: dbTemplate.bankName || COMPANY_INFO.bank.bankName,
+      bankAddress: dbTemplate.bankAddress || COMPANY_INFO.bank.bankAddress,
+      swiftCode: dbTemplate.swiftCode || COMPANY_INFO.bank.swiftCode,
+      clearingNo: dbTemplate.sortCode || COMPANY_INFO.bank.clearingNo
+    },
+    
+    // 发票标签（用于多语言）
+    labels: {
+      invoice: dbTemplate.labelInvoice || 'INVOICE',
+      invoiceNumber: dbTemplate.labelInvoiceNumber || 'Invoice No',
+      date: dbTemplate.labelDate || 'Invoice Date',
+      dueDate: dbTemplate.labelDueDate || 'Due Date',
+      billTo: dbTemplate.labelBillTo || 'Bill to',
+      description: dbTemplate.labelDescription || 'Service Description',
+      quantity: dbTemplate.labelQuantity || 'Quantity',
+      unitPrice: dbTemplate.labelUnitPrice || 'Unit Value',
+      amount: dbTemplate.labelAmount || 'Amount',
+      subtotal: dbTemplate.labelSubtotal || 'Sub Total',
+      tax: dbTemplate.labelTax || 'Tax',
+      total: dbTemplate.labelTotal || 'Total',
+      bankDetails: dbTemplate.labelBankDetails || 'Bank Details',
+      paymentTerms: dbTemplate.labelPaymentTerms || 'Payment Terms'
+    },
+    
+    // 发票条款
+    paymentTerms: dbTemplate.paymentTerms || '',
+    footerNote: dbTemplate.footerNote || '',
+    thankYouMessage: dbTemplate.thankYouMessage || '',
+    
+    // 图片URL
+    logoUrl: dbTemplate.logoUrl || null,
+    stampUrl: dbTemplate.stampUrl || null
   }
 }
 
@@ -219,6 +409,7 @@ function getFeeName(chineseName, descriptionEn, language = 'en') {
 
 // PDF发票HTML模板
 // language: 'en' = 英文发票, 'zh' = 中文发票（仅影响费用品名显示）
+// companyInfo: 可选，从数据库获取的公司信息模板
 export function generateInvoiceHTML(data) {
   const {
     invoiceNumber,
@@ -232,11 +423,46 @@ export function generateInvoiceHTML(data) {
     total,
     currency = 'EUR',
     exchangeRate = 1,
-    language = 'en'  // 发票语言，默认英文
+    language = 'en',  // 发票语言，默认英文
+    companyInfo = null  // 从数据库获取的公司信息模板
   } = data
 
-  const logoBase64 = getLogoBase64()
-  const stampBase64 = getStampBase64()
+  // 使用传入的公司信息或默认配置
+  const company = companyInfo || COMPANY_INFO
+  const labels = company.labels || {}
+
+  // 优先使用数据库配置的图片URL，如果没有则使用本地文件
+  let logoHtml = ''
+  let stampHtml = ''
+  
+  if (company.logoUrl) {
+    // 使用数据库配置的Logo URL（需要完整URL）
+    const logoFullUrl = company.logoUrl.startsWith('http') 
+      ? company.logoUrl 
+      : `${process.env.API_BASE_URL || 'http://localhost:3001'}${company.logoUrl}`
+    logoHtml = `<img src="${logoFullUrl}" class="logo" alt="Logo">`
+  } else {
+    // 使用本地文件
+    const logoBase64 = getLogoBase64()
+    if (logoBase64) {
+      logoHtml = `<img src="${logoBase64}" class="logo" alt="Logo">`
+    }
+  }
+  
+  if (company.stampUrl) {
+    // 使用数据库配置的公章 URL
+    const stampFullUrl = company.stampUrl.startsWith('http') 
+      ? company.stampUrl 
+      : `${process.env.API_BASE_URL || 'http://localhost:3001'}${company.stampUrl}`
+    stampHtml = `<img src="${stampFullUrl}" class="stamp" alt="Stamp">`
+  } else {
+    // 使用本地文件
+    const stampBase64 = getStampBase64()
+    if (stampBase64) {
+      stampHtml = `<img src="${stampBase64}" class="stamp" alt="Stamp">`
+    }
+  }
+  
   const chineseFontURL = getChineseFontURL()
   const formattedDate = formatInvoiceDate(invoiceDate)
   const formattedDueDate = formatInvoiceDate(dueDate)
@@ -455,20 +681,21 @@ export function generateInvoiceHTML(data) {
   <!-- 头部 -->
   <div class="header">
     <div class="header-left">
-      ${logoBase64 ? `<img src="${logoBase64}" class="logo" alt="Logo">` : ''}
+      ${logoHtml}
     </div>
     <div class="company-info">
-      <div class="company-name">${COMPANY_INFO.name}</div>
-      <div class="company-slogan">${COMPANY_INFO.slogan}</div>
-      <div class="company-detail">Registration No: ${COMPANY_INFO.registrationNo}</div>
-      <div class="company-detail">Address: ${COMPANY_INFO.address}</div>
+      <div class="company-name">${company.name}</div>
+      <div class="company-slogan">${company.slogan || 'PRECISION LOGISTICS, TRUSTED CHOICE'}</div>
+      <div class="company-detail">Registration No: ${company.registrationNo}</div>
+      <div class="company-detail">Address: ${company.address}</div>
+      ${company.taxNumber ? `<div class="company-detail">VAT: ${company.taxNumber}</div>` : ''}
     </div>
   </div>
   
   <!-- 客户和发票信息 -->
   <div class="info-section">
     <div class="bill-to">
-      <div class="bill-to-label">Bill to:</div>
+      <div class="bill-to-label">${labels.billTo || 'Bill to'}:</div>
       <div class="bill-to-name">${customer.name || ''}</div>
       <div class="bill-to-address">${customer.address || ''}</div>
       ${containerNumbers && containerNumbers.length > 0 ? `
@@ -478,11 +705,11 @@ export function generateInvoiceHTML(data) {
       ` : ''}
     </div>
     <div class="invoice-info">
-      <div class="invoice-title">INVOICE</div>
-      <div class="invoice-detail">Invoice No: <span>${invoiceNumber}</span></div>
-      <div class="invoice-detail">Invoice Date: ${formattedDate}</div>
+      <div class="invoice-title">${labels.invoice || 'INVOICE'}</div>
+      <div class="invoice-detail">${labels.invoiceNumber || 'Invoice No'}: <span>${invoiceNumber}</span></div>
+      <div class="invoice-detail">${labels.date || 'Invoice Date'}: ${formattedDate}</div>
       <div class="invoice-detail">Payment Terms: ${paymentDays ? `${paymentDays} Days` : 'Due on Receipt'}</div>
-      ${formattedDueDate ? `<div class="invoice-detail">Due Date: ${formattedDueDate}</div>` : ''}
+      ${formattedDueDate ? `<div class="invoice-detail">${labels.dueDate || 'Due Date'}: ${formattedDueDate}</div>` : ''}
       ${exchangeRateText ? `<div class="invoice-detail">${exchangeRateText}</div>` : ''}
     </div>
   </div>
@@ -491,10 +718,10 @@ export function generateInvoiceHTML(data) {
   <table class="items-table">
     <thead>
       <tr>
-        <th style="width: ${isMultiContainerInvoice ? '45%' : '35%'}">Service Description</th>
-        <th style="width: 10%" class="quantity">Quantity</th>
-        ${isMultiContainerInvoice ? '' : '<th style="width: 15%" class="amount">Unit Value</th>'}
-        <th style="width: ${isMultiContainerInvoice ? '20%' : '20%'}" class="amount">Amount ${currency}</th>
+        <th style="width: ${isMultiContainerInvoice ? '45%' : '35%'}">${labels.description || 'Service Description'}</th>
+        <th style="width: 10%" class="quantity">${labels.quantity || 'Quantity'}</th>
+        ${isMultiContainerInvoice ? '' : `<th style="width: 15%" class="amount">${labels.unitPrice || 'Unit Value'}</th>`}
+        <th style="width: ${isMultiContainerInvoice ? '20%' : '20%'}" class="amount">${labels.amount || 'Amount'} ${currency}</th>
         <th style="width: ${isMultiContainerInvoice ? '12%' : '12%'}" class="amount discount-col">Discount</th>
         <th style="width: ${isMultiContainerInvoice ? '13%' : '18%'}" class="amount">Final</th>
       </tr>
@@ -519,11 +746,11 @@ export function generateInvoiceHTML(data) {
   <!-- 合计区域 -->
   <div class="totals-section">
     <div>
-      ${stampBase64 ? `<img src="${stampBase64}" class="stamp" alt="Stamp">` : ''}
+      ${stampHtml}
     </div>
     <div class="totals">
       <div class="subtotal-row">
-        <span>Sub Total</span>
+        <span>${labels.subtotal || 'Sub Total'}</span>
         <span>${formatNumber(subtotal)} ${currency}</span>
       </div>
       ${subtotal > total ? `
@@ -533,7 +760,7 @@ export function generateInvoiceHTML(data) {
       </div>
       ` : ''}
       <div class="total-row">
-        <span>Total:</span>
+        <span>${labels.total || 'Total'}:</span>
         <span>${formatNumber(total)} ${currency}</span>
       </div>
     </div>
@@ -547,19 +774,38 @@ export function generateInvoiceHTML(data) {
   <!-- 底部信息 -->
   <div class="footer">
     <div class="footer-left">
-      <div><span class="footer-label">${COMPANY_INFO.name}</span></div>
-      <div><span class="footer-label">Registration No:</span> ${COMPANY_INFO.registrationNo}</div>
-      <div><span class="footer-label">Address:</span> ${COMPANY_INFO.address}</div>
+      <div><span class="footer-label">${company.name}</span></div>
+      <div><span class="footer-label">Registration No:</span> ${company.registrationNo}</div>
+      <div><span class="footer-label">Address:</span> ${company.address}</div>
+      ${company.taxNumber ? `<div><span class="footer-label">VAT:</span> ${company.taxNumber}</div>` : ''}
     </div>
     <div class="footer-right">
-      <div><span class="footer-label">Account Holder's Name:</span> ${COMPANY_INFO.bank.accountName}</div>
-      <div><span class="footer-label">Account Number:</span> ${COMPANY_INFO.bank.accountNumber}</div>
-      <div><span class="footer-label">Bank's Name:</span> ${COMPANY_INFO.bank.bankName}</div>
-      <div><span class="footer-label">Bank's Address:</span> ${COMPANY_INFO.bank.bankAddress}</div>
-      <div><span class="footer-label">SWIFT Code:</span> ${COMPANY_INFO.bank.swiftCode}</div>
-      <div><span class="footer-label">Clearing No:</span> ${COMPANY_INFO.bank.clearingNo}</div>
+      <div><span class="footer-label">Account Holder's Name:</span> ${company.bank.accountName}</div>
+      <div><span class="footer-label">Account Number:</span> ${company.bank.accountNumber}</div>
+      <div><span class="footer-label">Bank's Name:</span> ${company.bank.bankName}</div>
+      ${company.bank.bankAddress ? `<div><span class="footer-label">Bank's Address:</span> ${company.bank.bankAddress}</div>` : ''}
+      ${company.bank.swiftCode ? `<div><span class="footer-label">SWIFT Code:</span> ${company.bank.swiftCode}</div>` : ''}
+      ${company.bank.clearingNo ? `<div><span class="footer-label">Clearing No:</span> ${company.bank.clearingNo}</div>` : ''}
     </div>
   </div>
+  
+  <!-- 付款条款和感谢语 -->
+  ${(() => {
+    // 根据账期天数动态生成付款条款
+    let dynamicPaymentTerms = ''
+    if (paymentDays) {
+      dynamicPaymentTerms = language === 'zh' 
+        ? `请于发票日期起${paymentDays}天内付款`
+        : `Payment due within ${paymentDays} days of invoice date`
+    }
+    const showTerms = dynamicPaymentTerms || company.thankYouMessage
+    return showTerms ? `
+    <div style="margin-top: 10px; text-align: center; font-size: 9px; color: #666;">
+      ${dynamicPaymentTerms ? `<p style="margin-bottom: 3px;">${dynamicPaymentTerms}</p>` : ''}
+      ${company.thankYouMessage ? `<p style="font-weight: bold;">${company.thankYouMessage}</p>` : ''}
+    </div>
+    ` : ''
+  })()}
 </body>
 </html>
 `
@@ -579,5 +825,7 @@ export default {
   COLORS,
   getLogoBase64,
   getStampBase64,
-  generateInvoiceHTML
+  generateInvoiceHTML,
+  getInvoiceTemplateFromDB,
+  convertTemplateToCompanyInfo
 }

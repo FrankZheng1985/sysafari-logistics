@@ -108,9 +108,9 @@ async function isImageBlurry(imageBuffer) {
   }
 }
 
-// AI超分辨率API代码
-const AI_SR_API_CODE = 'aliyun_wanx_sr'
-const AI_SR_COST_PER_CALL = 0.04  // 每次调用约0.04元
+// AI超分辨率API代码（已合并到阿里云AI智能服务）
+const AI_SR_API_CODE = 'aliyun_qwen_vl'  // 统一使用阿里云AI智能
+const AI_SR_COST_PER_CALL = 0.04  // 每次调用约0.04元（万象超分辨率）
 
 /**
  * 记录AI超分辨率调用日志

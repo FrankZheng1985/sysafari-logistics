@@ -271,8 +271,8 @@ export async function createInvoice(data) {
       customer_id, customer_name, bill_id, bill_number, container_numbers,
       subtotal, tax_amount, total_amount, paid_amount,
       currency, exchange_rate, description, items, notes,
-      status, language, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      status, language, template_id, created_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     invoiceNumber,
@@ -295,6 +295,7 @@ export async function createInvoice(data) {
     data.notes || '',
     data.status || 'issued',
     data.language || 'en',  // 发票语言，默认英文
+    data.templateId || null,  // 发票模版ID
     data.createdBy || null
   )
   
@@ -344,7 +345,8 @@ export async function updateInvoice(id, data) {
     description: 'description',
     notes: 'notes',
     status: 'status',
-    language: 'language'  // 发票语言
+    language: 'language',  // 发票语言
+    templateId: 'template_id'  // 发票模版ID
   }
   
   Object.entries(fieldMap).forEach(([jsField, dbField]) => {
@@ -1955,6 +1957,7 @@ export function convertInvoiceToCamelCase(row) {
     notes: row.notes,
     status: row.status,
     language: row.language || 'en',  // 发票语言
+    templateId: row.template_id,  // 发票模版ID
     pdfUrl: row.pdf_url,
     excelUrl: row.excel_url,
     pdfGeneratedAt: row.pdf_generated_at,

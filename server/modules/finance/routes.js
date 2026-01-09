@@ -5,6 +5,7 @@
 import express from 'express'
 import multer from 'multer'
 import * as controller from './controller.js'
+import * as invoiceTemplateController from './invoiceTemplateController.js'
 import { authenticate } from '../../middleware/auth.js'
 
 const router = express.Router()
@@ -239,6 +240,78 @@ router.post('/carrier-settlements/:id/pay', controller.payCarrierSettlement)
 
 // 获取结算明细
 router.get('/carrier-settlements/:id/items', controller.getCarrierSettlementItems)
+
+// ==================== 发票模板管理路由 ====================
+
+// 配置 multer 用于发票模板图片上传
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// 确保上传目录存在
+const templateImageDir = path.join(__dirname, '../../uploads/invoice-templates')
+if (!fs.existsSync(templateImageDir)) {
+  fs.mkdirSync(templateImageDir, { recursive: true })
+}
+
+const templateImageStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, templateImageDir)
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    const ext = path.extname(file.originalname)
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext)
+  }
+})
+
+const templateImageUpload = multer({
+  storage: templateImageStorage,
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true)
+    } else {
+      cb(new Error('不支持的文件类型，请上传图片文件'))
+    }
+  }
+})
+
+// 获取所有发票模板
+router.get('/invoice-templates', invoiceTemplateController.getInvoiceTemplates)
+
+// 获取默认发票模板
+router.get('/invoice-templates/default', invoiceTemplateController.getDefaultInvoiceTemplate)
+
+// 翻译文本
+router.post('/invoice-templates/translate', invoiceTemplateController.translateTexts)
+
+// 上传发票模板图片（Logo/公章）
+router.post('/invoice-templates/upload-image', authenticate, templateImageUpload.single('file'), invoiceTemplateController.uploadTemplateImage)
+
+// 获取发票模板图片
+router.get('/invoice-templates/images/:filename', invoiceTemplateController.getTemplateImage)
+
+// 获取模板指定语言内容
+router.get('/invoice-templates/language/:language', invoiceTemplateController.getTemplateByLanguage)
+
+// 获取单个发票模板
+router.get('/invoice-templates/:id', invoiceTemplateController.getInvoiceTemplateById)
+
+// 创建发票模板
+router.post('/invoice-templates', authenticate, invoiceTemplateController.createInvoiceTemplate)
+
+// 更新发票模板
+router.put('/invoice-templates/:id', authenticate, invoiceTemplateController.updateInvoiceTemplate)
+
+// 删除发票模板
+router.delete('/invoice-templates/:id', authenticate, invoiceTemplateController.deleteInvoiceTemplate)
 
 export default router
 

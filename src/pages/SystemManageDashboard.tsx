@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { 
   Settings, Users, Shield, Image, Database, FileText,
-  ToggleLeft, ArrowRight, Activity, Server, Lock, Key, Link2
+  ToggleLeft, ArrowRight, Activity, Server, Lock, Key, Link2, Receipt, Bell
 } from 'lucide-react'
 
 interface SystemCard {
@@ -69,6 +69,22 @@ const systemModules: SystemCard[] = [
     icon: Link2,
     color: 'text-indigo-600',
     bgColor: 'bg-indigo-50 hover:bg-indigo-100',
+  },
+  {
+    path: '/system/invoice-templates',
+    label: '发票模板管理',
+    description: '配置多语言发票模板、公司信息和付款条款',
+    icon: Receipt,
+    color: 'text-amber-600',
+    bgColor: 'bg-amber-50 hover:bg-amber-100',
+  },
+  {
+    path: '/system/subscriptions',
+    label: '服务订阅管理',
+    description: '管理SSL证书、API服务、云服务等到期和费用',
+    icon: Bell,
+    color: 'text-pink-600',
+    bgColor: 'bg-pink-50 hover:bg-pink-100',
   },
 ]
 

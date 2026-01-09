@@ -73,6 +73,16 @@ interface Fee {
   isLocked?: boolean
 }
 
+// 发票模版
+interface InvoiceTemplate {
+  id: number
+  templateName: string
+  isDefault: boolean
+  languages: string[]
+  logoUrl?: string
+  stampUrl?: string
+}
+
 // 供应商费用项（包含订单信息）
 interface SupplierFee extends Fee {
   billId: string
@@ -117,6 +127,7 @@ interface InvoiceFormData {
   status: string
   items: InvoiceItem[]
   language: 'en' | 'zh'  // 发票语言：en=英文, zh=中文
+  templateId: number | null  // 发票模版ID
   // 采购发票专用字段
   supplierInvoiceNumber: string  // 供应商发票号
   supplierInvoiceDate: string    // 供应商发票日期
@@ -187,9 +198,13 @@ export default function CreateInvoice() {
     status: 'pending',
     items: [],
     language: 'en',  // 默认英文发票
+    templateId: null,  // 发票模版ID，null表示使用默认模版
     supplierInvoiceNumber: '',
     supplierInvoiceDate: ''
   })
+
+  // 发票模版列表
+  const [invoiceTemplates, setInvoiceTemplates] = useState<InvoiceTemplate[]>([])
 
   const tabs = [
     { label: '财务概览', path: '/finance' },
@@ -416,6 +431,7 @@ export default function CreateInvoice() {
           status: invoice.status || 'issued',
           items: items.length > 0 ? items : [{ id: '1', description: '', quantity: 1, unitPrice: 0, currency: 'EUR', amount: 0, taxRate: 0, taxAmount: 0, discountPercent: 0, discountAmount: 0, finalAmount: 0, isFromOrder: false }],
           language: invoice.language || 'en',  // 发票语言
+          templateId: invoice.templateId || null,  // 发票模版ID
           supplierInvoiceNumber: invoice.supplierInvoiceNumber || '',
           supplierInvoiceDate: invoice.supplierInvoiceDate || ''
         })
@@ -448,12 +464,39 @@ export default function CreateInvoice() {
     }
   }
 
+  // 加载发票模版列表
+  const fetchInvoiceTemplates = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/invoice-templates`, {
+        headers: getAuthHeaders()
+      })
+      const data = await res.json()
+      if (data.errCode === 200 && data.data) {
+        setInvoiceTemplates(data.data)
+        // 设置默认模版
+        const defaultTemplate = data.data.find((t: InvoiceTemplate) => t.isDefault)
+        if (defaultTemplate && !formData.templateId) {
+          setFormData(prev => ({ 
+            ...prev, 
+            templateId: defaultTemplate.id,
+            // 根据模版支持的语言设置默认语言
+            language: defaultTemplate.languages?.includes('zh') ? 'zh' : 'en'
+          }))
+        }
+      }
+    } catch (error) {
+      console.error('加载发票模版失败:', error)
+    }
+  }
+
   useEffect(() => {
     fetchCustomers()
     fetchSuppliers()
     fetchCompletedBills('', initialType) // 初始加载时使用初始发票类型
     // 初始加载时获取默认货币汇率
     fetchExchangeRate('EUR')
+    // 加载发票模版
+    fetchInvoiceTemplates()
     
     // 编辑模式：加载发票数据
     if (editInvoiceId) {
@@ -1341,6 +1384,7 @@ export default function CreateInvoice() {
         currency: formData.currency,
         exchangeRate: formData.exchangeRate,
         language: formData.language,  // 发票语言
+        templateId: formData.templateId,  // 发票模版ID
         description: formData.description || formData.items.map(i => i.description).join('; '),
         items: JSON.stringify(formData.items.map(item => ({
           description: item.description,
@@ -2119,6 +2163,7 @@ export default function CreateInvoice() {
                         type="button"
                         onClick={() => setFeeSearchKeyword('')}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        title="清除搜索"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -2449,8 +2494,40 @@ export default function CreateInvoice() {
                   </div>
                 </div>
 
-                {/* 第三行：发票语言选择 */}
+                {/* 第三行：发票模版和语言选择 */}
                 <div className="grid grid-cols-3 gap-3 mt-3">
+                  {/* 发票模版 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      发票模版
+                    </label>
+                    <select
+                      value={formData.templateId || ''}
+                      onChange={(e) => {
+                        const templateId = e.target.value ? Number(e.target.value) : null
+                        const template = invoiceTemplates.find(t => t.id === templateId)
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          templateId,
+                          // 如果模版只支持一种语言，自动切换
+                          language: template?.languages?.length === 1 
+                            ? template.languages[0] as 'en' | 'zh'
+                            : prev.language
+                        }))
+                      }}
+                      title="选择发票模版"
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
+                    >
+                      <option value="">使用默认模版</option>
+                      {invoiceTemplates.map(template => (
+                        <option key={template.id} value={template.id}>
+                          {template.templateName} {template.isDefault ? '(默认)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[10px] text-gray-400">选择发票的公司信息和样式模版</p>
+                  </div>
+                  
                   {/* 发票语言 */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -2462,8 +2539,18 @@ export default function CreateInvoice() {
                       title="选择发票费用品名显示语言"
                       className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
                     >
-                      <option value="en">英文 (English)</option>
-                      <option value="zh">中文 (Chinese)</option>
+                      {(() => {
+                        const selectedTemplate = invoiceTemplates.find(t => t.id === formData.templateId)
+                        const langs = selectedTemplate?.languages || ['en', 'zh']
+                        return (
+                          <>
+                            {langs.includes('en') && <option value="en">英文 (English)</option>}
+                            {langs.includes('zh') && <option value="zh">中文 (Chinese)</option>}
+                            {langs.includes('de') && <option value="de">德文 (Deutsch)</option>}
+                            {langs.includes('fr') && <option value="fr">法文 (Français)</option>}
+                          </>
+                        )
+                      })()}
                     </select>
                     <p className="mt-1 text-[10px] text-gray-400">影响PDF发票中费用品名的显示语言</p>
                   </div>

@@ -181,6 +181,26 @@ export async function getApiIntegrations(filters = {}) {
     
     const list = await db.prepare(sql).all(...params)
     
+    // 处理敏感信息：不返回完整密钥，只返回是否已配置
+    list.forEach(api => {
+      api.has_api_key = !!api.api_key
+      api.has_api_secret = !!api.api_secret
+      // 如果有密钥，只显示前4位和后4位
+      if (api.api_key) {
+        api.api_key_masked = api.api_key.length > 8 
+          ? `${api.api_key.slice(0, 4)}****${api.api_key.slice(-4)}`
+          : '****'
+      }
+      if (api.api_secret) {
+        api.api_secret_masked = api.api_secret.length > 8 
+          ? `${api.api_secret.slice(0, 4)}****${api.api_secret.slice(-4)}`
+          : '****'
+      }
+      // 删除原始密钥字段
+      delete api.api_key
+      delete api.api_secret
+    })
+    
     // 计算统计数据
     const stats = {
       total: list.length,
@@ -228,10 +248,31 @@ export async function getApiByCode(apiCode) {
       WHERE api_code = $1 AND usage_date >= DATE_TRUNC('month', CURRENT_DATE)
     `).get(apiCode)
     
-    return {
+    // 处理敏感信息：不返回完整密钥
+    const result = {
       ...api,
-      monthUsage: monthUsage || { total_calls: 0, success_calls: 0, fail_calls: 0, total_cost: 0 }
+      monthUsage: monthUsage || { total_calls: 0, success_calls: 0, fail_calls: 0, total_cost: 0 },
+      has_api_key: !!api.api_key,
+      has_api_secret: !!api.api_secret
     }
+    
+    // 如果有密钥，只显示前4位和后4位
+    if (api.api_key) {
+      result.api_key_masked = api.api_key.length > 8 
+        ? `${api.api_key.slice(0, 4)}****${api.api_key.slice(-4)}`
+        : '****'
+    }
+    if (api.api_secret) {
+      result.api_secret_masked = api.api_secret.length > 8 
+        ? `${api.api_secret.slice(0, 4)}****${api.api_secret.slice(-4)}`
+        : '****'
+    }
+    
+    // 删除原始密钥字段
+    delete result.api_key
+    delete result.api_secret
+    
+    return result
   } catch (error) {
     console.error('获取API详情失败:', error)
     return null
@@ -248,7 +289,8 @@ export async function updateApi(apiCode, data) {
   const allowedFields = [
     'api_name', 'provider', 'category', 'api_url', 'health_check_url',
     'pricing_model', 'unit_price', 'currency', 'balance', 'alert_threshold',
-    'recharge_url', 'status', 'config_json', 'description', 'icon', 'sort_order'
+    'recharge_url', 'status', 'config_json', 'description', 'icon', 'sort_order',
+    'api_key', 'api_secret', 'env_key_name'  // API密钥相关字段
   ]
   
   const updates = []
@@ -641,6 +683,63 @@ async function checkQichachaHealth() {
 }
 
 /**
+ * 检查HERE Maps API配置和可用性
+ */
+async function checkHereApiHealth() {
+  const db = getDatabase()
+  
+  // 首先检查数据库中是否存储了API Key
+  const apiInfo = await db.prepare('SELECT api_key FROM api_integrations WHERE api_code = $1').get('here_geocoding')
+  const dbApiKey = apiInfo?.api_key
+  
+  // 然后检查环境变量
+  const envApiKey = process.env.HERE_API_KEY
+  
+  const apiKey = dbApiKey || envApiKey
+  
+  if (!apiKey) {
+    return {
+      status: 'degraded',
+      responseTime: 0,
+      message: '未配置HERE API密钥'
+    }
+  }
+  
+  // 使用API Key进行真实的健康检查
+  const startTime = Date.now()
+  try {
+    const testUrl = `https://geocode.search.hereapi.com/v1/geocode?q=Berlin&apiKey=${apiKey}&limit=1`
+    const result = await httpHealthCheck(testUrl)
+    
+    if (result.status === 'online' || result.statusCode === 200) {
+      return {
+        status: 'online',
+        responseTime: Date.now() - startTime,
+        message: 'API正常可用'
+      }
+    } else if (result.statusCode === 401 || result.statusCode === 403) {
+      return {
+        status: 'degraded',
+        responseTime: Date.now() - startTime,
+        message: 'API密钥无效或已过期'
+      }
+    } else {
+      return {
+        status: 'degraded',
+        responseTime: Date.now() - startTime,
+        message: result.message || 'API响应异常'
+      }
+    }
+  } catch (error) {
+    return {
+      status: 'offline',
+      responseTime: Date.now() - startTime,
+      message: error.message || '网络错误'
+    }
+  }
+}
+
+/**
  * 执行单个API健康检查
  */
 export async function performHealthCheck(apiCode) {
@@ -665,6 +764,9 @@ export async function performHealthCheck(apiCode) {
       break
     case 'qichacha':
       result = await checkQichachaHealth()
+      break
+    case 'here_geocoding':
+      result = await checkHereApiHealth()
       break
     default:
       // 默认HTTP健康检查

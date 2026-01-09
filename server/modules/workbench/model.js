@@ -576,18 +576,19 @@ export async function getTmsStats(userId, role) {
       `SELECT COUNT(*) as count FROM bills
        WHERE ship_status = '已到港'
          AND (delivery_status IS NULL OR delivery_status = '' OR delivery_status = '待派送')
-         AND ata >= CURRENT_DATE
+         AND ata IS NOT NULL AND ata <> ''
+         AND ata::DATE >= CURRENT_DATE
          AND status NOT IN ('已完成', 'completed', 'archived')`
     ).get()
     
     // 平均派送时效（已送达订单的 ata 到实际送达的天数）
     const avgDeliveryResult = await db.prepare(
       `SELECT AVG(
-         EXTRACT(DAY FROM (updated_at - ata))
+         EXTRACT(DAY FROM (updated_at - ata::TIMESTAMP))
        ) as avg_days
        FROM bills
        WHERE delivery_status IN ('已送达', '已完成')
-         AND ata IS NOT NULL
+         AND ata IS NOT NULL AND ata <> ''
          AND updated_at IS NOT NULL`
     ).get()
     

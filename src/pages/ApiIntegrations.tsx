@@ -4,7 +4,8 @@ import {
   FileText, Ship, HardDrive, Languages, Calculator, BadgeCheck,
   ShieldCheck, Globe, ExternalLink, Plus, AlertTriangle, 
   CheckCircle, XCircle, Clock, Loader2, TrendingUp, Wallet,
-  ChevronRight, Info, Download, X, Building2, MapPin, Brain
+  ChevronRight, Info, Download, X, Building2, MapPin, Brain,
+  Key, Eye, EyeOff, Save
 } from 'lucide-react'
 import { getApiBaseUrl } from '../utils/api'
 import HereApiUsageCard from '../components/HereApiUsageCard'
@@ -87,6 +88,12 @@ interface ApiIntegration {
   month_calls: number
   month_cost: number
   config_json?: string  // 存储额外配置信息（如COS存储量）
+  // API密钥相关
+  has_api_key?: boolean
+  has_api_secret?: boolean
+  api_key_masked?: string
+  api_secret_masked?: string
+  env_key_name?: string
 }
 
 interface Stats {
@@ -193,13 +200,15 @@ function ApiCard({
   onHealthCheck, 
   checking,
   onSync,
-  syncing
+  syncing,
+  onEditKey
 }: { 
   api: ApiIntegration
   onHealthCheck: (code: string) => void
   checking: boolean
   onSync?: (code: string) => void
   syncing?: boolean
+  onEditKey?: (api: ApiIntegration) => void
 }) {
   const CategoryIcon = categoryIcons[api.category] || Link2
   const balance = Number(api.balance || 0)
@@ -355,8 +364,29 @@ function ApiCard({
           <div className="flex items-center gap-1 text-[10px] text-gray-400">
             <Info className="w-3 h-3" />
             <span>{categoryNames[api.category] || api.category}</span>
+            {/* 密钥状态指示 */}
+            {api.has_api_key && (
+              <span className="ml-1 text-green-500" title={`已配置密钥: ${api.api_key_masked}`}>
+                <Key className="w-3 h-3" />
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3">
+            {/* 设置密钥按钮 */}
+            {onEditKey && (
+              <button
+                onClick={() => onEditKey(api)}
+                className={`text-xs flex items-center gap-1 ${
+                  api.has_api_key 
+                    ? 'text-gray-500 hover:text-gray-700' 
+                    : 'text-amber-600 hover:text-amber-700'
+                }`}
+                title={api.has_api_key ? '修改密钥' : '设置密钥'}
+              >
+                <Key className="w-3.5 h-3.5" />
+                {api.has_api_key ? '密钥' : '设置密钥'}
+              </button>
+            )}
             {/* 同步按钮 - 仅对支持同步的API显示 */}
             {canSync && onSync && (
               <button
@@ -534,6 +564,199 @@ function StatsDetailModal({
   )
 }
 
+// API密钥编辑模态框组件
+function ApiKeyEditModal({
+  api,
+  onClose,
+  onSave
+}: {
+  api: ApiIntegration | null
+  onClose: () => void
+  onSave: (apiCode: string, apiKey: string, apiSecret?: string) => Promise<void>
+}) {
+  const [apiKey, setApiKey] = useState('')
+  const [apiSecret, setApiSecret] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [showSecret, setShowSecret] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  
+  if (!api) return null
+  
+  // 判断是否需要两个密钥（腾讯云、企查查等）
+  const needsSecret = ['tencent_ocr', 'tencent_cos', 'qichacha'].includes(api.api_code)
+  
+  const handleSave = async () => {
+    if (!apiKey.trim()) {
+      setError('请输入API密钥')
+      return
+    }
+    
+    if (needsSecret && !apiSecret.trim()) {
+      setError('请输入API Secret')
+      return
+    }
+    
+    setSaving(true)
+    setError('')
+    
+    try {
+      await onSave(api.api_code, apiKey.trim(), needsSecret ? apiSecret.trim() : undefined)
+      onClose()
+    } catch (err) {
+      setError((err as Error).message || '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+  
+  // 获取密钥说明
+  const getKeyDescription = () => {
+    switch (api.api_code) {
+      case 'tencent_ocr':
+      case 'tencent_cos':
+        return { keyLabel: 'SecretId', secretLabel: 'SecretKey', hint: '从腾讯云控制台获取' }
+      case 'aliyun_qwen_vl':
+        return { keyLabel: 'API Key', secretLabel: '', hint: '从阿里云DashScope控制台获取' }
+      case 'qichacha':
+        return { keyLabel: 'Key', secretLabel: 'Secret', hint: '从企查查开放平台获取' }
+      case 'here_geocoding':
+        return { keyLabel: 'API Key', secretLabel: '', hint: '从HERE Developer获取' }
+      default:
+        return { keyLabel: 'API Key', secretLabel: 'Secret', hint: '' }
+    }
+  }
+  
+  const keyDesc = getKeyDescription()
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* 背景遮罩 */}
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      
+      {/* 模态框内容 */}
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* 头部 */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-100">
+              <Key className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">设置API密钥</h3>
+              <p className="text-sm text-gray-500">{api.api_name}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title="关闭"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        
+        {/* 表单内容 */}
+        <div className="p-6 space-y-4">
+          {/* 当前状态 */}
+          {api.has_api_key && (
+            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+              <CheckCircle className="w-4 h-4" />
+              <span>当前已配置密钥: {api.api_key_masked}</span>
+            </div>
+          )}
+          
+          {/* 提示 */}
+          {keyDesc.hint && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
+              <Info className="w-4 h-4" />
+              <span>{keyDesc.hint}</span>
+            </div>
+          )}
+          
+          {/* API Key 输入 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {keyDesc.keyLabel} <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={`请输入${keyDesc.keyLabel}`}
+                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              >
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          
+          {/* API Secret 输入（如果需要） */}
+          {needsSecret && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {keyDesc.secretLabel} <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showSecret ? 'text' : 'password'}
+                  value={apiSecret}
+                  onChange={(e) => setApiSecret(e.target.value)}
+                  placeholder={`请输入${keyDesc.secretLabel}`}
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(!showSecret)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                >
+                  {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* 错误提示 */}
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+              <AlertTriangle className="w-4 h-4" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+        
+        {/* 底部按钮 */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ApiIntegrations() {
   const [apis, setApis] = useState<ApiIntegration[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
@@ -542,6 +765,7 @@ export default function ApiIntegrations() {
   const [checkingApi, setCheckingApi] = useState<string | null>(null)
   const [syncingApi, setSyncingApi] = useState<string | null>(null)
   const [statsModalType, setStatsModalType] = useState<StatsModalType>(null)
+  const [editingKeyApi, setEditingKeyApi] = useState<ApiIntegration | null>(null)
   
   // 加载API列表
   const loadApis = useCallback(async () => {
@@ -563,6 +787,26 @@ export default function ApiIntegrations() {
   useEffect(() => {
     loadApis()
   }, [loadApis])
+  
+  // 保存API密钥
+  const handleSaveApiKey = async (apiCode: string, apiKey: string, apiSecret?: string) => {
+    const res = await fetch(`${API_BASE}/api/api-integrations/${apiCode}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey,
+        ...(apiSecret && { apiSecret })
+      })
+    })
+    const data = await res.json()
+    
+    if (data.errCode !== 200) {
+      throw new Error(data.msg || '保存失败')
+    }
+    
+    // 重新加载列表以显示更新后的状态
+    await loadApis()
+  }
   
   // 单个API健康检查
   const handleHealthCheck = async (apiCode: string) => {
@@ -819,6 +1063,7 @@ export default function ApiIntegrations() {
                       checking={checkingApi === api.api_code}
                       onSync={handleSyncData}
                       syncing={syncingApi === api.api_code}
+                      onEditKey={setEditingKeyApi}
                     />
                   ))}
                 </div>
@@ -849,6 +1094,15 @@ export default function ApiIntegrations() {
           type={statsModalType}
           apis={apis}
           onClose={() => setStatsModalType(null)}
+        />
+      )}
+      
+      {/* API密钥编辑模态框 */}
+      {editingKeyApi && (
+        <ApiKeyEditModal
+          api={editingKeyApi}
+          onClose={() => setEditingKeyApi(null)}
+          onSave={handleSaveApiKey}
         />
       )}
     </div>

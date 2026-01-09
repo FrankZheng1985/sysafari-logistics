@@ -93,6 +93,7 @@ import ApprovalList from './pages/ApprovalList'
 import Auth0UserBinding from './pages/Auth0UserBinding'
 import ApiIntegrations from './pages/ApiIntegrations'
 import SubscriptionManagement from './pages/SubscriptionManagement'
+import InvoiceTemplateEditor from './pages/InvoiceTemplateEditor'
 // 消息/审批/预警模块
 import MessageCenter from './pages/MessageCenter'
 import ApprovalWorkbench from './pages/ApprovalWorkbench'
@@ -219,6 +220,7 @@ function AppRoutes() {
         <Route path="/system/data-import" element={<DataImportCenter />} />
         <Route path="/system/api-integrations" element={<ApiIntegrations />} />
         <Route path="/system/subscriptions" element={<SubscriptionManagement />} />
+        <Route path="/system/invoice-templates" element={<InvoiceTemplateEditor />} />
         {/* 供应商管理模块 */}
         <Route path="/suppliers" element={<SupplierDashboard />} />
         <Route path="/suppliers/list" element={<SupplierManage />} />

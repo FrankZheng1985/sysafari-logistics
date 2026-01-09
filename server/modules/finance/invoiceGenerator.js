@@ -6,7 +6,7 @@
 
 import puppeteer from 'puppeteer'
 import ExcelJS from 'exceljs'
-import { generateInvoiceHTML, COMPANY_INFO, getLogoBase64, getStampBase64 } from './invoiceTemplate.js'
+import { generateInvoiceHTML, COMPANY_INFO, getLogoBase64, getStampBase64, getInvoiceTemplateFromDB, getInvoiceTemplateById, convertTemplateToCompanyInfo } from './invoiceTemplate.js'
 import { getDatabase } from '../../config/database.js'
 import * as cosStorage from './cosStorage.js'
 import { generateId } from '../../utils/id.js'
@@ -975,6 +975,24 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }
   }
 
+  // 从数据库获取发票模板配置
+  const invoiceLang = invoice.language || 'en'
+  // 获取发票模版配置
+  let companyInfo = null
+  try {
+    // 优先使用发票指定的模版ID，否则使用默认模版
+    const templateId = invoice.template_id || null
+    const dbTemplate = await getInvoiceTemplateById(templateId, invoiceLang)
+    if (dbTemplate) {
+      companyInfo = convertTemplateToCompanyInfo(dbTemplate)
+      console.log(`[regenerateInvoiceFiles] 从数据库获取到发票模板配置，模版ID: ${templateId || '默认'}, 语言: ${invoiceLang}`)
+    } else {
+      console.log(`[regenerateInvoiceFiles] 数据库没有模板配置，使用默认配置`)
+    }
+  } catch (templateError) {
+    console.error('[regenerateInvoiceFiles] 获取发票模板失败:', templateError.message)
+  }
+
   // 生成PDF
   // subtotal = 优惠前金额（明细合计），total = 优惠后金额（最终金额）
   const pdfData = {
@@ -992,7 +1010,8 @@ export async function regenerateInvoiceFiles(invoiceId) {
     total: parseFloat(invoice.total_amount) || 0,
     currency: invoice.currency || 'EUR',
     exchangeRate: parseFloat(invoice.exchange_rate) || 1,
-    language: invoice.language || 'en'  // 发票语言
+    language: invoiceLang,  // 发票语言
+    companyInfo  // 从数据库获取的公司信息模板
   }
 
   console.log(`[regenerateInvoiceFiles] 准备生成 PDF, items 数量: ${items.length}, 客户: ${pdfData.customer.name}, 语言: ${pdfData.language}`)
@@ -1407,6 +1426,22 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       }
     }
 
+    // 从数据库获取发票模板配置
+    // 优先使用发票指定的模版ID，否则使用默认模版
+    let companyInfo = null
+    try {
+      const templateId = invoice.template_id || null
+      const dbTemplate = await getInvoiceTemplateById(templateId, invoiceLanguage)
+      if (dbTemplate) {
+        companyInfo = convertTemplateToCompanyInfo(dbTemplate)
+        console.log(`[发票文件生成] 从数据库获取到发票模板配置，模版ID: ${templateId || '默认'}, 语言: ${invoiceLanguage}`)
+      } else {
+        console.log(`[发票文件生成] 数据库没有模板配置，使用默认配置`)
+      }
+    } catch (templateError) {
+      console.error('[发票文件生成] 获取发票模板失败:', templateError.message)
+    }
+
     // 准备PDF数据
     const pdfData = {
       invoiceNumber: invoice.invoice_number,
@@ -1423,7 +1458,8 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
       total: parseFloat(invoice.total_amount) || 0,
       currency: invoice.currency || 'EUR',
       exchangeRate: parseFloat(invoice.exchange_rate) || 1,
-      language: invoiceLanguage
+      language: invoiceLanguage,
+      companyInfo  // 从数据库获取的公司信息模板
     }
 
     // 生成PDF
