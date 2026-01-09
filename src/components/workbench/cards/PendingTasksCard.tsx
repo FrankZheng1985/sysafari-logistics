@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock, FileText, Receipt, Truck, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Clock, FileText, Receipt, Truck, AlertTriangle, ChevronRight, LucideIcon } from 'lucide-react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { getApiBaseUrl } from '../../../utils/api'
 
 const API_BASE = getApiBaseUrl()
+
+// 图标名称到组件的映射
+const ICON_MAP: Record<string, LucideIcon> = {
+  Clock,
+  FileText,
+  Receipt,
+  Truck,
+  AlertTriangle,
+}
 
 interface PendingTask {
   id: string
@@ -13,7 +22,7 @@ interface PendingTask {
   count: number
   priority: 'high' | 'medium' | 'low'
   link: string
-  icon: typeof Clock
+  icon: string  // API 返回的是字符串名称
 }
 
 interface PendingTasksCardProps {
@@ -60,42 +69,42 @@ export default function PendingTasksCard({ refreshKey }: PendingTasksCardProps) 
   const getDefaultTasks = (role: string): PendingTask[] => {
     const tasksByRole: Record<string, PendingTask[]> = {
       operator: [
-        { id: '1', type: 'order', title: '待更新状态订单', count: 5, priority: 'high', link: '/bookings/bill', icon: FileText },
-        { id: '2', type: 'fee', title: '待录入费用', count: 3, priority: 'medium', link: '/finance/fees', icon: Receipt },
-        { id: '3', type: 'tms', title: '运输异常跟进', count: 2, priority: 'high', link: '/tms/exceptions', icon: Truck },
+        { id: '1', type: 'order', title: '待更新状态订单', count: 5, priority: 'high', link: '/bookings/bill', icon: 'FileText' },
+        { id: '2', type: 'fee', title: '待录入费用', count: 3, priority: 'medium', link: '/finance/fees', icon: 'Receipt' },
+        { id: '3', type: 'tms', title: '运输异常跟进', count: 2, priority: 'high', link: '/tms/exceptions', icon: 'Truck' },
       ],
       doc_clerk: [
-        { id: '1', type: 'order', title: '待更新状态订单', count: 8, priority: 'high', link: '/bookings/bill', icon: FileText },
-        { id: '2', type: 'tms', title: '待派送订单', count: 12, priority: 'medium', link: '/cmr-manage', icon: Truck },
-        { id: '3', type: 'inspection', title: '待查验订单', count: 3, priority: 'high', link: '/inspection/pending', icon: AlertTriangle },
+        { id: '1', type: 'order', title: '待更新状态订单', count: 8, priority: 'high', link: '/bookings/bill', icon: 'FileText' },
+        { id: '2', type: 'tms', title: '待派送订单', count: 12, priority: 'medium', link: '/cmr-manage', icon: 'Truck' },
+        { id: '3', type: 'inspection', title: '待查验订单', count: 3, priority: 'high', link: '/inspection/pending', icon: 'AlertTriangle' },
       ],
       doc_officer: [
-        { id: '1', type: 'document', title: '待匹配单证', count: 15, priority: 'high', link: '/documents/matching', icon: FileText },
-        { id: '2', type: 'document', title: '待补充数据', count: 8, priority: 'medium', link: '/documents/supplement', icon: FileText },
-        { id: '3', type: 'document', title: '待计算税费', count: 5, priority: 'medium', link: '/documents/tax-calc', icon: Receipt },
+        { id: '1', type: 'document', title: '待匹配单证', count: 15, priority: 'high', link: '/documents/matching', icon: 'FileText' },
+        { id: '2', type: 'document', title: '待补充数据', count: 8, priority: 'medium', link: '/documents/supplement', icon: 'FileText' },
+        { id: '3', type: 'document', title: '待计算税费', count: 5, priority: 'medium', link: '/documents/tax-calc', icon: 'Receipt' },
       ],
       finance_assistant: [
-        { id: '1', type: 'invoice', title: '待开发票', count: 10, priority: 'high', link: '/finance/invoices', icon: Receipt },
-        { id: '2', type: 'payment', title: '待核销收款', count: 6, priority: 'medium', link: '/finance/payments', icon: Receipt },
-        { id: '3', type: 'fee', title: '待出账单', count: 4, priority: 'medium', link: '/finance/fees', icon: FileText },
+        { id: '1', type: 'invoice', title: '待开发票', count: 10, priority: 'high', link: '/finance/invoices', icon: 'Receipt' },
+        { id: '2', type: 'payment', title: '待核销收款', count: 6, priority: 'medium', link: '/finance/payments', icon: 'Receipt' },
+        { id: '3', type: 'fee', title: '待出账单', count: 4, priority: 'medium', link: '/finance/fees', icon: 'FileText' },
       ],
       finance_director: [
-        { id: '1', type: 'approval', title: '待审批付款', count: 5, priority: 'high', link: '/system/approvals', icon: Clock },
-        { id: '2', type: 'approval', title: '费用审批', count: 3, priority: 'medium', link: '/finance/fee-approval', icon: Receipt },
-        { id: '3', type: 'alert', title: '逾期预警', count: 8, priority: 'high', link: '/finance/invoices?status=overdue', icon: AlertTriangle },
+        { id: '1', type: 'approval', title: '待审批付款', count: 5, priority: 'high', link: '/system/approvals', icon: 'Clock' },
+        { id: '2', type: 'approval', title: '费用审批', count: 3, priority: 'medium', link: '/finance/fee-approval', icon: 'Receipt' },
+        { id: '3', type: 'alert', title: '逾期预警', count: 8, priority: 'high', link: '/finance/invoices?status=overdue', icon: 'AlertTriangle' },
       ],
       manager: [
-        { id: '1', type: 'approval', title: '待审批事项', count: 7, priority: 'high', link: '/system/approvals', icon: Clock },
-        { id: '2', type: 'exception', title: '异常订单跟进', count: 4, priority: 'high', link: '/tms/exceptions', icon: AlertTriangle },
-        { id: '3', type: 'task', title: '团队任务分配', count: 6, priority: 'medium', link: '/crm/customers', icon: FileText },
+        { id: '1', type: 'approval', title: '待审批事项', count: 7, priority: 'high', link: '/system/approvals', icon: 'Clock' },
+        { id: '2', type: 'exception', title: '异常订单跟进', count: 4, priority: 'high', link: '/tms/exceptions', icon: 'AlertTriangle' },
+        { id: '3', type: 'task', title: '团队任务分配', count: 6, priority: 'medium', link: '/crm/customers', icon: 'FileText' },
       ],
       boss: [
-        { id: '1', type: 'approval', title: '重要审批', count: 3, priority: 'high', link: '/system/approvals', icon: Clock },
-        { id: '2', type: 'alert', title: '重要预警', count: 2, priority: 'high', link: '/system/alerts', icon: AlertTriangle },
+        { id: '1', type: 'approval', title: '重要审批', count: 3, priority: 'high', link: '/system/approvals', icon: 'Clock' },
+        { id: '2', type: 'alert', title: '重要预警', count: 2, priority: 'high', link: '/system/alerts', icon: 'AlertTriangle' },
       ],
       admin: [
-        { id: '1', type: 'approval', title: '待审批事项', count: 5, priority: 'high', link: '/system/approvals', icon: Clock },
-        { id: '2', type: 'system', title: '系统告警', count: 1, priority: 'medium', link: '/system/alerts', icon: AlertTriangle },
+        { id: '1', type: 'approval', title: '待审批事项', count: 5, priority: 'high', link: '/system/approvals', icon: 'Clock' },
+        { id: '2', type: 'system', title: '系统告警', count: 1, priority: 'medium', link: '/system/alerts', icon: 'AlertTriangle' },
       ],
     }
     return tasksByRole[role] || tasksByRole.operator
@@ -131,7 +140,8 @@ export default function PendingTasksCard({ refreshKey }: PendingTasksCardProps) 
       {/* 任务列表 */}
       <div className="space-y-2">
         {tasks.map(task => {
-          const IconComponent = task.icon
+          // 根据图标名称获取对应的组件，默认使用 Clock
+          const IconComponent = ICON_MAP[task.icon] || Clock
           return (
             <div
               key={task.id}
