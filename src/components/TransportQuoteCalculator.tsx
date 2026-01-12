@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import HereMapDisplay from './HereMapDisplay'
 
-const API_BASE = import.meta.env.VITE_API_BASE || ''
+const API_BASE = getApiBaseUrl()
 
 /**
  * 销售价取整函数
