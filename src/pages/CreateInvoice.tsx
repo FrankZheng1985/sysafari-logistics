@@ -1037,9 +1037,10 @@ export default function CreateInvoice() {
       const data = await response.json()
       
       if (data.errCode === 200) {
+        const items = data.data.items || []
         setExcelParseResult({
           success: true,
-          data: data.data.items || [],
+          data: items,
           matchedCount: data.data.matchedCount,
           unmatchedCount: data.data.unmatchedCount,
           extractedDueDate: data.data.extractedDueDate
@@ -1060,6 +1061,37 @@ export default function CreateInvoice() {
         
         if (Object.keys(updates).length > 0) {
           setFormData(prev => ({ ...prev, ...updates }))
+        }
+        
+        // 🔥 自动提取匹配的集装箱号
+        const matchedContainerNumbers = [...new Set(
+          items
+            .filter((item: any) => item.billId || item.matchedBillNumber) // 只取匹配到订单的
+            .map((item: any) => item.containerNumber)
+            .filter(Boolean)
+        )]
+        
+        if (matchedContainerNumbers.length > 0 && selectedSupplier) {
+          // 1. 填入搜索框进行筛选
+          setFeeSearchKeyword(matchedContainerNumbers.join(' '))
+          console.log('[Excel解析] 自动筛选匹配的集装箱:', matchedContainerNumbers.join(' '))
+          
+          // 2. 🔥 重新获取供应商费用列表（确保获取最新数据）
+          try {
+            const feesResponse = await fetch(`${API_BASE}/api/fees?supplierName=${encodeURIComponent(selectedSupplier.supplierName)}&feeType=payable&excludeInvoiced=true&pageSize=500`)
+            const feesData = await feesResponse.json()
+            if (feesData.errCode === 200 && feesData.data?.list) {
+              // 3. 自动勾选匹配的费用（按集装箱号匹配）
+              const feesWithSelection = feesData.data.list.map((fee: any) => ({
+                ...fee,
+                selected: matchedContainerNumbers.includes(fee.containerNumber || '')
+              }))
+              setSupplierFees(feesWithSelection)
+              console.log('[Excel解析] 刷新费用列表，找到', feesWithSelection.filter((f: any) => f.selected).length, '条匹配费用')
+            }
+          } catch (err) {
+            console.error('[Excel解析] 刷新费用列表失败:', err)
+          }
         }
         
         setShowExcelPreview(true)
@@ -1135,33 +1167,22 @@ export default function CreateInvoice() {
     const linkedBillIds = [...new Set(selectedItems.filter(i => i.billId).map(i => i.billId))]
     const linkedBillNumbers = [...new Set(selectedItems.filter(i => i.matchedBillNumber).map(i => i.matchedBillNumber))]
     
-    // 提取Excel中的集装箱号和费用名称，用于匹配右侧供应商费用
+    // 提取Excel中的集装箱号，用于匹配右侧供应商费用
     const excelContainerNumbers = [...new Set(selectedItems.map(i => i.containerNumber).filter(Boolean))]
-    const excelFeeNames = selectedItems.map(i => ({
-      containerNumber: i.containerNumber,
-      feeName: i.feeName?.toLowerCase().trim()
-    }))
     
-    // 自动勾选右侧匹配的供应商费用
+    // 自动勾选右侧匹配的供应商费用（按集装箱号匹配）
     if (supplierFees.length > 0 && excelContainerNumbers.length > 0) {
       setSupplierFees(prev => prev.map(fee => {
-        // 检查是否匹配：集装箱号匹配 + 费用名称包含关系
+        // 只按集装箱号匹配（不要求费用名称完全匹配）
         const containerMatch = excelContainerNumbers.includes(fee.containerNumber || '')
-        if (!containerMatch) return fee
-        
-        // 费用名称匹配（模糊匹配：Excel费用名包含供应商费用名，或反过来）
-        const feeNameLower = fee.feeName?.toLowerCase().trim() || ''
-        const nameMatch = excelFeeNames.some(ef => 
-          ef.containerNumber === fee.containerNumber && 
-          (feeNameLower.includes(ef.feeName || '') || (ef.feeName || '').includes(feeNameLower))
-        )
-        
-        // 如果集装箱号匹配且费用名匹配，则选中
-        if (nameMatch) {
+        if (containerMatch) {
           return { ...fee, selected: true }
         }
         return fee
       }))
+      
+      // 自动填入搜索框，筛选显示匹配的费用
+      setFeeSearchKeyword(excelContainerNumbers.join(' '))
     }
     
     setFormData(prev => {
