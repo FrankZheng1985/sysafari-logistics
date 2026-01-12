@@ -1445,60 +1445,13 @@ export default function BillDetails() {
               </div>
             </div>
 
-            {/* 操作按钮 */}
-            <div className="flex items-center gap-2">
-              {/* 已完成提示 */}
-              {isCompleted && !hasFinancePermission && (
-                <div className="flex items-center gap-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>提单已完成，仅财务可录入费用</span>
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  setEditingFee(null)
-                  setCurrentFeeType('receivable')
-                  setShowFeeModal(true)
-                }}
-                disabled={!canEdit}
-                className={`px-4 py-2 text-sm rounded-lg flex items-center gap-2 ${
-                  canEdit 
-                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-                title={!canEdit ? completedMessage : ''}
-              >
-                {canEdit ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                录入应收
-              </button>
-              <button
-                onClick={() => {
-                  setEditingFee(null)
-                  setCurrentFeeType('payable')
-                  setShowFeeModal(true)
-                }}
-                disabled={!canEdit}
-                className={`px-4 py-2 text-sm rounded-lg flex items-center gap-2 ${
-                  canEdit 
-                    ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
-                title={!canEdit ? completedMessage : ''}
-              >
-                {canEdit ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                录入应付
-              </button>
-              {/* 追加费用按钮 - 提单已完成时显示 */}
-              {isCompleted && (
-                <button
-                  onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}`)}
-                  className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  追加费用
-                </button>
-              )}
-            </div>
+            {/* 已完成提示 */}
+            {isCompleted && !hasFinancePermission && (
+              <div className="flex items-center gap-1 px-3 py-2 text-xs bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
+                <Lock className="w-3.5 h-3.5" />
+                <span>提单已完成，仅财务可录入费用</span>
+              </div>
+            )}
 
             {/* 费用列表 - 分应收应付显示 */}
             <div className="grid grid-cols-2 gap-4">
@@ -1510,9 +1463,28 @@ export default function BillDetails() {
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700">应收</span>
                       <span className="text-sm font-medium text-gray-900">收款明细</span>
                     </div>
-                    <span className="text-sm font-bold text-blue-600">
-                      €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-blue-600">
+                        €{billFees.filter(f => f.feeType === 'receivable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setEditingFee(null)
+                          setCurrentFeeType('receivable')
+                          setShowFeeModal(true)
+                        }}
+                        disabled={!canEdit}
+                        className={`px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 ${
+                          canEdit 
+                            ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                        title={!canEdit ? completedMessage : ''}
+                      >
+                        {canEdit ? <Plus className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                        录入应收
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="max-h-[400px] overflow-y-auto">
@@ -1595,9 +1567,38 @@ export default function BillDetails() {
                       <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-700">应付</span>
                       <span className="text-sm font-medium text-gray-900">付款明细</span>
                     </div>
-                    <span className="text-sm font-bold text-orange-600">
-                      €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-orange-600">
+                        €{billFees.filter(f => f.feeType === 'payable').reduce((sum, fee) => sum + (parseFloat(fee.amount) || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setEditingFee(null)
+                          setCurrentFeeType('payable')
+                          setShowFeeModal(true)
+                        }}
+                        disabled={!canEdit}
+                        className={`px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 ${
+                          canEdit 
+                            ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                        title={!canEdit ? completedMessage : ''}
+                      >
+                        {canEdit ? <Plus className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                        录入应付
+                      </button>
+                      {/* 追加费用按钮 - 提单已完成时显示 */}
+                      {isCompleted && (
+                        <button
+                          onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}`)}
+                          className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          追加费用
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="max-h-[400px] overflow-y-auto">
