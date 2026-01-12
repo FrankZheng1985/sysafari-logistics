@@ -188,7 +188,11 @@ export default function BPView() {
       render: (_value, record: BillOfLading) => (
         <div className="flex items-center gap-1.5">
           <Ship className="w-3 h-3 text-gray-400" />
-          <span className="text-xs">{record.vessel}</span>
+          <span className="text-xs">
+            {record.vessel 
+              ? (record.voyage ? `${record.vessel} ${record.voyage}` : record.vessel)
+              : '-'}
+          </span>
         </div>
       ),
     },

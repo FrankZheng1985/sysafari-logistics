@@ -933,7 +933,11 @@ export default function BillDetails() {
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">船名航次:</span>
-                  <span className="ml-2 font-medium text-xs">{billDetail.vessel || '-'}</span>
+                  <span className="ml-2 font-medium text-xs">
+                    {billDetail.vessel 
+                      ? (billDetail.voyage ? `${billDetail.vessel} ${billDetail.voyage}` : billDetail.vessel)
+                      : '-'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">柜型:</span>

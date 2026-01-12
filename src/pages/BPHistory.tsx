@@ -191,7 +191,11 @@ export default function BPHistory() {
       render: (_value, record: CompletedBillOfLading) => (
         <div className="flex items-center gap-1.5">
           <Ship className="w-3 h-3 text-gray-400" />
-          <span className="text-xs">{record.vessel}</span>
+          <span className="text-xs">
+            {record.vessel 
+              ? (record.voyage ? `${record.vessel} ${record.voyage}` : record.vessel)
+              : '-'}
+          </span>
         </div>
       ),
     },

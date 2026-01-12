@@ -634,7 +634,11 @@ export default function OrderBills() {
       sorter: true,
       filterable: true,
       render: (_value, record: BillOfLading) => (
-        <span className={textPrimary}>{record.vessel || '-'}</span>
+        <span className={textPrimary}>
+          {record.vessel 
+            ? (record.voyage ? `${record.vessel} ${record.voyage}` : record.vessel)
+            : '-'}
+        </span>
       ),
     },
     {
