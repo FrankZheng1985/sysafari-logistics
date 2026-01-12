@@ -82,7 +82,9 @@ deploy_env() {
     
     echo -e "${YELLOW}[1/4] 设置环境变量...${NC}"
     export VITE_API_BASE_URL="${api}"
+    export VITE_HERE_API_KEY="_ZjsHxPL5v1O8POvC-oFEPFhzO2-9vm_chgGxSED8w0"
     echo -e "${GREEN}✓ API 地址: ${VITE_API_BASE_URL}${NC}"
+    echo -e "${GREEN}✓ HERE API Key 已配置${NC}"
     
     echo -e "${YELLOW}[2/4] 构建前端项目...${NC}"
     npm run build
