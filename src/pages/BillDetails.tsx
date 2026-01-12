@@ -1484,6 +1484,16 @@ export default function BillDetails() {
                         {canEdit ? <Plus className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                         录入应收
                       </button>
+                      {/* 追加应收按钮 - 提单已完成时显示 */}
+                      {isCompleted && (
+                        <button
+                          onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}&feeType=receivable`)}
+                          className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          追加应收
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1588,14 +1598,14 @@ export default function BillDetails() {
                         {canEdit ? <Plus className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                         录入应付
                       </button>
-                      {/* 追加费用按钮 - 提单已完成时显示 */}
+                      {/* 追加应付按钮 - 提单已完成时显示 */}
                       {isCompleted && (
                         <button
-                          onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}`)}
+                          onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}&feeType=payable`)}
                           className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-1.5"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          追加费用
+                          追加应付
                         </button>
                       )}
                     </div>
@@ -2375,13 +2385,22 @@ export default function BillDetails() {
                   </div>
                   {/* 追加费用按钮 - 提单已完成时显示 */}
                   {isCompleted && (
-                    <button
-                      onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}`)}
-                      className="w-full mt-2 px-3 py-2 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      追加费用
-                    </button>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}&feeType=receivable`)}
+                        className="flex-1 px-3 py-2 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        追加应收
+                      </button>
+                      <button
+                        onClick={() => navigate(`/supplement-fee?billId=${billDetail.id}&feeType=payable`)}
+                        className="flex-1 px-3 py-2 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        追加应付
+                      </button>
+                    </div>
                   )}
                 </div>
                 
