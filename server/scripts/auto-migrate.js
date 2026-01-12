@@ -2569,6 +2569,56 @@ export async function runMigrations() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_supervisor ON inquiry_tasks(supervisor_id)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_status ON inquiry_tasks(status)`)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_inquiry_tasks_due_at ON inquiry_tasks(due_at)`)
+    
+    // 创建卡车类型配置表（运输报价计算依赖）
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS truck_types (
+        id SERIAL PRIMARY KEY,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        name_en TEXT,
+        category TEXT NOT NULL,
+        description TEXT,
+        max_weight NUMERIC NOT NULL,
+        max_volume NUMERIC,
+        length NUMERIC NOT NULL,
+        width NUMERIC NOT NULL,
+        height NUMERIC NOT NULL,
+        axle_count INTEGER DEFAULT 2,
+        emission_class TEXT DEFAULT 'EURO6',
+        base_rate_per_km NUMERIC NOT NULL,
+        min_charge NUMERIC DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_truck_types_category ON truck_types(category)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_truck_types_active ON truck_types(is_active)`)
+    
+    // 插入默认卡车类型数据
+    const truckTypesExist = await client.query(`SELECT COUNT(*) as count FROM truck_types`)
+    if (parseInt(truckTypesExist.rows[0].count) === 0) {
+      await client.query(`
+        INSERT INTO truck_types (code, name, name_en, category, description, max_weight, max_volume, length, width, height, axle_count, emission_class, base_rate_per_km, min_charge, sort_order)
+        VALUES 
+          ('VAN_35', '小型厢式车', 'Small Van (3.5t)', 'van', '适合小批量城市配送', 1500, 12, 3.5, 1.8, 1.8, 2, 'EURO6', 1.20, 80, 1),
+          ('VAN_75', '中型厢式车', 'Medium Van (7.5t)', 'van', '适合中等货量配送', 3500, 25, 5.5, 2.2, 2.2, 2, 'EURO6', 1.50, 120, 2),
+          ('BOX_12', '大型箱式车', 'Box Truck (12t)', 'box', '适合大批量配送', 6000, 45, 7.5, 2.4, 2.5, 2, 'EURO6', 1.80, 180, 3),
+          ('BOX_18', '重型箱式车', 'Heavy Box Truck (18t)', 'box', '适合重货运输', 10000, 55, 9.0, 2.45, 2.6, 3, 'EURO6', 2.00, 220, 4),
+          ('SEMI_40', '标准半挂车', 'Standard Semi-trailer (40t)', 'semi', '欧洲标准长途运输', 24000, 80, 13.6, 2.45, 2.7, 5, 'EURO6', 2.20, 350, 5),
+          ('SEMI_MEGA', '超大容量挂车', 'Mega Trailer', 'semi', '超大容积，适合轻泡货', 24000, 100, 13.6, 2.45, 3.0, 5, 'EURO6', 2.40, 400, 6),
+          ('REEFER_75', '小型冷藏车', 'Small Reefer (7.5t)', 'reefer', '适合小批量冷链配送', 3000, 20, 5.5, 2.2, 2.2, 2, 'EURO6', 2.00, 150, 7),
+          ('REEFER_40', '大型冷藏车', 'Large Reefer (40t)', 'reefer', '长途冷链运输', 22000, 70, 13.6, 2.45, 2.6, 5, 'EURO6', 3.00, 500, 8),
+          ('FLATBED_40', '标准平板车', 'Flatbed Trailer', 'flatbed', '适合机械设备、钢材等', 26000, NULL, 13.6, 2.45, 0, 5, 'EURO6', 2.00, 350, 9),
+          ('FLATBED_LOW', '低平板车', 'Low-loader Trailer', 'flatbed', '适合超高设备运输', 30000, NULL, 13.6, 2.55, 0, 6, 'EURO6', 2.50, 450, 10),
+          ('HAZMAT_40', '危险品运输车', 'Hazmat Truck (40t)', 'hazmat', 'ADR认证，适合化学品等', 22000, 75, 13.6, 2.45, 2.7, 5, 'EURO6', 3.50, 600, 11),
+          ('HAZMAT_TANK', '危险品罐车', 'Hazmat Tank Truck', 'hazmat', '液体危险品运输', 25000, 30000, 13.6, 2.5, 3.0, 5, 'EURO6', 4.00, 700, 12)
+      `)
+      console.log('    + 默认卡车类型数据已初始化')
+    }
+    
     console.log('  ✅ 询价工作流模块表就绪')
 
     // ==================== 税费计算精准改进 - 贸易条件字段 ====================
