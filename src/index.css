@@ -124,6 +124,22 @@ textarea::placeholder {
 }
 
 /* ============================================
+   隐藏数字输入框的 Spinner 按钮（上下箭头）
+   ============================================ */
+/* Chrome, Safari, Edge, Opera */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ============================================
    日期/时间输入框日历图标样式
    ============================================ */
 input[type="date"]::-webkit-calendar-picker-indicator,
