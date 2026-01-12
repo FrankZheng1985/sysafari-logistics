@@ -657,7 +657,11 @@ export default function BillDetails() {
 
   // 复制费用到另一种类型
   const handleCopyFee = async (fee: any, targetType: 'receivable' | 'payable') => {
-    const newDescription = `复制自${fee.feeType === 'receivable' ? '应收' : '应付'}费用: ${fee.feeName}`
+    // 保留原备注，并在末尾添加来源标记
+    const sourceLabel = `[复制自${fee.feeType === 'receivable' ? '应收' : '应付'}费用]`
+    const newDescription = fee.description 
+      ? `${fee.description} ${sourceLabel}` 
+      : sourceLabel
     try {
       const API_BASE = getApiBaseUrl()
       const response = await fetch(`${API_BASE}/api/fees`, {
