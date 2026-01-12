@@ -29,6 +29,7 @@ import {
 import PageHeader from '../components/PageHeader'
 import { useAuth } from '../contexts/AuthContext'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
+import { invalidateNotificationCache } from '../utils/apiCache'
 
 const API_BASE = getApiBaseUrl()
 
@@ -253,6 +254,10 @@ export default function AlertDashboard() {
         setShowHandleModal(false)
         fetchAlerts()
         fetchStats()
+        // 清除通知缓存，让铃铛数量立即更新
+        if (user?.id) {
+          invalidateNotificationCache(user.id, user.role)
+        }
       } else {
         alert(data.msg || '操作失败')
       }
