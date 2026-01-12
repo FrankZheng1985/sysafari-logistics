@@ -4,6 +4,7 @@
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
+import * as messageModel from '../message/model.js'
 
 // ==================== 常量定义 ====================
 
@@ -438,9 +439,9 @@ export async function updateInvoicePaidAmount(id) {
   
   const paidAmount = result.total_paid
   
-  // 获取发票信息（包含 bill_id 和 invoice_number）
+  // 获取发票信息（包含 bill_id、invoice_number 和 customer_id）
   const invoice = await db.prepare(`
-    SELECT total_amount, bill_id, invoice_number, invoice_type 
+    SELECT total_amount, bill_id, invoice_number, invoice_type, customer_id 
     FROM invoices WHERE id = ?
   `).get(id)
   if (!invoice) return false
@@ -460,25 +461,42 @@ export async function updateInvoicePaidAmount(id) {
     WHERE id = ?
   `).run(paidAmount, status, id)
   
-  // 如果发票变为已付清状态，且是销售发票，自动更新关联订单的主发票号
-  if (status === 'paid' && invoice.invoice_type === 'sales' && invoice.bill_id && invoice.invoice_number) {
-    // 处理多订单关联的情况（bill_id 可能是逗号分隔的多个ID）
-    const billIds = invoice.bill_id.split(',').map(id => id.trim()).filter(id => id)
-    
-    for (const billId of billIds) {
-      // 只有当订单还没有主发票号时才更新
-      const bill = await db.prepare(`
-        SELECT primary_invoice_number FROM bills_of_lading WHERE id = ?
-      `).get(billId)
+  // 如果发票变为已付清状态，且是销售发票
+  if (status === 'paid' && invoice.invoice_type === 'sales') {
+    // 1. 自动更新关联订单的主发票号
+    if (invoice.bill_id && invoice.invoice_number) {
+      // 处理多订单关联的情况（bill_id 可能是逗号分隔的多个ID）
+      const billIds = invoice.bill_id.split(',').map(id => id.trim()).filter(id => id)
       
-      if (bill && !bill.primary_invoice_number) {
-        await db.prepare(`
-          UPDATE bills_of_lading 
-          SET primary_invoice_number = ?, payment_confirmed = 1, updated_at = NOW()
-          WHERE id = ?
-        `).run(invoice.invoice_number, billId)
-        console.log(`[Auto] 订单 ${billId} 主发票号已自动设置为 ${invoice.invoice_number}`)
+      for (const billId of billIds) {
+        // 只有当订单还没有主发票号时才更新
+        const bill = await db.prepare(`
+          SELECT primary_invoice_number FROM bills_of_lading WHERE id = ?
+        `).get(billId)
+        
+        if (bill && !bill.primary_invoice_number) {
+          await db.prepare(`
+            UPDATE bills_of_lading 
+            SET primary_invoice_number = ?, payment_confirmed = 1, updated_at = NOW()
+            WHERE id = ?
+          `).run(invoice.invoice_number, billId)
+          console.log(`[Auto] 订单 ${billId} 主发票号已自动设置为 ${invoice.invoice_number}`)
+        }
       }
+    }
+    
+    // 2. 自动消除该发票相关的预警（账期即将到期、应收逾期）
+    await messageModel.autoResolveAlerts(
+      'invoice', 
+      id, 
+      ['payment_term_due', 'payment_due'], 
+      `发票已付清，系统自动处理`
+    )
+    console.log(`[预警自动消除] 发票 ${invoice.invoice_number} 已付清，相关预警已自动处理`)
+    
+    // 3. 检查并消除客户相关预警（多笔逾期、信用超限）
+    if (invoice.customer_id) {
+      await messageModel.checkAndResolveCustomerAlerts(invoice.customer_id)
     }
   }
   

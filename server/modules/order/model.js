@@ -4,6 +4,7 @@
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
+import * as messageModel from '../message/model.js'
 
 // ==================== 提单相关 ====================
 
@@ -435,6 +436,18 @@ export async function updateBill(id, data) {
   values.push(id)
   
   const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  
+  // 如果订单状态变为"已完成"或"已归档"，自动消除订单超期预警
+  if (result.changes > 0 && data.status && ['已完成', '已归档'].includes(data.status)) {
+    await messageModel.autoResolveAlerts(
+      'order', 
+      id, 
+      'order_overdue', 
+      `订单状态变更为${data.status}，系统自动处理`
+    )
+    console.log(`[预警自动消除] 订单 ${id} 状态变更为${data.status}，订单超期预警已自动处理`)
+  }
+  
   return result.changes > 0
 }
 
@@ -667,17 +680,33 @@ export async function updateBillDelivery(id, deliveryData) {
     }
   })
   
+  // 标记订单是否完成（用于后续自动消除预警）
+  let orderCompleted = false
+  
   // 如果设置了卸货完成时间，自动将订单状态标记为"已完成"
   if (deliveryData.cmrUnloadingCompleteTime) {
     fields.push("status = ?")
     values.push('已完成')
     fields.push("complete_time = ?")
     values.push(new Date().toISOString())
+    orderCompleted = true
   }
   
   values.push(id)
   
   const result = await db.prepare(`UPDATE bills_of_lading SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  
+  // 如果订单完成，自动消除相关预警（订单超期预警）
+  if (orderCompleted && result.changes > 0) {
+    await messageModel.autoResolveAlerts(
+      'order', 
+      id, 
+      'order_overdue', 
+      '订单已完成，系统自动处理'
+    )
+    console.log(`[预警自动消除] 订单 ${id} 已完成，订单超期预警已自动处理`)
+  }
+  
   return result.changes > 0
 }
 

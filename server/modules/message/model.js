@@ -762,6 +762,99 @@ export async function ignoreAlert(id, data) {
 }
 
 /**
+ * 自动消除预警（当业务问题解决时自动标记为已处理）
+ * @param {string} relatedType - 关联类型 (invoice, order, customer)
+ * @param {string|number} relatedId - 关联ID
+ * @param {string|string[]} alertTypes - 预警类型（可选，不传则消除该关联的所有预警）
+ * @param {string} remark - 自动处理备注
+ */
+export async function autoResolveAlerts(relatedType, relatedId, alertTypes = null, remark = '业务问题已解决，系统自动处理') {
+  const db = getDatabase()
+  
+  try {
+    let query = `
+      UPDATE alert_logs 
+      SET status = 'handled', 
+          handled_by = '系统自动处理', 
+          handled_at = NOW(), 
+          handle_remark = $1
+      WHERE related_type = $2 
+        AND related_id = $3 
+        AND status = 'active'
+    `
+    const params = [remark, relatedType, relatedId]
+    
+    // 如果指定了预警类型，添加类型过滤
+    if (alertTypes) {
+      const types = Array.isArray(alertTypes) ? alertTypes : [alertTypes]
+      if (types.length > 0) {
+        const placeholders = types.map((_, i) => `$${i + 4}`).join(', ')
+        query += ` AND alert_type IN (${placeholders})`
+        params.push(...types)
+      }
+    }
+    
+    const result = await db.prepare(query).run(...params)
+    
+    if (result.changes > 0) {
+      console.log(`[预警自动消除] 已自动处理 ${result.changes} 条预警 (${relatedType}: ${relatedId})`)
+    }
+    
+    return { success: true, count: result.changes }
+  } catch (error) {
+    console.error('[预警自动消除] 失败:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 检查并消除客户相关预警
+ * 当客户的逾期发票数量减少或信用恢复时调用
+ * @param {string|number} customerId - 客户ID
+ */
+export async function checkAndResolveCustomerAlerts(customerId) {
+  const db = getDatabase()
+  
+  try {
+    // 检查客户是否还有逾期发票
+    const overdueCount = await db.prepare(`
+      SELECT COUNT(*) as count 
+      FROM invoices 
+      WHERE customer_id = $1 
+        AND status = 'pending' 
+        AND invoice_type = 'sales'
+        AND due_date < CURRENT_DATE
+    `).get(customerId)
+    
+    // 如果逾期发票少于2笔，消除"客户多笔逾期"预警
+    if (overdueCount.count < 2) {
+      await autoResolveAlerts('customer', customerId, 'customer_overdue', '客户逾期发票已减少，系统自动处理')
+    }
+    
+    // 检查客户是否还超信用额度
+    const creditCheck = await db.prepare(`
+      SELECT 
+        c.credit_limit,
+        COALESCE(SUM(i.total_amount - i.paid_amount), 0) as outstanding
+      FROM customers c
+      LEFT JOIN invoices i ON i.customer_id = c.id AND i.status = 'pending' AND i.invoice_type = 'sales'
+      WHERE c.id = $1
+      GROUP BY c.id, c.credit_limit
+    `).get(customerId)
+    
+    // 如果欠款未超限，消除"信用超限"预警
+    if (creditCheck && (creditCheck.credit_limit <= 0 || creditCheck.outstanding <= creditCheck.credit_limit)) {
+      await autoResolveAlerts('customer', customerId, 'credit_limit', '客户信用已恢复，系统自动处理')
+    }
+    
+    return { success: true }
+  } catch (error) {
+    console.error('[客户预警检查] 失败:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * 获取预警统计
  * @param {string} userRole - 用户角色（用于权限过滤）
  */
