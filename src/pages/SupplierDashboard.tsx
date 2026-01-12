@@ -100,6 +100,7 @@ export default function SupplierDashboard() {
   const tabs = [
     { label: '供应商概览', path: '/suppliers' },
     { label: '供应商列表', path: '/suppliers/list' },
+    { label: '报价比对分析', path: '/suppliers/compare' },
   ]
 
   useEffect(() => {

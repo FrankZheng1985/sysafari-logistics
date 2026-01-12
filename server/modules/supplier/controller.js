@@ -585,6 +585,135 @@ export async function matchTransportPrices(req, res) {
   }
 }
 
+/**
+ * 供应商运输报价比对分析
+ * 将供应商报价与市场参考价格（基于距离计算）进行对比
+ */
+export async function compareTransportPrices(req, res) {
+  try {
+    const { origin, destination, truckType, distance } = req.body
+    
+    if (!origin || !destination) {
+      return badRequest(res, '请提供起点和终点')
+    }
+    
+    // 1. 获取匹配的供应商报价
+    const supplierPrices = await model.matchTransportPrices({
+      origin,
+      destination
+    })
+    
+    // 2. 计算市场参考价格（基于距离和标准费率）
+    // 欧洲卡车运输市场参考费率（€/km）
+    const marketRates = {
+      sprinter: { ratePerKm: 1.0, minCharge: 80 },
+      small_van: { ratePerKm: 1.2, minCharge: 100 },
+      medium_van: { ratePerKm: 1.5, minCharge: 150 },
+      large_van: { ratePerKm: 1.8, minCharge: 200 },
+      curtainsider: { ratePerKm: 2.2, minCharge: 350 },
+      semi_40: { ratePerKm: 2.5, minCharge: 400 },
+      mega_trailer: { ratePerKm: 2.7, minCharge: 450 },
+      double_deck: { ratePerKm: 3.0, minCharge: 500 },
+      reefer_small: { ratePerKm: 2.0, minCharge: 200 },
+      reefer_large: { ratePerKm: 3.5, minCharge: 600 },
+      flatbed: { ratePerKm: 2.8, minCharge: 450 },
+      lowloader: { ratePerKm: 4.0, minCharge: 800 },
+      hazmat: { ratePerKm: 4.5, minCharge: 700 },
+      tanker: { ratePerKm: 3.8, minCharge: 600 }
+    }
+    
+    // 默认使用标准半挂费率
+    const selectedRate = marketRates[truckType] || marketRates.semi_40
+    
+    // 如果提供了距离，计算市场参考价
+    let marketRefPrice = null
+    if (distance && distance > 0) {
+      const baseCost = distance * selectedRate.ratePerKm
+      marketRefPrice = Math.max(baseCost, selectedRate.minCharge)
+      // 加上估算的通行费（约 0.15€/km）和燃油附加费（5%）
+      const tolls = distance * 0.15
+      const fuelSurcharge = baseCost * 0.05
+      marketRefPrice = Math.round((marketRefPrice + tolls + fuelSurcharge) * 100) / 100
+    }
+    
+    // 3. 对供应商报价进行分析
+    const analysis = supplierPrices.map(price => {
+      let advantage = 'unknown'
+      let diffPercent = null
+      let diffAmount = null
+      
+      if (marketRefPrice && price.price) {
+        diffAmount = price.price - marketRefPrice
+        diffPercent = ((price.price - marketRefPrice) / marketRefPrice * 100).toFixed(1)
+        
+        if (price.price < marketRefPrice * 0.9) {
+          advantage = 'strong' // 价格优势明显（低于市场价10%以上）
+        } else if (price.price < marketRefPrice) {
+          advantage = 'slight' // 略有优势
+        } else if (price.price > marketRefPrice * 1.1) {
+          advantage = 'weak' // 价格劣势明显（高于市场价10%以上）
+        } else {
+          advantage = 'normal' // 价格合理
+        }
+      }
+      
+      return {
+        ...price,
+        marketRefPrice,
+        diffAmount: diffAmount ? Math.round(diffAmount * 100) / 100 : null,
+        diffPercent: diffPercent ? parseFloat(diffPercent) : null,
+        advantage,
+        ratePerKm: distance > 0 ? Math.round(price.price / distance * 100) / 100 : null
+      }
+    })
+    
+    // 4. 按优势排序（优势大的在前）
+    analysis.sort((a, b) => {
+      const order = { strong: 1, slight: 2, normal: 3, weak: 4, unknown: 5 }
+      return (order[a.advantage] || 5) - (order[b.advantage] || 5)
+    })
+    
+    // 5. 统计分析结果
+    const summary = {
+      totalSuppliers: analysis.length,
+      strongAdvantage: analysis.filter(a => a.advantage === 'strong').length,
+      slightAdvantage: analysis.filter(a => a.advantage === 'slight').length,
+      normalPrice: analysis.filter(a => a.advantage === 'normal').length,
+      weakAdvantage: analysis.filter(a => a.advantage === 'weak').length,
+      marketRefPrice,
+      marketRatePerKm: selectedRate.ratePerKm,
+      distance,
+      bestPrice: analysis.length > 0 ? Math.min(...analysis.filter(a => a.price).map(a => a.price)) : null,
+      avgPrice: analysis.length > 0 ? Math.round(analysis.filter(a => a.price).reduce((sum, a) => sum + a.price, 0) / analysis.filter(a => a.price).length * 100) / 100 : null
+    }
+    
+    return success(res, { analysis, summary }, `已完成 ${analysis.length} 家供应商的价格比对分析`)
+  } catch (error) {
+    console.error('供应商价格比对分析失败:', error)
+    return serverError(res, '供应商价格比对分析失败')
+  }
+}
+
+/**
+ * 获取运输报价概览
+ * 按路线分组显示供应商报价情况
+ */
+export async function getTransportPriceOverview(req, res) {
+  try {
+    const { supplierId, feeCategory } = req.query
+    
+    const overview = await model.getTransportPriceOverview({
+      supplierId,
+      feeCategory: feeCategory || 'transport'
+    })
+    
+    return success(res, overview, `获取到 ${overview.length} 条路线的报价概览`)
+  } catch (error) {
+    console.error('获取运输报价概览失败:', error)
+    return serverError(res, '获取运输报价概览失败')
+  }
+}
+
 export default {
   getSupplierList,
   getSupplierStats,
@@ -608,6 +737,8 @@ export default {
   parseImportFile,
   confirmImport,
   getImportRecords,
-  // 运输报价匹配
-  matchTransportPrices
+  // 运输报价匹配与分析
+  matchTransportPrices,
+  compareTransportPrices,
+  getTransportPriceOverview
 }

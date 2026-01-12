@@ -57,6 +57,7 @@ const containerTypes = [
 ]
 
 // 卡车类型选项 - 按欧洲物流行业标准分类
+// 注意：价格信息已隐藏，实际价格从供应商报价系统获取
 const truckTypeCategories = [
   {
     category: 'distribution',
@@ -64,10 +65,10 @@ const truckTypeCategories = [
     labelEn: 'Distribution Vehicles',
     description: '适合城市配送和区域运输',
     types: [
-      { value: 'sprinter', label: 'Sprinter', labelEn: 'Mercedes Sprinter (3.5t)', spec: '载重: 1.2t | 容积: 14m³', price: '€1.0/km' },
-      { value: 'small_van', label: '小型厢式车', labelEn: 'Small Van (7.5t)', spec: '载重: 3t | 容积: 20m³', price: '€1.2/km' },
-      { value: 'medium_van', label: '中型厢式车', labelEn: 'Medium Van (12t)', spec: '载重: 6t | 容积: 40m³', price: '€1.5/km' },
-      { value: 'large_van', label: '大型厢式车', labelEn: 'Large Van (18t)', spec: '载重: 10t | 容积: 55m³', price: '€1.8/km' }
+      { value: 'sprinter', label: 'Sprinter', labelEn: 'Mercedes Sprinter (3.5t)', spec: '载重: 1.2t | 容积: 14m³' },
+      { value: 'small_van', label: '小型厢式车', labelEn: 'Small Van (7.5t)', spec: '载重: 3t | 容积: 20m³' },
+      { value: 'medium_van', label: '中型厢式车', labelEn: 'Medium Van (12t)', spec: '载重: 6t | 容积: 40m³' },
+      { value: 'large_van', label: '大型厢式车', labelEn: 'Large Van (18t)', spec: '载重: 10t | 容积: 55m³' }
     ]
   },
   {
@@ -76,10 +77,10 @@ const truckTypeCategories = [
     labelEn: 'Semi-trailers',
     description: '适合长途干线运输',
     types: [
-      { value: 'curtainsider', label: '篷布半挂车', labelEn: 'Curtainsider (Tautliner)', spec: '载重: 24t | 容积: 86m³', price: '€2.2/km' },
-      { value: 'semi_40', label: '40尺标准半挂', labelEn: 'Standard Semi (40ft)', spec: '载重: 25t | 容积: 76m³', price: '€2.5/km' },
-      { value: 'mega_trailer', label: 'Mega半挂车', labelEn: 'Mega Trailer (45ft)', spec: '载重: 24t | 容积: 100m³', price: '€2.7/km' },
-      { value: 'double_deck', label: '双层半挂车', labelEn: 'Double Deck Trailer', spec: '载重: 22t | 容积: 120m³', price: '€3.0/km' }
+      { value: 'curtainsider', label: '篷布半挂车', labelEn: 'Curtainsider (Tautliner)', spec: '载重: 24t | 容积: 86m³' },
+      { value: 'semi_40', label: '40尺标准半挂', labelEn: 'Standard Semi (40ft)', spec: '载重: 25t | 容积: 76m³' },
+      { value: 'mega_trailer', label: 'Mega半挂车', labelEn: 'Mega Trailer (45ft)', spec: '载重: 24t | 容积: 100m³' },
+      { value: 'double_deck', label: '双层半挂车', labelEn: 'Double Deck Trailer', spec: '载重: 22t | 容积: 120m³' }
     ]
   },
   {
@@ -88,12 +89,12 @@ const truckTypeCategories = [
     labelEn: 'Special Vehicles',
     description: '特殊货物运输需求',
     types: [
-      { value: 'reefer_small', label: '冷藏车(小)', labelEn: 'Reefer Van (7.5t)', spec: '载重: 2.5t | 温控: -25°C~+25°C', price: '€2.0/km' },
-      { value: 'reefer_large', label: '冷藏半挂', labelEn: 'Reefer Semi-trailer', spec: '载重: 22t | 温控: -25°C~+25°C', price: '€3.5/km' },
-      { value: 'flatbed', label: '平板车', labelEn: 'Flatbed Trailer', spec: '载重: 28t | 长度: 13.6m', price: '€2.8/km' },
-      { value: 'lowloader', label: '低板车', labelEn: 'Low Loader', spec: '载重: 40t | 适合超高货物', price: '€4.0/km' },
-      { value: 'hazmat', label: 'ADR危险品车', labelEn: 'ADR Hazmat Truck', spec: '载重: 22t | ADR认证', price: '€4.5/km' },
-      { value: 'tanker', label: '罐车', labelEn: 'Tanker Truck', spec: '容量: 30,000L | 液体运输', price: '€3.8/km' }
+      { value: 'reefer_small', label: '冷藏车(小)', labelEn: 'Reefer Van (7.5t)', spec: '载重: 2.5t | 温控: -25°C~+25°C' },
+      { value: 'reefer_large', label: '冷藏半挂', labelEn: 'Reefer Semi-trailer', spec: '载重: 22t | 温控: -25°C~+25°C' },
+      { value: 'flatbed', label: '平板车', labelEn: 'Flatbed Trailer', spec: '载重: 28t | 长度: 13.6m' },
+      { value: 'lowloader', label: '低板车', labelEn: 'Low Loader', spec: '载重: 40t | 适合超高货物' },
+      { value: 'hazmat', label: 'ADR危险品车', labelEn: 'ADR Hazmat Truck', spec: '载重: 22t | ADR认证' },
+      { value: 'tanker', label: '罐车', labelEn: 'Tanker Truck', spec: '容量: 30,000L | 液体运输' }
     ]
   }
 ]
@@ -870,7 +871,6 @@ export default function TransportInquiryForm({
                             </div>
                             <p className="text-[10px] text-gray-500 ml-4">{type.labelEn}</p>
                             <p className="text-[10px] text-gray-400 ml-4">{type.spec}</p>
-                            <p className="text-[10px] text-blue-600 ml-4 font-medium">{type.price}</p>
                           </button>
                         ))}
                       </div>

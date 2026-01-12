@@ -983,6 +983,87 @@ export async function matchTransportPrices(params = {}) {
   }
 }
 
+/**
+ * 获取运输报价概览（按路线分组）
+ */
+export async function getTransportPriceOverview(params = {}) {
+  const db = getDatabase()
+  const { supplierId, feeCategory } = params
+  
+  try {
+    let sql = `
+      SELECT 
+        spi.route_from,
+        spi.route_to,
+        spi.fee_category,
+        COUNT(DISTINCT spi.supplier_id) as supplier_count,
+        MIN(spi.price) as min_price,
+        MAX(spi.price) as max_price,
+        AVG(spi.price) as avg_price,
+        json_agg(
+          json_build_object(
+            'id', spi.id,
+            'supplierId', spi.supplier_id,
+            'supplierName', spi.supplier_name,
+            'feeName', spi.fee_name,
+            'price', spi.price,
+            'currency', spi.currency,
+            'unit', spi.unit,
+            'effectiveDate', spi.effective_date,
+            'expiryDate', spi.expiry_date
+          )
+        ) as suppliers
+      FROM supplier_price_items spi
+      LEFT JOIN suppliers s ON spi.supplier_id = s.id
+      WHERE spi.fee_category IN ('transport', 'clearing_dispatching', 'express', 'freight')
+        AND (spi.status IS NULL OR spi.status != 'disabled')
+        AND (s.status IS NULL OR s.status = 'active')
+        AND (spi.effective_date IS NULL OR spi.effective_date <= CURRENT_DATE)
+        AND (spi.expiry_date IS NULL OR spi.expiry_date >= CURRENT_DATE)
+    `
+    
+    const queryParams = []
+    let paramIndex = 1
+    
+    if (supplierId) {
+      sql += ` AND spi.supplier_id = $${paramIndex}`
+      queryParams.push(supplierId)
+      paramIndex++
+    }
+    
+    if (feeCategory) {
+      sql += ` AND spi.fee_category = $${paramIndex}`
+      queryParams.push(feeCategory)
+      paramIndex++
+    }
+    
+    sql += `
+      GROUP BY spi.route_from, spi.route_to, spi.fee_category
+      ORDER BY supplier_count DESC, spi.route_from, spi.route_to
+      LIMIT 100
+    `
+    
+    const result = await db.pool.query(sql, queryParams)
+    
+    return result.rows.map(row => ({
+      routeFrom: row.route_from || '任意',
+      routeTo: row.route_to || '任意',
+      feeCategory: row.fee_category,
+      supplierCount: parseInt(row.supplier_count),
+      minPrice: parseFloat(row.min_price) || 0,
+      maxPrice: parseFloat(row.max_price) || 0,
+      avgPrice: Math.round(parseFloat(row.avg_price) * 100) / 100 || 0,
+      priceSpread: row.max_price && row.min_price 
+        ? Math.round((parseFloat(row.max_price) - parseFloat(row.min_price)) * 100) / 100 
+        : 0,
+      suppliers: row.suppliers || []
+    }))
+  } catch (error) {
+    console.error('获取运输报价概览失败:', error.message)
+    return []
+  }
+}
+
 export default {
   // 常量
   SUPPLIER_TYPES,
@@ -1021,6 +1102,7 @@ export default {
   createImportRecord,
   getImportRecords,
   
-  // 运输报价匹配
-  matchTransportPrices
+  // 运输报价匹配与分析
+  matchTransportPrices,
+  getTransportPriceOverview
 }

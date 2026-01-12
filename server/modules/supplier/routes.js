@@ -42,6 +42,14 @@ router.post('/translate/fee', controller.translateFee)
 // 匹配运输报价（根据起点终点查询供应商报价）
 router.get('/prices/match', controller.matchTransportPrices)
 
+// ==================== 供应商价格比对分析 ====================
+
+// 获取运输报价供应商比对分析（对比供应商报价与市场参考价）
+router.post('/prices/compare', controller.compareTransportPrices)
+
+// 获取供应商运输报价概览（按路线分组）
+router.get('/prices/transport-overview', controller.getTransportPriceOverview)
+
 // ==================== 供应商管理路由 ====================
 
 // 获取供应商统计

@@ -106,6 +106,7 @@ import SupplierDashboard from './pages/SupplierDashboard'
 import SupplierManage from './pages/SupplierManage'
 import SupplierPrices from './pages/SupplierPrices'
 import SupplierPriceImport from './pages/SupplierPriceImport'
+import SupplierPriceCompare from './pages/SupplierPriceCompare'
 // 单证管理模块
 import DocumentDashboard from './pages/DocumentDashboard'
 import DocumentImport from './pages/DocumentImport'
@@ -227,6 +228,7 @@ function AppRoutes() {
         <Route path="/suppliers/manage" element={<SupplierManage />} />
         <Route path="/suppliers/prices" element={<SupplierPrices />} />
         <Route path="/suppliers/import" element={<SupplierPriceImport />} />
+        <Route path="/suppliers/compare" element={<SupplierPriceCompare />} />
         <Route path="/tools" element={<ToolsDashboard />} />
         <Route path="/tools/inquiry" element={<Inquiry />} />
         <Route path="/tools/shared-tax" element={<SharedTaxManage />} />
