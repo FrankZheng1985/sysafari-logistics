@@ -1502,133 +1502,135 @@ export default function FeeModal({
                 </div>
               ) : (
                 /* 手动录入或未选择费用时，显示分类选择（按父子级分组，支持多选） */
-                <div className="max-h-[280px] overflow-y-auto space-y-3">
+                <div className="max-h-[320px] overflow-y-auto">
                   {feeCategoryGroups.length > 0 ? (
-                    feeCategoryGroups.map(group => {
-                      const isExpanded = expandedCategoryGroups.has(group.parent.value)
-                      const selectedCount = group.children.filter(cat => 
-                        selectedManualCategories.some(s => s.value === cat.value)
-                      ).length
-                      
-                      return (
-                        <div key={group.parent.value} className="space-y-1.5">
-                          {/* 一级分类标题 - 可点击展开/收起 */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const groupValue = group.parent.value
-                              
-                              setExpandedCategoryGroups(prev => {
-                                const newSet = new Set(prev)
-                                if (newSet.has(groupValue)) {
-                                  // 收起时清除该分组的定时器
-                                  const existingTimer = categoryCollapseTimersRef.current.get(groupValue)
-                                  if (existingTimer) {
-                                    clearTimeout(existingTimer)
-                                    categoryCollapseTimersRef.current.delete(groupValue)
+                    <div className="grid grid-cols-3 gap-2">
+                      {feeCategoryGroups.map(group => {
+                        const isExpanded = expandedCategoryGroups.has(group.parent.value)
+                        const selectedCount = group.children.filter(cat => 
+                          selectedManualCategories.some(s => s.value === cat.value)
+                        ).length
+                        
+                        return (
+                          <div key={group.parent.value} className={`${isExpanded ? 'col-span-3' : ''}`}>
+                            {/* 一级分类标题 - 可点击展开/收起 */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const groupValue = group.parent.value
+                                
+                                setExpandedCategoryGroups(prev => {
+                                  const newSet = new Set(prev)
+                                  if (newSet.has(groupValue)) {
+                                    // 收起时清除该分组的定时器
+                                    const existingTimer = categoryCollapseTimersRef.current.get(groupValue)
+                                    if (existingTimer) {
+                                      clearTimeout(existingTimer)
+                                      categoryCollapseTimersRef.current.delete(groupValue)
+                                    }
+                                    newSet.delete(groupValue)
+                                  } else {
+                                    // 展开时设置15秒后自动收起
+                                    newSet.add(groupValue)
+                                    
+                                    // 清除之前的定时器（如果有）
+                                    const existingTimer = categoryCollapseTimersRef.current.get(groupValue)
+                                    if (existingTimer) {
+                                      clearTimeout(existingTimer)
+                                    }
+                                    
+                                    // 设置新的15秒定时器
+                                    const timer = setTimeout(() => {
+                                      setExpandedCategoryGroups(prevSet => {
+                                        const updatedSet = new Set(prevSet)
+                                        updatedSet.delete(groupValue)
+                                        return updatedSet
+                                      })
+                                      categoryCollapseTimersRef.current.delete(groupValue)
+                                    }, 15000) // 15秒后自动收起
+                                    
+                                    categoryCollapseTimersRef.current.set(groupValue, timer)
                                   }
-                                  newSet.delete(groupValue)
-                                } else {
-                                  // 展开时设置15秒后自动收起
-                                  newSet.add(groupValue)
-                                  
-                                  // 清除之前的定时器（如果有）
-                                  const existingTimer = categoryCollapseTimersRef.current.get(groupValue)
-                                  if (existingTimer) {
-                                    clearTimeout(existingTimer)
-                                  }
-                                  
-                                  // 设置新的15秒定时器
-                                  const timer = setTimeout(() => {
-                                    setExpandedCategoryGroups(prevSet => {
-                                      const updatedSet = new Set(prevSet)
-                                      updatedSet.delete(groupValue)
-                                      return updatedSet
-                                    })
-                                    categoryCollapseTimersRef.current.delete(groupValue)
-                                  }, 15000) // 15秒后自动收起
-                                  
-                                  categoryCollapseTimersRef.current.set(groupValue, timer)
-                                }
-                                return newSet
-                              })
-                            }}
-                            className={`w-full flex items-center justify-between gap-1.5 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors ${group.parent.color}`}
-                          >
-                            <div className="flex items-center gap-1.5">
-                              {isExpanded ? (
-                                <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                              ) : (
-                                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                                  return newSet
+                                })
+                              }}
+                              className={`w-full flex items-center justify-between gap-1 px-2 py-1.5 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors ${group.parent.color}`}
+                            >
+                              <div className="flex items-center gap-1">
+                                {isExpanded ? (
+                                  <ChevronDown className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                )}
+                                {(() => {
+                                  const Icon = group.parent.icon
+                                  return <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                                })()}
+                                <span className="truncate">{group.parent.label}</span>
+                                <span className="text-gray-400 font-normal flex-shrink-0">({group.children.length})</span>
+                              </div>
+                              {selectedCount > 0 && (
+                                <span className="px-1 py-0.5 bg-primary-100 text-primary-700 rounded text-[10px] flex-shrink-0">
+                                  已选 {selectedCount}
+                                </span>
                               )}
-                              {(() => {
-                                const Icon = group.parent.icon
-                                return <Icon className="w-3.5 h-3.5" />
-                              })()}
-                              <span>{group.parent.label}</span>
-                              <span className="text-gray-400 font-normal">({group.children.length})</span>
-                            </div>
-                            {selectedCount > 0 && (
-                              <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded text-xs">
-                                已选 {selectedCount}
-                              </span>
-                            )}
-                          </button>
-                          {/* 二级分类按钮 - 支持多选，展开时显示 */}
-                          {isExpanded && (
-                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pl-6">
-                              {group.children.map(cat => {
-                                const canSelect = isManualEntry
-                                const isSelected = selectedManualCategories.some(s => s.value === cat.value)
-                                return (
-                                  <button
-                                    key={cat.value}
-                                    type="button"
-                                    onClick={() => {
-                                      if (canSelect) {
-                                        if (isSelected) {
-                                          // 取消选择
-                                          setSelectedManualCategories(prev => prev.filter(s => s.value !== cat.value))
-                                        } else {
-                                          // 添加选择，费用名称自动填写为分类名称
-                                          setSelectedManualCategories(prev => [...prev, {
-                                            id: `manual-${cat.value}-${Date.now()}`,
-                                            value: cat.value,
-                                            label: cat.label,
-                                            feeName: cat.label,  // 自动填写费用名称
-                                            amount: '',
-                                            currency: 'EUR',
-                                            description: ''
-                                          }])
+                            </button>
+                            {/* 二级分类按钮 - 支持多选，展开时显示 */}
+                            {isExpanded && (
+                              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 mt-1.5 pl-4 pb-2 border-b border-gray-100">
+                                {group.children.map(cat => {
+                                  const canSelect = isManualEntry
+                                  const isSelected = selectedManualCategories.some(s => s.value === cat.value)
+                                  return (
+                                    <button
+                                      key={cat.value}
+                                      type="button"
+                                      onClick={() => {
+                                        if (canSelect) {
+                                          if (isSelected) {
+                                            // 取消选择
+                                            setSelectedManualCategories(prev => prev.filter(s => s.value !== cat.value))
+                                          } else {
+                                            // 添加选择，费用名称自动填写为分类名称
+                                            setSelectedManualCategories(prev => [...prev, {
+                                              id: `manual-${cat.value}-${Date.now()}`,
+                                              value: cat.value,
+                                              label: cat.label,
+                                              feeName: cat.label,  // 自动填写费用名称
+                                              amount: '',
+                                              currency: 'EUR',
+                                              description: ''
+                                            }])
+                                          }
+                                          // 同时更新单选状态（兼容）
+                                          setFormData(prev => ({ 
+                                            ...prev, 
+                                            category: cat.value,
+                                            feeName: cat.label  // 自动填写费用名称
+                                          }))
                                         }
-                                        // 同时更新单选状态（兼容）
-                                        setFormData(prev => ({ 
-                                          ...prev, 
-                                          category: cat.value,
-                                          feeName: cat.label  // 自动填写费用名称
-                                        }))
-                                      }
-                                    }}
-                                    disabled={!canSelect}
-                                    className={`flex items-center justify-center px-2 py-1.5 rounded border text-xs transition-all truncate ${
-                                      isSelected
-                                        ? `${cat.bg} ${cat.color} border-current font-medium ring-2 ring-offset-1 ring-current`
-                                        : !canSelect
-                                          ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
-                                          : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                                    }`}
-                                    title={`${cat.label}${isSelected ? ' (已选择)' : ''}`}
-                                  >
-                                    {isSelected && <Check className="w-3 h-3 mr-1 flex-shrink-0" />}
-                                    {cat.label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })
+                                      }}
+                                      disabled={!canSelect}
+                                      className={`flex items-center justify-center px-2 py-1.5 rounded border text-xs transition-all truncate ${
+                                        isSelected
+                                          ? `${cat.bg} ${cat.color} border-current font-medium ring-2 ring-offset-1 ring-current`
+                                          : !canSelect
+                                            ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-not-allowed'
+                                            : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                                      }`}
+                                      title={`${cat.label}${isSelected ? ' (已选择)' : ''}`}
+                                    >
+                                      {isSelected && <Check className="w-3 h-3 mr-1 flex-shrink-0" />}
+                                      {cat.label}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   ) : (
                     /* 兜底：如果没有分组数据，显示平铺列表 */
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
