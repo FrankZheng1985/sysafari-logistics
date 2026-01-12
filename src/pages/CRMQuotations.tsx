@@ -1801,7 +1801,7 @@ export default function CRMQuotations() {
               validityUnit: 'day',
               currency: 'EUR',
               terms: '',
-              notes: `关联询价：${inquiry.inquiryNumber}\n路线：${data.route.origin.address || inquiry.transportData?.origin} → ${data.route.destination.address || inquiry.transportData?.destination}\n距离：${data.route.distance}km | 利润设置：${data.profitSettings.type === 'percent' ? `${data.profitSettings.value}%` : `€${data.profitSettings.value}`}`,
+              notes: `关联询价：${inquiry.inquiryNumber}\n路线：${data.route.origin.address || inquiry.transportData?.origin} → ${data.route.destination.address || inquiry.transportData?.destination}\n距离：${data.route.distance}km`,
               items: data.items.map(item => ({
                 name: item.name,
                 nameEn: item.nameEn,
