@@ -56,19 +56,50 @@ const containerTypes = [
   { value: '45HC', label: '45尺高柜', labelEn: "45' High Cube", dimensions: '尺寸: 13.5×2.35×2.69m' }
 ]
 
-// 卡车类型选项
-const truckTypes = [
-  { value: 'small_van', label: '小型厢式车', labelEn: 'Small Van (3.5t)', spec: '载重: 1.5t | 容积: 12m³', price: '€1.2/km' },
-  { value: 'medium_van', label: '中型厢式车', labelEn: 'Medium Van (7.5t)', spec: '载重: 3.5t | 容积: 25m³', price: '€1.5/km' },
-  { value: 'box_truck', label: '大型箱式车', labelEn: 'Box Truck (12t)', spec: '载重: 6t | 容积: 45m³', price: '€1.8/km' },
-  { value: 'heavy_box', label: '重型箱式车', labelEn: 'Heavy Box Truck (18t)', spec: '载重: 10t | 容积: 55m³', price: '€2/km' },
-  { value: 'reefer_20', label: '20尺冷藏车', labelEn: 'Reefer Truck (20ft)', spec: '载重: 18t | 容积: 33m³', price: '€3/km' },
-  { value: 'hazmat', label: '危险品车', labelEn: 'Hazmat Truck', spec: '载重: 20t | 容积: 50m³', price: '€4/km' },
-  { value: 'semi_45', label: '45尺半挂车', labelEn: 'Semi-trailer (45ft)', spec: '载重: 24t | 容积: 90m³', price: '€2.7/km' },
-  { value: 'semi_40', label: '40尺半挂车', labelEn: 'Semi-trailer (40ft)', spec: '载重: 25t | 容积: 76m³', price: '€2.5/km' },
-  { value: 'reefer_40', label: '40尺冷藏车', labelEn: 'Reefer Truck (40ft)', spec: '载重: 26t | 容积: 67m³', price: '€3.5/km' },
-  { value: 'flatbed_40', label: '40尺平板车', labelEn: 'Flatbed (40ft)', spec: '载重: 30t', price: '€2.8/km' }
+// 卡车类型选项 - 按欧洲物流行业标准分类
+const truckTypeCategories = [
+  {
+    category: 'distribution',
+    label: '厢式配送车',
+    labelEn: 'Distribution Vehicles',
+    description: '适合城市配送和区域运输',
+    types: [
+      { value: 'sprinter', label: 'Sprinter', labelEn: 'Mercedes Sprinter (3.5t)', spec: '载重: 1.2t | 容积: 14m³', price: '€1.0/km' },
+      { value: 'small_van', label: '小型厢式车', labelEn: 'Small Van (7.5t)', spec: '载重: 3t | 容积: 20m³', price: '€1.2/km' },
+      { value: 'medium_van', label: '中型厢式车', labelEn: 'Medium Van (12t)', spec: '载重: 6t | 容积: 40m³', price: '€1.5/km' },
+      { value: 'large_van', label: '大型厢式车', labelEn: 'Large Van (18t)', spec: '载重: 10t | 容积: 55m³', price: '€1.8/km' }
+    ]
+  },
+  {
+    category: 'semi_trailer',
+    label: '半挂车/公路运输',
+    labelEn: 'Semi-trailers',
+    description: '适合长途干线运输',
+    types: [
+      { value: 'curtainsider', label: '篷布半挂车', labelEn: 'Curtainsider (Tautliner)', spec: '载重: 24t | 容积: 86m³', price: '€2.2/km' },
+      { value: 'semi_40', label: '40尺标准半挂', labelEn: 'Standard Semi (40ft)', spec: '载重: 25t | 容积: 76m³', price: '€2.5/km' },
+      { value: 'mega_trailer', label: 'Mega半挂车', labelEn: 'Mega Trailer (45ft)', spec: '载重: 24t | 容积: 100m³', price: '€2.7/km' },
+      { value: 'double_deck', label: '双层半挂车', labelEn: 'Double Deck Trailer', spec: '载重: 22t | 容积: 120m³', price: '€3.0/km' }
+    ]
+  },
+  {
+    category: 'special',
+    label: '特种车辆',
+    labelEn: 'Special Vehicles',
+    description: '特殊货物运输需求',
+    types: [
+      { value: 'reefer_small', label: '冷藏车(小)', labelEn: 'Reefer Van (7.5t)', spec: '载重: 2.5t | 温控: -25°C~+25°C', price: '€2.0/km' },
+      { value: 'reefer_large', label: '冷藏半挂', labelEn: 'Reefer Semi-trailer', spec: '载重: 22t | 温控: -25°C~+25°C', price: '€3.5/km' },
+      { value: 'flatbed', label: '平板车', labelEn: 'Flatbed Trailer', spec: '载重: 28t | 长度: 13.6m', price: '€2.8/km' },
+      { value: 'lowloader', label: '低板车', labelEn: 'Low Loader', spec: '载重: 40t | 适合超高货物', price: '€4.0/km' },
+      { value: 'hazmat', label: 'ADR危险品车', labelEn: 'ADR Hazmat Truck', spec: '载重: 22t | ADR认证', price: '€4.5/km' },
+      { value: 'tanker', label: '罐车', labelEn: 'Tanker Truck', spec: '容量: 30,000L | 液体运输', price: '€3.8/km' }
+    ]
+  }
 ]
+
+// 扁平化的卡车类型列表（用于查找）
+const allTruckTypes = truckTypeCategories.flatMap(cat => cat.types)
 
 export default function TransportInquiryForm({
   visible,
@@ -82,7 +113,7 @@ export default function TransportInquiryForm({
     customerName: '',
     transportMode: 'container' as 'container' | 'truck',
     containerType: '40GP',
-    truckType: 'semi_40', // 默认40尺半挂车
+    truckType: 'curtainsider', // 默认篷布半挂车（欧洲最常用）
     returnLocation: 'same' as 'same' | 'different',
     returnAddress: '',
     origin: '',
@@ -164,7 +195,7 @@ export default function TransportInquiryForm({
         customerName: '',
         transportMode: 'container',
         containerType: '40GP',
-        truckType: 'semi_40',
+        truckType: 'curtainsider',
         returnLocation: 'same',
         returnAddress: '',
         origin: '',
@@ -792,39 +823,58 @@ export default function TransportInquiryForm({
                   卡车类型
                 </h3>
                 
-                <div className="grid grid-cols-2 gap-3">
-                  {truckTypes.map(type => (
-                    <button
-                      key={type.value}
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, truckType: type.value }))}
-                      className={`p-3 border-2 rounded-lg text-left transition-all ${
-                        formData.truckType === type.value
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
-                            formData.truckType === type.value ? 'border-blue-500' : 'border-gray-300'
-                          }`}>
-                            {formData.truckType === type.value && (
-                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                            )}
-                          </div>
-                          <span className="font-medium text-sm">{type.label}</span>
-                        </div>
-                        {formData.truckType === type.value && (
-                          <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                        )}
+                {/* 分类显示卡车类型 */}
+                <div className="space-y-4">
+                  {truckTypeCategories.map(category => (
+                    <div key={category.category}>
+                      {/* 分类标题 */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-1 h-4 rounded ${
+                          category.category === 'distribution' ? 'bg-green-500' :
+                          category.category === 'semi_trailer' ? 'bg-blue-500' : 'bg-amber-500'
+                        }`} />
+                        <span className="text-xs font-semibold text-gray-700">{category.label}</span>
+                        <span className="text-xs text-gray-400">({category.labelEn})</span>
+                        <span className="text-xs text-gray-400 ml-auto">{category.description}</span>
                       </div>
-                      <p className="text-xs text-gray-500 ml-5">{type.labelEn}</p>
-                      <p className="text-xs text-gray-400 ml-5">{type.spec}</p>
-                      <p className="text-xs text-blue-600 ml-5 font-medium">{type.price}</p>
-                    </button>
+                      
+                      {/* 该分类下的卡车类型 */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {category.types.map(type => (
+                          <button
+                            key={type.value}
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, truckType: type.value }))}
+                            className={`p-2.5 border-2 rounded-lg text-left transition-all ${
+                              formData.truckType === type.value
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <div className={`w-2.5 h-2.5 rounded-full border-2 flex items-center justify-center ${
+                                  formData.truckType === type.value ? 'border-blue-500' : 'border-gray-300'
+                                }`}>
+                                  {formData.truckType === type.value && (
+                                    <div className="w-1 h-1 rounded-full bg-blue-500" />
+                                  )}
+                                </div>
+                                <span className="font-medium text-xs">{type.label}</span>
+                              </div>
+                              {formData.truckType === type.value && (
+                                <svg className="w-3.5 h-3.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-gray-500 ml-4">{type.labelEn}</p>
+                            <p className="text-[10px] text-gray-400 ml-4">{type.spec}</p>
+                            <p className="text-[10px] text-blue-600 ml-4 font-medium">{type.price}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
