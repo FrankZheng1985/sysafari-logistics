@@ -263,6 +263,7 @@ export async function getCustomerByCode(code) {
  * 生成客户编码
  * 新格式：简称拼音首字母 + 年月(YYMM) + 4位序号
  * 示例：傲翼 + 2024年1月 -> AY24010001
+ * 序号按年月递增，同一年月的所有客户共享一个序号池
  * @param {string} customerName - 客户名称（用于提取拼音首字母）
  * @returns {Promise<string>} - 生成的客户编码
  */
@@ -273,33 +274,54 @@ export async function generateCustomerCode(customerName) {
   // 获取年月：YYMM格式（2位年+2位月）
   const year = today.getFullYear().toString().slice(-2) // 后2位年份
   const month = (today.getMonth() + 1).toString().padStart(2, '0') // 2位月份
-  const yearMonth = `${year}${month}` // 如: 2401
+  const yearMonth = `${year}${month}` // 如: 2512
   
   // 获取客户名称的拼音首字母
   const initials = getNameInitials(customerName)
   
-  // 前缀：首字母 + 年月
-  const prefix = `${initials}${yearMonth}`
+  // 序列号业务类型：按年月分组，同一年月共享序号池
+  const businessType = `CUSTOMER_${yearMonth}`
   
-  // 查询该前缀下已有的最大序号
-  const result = await db.prepare(`
-    SELECT customer_code FROM customers 
-    WHERE customer_code LIKE ? 
-    ORDER BY customer_code DESC 
-    LIMIT 1
-  `).get(`${prefix}%`)
+  // 先尝试插入新的序列号记录（如果不存在）
+  await db.prepare(`
+    INSERT INTO order_sequences (business_type, current_seq, description, updated_at)
+    VALUES (?, 0, ?, NOW())
+    ON CONFLICT (business_type) DO NOTHING
+  `).run(businessType, `客户编号序列 - ${year}年${month}月`)
   
-  let seq = 1
-  if (result && result.customer_code) {
-    // 提取最后4位序号
-    const lastSeq = parseInt(result.customer_code.slice(-4), 10)
-    if (!isNaN(lastSeq)) {
-      seq = lastSeq + 1
-    }
+  // 检查是否需要同步序列号（防止序列号表落后于实际数据）
+  const maxSeqResult = await db.prepare(`
+    SELECT MAX(CAST(RIGHT(customer_code, 4) AS INTEGER)) as max_seq 
+    FROM customers 
+    WHERE customer_code ~ ('^[A-Z]+' || $1 || '[0-9]{4}$')
+  `).get(yearMonth)
+  const maxSeqInDb = maxSeqResult?.max_seq || 0
+  
+  const currentSeqResult = await db.prepare(`
+    SELECT current_seq FROM order_sequences WHERE business_type = ?
+  `).get(businessType)
+  const currentSeq = currentSeqResult?.current_seq || 0
+  
+  // 如果数据库中的最大序号大于序列号表，需要同步
+  if (maxSeqInDb > currentSeq) {
+    await db.prepare(`
+      UPDATE order_sequences SET current_seq = ?, updated_at = NOW() WHERE business_type = ?
+    `).run(maxSeqInDb, businessType)
+    console.log(`🔄 客户编号序列已同步: ${currentSeq} -> ${maxSeqInDb}`)
   }
   
+  // 原子操作：递增并返回新序号（防止并发导致重复）
+  const result = await db.prepare(`
+    UPDATE order_sequences 
+    SET current_seq = current_seq + 1, updated_at = NOW()
+    WHERE business_type = ?
+    RETURNING current_seq
+  `).get(businessType)
+  
+  const seq = result?.current_seq || 1
+  
   // 返回完整编码：首字母 + 年月 + 4位序号
-  return `${prefix}${seq.toString().padStart(4, '0')}`
+  return `${initials}${yearMonth}${seq.toString().padStart(4, '0')}`
 }
 
 /**
