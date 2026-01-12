@@ -26,6 +26,27 @@ const paymentUpload = multer({
   }
 })
 
+// 配置 multer 用于发票 Excel 上传
+const invoiceExcelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+    ]
+    // 也检查文件扩展名
+    const ext = file.originalname.toLowerCase().split('.').pop()
+    if (allowedTypes.includes(file.mimetype) || ['xlsx', 'xls'].includes(ext)) {
+      cb(null, true)
+    } else {
+      cb(new Error('不支持的文件类型，请上传 Excel 文件 (.xlsx, .xls)'))
+    }
+  }
+})
+
 // ==================== 财务概览 ====================
 
 // 获取财务概览
@@ -65,6 +86,9 @@ router.get('/invoices/files/:filename', controller.downloadLocalInvoiceFile)
 
 // 重新生成发票文件
 router.post('/invoices/:id/regenerate', controller.regenerateInvoice)
+
+// 解析发票 Excel 文件
+router.post('/invoices/parse-excel', invoiceExcelUpload.single('file'), controller.parseInvoiceExcel)
 
 // 创建发票
 router.post('/invoices', controller.createInvoice)

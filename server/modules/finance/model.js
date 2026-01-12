@@ -266,14 +266,17 @@ export async function createInvoice(data) {
     console.error('[createInvoice] 解析 items 失败:', e)
   }
   
+  // 将费用IDs存储为JSON，以便删除发票时能找到关联费用
+  const feeIdsJson = feeIds.length > 0 ? JSON.stringify([...new Set(feeIds)]) : null
+  
   const result = await db.prepare(`
     INSERT INTO invoices (
       id, invoice_number, invoice_type, invoice_date, due_date,
       customer_id, customer_name, bill_id, bill_number, container_numbers,
       subtotal, tax_amount, total_amount, paid_amount,
-      currency, exchange_rate, description, items, notes,
+      currency, exchange_rate, description, items, notes, fee_ids,
       status, language, template_id, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
   `).run(
     id,
     invoiceNumber,
@@ -294,6 +297,7 @@ export async function createInvoice(data) {
     data.description || '',
     items,
     data.notes || '',
+    feeIdsJson,  // 存储关联的费用IDs
     data.status || 'issued',
     data.language || 'en',  // 发票语言，默认英文
     data.templateId || null,  // 发票模版ID
@@ -391,32 +395,76 @@ export async function updateInvoice(id, data) {
 export async function deleteInvoice(id) {
   const db = getDatabase()
   
-  // 1. 获取发票记录，获取关联的费用ID
-  const invoice = await db.prepare('SELECT fee_ids FROM invoices WHERE id = ?').get(id)
+  // 1. 获取发票记录，获取关联的费用ID和发票号
+  const invoice = await db.prepare('SELECT fee_ids, invoice_number, items FROM invoices WHERE id = ?').get(id)
   
-  // 2. 如果有关联费用，重置它们的开票状态
+  let feeIds = []
+  
+  // 2. 尝试从 fee_ids 字段获取费用ID
   if (invoice && invoice.fee_ids) {
     try {
-      const feeIds = JSON.parse(invoice.fee_ids)
-      if (Array.isArray(feeIds) && feeIds.length > 0) {
-        for (const feeId of feeIds) {
-          await db.prepare(`
-            UPDATE fees SET 
-              invoice_status = 'not_invoiced',
-              invoice_number = NULL,
-              invoice_date = NULL,
-              updated_at = NOW()
-            WHERE id = ?
-          `).run(feeId)
-        }
-        console.log(`[deleteInvoice] 已重置 ${feeIds.length} 条费用记录的开票状态`)
+      const parsedFeeIds = JSON.parse(invoice.fee_ids)
+      if (Array.isArray(parsedFeeIds)) {
+        feeIds = parsedFeeIds
       }
     } catch (e) {
       console.error('[deleteInvoice] 解析 fee_ids 失败:', e)
     }
   }
   
-  // 3. 软删除：标记为已删除，记录删除时间
+  // 3. 如果 fee_ids 为空，尝试从 items 字段解析费用ID（兼容旧数据）
+  if (feeIds.length === 0 && invoice && invoice.items) {
+    try {
+      const parsedItems = JSON.parse(invoice.items)
+      if (Array.isArray(parsedItems)) {
+        parsedItems.forEach(item => {
+          if (item.feeId) {
+            const ids = item.feeId.split(',').map(id => id.trim()).filter(id => id)
+            feeIds.push(...ids)
+          }
+        })
+      }
+    } catch (e) {
+      console.error('[deleteInvoice] 解析 items 失败:', e)
+    }
+  }
+  
+  // 4. 如果还是没有找到费用ID，通过发票号查询费用表（最终回退方案）
+  if (feeIds.length === 0 && invoice && invoice.invoice_number) {
+    try {
+      const fees = await db.prepare(`
+        SELECT id FROM fees WHERE invoice_number = ?
+      `).all(invoice.invoice_number)
+      if (fees && fees.length > 0) {
+        feeIds = fees.map(f => f.id)
+        console.log(`[deleteInvoice] 通过发票号 ${invoice.invoice_number} 找到 ${feeIds.length} 条关联费用`)
+      }
+    } catch (e) {
+      console.error('[deleteInvoice] 通过发票号查询费用失败:', e)
+    }
+  }
+  
+  // 5. 重置关联费用的开票状态
+  if (feeIds.length > 0) {
+    const uniqueFeeIds = [...new Set(feeIds)]
+    for (const feeId of uniqueFeeIds) {
+      try {
+        await db.prepare(`
+          UPDATE fees SET 
+            invoice_status = 'not_invoiced',
+            invoice_number = NULL,
+            invoice_date = NULL,
+            updated_at = NOW()
+          WHERE id = ?
+        `).run(feeId)
+      } catch (e) {
+        console.error(`[deleteInvoice] 重置费用 ${feeId} 状态失败:`, e)
+      }
+    }
+    console.log(`[deleteInvoice] 已重置 ${uniqueFeeIds.length} 条费用记录的开票状态，恢复为可选择`)
+  }
+  
+  // 6. 软删除：标记为已删除，记录删除时间
   const result = await db.prepare(`
     UPDATE invoices 
     SET is_deleted = TRUE, deleted_at = NOW(), updated_at = NOW() 

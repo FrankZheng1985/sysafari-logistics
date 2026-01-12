@@ -239,7 +239,7 @@ export default function RegisterPayment() {
       const data = await response.json()
       
       if (data.errCode !== 200) {
-        throw new Error(data.msg || '登记收款失败')
+        throw new Error(data.msg || (invoice.invoiceType === 'sales' ? '登记收款失败' : '登记付款失败'))
       }
 
       // 如果有付款凭证，上传
@@ -249,7 +249,7 @@ export default function RegisterPayment() {
 
       navigate(`/finance/invoices/${invoice.id}`, { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登记收款失败')
+      setError(err instanceof Error ? err.message : (invoice.invoiceType === 'sales' ? '登记收款失败' : '登记付款失败'))
     } finally {
       setSubmitting(false)
     }
@@ -288,9 +288,11 @@ export default function RegisterPayment() {
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">登记收款</h1>
+          <h1 className="text-xl font-semibold text-gray-900">
+            {invoice.invoiceType === 'sales' ? '登记收款' : '登记付款'}
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            为发票 {invoice.invoiceNumber} 登记收款
+            为发票 {invoice.invoiceNumber} {invoice.invoiceType === 'sales' ? '登记收款' : '登记付款'}
           </p>
         </div>
       </div>

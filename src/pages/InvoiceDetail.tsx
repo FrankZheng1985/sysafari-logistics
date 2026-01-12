@@ -389,55 +389,64 @@ export default function InvoiceDetail() {
           {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
             <button
               onClick={() => navigate(`/finance/invoices/${invoice.id}/payment`)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-green-600 hover:bg-green-50 border border-green-200 rounded-lg transition-colors"
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg transition-colors ${
+                invoice.invoiceType === 'sales' 
+                  ? 'text-green-600 hover:bg-green-50 border border-green-200' 
+                  : 'text-orange-600 hover:bg-orange-50 border border-orange-200'
+              }`}
             >
               <CreditCard className="w-4 h-4" />
-              登记收款
+              {invoice.invoiceType === 'sales' ? '登记收款' : '登记付款'}
             </button>
           )}
-          <button
-            onClick={() => {
-              if (invoice.pdfUrl) {
-                // 使用 iframe 直接打印PDF
-                const iframe = document.createElement('iframe')
-                iframe.style.display = 'none'
-                iframe.src = `${API_BASE}${invoice.pdfUrl}`
-                document.body.appendChild(iframe)
-                iframe.onload = () => {
-                  setTimeout(() => {
-                    iframe.contentWindow?.print()
-                  }, 500)
-                }
-              } else {
-                alert('PDF文件未生成，无法打印')
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
-          >
-            <Printer className="w-4 h-4" />
-            打印
-          </button>
-          <button
-            onClick={async () => {
-              if (!confirm('确定要重新生成发票文件吗？')) return
-              try {
-                const res = await fetch(`${API_BASE}/api/invoices/${id}/regenerate`, { method: 'POST' })
-                const data = await res.json()
-                if (data.errCode === 200) {
-                  alert('发票文件已重新生成')
-                  window.location.reload()
-                } else {
-                  alert(data.msg || '重新生成失败')
-                }
-              } catch (error) {
-                alert('重新生成失败')
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            重新生成
-          </button>
+          {/* 销售发票才显示打印和重新生成按钮 */}
+          {invoice.invoiceType === 'sales' && (
+            <>
+              <button
+                onClick={() => {
+                  if (invoice.pdfUrl) {
+                    // 使用 iframe 直接打印PDF
+                    const iframe = document.createElement('iframe')
+                    iframe.style.display = 'none'
+                    iframe.src = `${API_BASE}${invoice.pdfUrl}`
+                    document.body.appendChild(iframe)
+                    iframe.onload = () => {
+                      setTimeout(() => {
+                        iframe.contentWindow?.print()
+                      }, 500)
+                    }
+                  } else {
+                    alert('PDF文件未生成，无法打印')
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                打印
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('确定要重新生成发票文件吗？')) return
+                  try {
+                    const res = await fetch(`${API_BASE}/api/invoices/${id}/regenerate`, { method: 'POST' })
+                    const data = await res.json()
+                    if (data.errCode === 200) {
+                      alert('发票文件已重新生成')
+                      window.location.reload()
+                    } else {
+                      alert(data.msg || '重新生成失败')
+                    }
+                  } catch (error) {
+                    alert('重新生成失败')
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                重新生成
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -788,6 +797,7 @@ export default function InvoiceDetail() {
                         <tr className="border-b border-gray-200 bg-gray-50">
                           <th className="text-center py-2 px-2 font-medium text-gray-600 w-10">#</th>
                           <th className="text-left py-2 px-2 font-medium text-gray-600">描述</th>
+                          <th className="text-left py-2 px-2 font-medium text-gray-600 w-28">集装箱号</th>
                           {hasDetailedData && (
                             <>
                               <th className="text-center py-2 px-2 font-medium text-gray-600 w-16">数量</th>
@@ -825,6 +835,9 @@ export default function InvoiceDetail() {
                                   <td className="py-2 px-2 text-center text-gray-500">{index + 1}</td>
                                   <td className={`py-2 px-2 ${isNegative ? 'text-green-700 font-medium' : 'text-gray-900'}`}>
                                     {item.description}
+                                  </td>
+                                  <td className="py-2 px-2 text-gray-600 text-xs">
+                                    {item.containerNumber || '-'}
                                   </td>
                                   {hasDetailedData && (
                                     <>
@@ -865,6 +878,7 @@ export default function InvoiceDetail() {
                             <tr key={index} className="border-b border-gray-100">
                               <td className="py-2 px-2 text-center text-gray-500">{index + 1}</td>
                               <td className="py-2 px-2 text-gray-900">{item.trim()}</td>
+                              <td className="py-2 px-2 text-gray-500">-</td>
                               {hasDetailedData && (
                                 <>
                                   <td className="py-2 px-2 text-center text-gray-500">-</td>
@@ -882,7 +896,7 @@ export default function InvoiceDetail() {
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-gray-300 bg-gray-50 font-medium">
-                          <td colSpan={hasDetailedData ? 4 : 2} className="py-2 px-2 text-right text-gray-700">合计</td>
+                          <td colSpan={hasDetailedData ? 5 : 3} className="py-2 px-2 text-right text-gray-700">合计</td>
                           <td className="py-2 px-2 text-right text-gray-700">
                             {formatCurrency(totals.amount, invoice.currency)}
                           </td>
@@ -927,32 +941,37 @@ export default function InvoiceDetail() {
                   发布发票
                 </button>
               )}
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleDownloadPDF}
-                disabled={regenerating}
-              >
-                <Download className="w-4 h-4 text-red-500" />
-                {regenerating ? '生成中...' : '下载 PDF'}
-                {!invoice.pdfUrl && <span className="ml-auto text-xs text-amber-500">待生成</span>}
-              </button>
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleDownloadExcel}
-                disabled={regenerating}
-              >
-                <Download className="w-4 h-4 text-green-500" />
-                {regenerating ? '生成中...' : '下载 Excel'}
-                {!invoice.excelUrl && <span className="ml-auto text-xs text-amber-500">待生成</span>}
-              </button>
-              <button
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleRegenerate}
-                disabled={regenerating}
-              >
-                <RefreshCw className={`w-4 h-4 text-blue-500 ${regenerating ? 'animate-spin' : ''}`} />
-                {regenerating ? '重新生成中...' : '重新生成'}
-              </button>
+              {/* 销售发票才显示下载和重新生成按钮，采购发票不生成PDF/Excel */}
+              {invoice.invoiceType === 'sales' && (
+                <>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleDownloadPDF}
+                    disabled={regenerating}
+                  >
+                    <Download className="w-4 h-4 text-red-500" />
+                    {regenerating ? '生成中...' : '下载 PDF'}
+                    {!invoice.pdfUrl && <span className="ml-auto text-xs text-amber-500">待生成</span>}
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleDownloadExcel}
+                    disabled={regenerating}
+                  >
+                    <Download className="w-4 h-4 text-green-500" />
+                    {regenerating ? '生成中...' : '下载 Excel'}
+                    {!invoice.excelUrl && <span className="ml-auto text-xs text-amber-500">待生成</span>}
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                  >
+                    <RefreshCw className={`w-4 h-4 text-blue-500 ${regenerating ? 'animate-spin' : ''}`} />
+                    {regenerating ? '重新生成中...' : '重新生成'}
+                  </button>
+                </>
+              )}
               {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
                 <>
                   <button

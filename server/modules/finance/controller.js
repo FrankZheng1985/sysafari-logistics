@@ -325,16 +325,21 @@ export async function createInvoice(req, res) {
       createdBy: req.user?.id
     })
     
-    // 异步生成PDF和Excel文件（不阻塞响应）
-    invoiceGenerator.generateFilesForNewInvoice(result.id, { items })
-      .then(({ pdfUrl, excelUrl }) => {
-        if (pdfUrl || excelUrl) {
-          console.log(`发票 ${result.invoiceNumber} 文件生成成功: PDF=${!!pdfUrl}, Excel=${!!excelUrl}`)
-        }
-      })
-      .catch(err => {
-        console.error(`发票 ${result.invoiceNumber} 文件生成失败:`, err)
-      })
+    // 采购发票（应付）不需要生成PDF和Excel文件，只有销售发票（应收）才生成
+    if (invoiceType !== 'purchase') {
+      // 异步生成PDF和Excel文件（不阻塞响应）
+      invoiceGenerator.generateFilesForNewInvoice(result.id, { items })
+        .then(({ pdfUrl, excelUrl }) => {
+          if (pdfUrl || excelUrl) {
+            console.log(`发票 ${result.invoiceNumber} 文件生成成功: PDF=${!!pdfUrl}, Excel=${!!excelUrl}`)
+          }
+        })
+        .catch(err => {
+          console.error(`发票 ${result.invoiceNumber} 文件生成失败:`, err)
+        })
+    } else {
+      console.log(`采购发票 ${result.invoiceNumber} 跳过PDF/Excel生成`)
+    }
     
     const newInvoice = await model.getInvoiceById(result.id)
     return success(res, newInvoice, '创建成功')
@@ -401,8 +406,9 @@ export async function deleteInvoice(req, res) {
       return badRequest(res, '已有付款记录的发票不能删除')
     }
     
-    model.deleteInvoice(id)
-    return success(res, null, '删除成功')
+    // 删除发票并重置关联费用的开票状态
+    await model.deleteInvoice(id)
+    return success(res, null, '删除成功，关联费用已恢复为可选状态')
   } catch (error) {
     console.error('删除发票失败:', error)
     return serverError(res, '删除发票失败')
@@ -2153,3 +2159,373 @@ export async function getBillSupplementInvoices(req, res) {
   }
 }
 
+// ==================== 采购发票 Excel 解析 ====================
+
+/**
+ * 解析采购发票 Excel 文件
+ * 支持两种格式：
+ * 1. 纵向格式：费用名称、金额、币种、集装箱号/提单号、备注（每行一个费用）
+ * 2. 横向格式：柜号、清关费、关税、其他费用...（每行一个柜号，费用分布在多列）- ASL等供应商格式
+ */
+export async function parseInvoiceExcel(req, res) {
+  try {
+    if (!req.file) {
+      return badRequest(res, '请上传文件')
+    }
+    
+    const { buffer, originalname } = req.file
+    
+    // 动态导入 xlsx
+    const XLSX = await import('xlsx')
+    
+    // 解析 Excel 文件
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+    
+    if (!workbook.SheetNames.length) {
+      return badRequest(res, 'Excel文件没有工作表')
+    }
+    
+    const items = []
+    
+    // 集装箱号/柜号字段
+    const containerFields = [
+      '柜号', '集装箱号', '箱号', '集装箱', '货柜号', '柜', '箱',
+      'container', 'container_no', 'container number', 'cntr', 'ctnr'
+    ]
+    
+    // 发票号/提单号字段
+    const invoiceFields = [
+      '发票号', '账单号', '提单号', '订单号', '单号', 'bl号', '参考号',
+      'invoice', 'bill', 'bill_number', 'order', 'bl', 'ref'
+    ]
+    
+    // 备注/支付情况字段
+    const remarkFields = [
+      '备注', '说明', '支付情况', '付款情况', '状态', '注释',
+      'remark', 'note', 'comment', 'memo', 'status'
+    ]
+    
+    // 到期日期字段（用于采购发票）
+    const dueDateFields = [
+      '到期日期', '付款日期', '应付日期', '截止日期', '付款期限', '账期',
+      'due_date', 'duedate', 'due date', 'payment_date', 'payment date', 'deadline'
+    ]
+    
+    // 需要跳过的列（非费用列）
+    const skipFields = [
+      '总额', '合计', '总计', 'total', 'sum',
+      '支付凭证', '凭证', '附件', 'attachment',
+      ...containerFields, ...invoiceFields, ...remarkFields, ...dueDateFields
+    ]
+    
+    // 常见费用列名（用于横向格式识别）
+    const feeColumnNames = [
+      '清关费', '关税', '增值税', 'hs费', '额外hs费', '仓储费', '拖车费', '报关费',
+      '代理费', '操作费', '文件费', '换单费', '港杂费', '查验费', '熏蒸费', '滞箱费',
+      '堆存费', '海运费', '内陆运费', '保险费', '杂费', '其他费用', '手续费',
+      'customs', 'duty', 'vat', 'handling', 'storage', 'freight', 'insurance'
+    ]
+    
+    // 解析所有工作表
+    for (const sheetName of workbook.SheetNames) {
+      const worksheet = workbook.Sheets[sheetName]
+      const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+      
+      console.log(`📋 解析工作表: ${sheetName}, 行数: ${rawData.length}`)
+      
+      if (rawData.length < 2) {
+        console.log(`  跳过: 数据行数不足`)
+        continue
+      }
+      
+      // 获取表头
+      const headers = rawData[0].map(h => String(h || '').trim())
+      const headersLower = headers.map(h => h.toLowerCase())
+      
+      console.log(`  表头内容: [${headers.join(', ')}]`)
+      
+      // 查找字段索引的辅助函数
+      const findFieldIndex = (fieldNames) => {
+        for (const name of fieldNames) {
+          const lowerName = name.toLowerCase()
+          let idx = headersLower.findIndex(h => h === lowerName || h.includes(lowerName))
+          if (idx !== -1) return idx
+        }
+        return -1
+      }
+      
+      // 查找关键列
+      const containerIdx = findFieldIndex(containerFields)
+      const invoiceIdx = findFieldIndex(invoiceFields)
+      const remarkIdx = findFieldIndex(remarkFields)
+      const dueDateIdx = findFieldIndex(dueDateFields)
+      
+      console.log(`  关键列索引: 柜号=${containerIdx}, 发票号=${invoiceIdx}, 备注=${remarkIdx}, 到期日期=${dueDateIdx}`)
+      
+      // 检测格式：横向格式（ASL风格）还是纵向格式
+      // 横向格式特征：有柜号列，且有多个看起来像费用名称的列
+      const potentialFeeColumns = []
+      
+      for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+        const header = headers[colIdx]
+        const headerLower = headersLower[colIdx]
+        
+        // 跳过已识别的非费用列
+        const isSkipColumn = skipFields.some(f => headerLower.includes(f.toLowerCase()))
+        if (isSkipColumn) continue
+        
+        // 检查是否是费用列：列名包含费用关键字，或者数据列包含数字
+        const isFeeNameColumn = feeColumnNames.some(f => headerLower.includes(f.toLowerCase()))
+        
+        // 检查该列的数据是否为数字
+        const hasNumericData = rawData.slice(1, Math.min(6, rawData.length)).some(row => {
+          const val = row[colIdx]
+          return typeof val === 'number' || (typeof val === 'string' && /^[\d,.]+$/.test(val.replace(/[€$¥\s]/g, '')))
+        })
+        
+        if (isFeeNameColumn || (hasNumericData && header && colIdx !== containerIdx)) {
+          potentialFeeColumns.push({ idx: colIdx, name: header, isFeeName: isFeeNameColumn })
+        }
+      }
+      
+      console.log(`  潜在费用列: ${potentialFeeColumns.map(c => `${c.name}(${c.idx})`).join(', ')}`)
+      
+      // 判断格式
+      const isHorizontalFormat = containerIdx !== -1 && potentialFeeColumns.length >= 1
+      
+      if (isHorizontalFormat) {
+        // ========== 横向格式解析（ASL风格）==========
+        console.log(`  使用横向格式解析`)
+        
+        // 提取到期日期（整个表格通用）
+        let sheetDueDate = null
+        if (dueDateIdx !== -1 && rawData.length > 1) {
+          const dueDateVal = rawData[1][dueDateIdx]
+          if (dueDateVal) {
+            // 处理Excel日期格式
+            if (dueDateVal instanceof Date) {
+              sheetDueDate = dueDateVal.toISOString().split('T')[0]
+            } else if (typeof dueDateVal === 'number') {
+              // Excel序列日期转换
+              const excelEpoch = new Date(1899, 11, 30)
+              const date = new Date(excelEpoch.getTime() + dueDateVal * 86400000)
+              sheetDueDate = date.toISOString().split('T')[0]
+            } else if (typeof dueDateVal === 'string') {
+              // 尝试解析日期字符串
+              const parsed = new Date(dueDateVal)
+              if (!isNaN(parsed.getTime())) {
+                sheetDueDate = parsed.toISOString().split('T')[0]
+              }
+            }
+          }
+        }
+        
+        for (let i = 1; i < rawData.length; i++) {
+          const row = rawData[i]
+          if (!row || row.every(cell => !cell && cell !== 0)) continue
+          
+          const containerNumber = containerIdx !== -1 ? String(row[containerIdx] || '').trim() : ''
+          const invoiceNumber = invoiceIdx !== -1 ? String(row[invoiceIdx] || '').trim() : ''
+          const remark = remarkIdx !== -1 ? String(row[remarkIdx] || '').trim() : ''
+          
+          // 跳过没有柜号的行
+          if (!containerNumber) continue
+          
+          // 遍历所有费用列，每列生成一个费用项
+          for (const feeCol of potentialFeeColumns) {
+            let amount = row[feeCol.idx]
+            
+            // 处理金额
+            if (typeof amount === 'string') {
+              amount = parseFloat(amount.replace(/[€$¥,\s]/g, '')) || 0
+            }
+            amount = Number(amount) || 0
+            
+            // 跳过金额为0的费用
+            if (amount <= 0) continue
+            
+            items.push({
+              feeName: feeCol.name, // 使用列名作为费用名称
+              amount,
+              currency: 'EUR', // 默认欧元
+              containerNumber,
+              billNumber: invoiceNumber,
+              remark,
+              _sheetName: sheetName,
+              _rowIndex: i + 1,
+              _selected: true,
+              _dueDate: sheetDueDate  // 到期日期
+            })
+          }
+        }
+      } else {
+        // ========== 纵向格式解析（传统格式）==========
+        console.log(`  使用纵向格式解析`)
+        
+        // 费用名称字段映射
+        const feeNameFields = [
+          '费用名称', '费用项', '费用', '项目', '摘要', '服务', '名称',
+          'feename', 'fee', 'description', 'item', 'service', 'charge'
+        ]
+        const amountFields = [
+          '金额', '费用金额', '应付金额', '价格', '总价', '总金额',
+          'amount', 'price', 'total', 'cost', 'value'
+        ]
+        const currencyFields = ['币种', '货币', 'currency', 'ccy']
+        
+        const feeNameIdx = findFieldIndex(feeNameFields)
+        const amountIdx = findFieldIndex(amountFields)
+        const currencyIdx = findFieldIndex(currencyFields)
+        
+        console.log(`  纵向格式索引: 费用名称=${feeNameIdx}, 金额=${amountIdx}, 币种=${currencyIdx}`)
+        
+        // 至少需要金额字段
+        if (amountIdx === -1) {
+          console.log(`  未找到金额字段，跳过此工作表`)
+          continue
+        }
+        
+        for (let i = 1; i < rawData.length; i++) {
+          const row = rawData[i]
+          if (!row || row.every(cell => !cell && cell !== 0)) continue
+          
+          const feeName = feeNameIdx !== -1 ? String(row[feeNameIdx] || '').trim() : ''
+          let amount = row[amountIdx]
+          
+          if (typeof amount === 'string') {
+            amount = parseFloat(amount.replace(/[€$¥,\s]/g, '')) || 0
+          }
+          amount = Number(amount) || 0
+          
+          if (amount <= 0 && !feeName) continue
+          
+          const currency = currencyIdx !== -1 ? String(row[currencyIdx] || 'EUR').trim().toUpperCase() : 'EUR'
+          const containerNumber = containerIdx !== -1 ? String(row[containerIdx] || '').trim() : ''
+          const invoiceNumber = invoiceIdx !== -1 ? String(row[invoiceIdx] || '').trim() : ''
+          const remark = remarkIdx !== -1 ? String(row[remarkIdx] || '').trim() : ''
+          
+          items.push({
+            feeName: feeName || `费用项-${i}`,
+            amount,
+            currency: currency || 'EUR',
+            containerNumber,
+            billNumber: invoiceNumber,
+            remark,
+            _sheetName: sheetName,
+            _rowIndex: i + 1,
+            _selected: true
+          })
+        }
+      }
+    }
+    
+    console.log(`📊 解析完成，共 ${items.length} 条费用数据`)
+    
+    if (items.length === 0) {
+      return badRequest(res, '未能从Excel中解析出有效的费用数据。支持的格式：1) 横向格式(柜号+多个费用列) 2) 纵向格式(费用名称+金额列)')
+    }
+    
+    // 提取所有唯一的集装箱号，用于匹配订单
+    const containerNumbers = [...new Set(items.map(item => item.containerNumber).filter(Boolean))]
+    const billNumbers = [...new Set(items.map(item => item.billNumber).filter(Boolean))]
+    
+    console.log(`📦 提取到集装箱号: [${containerNumbers.join(', ')}]`)
+    console.log(`📦 提取到提单号: [${billNumbers.join(', ')}]`)
+    
+    // 查询匹配的订单
+    let matchedBills = []
+    if (containerNumbers.length > 0 || billNumbers.length > 0) {
+      try {
+        // 使用 model 中的数据库连接
+        const { getDatabase } = await import('../../config/database.js')
+        const db = getDatabase()
+        
+        // 构建查询条件
+        const conditions = []
+        const params = []
+        let paramIdx = 1
+        
+        if (containerNumbers.length > 0) {
+          conditions.push(`container_number = ANY($${paramIdx})`)
+          params.push(containerNumbers)
+          paramIdx++
+        }
+        
+        if (billNumbers.length > 0) {
+          conditions.push(`bill_number = ANY($${paramIdx})`)
+          params.push(billNumbers)
+        }
+        
+        // 注意：实际表名是 bills_of_lading，不是 bills
+        const query = `
+          SELECT id, bill_number as "billNumber", container_number as "containerNumber", 
+                 consignee as "customerName", bill_id as "customerId"
+          FROM bills_of_lading
+          WHERE (${conditions.join(' OR ')})
+            AND (is_void IS NULL OR is_void = 0)
+          ORDER BY created_at DESC
+        `
+        
+        const result = await db.pool.query(query, params)
+        matchedBills = result.rows
+        console.log(`✅ 匹配到 ${matchedBills.length} 个订单`)
+      } catch (err) {
+        console.error('查询匹配订单失败:', err)
+        // 不中断流程，继续返回解析结果
+      }
+    }
+    
+    // 为每个费用项匹配订单
+    const itemsWithBill = items.map(item => {
+      // 优先按集装箱号匹配，其次按提单号匹配
+      let matched = matchedBills.find(b => 
+        (item.containerNumber && b.containerNumber === item.containerNumber) ||
+        (item.billNumber && b.billNumber === item.billNumber)
+      )
+      
+      return {
+        ...item,
+        billId: matched?.id || null,
+        matchedBillNumber: matched?.billNumber || null,
+        matchedContainerNumber: matched?.containerNumber || null,
+        isMatched: !!matched
+      }
+    })
+    
+    // 统计匹配情况
+    const matchedCount = itemsWithBill.filter(i => i.isMatched).length
+    const unmatchedCount = itemsWithBill.filter(i => !i.isMatched).length
+    
+    console.log(`📊 匹配结果: ${matchedCount}/${items.length} 条费用已关联订单, ${unmatchedCount} 条未匹配`)
+    
+    // 计算合计
+    const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
+    
+    // 提取到期日期（如果Excel中有）
+    let extractedDueDate = null
+    if (items.length > 0 && items[0]._dueDate) {
+      extractedDueDate = items[0]._dueDate
+      console.log(`📅 从Excel提取到期日期: ${extractedDueDate}`)
+    }
+    
+    // 提取所有唯一的发票号/提单号（供应商发票号）
+    const invoiceNumbers = [...new Set(items.map(item => item.billNumber).filter(Boolean))]
+    console.log(`📄 从Excel提取发票号: [${invoiceNumbers.join(', ')}]`)
+    
+    return success(res, {
+      items: itemsWithBill,
+      totalCount: items.length,
+      totalAmount,
+      fileName: originalname,
+      matchedBills,
+      matchedCount,
+      unmatchedCount,
+      extractedDueDate,  // 从Excel提取的到期日期
+      invoiceNumbers     // 从Excel提取的发票号列表
+    })
+    
+  } catch (error) {
+    console.error('解析Excel失败:', error)
+    return serverError(res, '解析Excel失败: ' + error.message)
+  }
+}

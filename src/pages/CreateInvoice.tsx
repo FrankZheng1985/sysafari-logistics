@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   ArrowLeft, Save, FileText, Plus, Trash2, 
   Search, Calculator, AlertCircle, Package, Check, Upload,
-  Building2, FileCheck, Eye, X, RefreshCw
+  Building2, FileCheck, Eye, X, RefreshCw, FileSpreadsheet, Loader2
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import DatePicker from '../components/DatePicker'
@@ -67,6 +67,9 @@ interface Fee {
   description?: string
   billId?: string
   billNumber?: string
+  // 供应商信息
+  supplierId?: string
+  supplierName?: string
   // 审批相关
   approvalStatus?: 'pending' | 'approved' | 'rejected'
   isSupplementary?: boolean
@@ -106,7 +109,8 @@ interface InvoiceItem {
   finalAmount: number      // 最终金额（金额 + 税额 - 优惠）
   feeId?: string // 关联的费用ID
   billId?: string // 关联的订单ID
-  billNumber?: string // 关联的订单号
+  billNumber?: string // 关联的订单号/提单号
+  containerNumber?: string // 集装箱号（采购发票用）
   isFromOrder?: boolean // 是否来自订单（来自订单的数据禁止修改）
 }
 
@@ -129,8 +133,7 @@ interface InvoiceFormData {
   language: 'en' | 'zh'  // 发票语言：en=英文, zh=中文
   templateId: number | null  // 发票模版ID
   // 采购发票专用字段
-  supplierInvoiceNumber: string  // 供应商发票号
-  supplierInvoiceDate: string    // 供应商发票日期
+  supplierInvoiceNumber: string  // 供应商发票号（支持多个，逗号分隔）
 }
 
 export default function CreateInvoice() {
@@ -169,6 +172,31 @@ export default function CreateInvoice() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [mergeSameFees, setMergeSameFees] = useState(true)  // 是否合并相同费用项（默认开启）
   
+  // Excel 解析相关状态
+  const [parsingExcel, setParsingExcel] = useState(false)
+  const [excelParseResult, setExcelParseResult] = useState<{
+    success: boolean
+    data?: Array<{
+      feeName: string
+      amount: number
+      currency: string
+      containerNumber?: string
+      billNumber?: string
+      remark?: string
+      // 订单匹配相关字段
+      billId?: string
+      matchedBillNumber?: string
+      matchedContainerNumber?: string
+      isMatched?: boolean
+      _selected?: boolean
+    }>
+    matchedCount?: number
+    unmatchedCount?: number
+    extractedDueDate?: string  // 从Excel提取的到期日期
+    error?: string
+  } | null>(null)
+  const [showExcelPreview, setShowExcelPreview] = useState(false)
+  
   // Refs for click outside detection
   const customerDropdownRef = useRef<HTMLDivElement>(null)
   const billDropdownRef = useRef<HTMLDivElement>(null)
@@ -199,8 +227,7 @@ export default function CreateInvoice() {
     items: [],
     language: 'en',  // 默认英文发票
     templateId: null,  // 发票模版ID，null表示使用默认模版
-    supplierInvoiceNumber: '',
-    supplierInvoiceDate: ''
+    supplierInvoiceNumber: ''
   })
 
   // 发票模版列表
@@ -243,23 +270,35 @@ export default function CreateInvoice() {
   }
 
   // 过滤后的费用列表（支持多集装箱号搜索，空格分隔）
+  // 当有已选中的费用时，只显示已选中的费用
   const filteredSupplierFees = useMemo(() => {
+    // 检查是否有已选中的费用
+    const hasSelectedFees = supplierFees.some(fee => fee.selected)
+    
+    // 如果有已选中的费用，只显示已选中的费用
+    if (hasSelectedFees) {
+      return supplierFees.filter(fee => fee.selected)
+    }
+    
+    // 没有已选中的费用时，按搜索条件过滤
     if (!feeSearchKeyword.trim()) {
       return supplierFees
     }
+    
     // 将搜索词按空格分割成多个关键词
     const keywords = feeSearchKeyword.trim().split(/\s+/).filter(k => k)
     if (keywords.length === 0) {
       return supplierFees
     }
-    // 只要费用的集装箱号或提单号包含任意一个关键词，就显示
-    return supplierFees.filter(fee => 
-      keywords.some(keyword => {
+    
+    // 按搜索条件过滤
+    return supplierFees.filter(fee => {
+      return keywords.some(keyword => {
         const kw = keyword.toUpperCase()
         return (fee.containerNumber?.toUpperCase().includes(kw) || 
                 fee.billNumber?.toUpperCase().includes(kw))
       })
-    )
+    })
   }, [supplierFees, feeSearchKeyword])
 
   // 按集装箱号分组的费用
@@ -432,8 +471,7 @@ export default function CreateInvoice() {
           items: items.length > 0 ? items : [{ id: '1', description: '', quantity: 1, unitPrice: 0, currency: 'EUR', amount: 0, taxRate: 0, taxAmount: 0, discountPercent: 0, discountAmount: 0, finalAmount: 0, isFromOrder: false }],
           language: invoice.language || 'en',  // 发票语言
           templateId: invoice.templateId || null,  // 发票模版ID
-          supplierInvoiceNumber: invoice.supplierInvoiceNumber || '',
-          supplierInvoiceDate: invoice.supplierInvoiceDate || ''
+          supplierInvoiceNumber: invoice.supplierInvoiceNumber || ''
         })
 
         // 计算账期天数
@@ -533,7 +571,6 @@ export default function CreateInvoice() {
       supplierId: '',
       supplierName: '',
       supplierInvoiceNumber: '',
-      supplierInvoiceDate: '',
       items: []
     }))
   }, [formData.invoiceType])
@@ -808,7 +845,6 @@ export default function CreateInvoice() {
       supplierId: '',
       supplierName: '',
       supplierInvoiceNumber: '',
-      supplierInvoiceDate: '',
       items: []
     }))
   }
@@ -848,6 +884,18 @@ export default function CreateInvoice() {
       return
     }
     
+    // 验证选中的费用是否都属于当前供应商
+    if (selectedSupplier) {
+      const invalidFees = selectedFeesList.filter(fee => 
+        fee.supplierName && fee.supplierName !== selectedSupplier.supplierName
+      )
+      if (invalidFees.length > 0) {
+        const invalidNames = [...new Set(invalidFees.map(f => f.supplierName))].join(', ')
+        alert(`以下费用不属于当前供应商（${selectedSupplier.supplierName}）：\n供应商: ${invalidNames}\n\n请取消选择这些费用后重试。`)
+        return
+      }
+    }
+    
     let items: InvoiceItem[]
     
     if (mergeSameFees) {
@@ -860,6 +908,7 @@ export default function CreateInvoice() {
         feeIds: string[]
         billIds: string[]
         billNumbers: string[]
+        containerNumbers: string[]  // 集装箱号列表
         unitPrices: number[]  // 记录所有单价，用于判断是否一致
       }>()
       
@@ -879,6 +928,10 @@ export default function CreateInvoice() {
           if (!existing.billNumbers.includes(fee.billNumber)) {
             existing.billNumbers.push(fee.billNumber)
           }
+          // 收集集装箱号（去重）
+          if (fee.containerNumber && !existing.containerNumbers.includes(fee.containerNumber)) {
+            existing.containerNumbers.push(fee.containerNumber)
+          }
         } else {
           feeMap.set(feeName, {
             feeName,
@@ -888,6 +941,7 @@ export default function CreateInvoice() {
             feeIds: [fee.id],
             billIds: [fee.billId],
             billNumbers: [fee.billNumber],
+            containerNumbers: fee.containerNumber ? [fee.containerNumber] : [],
             unitPrices: [amount]
           })
         }
@@ -912,6 +966,7 @@ export default function CreateInvoice() {
           feeId: group.feeIds.join(','),  // 保存所有关联的费用ID
           billId: group.billIds.join(','),  // 保存所有关联的订单ID
           billNumber: group.billNumbers.join(','),  // 保存所有关联的订单号
+          containerNumber: group.containerNumbers.join(','),  // 保存所有集装箱号
           isFromOrder: true
         }
       })
@@ -920,6 +975,7 @@ export default function CreateInvoice() {
       items = selectedFeesList.map((fee, index) => ({
         id: (index + 1).toString(),
         description: `${fee.billNumber} - ${fee.feeName || feeCategoryMap[fee.category] || '费用'}`,
+        containerNumber: fee.containerNumber || '',  // 保存集装箱号
         quantity: 1,
         unitPrice: Number(fee.amount) || 0,
         currency: fee.currency || 'EUR',
@@ -956,6 +1012,205 @@ export default function CreateInvoice() {
   const handlePreviewFile = (file: File) => {
     const url = URL.createObjectURL(file)
     setPreviewFile(url)
+  }
+
+  // 解析 Excel 文件
+  const handleParseExcel = async (file: File) => {
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      alert('请选择 Excel 文件')
+      return
+    }
+    
+    setParsingExcel(true)
+    setExcelParseResult(null)
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const response = await fetch(`${API_BASE}/api/invoices/parse-excel`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData
+      })
+      
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        setExcelParseResult({
+          success: true,
+          data: data.data.items || [],
+          matchedCount: data.data.matchedCount,
+          unmatchedCount: data.data.unmatchedCount,
+          extractedDueDate: data.data.extractedDueDate
+        })
+        
+        // 自动填入从Excel提取的信息
+        const updates: Partial<InvoiceFormData> = {}
+        
+        // 如果Excel中有到期日期，且当前是采购发票，自动填入
+        if (data.data.extractedDueDate && formData.invoiceType === 'purchase') {
+          updates.dueDate = data.data.extractedDueDate
+        }
+        
+        // 如果Excel中有发票号，自动填入供应商发票号
+        if (data.data.invoiceNumbers && data.data.invoiceNumbers.length > 0) {
+          updates.supplierInvoiceNumber = data.data.invoiceNumbers.join(', ')
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          setFormData(prev => ({ ...prev, ...updates }))
+        }
+        
+        setShowExcelPreview(true)
+      } else {
+        setExcelParseResult({
+          success: false,
+          error: data.msg || 'Excel解析失败'
+        })
+        alert('Excel解析失败: ' + (data.msg || '未知错误'))
+      }
+    } catch (error) {
+      console.error('解析Excel失败:', error)
+      setExcelParseResult({
+        success: false,
+        error: '网络错误或服务器异常'
+      })
+      alert('解析Excel失败，请检查网络连接')
+    } finally {
+      setParsingExcel(false)
+    }
+  }
+
+  // 将 Excel 解析结果添加到发票项
+  const applyExcelToInvoice = () => {
+    if (!excelParseResult?.data || excelParseResult.data.length === 0) {
+      alert('没有可导入的数据')
+      return
+    }
+    
+    // 只导入选中的项目
+    const selectedItems = excelParseResult.data.filter(item => item._selected !== false)
+    
+    if (selectedItems.length === 0) {
+      alert('请至少选择一条费用记录')
+      return
+    }
+    
+    const newItems: InvoiceItem[] = selectedItems.map((item, index) => {
+      // 在右侧供应商费用列表中查找匹配的费用（用于关联feeId）
+      const matchedFee = supplierFees.find(fee => {
+        // 集装箱号匹配
+        const containerMatch = item.containerNumber && fee.containerNumber === item.containerNumber
+        if (!containerMatch) return false
+        
+        // 费用名称模糊匹配
+        const excelFeeName = (item.feeName || '').toLowerCase().trim()
+        const feeNameLower = (fee.feeName || '').toLowerCase().trim()
+        return feeNameLower.includes(excelFeeName) || excelFeeName.includes(feeNameLower)
+      })
+      
+      return {
+        id: `excel-${Date.now()}-${index}`,
+        description: item.feeName || '费用项',
+        quantity: 1,
+        unitPrice: item.amount || 0,
+        currency: item.currency || 'EUR',
+        amount: item.amount || 0,
+        taxRate: 0,
+        taxAmount: 0,
+        discountPercent: 0,
+        discountAmount: 0,
+        finalAmount: item.amount || 0,
+        // 关联订单信息
+        billId: item.billId || matchedFee?.billId || undefined,
+        billNumber: item.matchedBillNumber || item.billNumber || '', // 订单号/提单号
+        containerNumber: item.containerNumber || '', // 集装箱号
+        feeId: matchedFee?.id || undefined,  // 关联供应商费用ID，用于标记已开票
+        isFromOrder: !!(item.billId || matchedFee?.billId)  // 如果关联了订单，标记为来自订单
+      }
+    })
+    
+    // 收集所有关联的订单ID和订单号
+    const linkedBillIds = [...new Set(selectedItems.filter(i => i.billId).map(i => i.billId))]
+    const linkedBillNumbers = [...new Set(selectedItems.filter(i => i.matchedBillNumber).map(i => i.matchedBillNumber))]
+    
+    // 提取Excel中的集装箱号和费用名称，用于匹配右侧供应商费用
+    const excelContainerNumbers = [...new Set(selectedItems.map(i => i.containerNumber).filter(Boolean))]
+    const excelFeeNames = selectedItems.map(i => ({
+      containerNumber: i.containerNumber,
+      feeName: i.feeName?.toLowerCase().trim()
+    }))
+    
+    // 自动勾选右侧匹配的供应商费用
+    if (supplierFees.length > 0 && excelContainerNumbers.length > 0) {
+      setSupplierFees(prev => prev.map(fee => {
+        // 检查是否匹配：集装箱号匹配 + 费用名称包含关系
+        const containerMatch = excelContainerNumbers.includes(fee.containerNumber || '')
+        if (!containerMatch) return fee
+        
+        // 费用名称匹配（模糊匹配：Excel费用名包含供应商费用名，或反过来）
+        const feeNameLower = fee.feeName?.toLowerCase().trim() || ''
+        const nameMatch = excelFeeNames.some(ef => 
+          ef.containerNumber === fee.containerNumber && 
+          (feeNameLower.includes(ef.feeName || '') || (ef.feeName || '').includes(feeNameLower))
+        )
+        
+        // 如果集装箱号匹配且费用名匹配，则选中
+        if (nameMatch) {
+          return { ...fee, selected: true }
+        }
+        return fee
+      }))
+    }
+    
+    setFormData(prev => {
+      // 合并已有的订单ID和新关联的订单ID
+      const existingBillIds = prev.billId ? prev.billId.split(',').filter(Boolean) : []
+      const allBillIds = [...new Set([...existingBillIds, ...linkedBillIds])]
+      
+      const existingBillNumbers = prev.billNumber ? prev.billNumber.split(', ').filter(Boolean) : []
+      const allBillNumbers = [...new Set([...existingBillNumbers, ...linkedBillNumbers])]
+      
+      return {
+        ...prev,
+        items: [...prev.items, ...newItems],
+        billId: allBillIds.join(','),
+        billNumber: allBillNumbers.join(', ')
+      }
+    })
+    
+    setShowExcelPreview(false)
+    
+    const matchedMsg = linkedBillIds.length > 0 
+      ? `，其中 ${linkedBillIds.length} 条已关联订单` 
+      : ''
+    alert(`成功导入 ${newItems.length} 条费用记录${matchedMsg}`)
+  }
+  
+  // 切换Excel解析项的选中状态
+  const toggleExcelItemSelection = (index: number) => {
+    if (!excelParseResult?.data) return
+    
+    setExcelParseResult(prev => {
+      if (!prev?.data) return prev
+      const newData = [...prev.data]
+      newData[index] = { ...newData[index], _selected: !newData[index]._selected }
+      return { ...prev, data: newData }
+    })
+  }
+  
+  // 全选/取消全选Excel解析项
+  const toggleAllExcelItems = (selected: boolean) => {
+    if (!excelParseResult?.data) return
+    
+    setExcelParseResult(prev => {
+      if (!prev?.data) return prev
+      return {
+        ...prev,
+        data: prev.data.map(item => ({ ...item, _selected: selected }))
+      }
+    })
   }
 
   // 根据账期天数计算到期日期
@@ -1386,25 +1641,29 @@ export default function CreateInvoice() {
         language: formData.language,  // 发票语言
         templateId: formData.templateId,  // 发票模版ID
         description: formData.description || formData.items.map(i => i.description).join('; '),
-        items: JSON.stringify(formData.items.map(item => ({
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          currency: item.currency,
-          amount: item.amount,
-          taxRate: item.taxRate,
-          taxAmount: item.taxAmount,
-          discountPercent: item.discountPercent,
-          discountAmount: item.discountAmount,
-          finalAmount: item.finalAmount,
-          billId: item.billId,
-          billNumber: item.billNumber,
-          feeId: item.feeId
-        }))),
+        items: JSON.stringify(formData.items.map(item => {
+          // 从 supplierFees 中查找对应的费用记录，获取集装箱号
+          const fee = supplierFees.find(f => f.id === item.feeId || (item.feeId && item.feeId.includes(f.id)))
+          return {
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            currency: item.currency,
+            amount: item.amount,
+            taxRate: item.taxRate,
+            taxAmount: item.taxAmount,
+            discountPercent: item.discountPercent,
+            discountAmount: item.discountAmount,
+            finalAmount: item.finalAmount,
+            billId: item.billId,
+            billNumber: item.billNumber,
+            feeId: item.feeId,
+            containerNumber: fee?.containerNumber || item.containerNumber || ''
+          }
+        })),
         notes: formData.notes,
         // 采购发票额外信息
         supplierInvoiceNumber: formData.supplierInvoiceNumber || null,
-        supplierInvoiceDate: formData.supplierInvoiceDate || null,
         status: formData.status
       }
 
@@ -1442,8 +1701,7 @@ export default function CreateInvoice() {
           setFormData(prev => ({
             ...prev,
             items: [],
-            supplierInvoiceNumber: '',
-            supplierInvoiceDate: ''
+            supplierInvoiceNumber: ''
           }))
           
           // 重新获取供应商费用列表（已开票的会被自动过滤）
@@ -2044,7 +2302,7 @@ export default function CreateInvoice() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
+                  accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
                   multiple
                   onChange={handleFileUpload}
                   title="选择文件上传"
@@ -2060,7 +2318,8 @@ export default function CreateInvoice() {
                   >
                     点击上传对账单/发票
                   </button>
-                  <p className="text-xs text-gray-500 mt-1">支持 PDF、JPG、PNG 格式</p>
+                  <p className="text-xs text-gray-500 mt-1">支持 Excel (.xlsx, .xls)、PDF、JPG、PNG 格式</p>
+                  <p className="text-xs text-orange-500 mt-1">💡 上传 Excel 可自动解析费用数据</p>
                 </div>
               </div>
 
@@ -2068,59 +2327,72 @@ export default function CreateInvoice() {
               {uploadedFiles.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-xs font-medium text-gray-700">已上传文件：</div>
-                  {uploadedFiles.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <FileCheck className="w-4 h-4 text-green-600" />
-                        <span className="text-sm text-gray-700 truncate max-w-[150px]">{file.name}</span>
-                        <span className="text-xs text-gray-400">({(file.size / 1024).toFixed(1)} KB)</span>
+                  {uploadedFiles.map((file, index) => {
+                    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+                    const isPdf = file.name.endsWith('.pdf')
+                    return (
+                      <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          {isExcel ? (
+                            <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                          ) : isPdf ? (
+                            <FileText className="w-4 h-4 text-red-500" />
+                          ) : (
+                            <FileCheck className="w-4 h-4 text-blue-500" />
+                          )}
+                          <span className="text-sm text-gray-700 truncate max-w-[150px]">{file.name}</span>
+                          <span className="text-xs text-gray-400">({(file.size / 1024).toFixed(1)} KB)</span>
+                          {isExcel && (
+                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">可解析</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {isExcel ? (
+                            <button
+                              type="button"
+                              onClick={() => handleParseExcel(file)}
+                              className="p-1 text-gray-400 hover:text-green-600"
+                              title="解析Excel"
+                            >
+                              <Calculator className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewFile(file)}
+                              className="p-1 text-gray-400 hover:text-blue-600"
+                              title="预览"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeUploadedFile(index)}
+                            className="p-1 text-gray-400 hover:text-red-600"
+                            title="删除"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handlePreviewFile(file)}
-                          className="p-1 text-gray-400 hover:text-blue-600"
-                          title="预览"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeUploadedFile(index)}
-                          className="p-1 text-gray-400 hover:text-red-600"
-                          title="删除"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
-              {/* 供应商发票信息 */}
+              {/* 供应商发票号 */}
               <div className="space-y-3 pt-2 border-t border-gray-200">
-                <div className="text-xs font-medium text-gray-700">供应商发票信息：</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">供应商发票号</label>
-                    <input
-                      type="text"
-                      value={formData.supplierInvoiceNumber}
-                      onChange={(e) => setFormData(prev => ({ ...prev, supplierInvoiceNumber: e.target.value }))}
-                      placeholder="输入发票号"
-                      title="供应商发票号"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">供应商发票日期</label>
-                    <DatePicker
-                      value={formData.supplierInvoiceDate}
-                      onChange={(date) => setFormData(prev => ({ ...prev, supplierInvoiceDate: date }))}
-                      placeholder="选择日期"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">供应商发票号 <span className="text-gray-400">(Excel导入会自动提取)</span></label>
+                  <input
+                    type="text"
+                    value={formData.supplierInvoiceNumber}
+                    onChange={(e) => setFormData(prev => ({ ...prev, supplierInvoiceNumber: e.target.value }))}
+                    placeholder="输入发票号（多个用逗号分隔）"
+                    title="供应商发票号"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
                 </div>
               </div>
             </div>
@@ -2249,8 +2521,8 @@ export default function CreateInvoice() {
                 </div>
               )}
 
-              {/* 确认选择按钮 */}
-              {supplierFees.some(f => f.selected) && (
+              {/* 确认选择按钮 - 如果发票明细已有内容（Excel导入），则不显示 */}
+              {supplierFees.some(f => f.selected) && formData.items.length === 0 && (
                 <div className="mt-4 pt-3 border-t border-gray-200">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-gray-500">
@@ -2333,38 +2605,60 @@ export default function CreateInvoice() {
                     />
                   </div>
 
-                  {/* 账期天数 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      账期天数
-                    </label>
-                    <div className="flex items-center h-8">
-                      <input
-                        type="number"
-                        value={paymentDays}
-                        onChange={(e) => handlePaymentDaysChange(e.target.value ? parseInt(e.target.value) : '')}
-                        min="0"
-                        placeholder="输入"
-                        title="账期天数"
-                        className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded-l-md focus:outline-none focus:ring-1 focus:ring-primary-500 h-8"
-                      />
-                      <span className="px-2 py-1.5 text-xs bg-gray-100 border border-l-0 border-gray-200 rounded-r-md text-gray-500 h-8 flex items-center">天</span>
-                    </div>
-                  </div>
+                  {/* 销售发票显示账期天数，采购发票不显示 */}
+                  {formData.invoiceType === 'sales' ? (
+                    <>
+                      {/* 账期天数 - 仅销售发票 */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          账期天数
+                        </label>
+                        <div className="flex items-center h-8">
+                          <input
+                            type="number"
+                            value={paymentDays}
+                            onChange={(e) => handlePaymentDaysChange(e.target.value ? parseInt(e.target.value) : '')}
+                            min="0"
+                            placeholder="输入"
+                            title="账期天数"
+                            className="flex-1 min-w-0 px-2 py-1.5 text-xs border border-gray-200 rounded-l-md focus:outline-none focus:ring-1 focus:ring-primary-500 h-8"
+                          />
+                          <span className="px-2 py-1.5 text-xs bg-gray-100 border border-l-0 border-gray-200 rounded-r-md text-gray-500 h-8 flex items-center">天</span>
+                        </div>
+                      </div>
 
-                  {/* 到期日期 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      到期日期
-                    </label>
-                    <div className={`px-2 py-1.5 text-xs rounded-md border h-8 flex items-center ${
-                      formData.dueDate 
-                        ? 'bg-green-50 border-green-200 text-green-700' 
-                        : 'bg-gray-50 border-gray-200 text-gray-400'
-                    }`}>
-                      {formData.dueDate || '自动计算'}
-                    </div>
-                  </div>
+                      {/* 到期日期 - 销售发票自动计算 */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          到期日期
+                        </label>
+                        <div className={`px-2 py-1.5 text-xs rounded-md border h-8 flex items-center ${
+                          formData.dueDate 
+                            ? 'bg-green-50 border-green-200 text-green-700' 
+                            : 'bg-gray-50 border-gray-200 text-gray-400'
+                        }`}>
+                          {formData.dueDate || '自动计算'}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* 到期日期 - 采购发票可手动选择 */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          到期日期
+                        </label>
+                        <DatePicker
+                          value={formData.dueDate}
+                          onChange={(date) => setFormData(prev => ({ ...prev, dueDate: date }))}
+                          placeholder="选择到期日期"
+                        />
+                      </div>
+
+                      {/* 占位 - 保持布局对齐 */}
+                      <div></div>
+                    </>
+                  )}
                 </div>
 
                 {/* 第二行：客户、货币、汇率 */}
@@ -2494,67 +2788,69 @@ export default function CreateInvoice() {
                   </div>
                 </div>
 
-                {/* 第三行：发票模版和语言选择 */}
-                <div className="grid grid-cols-3 gap-3 mt-3">
-                  {/* 发票模版 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      发票模版
-                    </label>
-                    <select
-                      value={formData.templateId || ''}
-                      onChange={(e) => {
-                        const templateId = e.target.value ? Number(e.target.value) : null
-                        const template = invoiceTemplates.find(t => t.id === templateId)
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          templateId,
-                          // 如果模版只支持一种语言，自动切换
-                          language: template?.languages?.length === 1 
-                            ? template.languages[0] as 'en' | 'zh'
-                            : prev.language
-                        }))
-                      }}
-                      title="选择发票模版"
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
-                    >
-                      <option value="">使用默认模版</option>
-                      {invoiceTemplates.map(template => (
-                        <option key={template.id} value={template.id}>
-                          {template.templateName} {template.isDefault ? '(默认)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-[10px] text-gray-400">选择发票的公司信息和样式模版</p>
+                {/* 第三行：发票模版和语言选择（仅销售发票显示） */}
+                {formData.invoiceType === 'sales' && (
+                  <div className="grid grid-cols-3 gap-3 mt-3">
+                    {/* 发票模版 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        发票模版
+                      </label>
+                      <select
+                        value={formData.templateId || ''}
+                        onChange={(e) => {
+                          const templateId = e.target.value ? Number(e.target.value) : null
+                          const template = invoiceTemplates.find(t => t.id === templateId)
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            templateId,
+                            // 如果模版只支持一种语言，自动切换
+                            language: template?.languages?.length === 1 
+                              ? template.languages[0] as 'en' | 'zh'
+                              : prev.language
+                          }))
+                        }}
+                        title="选择发票模版"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
+                      >
+                        <option value="">使用默认模版</option>
+                        {invoiceTemplates.map(template => (
+                          <option key={template.id} value={template.id}>
+                            {template.templateName} {template.isDefault ? '(默认)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[10px] text-gray-400">选择发票的公司信息和样式模版</p>
+                    </div>
+                    
+                    {/* 发票语言 */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        费用品名语言
+                      </label>
+                      <select
+                        value={formData.language}
+                        onChange={(e) => setFormData(prev => ({ ...prev, language: e.target.value as 'en' | 'zh' }))}
+                        title="选择发票费用品名显示语言"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
+                      >
+                        {(() => {
+                          const selectedTemplate = invoiceTemplates.find(t => t.id === formData.templateId)
+                          const langs = selectedTemplate?.languages || ['en', 'zh']
+                          return (
+                            <>
+                              {langs.includes('en') && <option value="en">英文 (English)</option>}
+                              {langs.includes('zh') && <option value="zh">中文 (Chinese)</option>}
+                              {langs.includes('de') && <option value="de">德文 (Deutsch)</option>}
+                              {langs.includes('fr') && <option value="fr">法文 (Français)</option>}
+                            </>
+                          )
+                        })()}
+                      </select>
+                      <p className="mt-1 text-[10px] text-gray-400">影响PDF发票中费用品名的显示语言</p>
+                    </div>
                   </div>
-                  
-                  {/* 发票语言 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      费用品名语言
-                    </label>
-                    <select
-                      value={formData.language}
-                      onChange={(e) => setFormData(prev => ({ ...prev, language: e.target.value as 'en' | 'zh' }))}
-                      title="选择发票费用品名显示语言"
-                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white h-8"
-                    >
-                      {(() => {
-                        const selectedTemplate = invoiceTemplates.find(t => t.id === formData.templateId)
-                        const langs = selectedTemplate?.languages || ['en', 'zh']
-                        return (
-                          <>
-                            {langs.includes('en') && <option value="en">英文 (English)</option>}
-                            {langs.includes('zh') && <option value="zh">中文 (Chinese)</option>}
-                            {langs.includes('de') && <option value="de">德文 (Deutsch)</option>}
-                            {langs.includes('fr') && <option value="fr">法文 (Français)</option>}
-                          </>
-                        )
-                      })()}
-                    </select>
-                    <p className="mt-1 text-[10px] text-gray-400">影响PDF发票中费用品名的显示语言</p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -2576,11 +2872,15 @@ export default function CreateInvoice() {
                   <button
                     type="button"
                     onClick={addItem}
-                    title="添加发票项目"
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                    title="添加自定义费用项（如银行手续费、杂费等）"
+                    className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                      formData.invoiceType === 'sales'
+                        ? 'text-primary-600 border-primary-300 bg-primary-50 hover:bg-primary-100'
+                        : 'text-orange-600 border-orange-300 bg-orange-50 hover:bg-orange-100'
+                    }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    添加项目
+                    添加费用
                   </button>
                 </div>
               </div>
@@ -2883,25 +3183,32 @@ export default function CreateInvoice() {
                   <span className="text-gray-500">
                     {formData.invoiceType === 'sales' ? '客户' : '供应商'}
                   </span>
-                  <span className="font-medium text-gray-900 truncate max-w-[120px]">
-                    {formData.customerName || '-'}
+                  <span className="font-medium text-gray-900 truncate max-w-[120px]" title={formData.invoiceType === 'sales' ? formData.customerName : formData.supplierName}>
+                    {formData.invoiceType === 'sales' ? (formData.customerName || '-') : (formData.supplierName || '-')}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">关联订单</span>
-                  <span className="font-medium text-gray-900 truncate max-w-[120px]">
-                    {formData.billNumber}
+                  <span className="font-medium text-gray-900 truncate max-w-[120px]" title={
+                    formData.invoiceType === 'purchase' 
+                      ? (() => {
+                          // 采购发票：显示集装箱号列表
+                          const containers = [...new Set(formData.items.map(i => i.containerNumber).filter(Boolean))]
+                          return containers.length > 0 ? containers.join(', ') : '-'
+                        })()
+                      : formData.billNumber
+                  }>
+                    {formData.invoiceType === 'purchase' 
+                      ? (() => {
+                          // 采购发票：显示集装箱号列表
+                          const containers = [...new Set(formData.items.map(i => i.containerNumber).filter(Boolean))]
+                          return containers.length > 0 ? containers.join(', ') : '-'
+                        })()
+                      : formData.billNumber
+                    }
                   </span>
                 </div>
-                {selectedBill?.containerNumber && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">提单号</span>
-                    <span className="font-medium text-gray-900 truncate max-w-[120px]" title={selectedBill.containerNumber}>
-                      {selectedBill.containerNumber}
-                    </span>
-                  </div>
-                )}
-                {selectedBill?.containerNumber && (
+                {formData.invoiceType === 'sales' && selectedBill?.containerNumber && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">集装箱号</span>
                     <span className="font-medium text-gray-900 truncate max-w-[120px]" title={selectedBill.containerNumber}>
@@ -2967,6 +3274,175 @@ export default function CreateInvoice() {
               <X className="w-5 h-5" />
             </button>
             <img src={previewFile} alt="预览" className="max-w-full max-h-[90vh] object-contain" />
+          </div>
+        </div>
+      )}
+
+      {/* Excel 解析预览弹窗 */}
+      {showExcelPreview && excelParseResult?.data && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-[900px] max-h-[85vh] flex flex-col">
+            {/* 弹窗标题 */}
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div className="flex items-center gap-3">
+                <FileSpreadsheet className="w-6 h-6 text-green-600" />
+                <h3 className="text-lg font-medium text-gray-900">Excel 解析结果</h3>
+                <span className="text-sm text-gray-500">共 {excelParseResult.data.length} 条记录</span>
+              </div>
+              <button
+                onClick={() => setShowExcelPreview(false)}
+                className="p-1 text-gray-400 hover:text-gray-600"
+                title="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* 订单匹配统计 */}
+            <div className="px-6 py-3 bg-gray-50 border-b flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-green-600" />
+                <span className="text-sm text-gray-700">
+                  已匹配订单: <span className="font-medium text-green-600">{excelParseResult.matchedCount || 0}</span> 条
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500" />
+                <span className="text-sm text-gray-700">
+                  未匹配订单: <span className="font-medium text-amber-600">{excelParseResult.unmatchedCount || 0}</span> 条
+                </span>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => toggleAllExcelItems(true)}
+                  className="px-2 py-1 text-xs text-primary-600 hover:bg-primary-50 rounded"
+                >
+                  全选
+                </button>
+                <button
+                  onClick={() => toggleAllExcelItems(false)}
+                  className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  取消全选
+                </button>
+              </div>
+            </div>
+            
+            {/* 解析结果列表 */}
+            <div className="flex-1 overflow-auto p-4">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 w-10">
+                      <input
+                        type="checkbox"
+                        checked={excelParseResult.data.every(item => item._selected !== false)}
+                        onChange={(e) => toggleAllExcelItems(e.target.checked)}
+                        className="w-4 h-4 text-orange-600 rounded border-gray-300"
+                      />
+                    </th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">费用名称</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">集装箱号</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">金额</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">币种</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500">订单关联</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">备注</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {excelParseResult.data.map((item, index) => (
+                    <tr 
+                      key={index} 
+                      className={`hover:bg-gray-50 ${item._selected === false ? 'opacity-50' : ''}`}
+                      onClick={() => toggleExcelItemSelection(index)}
+                    >
+                      <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={item._selected !== false}
+                          onChange={() => toggleExcelItemSelection(index)}
+                          className="w-4 h-4 text-orange-600 rounded border-gray-300"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-gray-900">{item.feeName || '-'}</td>
+                      <td className="px-2 py-2 text-gray-600 font-mono text-xs">
+                        {item.containerNumber || item.billNumber || '-'}
+                      </td>
+                      <td className="px-2 py-2 text-right text-gray-900 font-medium">
+                        {item.amount?.toFixed(2) || '0.00'}
+                      </td>
+                      <td className="px-2 py-2 text-gray-600">{item.currency || 'EUR'}</td>
+                      <td className="px-2 py-2 text-center">
+                        {item.isMatched ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                            <Check className="w-3 h-3" />
+                            已关联
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full">
+                            <AlertCircle className="w-3 h-3" />
+                            未匹配
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-gray-500 max-w-[100px] truncate" title={item.remark}>
+                        {item.remark || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t">
+                  <tr>
+                    <td></td>
+                    <td className="px-2 py-2 text-right text-sm font-medium text-gray-700">
+                      已选合计
+                    </td>
+                    <td></td>
+                    <td className="px-2 py-2 text-right text-sm font-bold text-orange-600">
+                      €{excelParseResult.data
+                        .filter(item => item._selected !== false)
+                        .reduce((sum, item) => sum + (item.amount || 0), 0)
+                        .toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2 text-gray-600">EUR</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            
+            {/* 操作按钮 */}
+            <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
+              <p className="text-xs text-gray-500">
+                <span className="text-green-600">✓ 已关联订单</span>的费用保存后可自动核销 | 
+                <span className="text-amber-600 ml-1">⚠ 未匹配</span>的费用需手动关联或后续核销
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowExcelPreview(false)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={applyExcelToInvoice}
+                  className="px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  确认导入 ({excelParseResult.data.filter(item => item._selected !== false).length} 条)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel 解析中遮罩 */}
+      {parsingExcel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg px-8 py-6 flex flex-col items-center gap-4">
+            <Loader2 className="w-10 h-10 text-orange-500 animate-spin" />
+            <p className="text-sm text-gray-600">正在解析 Excel 文件...</p>
           </div>
         </div>
       )}

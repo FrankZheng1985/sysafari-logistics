@@ -499,8 +499,12 @@ export default function FinanceInvoices() {
           {record.status !== 'paid' && record.status !== 'cancelled' && (
             <button
               onClick={() => navigate(`/finance/invoices/${record.id}/payment`)}
-              className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
-              title="登记收款"
+              className={`p-1.5 text-gray-400 rounded transition-colors ${
+                record.invoiceType === 'sales' 
+                  ? 'hover:text-amber-600 hover:bg-amber-50' 
+                  : 'hover:text-orange-600 hover:bg-orange-50'
+              }`}
+              title={record.invoiceType === 'sales' ? '登记收款' : '登记付款'}
             >
               <CreditCard className="w-3.5 h-3.5" />
             </button>
@@ -628,20 +632,24 @@ export default function FinanceInvoices() {
             <option value="overdue">已逾期</option>
           </select>
           
-          {/* 批量登记收款按钮 */}
+          {/* 批量登记收款/付款按钮 */}
           <button
             onClick={handleOpenBatchPayment}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
               selectedInvoiceIds.length > 0 
-                ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100' 
+                ? filterType === 'purchase'
+                  ? 'bg-orange-50 text-orange-700 border-orange-300 hover:bg-orange-100'
+                  : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100' 
                 : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
             }`}
             disabled={selectedInvoiceIds.length === 0}
           >
             <CreditCard className="w-4 h-4" />
-            批量登记收款
+            {filterType === 'purchase' ? '批量登记付款' : filterType === 'sales' ? '批量登记收款' : '批量登记收款'}
             {selectedInvoiceIds.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded-full text-[10px]">
+              <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
+                filterType === 'purchase' ? 'bg-orange-200 text-orange-800' : 'bg-amber-200 text-amber-800'
+              }`}>
                 {selectedInvoiceIds.length}
               </span>
             )}
