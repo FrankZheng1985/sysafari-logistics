@@ -263,6 +263,9 @@ export default function FeeModal({
   const [showSupplierPriceSelect, setShowSupplierPriceSelect] = useState(false)
   const [billSearch, setBillSearch] = useState('')
   const [supplierSearch, setSupplierSearch] = useState('')
+  // 费用名称搜索下拉框状态
+  const [showFeeNameDropdown, setShowFeeNameDropdown] = useState(false)
+  const [feeNameSearch, setFeeNameSearch] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   
@@ -331,6 +334,9 @@ export default function FeeModal({
   
   // 供应商搜索防抖
   const supplierSearchRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // 费用名称下拉框 ref（用于点击外部关闭）
+  const feeNameDropdownRef = useRef<HTMLDivElement | null>(null)
 
   // 加载订单列表、供应商列表和费用分类
   useEffect(() => {
@@ -357,8 +363,44 @@ export default function FeeModal({
       setExpandedCategoryGroups(new Set())
       categoryCollapseTimersRef.current.forEach(timer => clearTimeout(timer))
       categoryCollapseTimersRef.current.clear()
+      // 重置费用名称搜索状态
+      setFeeNameSearch('')
+      setShowFeeNameDropdown(false)
     }
   }, [visible])
+  
+  // 点击外部关闭费用名称下拉框
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // 确保事件目标不是输入框本身
+      const target = event.target as Node
+      if (feeNameDropdownRef.current && !feeNameDropdownRef.current.contains(target)) {
+        // 如果用户输入了内容但没有从下拉框选择，将输入作为手动录入
+        if (feeNameSearch && !formData.feeName) {
+          setFormData(prev => ({ ...prev, feeName: feeNameSearch }))
+          setIsManualEntry(true)
+          setFeeNameSearch('')
+        }
+        setShowFeeNameDropdown(false)
+      }
+    }
+    
+    if (showFeeNameDropdown) {
+      // 使用 setTimeout 延迟添加事件监听，避免立即触发
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside)
+      }, 100)
+      
+      return () => {
+        clearTimeout(timeoutId)
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showFeeNameDropdown, feeNameSearch, formData.feeName])
 
   // 编辑时填充表单
   useEffect(() => {
@@ -987,6 +1029,49 @@ export default function FeeModal({
       supplier.supplierCode?.toLowerCase().includes(search)
     )
   })
+
+  // 获取二级分类作为费用名称选项（带父级分类信息）
+  const feeNameOptions = feeCategories
+    .filter(cat => cat.level === 2 && cat.parentId)
+    .map(cat => {
+      // 找到父级分类
+      const parentCat = feeCategories.find(p => p.id === cat.parentId)
+      return {
+        id: cat.id,
+        name: cat.label,
+        code: cat.value,
+        parentId: cat.parentId,
+        parentName: parentCat?.label || '',
+        parentCode: parentCat?.value || ''
+      }
+    })
+
+  // 根据搜索关键字筛选费用名称
+  // 注意：当 formData.feeName 有值时，使用它作为已选择的状态，不进行过滤
+  const searchTerm = feeNameSearch.trim()
+  const filteredFeeNames = feeNameOptions.filter(item => {
+    if (!searchTerm) return true
+    const search = searchTerm.toLowerCase()
+    return (
+      item.name.toLowerCase().includes(search) ||
+      item.code?.toLowerCase().includes(search) ||
+      item.parentName.toLowerCase().includes(search)
+    )
+  })
+
+  // 处理费用名称选择
+  const handleFeeNameSelect = (item: typeof feeNameOptions[0]) => {
+    setFormData(prev => ({
+      ...prev,
+      feeName: item.name,
+      category: item.parentCode || item.code
+    }))
+    setFeeNameSearch('')
+    setShowFeeNameDropdown(false)
+    setIsManualEntry(false)
+    // 更新已选的手动分类（单选模式）
+    setSelectedManualCategories([])
+  }
 
   if (!visible) return null
 
@@ -1808,28 +1893,92 @@ export default function FeeModal({
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       费用名称 <span className="text-red-500">*</span>
+                      {!isManualEntry && formData.feeName && (
+                        <span className="ml-2 text-green-500 text-xs font-normal">
+                          (已关联分类)
+                        </span>
+                      )}
                       {isManualEntry && formData.feeName && (
                         <span className="ml-2 text-blue-500 text-xs font-normal">
                           (手动录入)
                         </span>
                       )}
                     </label>
-                    <div className="relative">
+                    <div className="relative" ref={feeNameDropdownRef}>
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="text"
-                        value={formData.feeName}
+                        value={feeNameSearch || formData.feeName}
                         onChange={(e) => {
-                          setFormData(prev => ({ ...prev, feeName: e.target.value }))
-                          // 用户手动输入费用名称时，标记为手动录入
-                          if (e.target.value && feeSource !== 'product' && feeSource !== 'supplier_price') {
-                            setIsManualEntry(true)
+                          const value = e.target.value
+                          setFeeNameSearch(value)
+                          setShowFeeNameDropdown(true)
+                          // 如果清空了值，也清空 feeName
+                          if (!value) {
+                            setFormData(prev => ({ ...prev, feeName: '', category: '' }))
+                            setIsManualEntry(false)
                           }
                         }}
-                        placeholder="请输入费用名称"
-                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        onFocus={() => setShowFeeNameDropdown(true)}
+                        placeholder="搜索或输入费用名称..."
+                        className={`w-full pl-9 pr-8 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                           errors.feeName ? 'border-red-500' : 'border-gray-300'
-                        } ${isManualEntry && formData.feeName ? 'border-blue-300 bg-blue-50' : ''}`}
+                        } ${!isManualEntry && formData.feeName ? 'border-green-300 bg-green-50' : ''} ${isManualEntry && formData.feeName ? 'border-blue-300 bg-blue-50' : ''}`}
                       />
+                      {formData.feeName && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, feeName: '', category: '' }))
+                            setFeeNameSearch('')
+                            setIsManualEntry(false)
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          title="清除费用名称"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                      
+                      {/* 费用名称搜索下拉框 */}
+                      {showFeeNameDropdown && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredFeeNames.length > 0 ? (
+                            <>
+                              <div className="px-3 py-1.5 bg-gray-50 text-xs text-gray-500 border-b sticky top-0">
+                                共 {filteredFeeNames.length} 个费用名称
+                              </div>
+                              {filteredFeeNames.slice(0, 30).map(item => (
+                                <div
+                                  key={item.id}
+                                  onClick={() => handleFeeNameSelect(item)}
+                                  className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                >
+                                  <div className="font-medium text-sm text-gray-900">{item.name}</div>
+                                  <div className="text-xs text-gray-500">
+                                    分类：{item.parentName}
+                                  </div>
+                                </div>
+                              ))}
+                              {filteredFeeNames.length > 30 && (
+                                <div className="px-3 py-2 text-xs text-gray-400 text-center bg-gray-50">
+                                  还有 {filteredFeeNames.length - 30} 个费用名称，请输入关键字筛选
+                                </div>
+                              )}
+                            </>
+                          ) : feeNameSearch.length >= 1 ? (
+                            <div className="px-3 py-4 text-center">
+                              <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                              <p className="text-sm text-gray-500">未找到匹配的费用名称</p>
+                              <p className="text-xs text-gray-400 mt-1">可直接输入自定义费用名称</p>
+                            </div>
+                          ) : (
+                            <div className="px-3 py-3 text-sm text-gray-400 text-center">
+                              输入关键字搜索费用名称
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {errors.feeName && <p className="mt-1 text-xs text-red-500">{errors.feeName}</p>}
                   </div>
