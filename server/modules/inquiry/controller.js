@@ -615,12 +615,13 @@ export async function getPendingTasks(req, res) {
 export async function getTaskStats(req, res) {
   try {
     const userId = req.user?.id
+    const userRole = req.user?.role || ''
     
     if (!userId) {
       return badRequest(res, '用户信息缺失')
     }
     
-    const stats = await model.getTaskStats(userId)
+    const stats = await model.getTaskStats(userId, userRole)
     
     return success(res, stats)
   } catch (error) {

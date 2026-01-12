@@ -681,10 +681,35 @@ export async function checkOverdueTasks() {
 
 /**
  * 获取待办任务统计
+ * @param {number} userId - 用户ID
+ * @param {string} userRole - 用户角色（admin可以看到所有）
  */
-export async function getTaskStats(userId) {
+export async function getTaskStats(userId, userRole = '') {
   const db = getDatabase()
   
+  // 管理员或高级角色可以看到所有询价统计
+  const isAdmin = ['admin', 'super_admin', 'manager'].includes(userRole)
+  
+  if (isAdmin) {
+    // 管理员：从 customer_inquiries 表直接统计所有询价
+    const stats = await db.prepare(`
+      SELECT 
+        COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
+        COUNT(*) FILTER (WHERE status = 'processing') as processing_count,
+        COUNT(*) FILTER (WHERE is_overdue = TRUE AND status NOT IN ('completed', 'cancelled', 'quoted')) as overdue_count,
+        COUNT(*) FILTER (WHERE status IN ('completed', 'quoted') AND DATE(updated_at) = CURRENT_DATE) as today_completed
+      FROM customer_inquiries
+    `).get()
+    
+    return {
+      pendingCount: parseInt(stats?.pending_count) || 0,
+      processingCount: parseInt(stats?.processing_count) || 0,
+      overdueCount: parseInt(stats?.overdue_count) || 0,
+      todayCompleted: parseInt(stats?.today_completed) || 0
+    }
+  }
+  
+  // 普通用户：统计分配给自己的任务
   const stats = await db.prepare(`
     SELECT 
       COUNT(*) FILTER (WHERE t.status = 'pending') as pending_count,
