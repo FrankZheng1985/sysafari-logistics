@@ -3,6 +3,11 @@
  * 基于公司模板生成专业报价单
  */
 
+// 使用 Google Fonts CDN URL 加载中文字体（与发票模板保持一致）
+function getChineseFontURL() {
+  return 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap'
+}
+
 /**
  * 生成报价单HTML模板
  * @param {Object} quotation - 报价单数据
@@ -88,16 +93,21 @@ export function generateQuotationHtml(quotation, company = {}) {
     `).join('')
   }
 
+  // 使用 Google Fonts 加载中文字体（与发票模板保持一致）
+  const chineseFontURL = getChineseFontURL()
+  const fontFamily = "'Noto Sans SC', 'Microsoft YaHei', 'SimHei', Arial, sans-serif"
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>报价单 - ${quoteNumber}</title>
+  <link href="${chineseFontURL}" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
-      font-family: 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+      font-family: ${fontFamily};
       font-size: 12px;
       line-height: 1.5;
       color: #333;
