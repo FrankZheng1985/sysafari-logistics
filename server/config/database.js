@@ -332,9 +332,11 @@ export function getDatabase() {
       ssl: sslConfig,
       max: 20,                        // 最大连接数
       min: 2,                         // 保持最小连接数，减少冷启动延迟
-      idleTimeoutMillis: 60000,       // 空闲连接超时 60s
-      connectionTimeoutMillis: 10000, // 连接超时 10s
+      idleTimeoutMillis: 30000,       // 空闲连接超时 30s（减少以更快释放）
+      connectionTimeoutMillis: 5000,  // 连接超时 5s（减少等待时间）
       allowExitOnIdle: false,         // 防止空闲时退出连接池
+      statement_timeout: 30000,       // SQL 语句超时 30s，防止卡住
+      query_timeout: 30000,           // 查询超时 30s
     })
     
     pgPool.on('error', (err) => {

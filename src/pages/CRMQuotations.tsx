@@ -9,9 +9,10 @@ import PageHeader from '../components/PageHeader'
 import DataTable, { Column } from '../components/DataTable'
 import DatePicker from '../components/DatePicker'
 import TransportQuoteCalculator from '../components/TransportQuoteCalculator'
+import TransportInquiryForm from '../components/TransportInquiryForm'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useAuth } from '../contexts/AuthContext'
-import { formatDateTime } from '../utils/dateFormat'
+import { formatDate, formatDateTime } from '../utils/dateFormat'
 
 const API_BASE = getApiBaseUrl()
 
@@ -148,7 +149,9 @@ export default function CRMQuotations() {
     terms: '',
     notes: '',
     items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }] as QuotationItem[],
-    inquiryId: '' // 关联的询价ID
+    inquiryId: '', // 关联的询价ID
+    origin: '', // 起运点
+    destination: '' // 目的地
   })
   const [translatingIndex, setTranslatingIndex] = useState<number | null>(null)
   const [generatingPdf, setGeneratingPdf] = useState(false)
@@ -167,6 +170,9 @@ export default function CRMQuotations() {
   // 运输报价计算弹窗状态
   const [showTransportCalculator, setShowTransportCalculator] = useState(false)
   const [pendingInquiryForQuote, setPendingInquiryForQuote] = useState<CustomerInquiry | null>(null)
+  
+  // 新建运输询价弹窗状态
+  const [showNewInquiryForm, setShowNewInquiryForm] = useState(false)
 
    
   useEffect(() => {
@@ -225,14 +231,28 @@ export default function CRMQuotations() {
       if (inquiryFilterStatus) params.append('status', inquiryFilterStatus)
 
       const token = await getAccessToken()
-      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      })
-      const data = await response.json()
+      
+      // 并行加载询价列表和客户列表（新建运输询价需要客户列表）
+      const [inquiryRes, custRes] = await Promise.all([
+        fetch(`${API_BASE}/api/inquiry/manage/inquiries?${params}`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        }),
+        customers.length === 0 ? fetch(`${API_BASE}/api/customers?pageSize=100`) : Promise.resolve(null)
+      ])
+      
+      const data = await inquiryRes.json()
       
       if (data.errCode === 200) {
         setInquiries(data.data.list || [])
         setInquiryTotal(data.data.total || 0)
+      }
+      
+      // 如果客户列表为空，加载客户数据
+      if (custRes) {
+        const custData = await custRes.json()
+        if (custData.errCode === 200) {
+          setCustomers(custData.data.list || [])
+        }
       }
     } catch (error) {
       console.error('加载客户询价失败:', error)
@@ -453,7 +473,9 @@ export default function CRMQuotations() {
         terms: '',
         notes: '',
         items: item.items?.length > 0 ? item.items : [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
-        inquiryId: '' // 编辑时不关联询价
+        inquiryId: '', // 编辑时不关联询价
+        origin: item.origin || '', // 起运点
+        destination: item.destination || '' // 目的地
       })
     } else {
       setEditingItem(null)
@@ -469,7 +491,9 @@ export default function CRMQuotations() {
         terms: '',
         notes: '',
         items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
-        inquiryId: '' // 新建时不关联询价
+        inquiryId: '', // 新建时不关联询价
+        origin: '',
+        destination: ''
       })
     }
     setShowModal(true)
@@ -686,7 +710,7 @@ export default function CRMQuotations() {
         return dateA - dateB
       },
       render: (_value, record) => (
-        <span className="text-xs text-gray-500">{record.quoteDate || '-'}</span>
+        <span className="text-xs text-gray-500">{formatDate(record.quoteDate)}</span>
       )
     },
     {
@@ -699,7 +723,7 @@ export default function CRMQuotations() {
         return dateA - dateB
       },
       render: (_value, record) => (
-        <span className="text-xs text-gray-500">{record.validUntil || '-'}</span>
+        <span className="text-xs text-gray-500">{formatDate(record.validUntil)}</span>
       )
     },
     {
@@ -1118,8 +1142,15 @@ export default function CRMQuotations() {
               </select>
             </div>
 
-            <div className="text-xs text-gray-500">
-              共 {inquiryTotal} 条询价
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">共 {inquiryTotal} 条询价</span>
+              <button
+                onClick={() => setShowNewInquiryForm(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700"
+              >
+                <Plus className="w-4 h-4" />
+                新建运输询价
+              </button>
             </div>
           </div>
 
@@ -1254,6 +1285,26 @@ export default function CRMQuotations() {
                   />
                 </div>
               </div>
+
+              {/* 路线信息（仅运输询价显示） */}
+              {(formData.origin || formData.destination) && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">起运点</label>
+                    <div className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-50 border rounded-lg">
+                      <MapPin className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                      <span className="text-gray-700 truncate" title={formData.origin}>{formData.origin || '-'}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">目的地</label>
+                    <div className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-50 border rounded-lg">
+                      <MapPin className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                      <span className="text-gray-700 truncate" title={formData.destination}>{formData.destination || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-4 gap-4">
                 <div>
@@ -1686,8 +1737,10 @@ export default function CRMQuotations() {
                       currency: 'EUR',
                       terms: '',
                       notes: `关联询价：${selectedInquiry.inquiryNumber}`,
-                        items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
-                        inquiryId: selectedInquiry.id // 关联询价ID
+                      items: [{ name: '', nameEn: '', description: '', quantity: 1, unit: '', price: 0, amount: 0 }],
+                      inquiryId: selectedInquiry.id, // 关联询价ID
+                      origin: selectedInquiry.transportData?.origin || '',
+                      destination: selectedInquiry.transportData?.destination || ''
                     })
                     setActiveView('quotations')
                     setShowModal(true)
@@ -1737,7 +1790,9 @@ export default function CRMQuotations() {
                 price: item.price,
                 amount: item.amount
               })),
-              inquiryId: inquiry.id // 关联询价ID，用于更新询价状态
+              inquiryId: inquiry.id, // 关联询价ID，用于更新询价状态
+              origin: data.route.origin.address || inquiry.transportData?.origin || '',
+              destination: data.route.destination.address || inquiry.transportData?.destination || ''
             })
             
             // 清除待处理询价
@@ -1757,6 +1812,18 @@ export default function CRMQuotations() {
           }}
         />
       )}
+
+      {/* 新建运输询价弹窗 */}
+      <TransportInquiryForm
+        visible={showNewInquiryForm}
+        onClose={() => setShowNewInquiryForm(false)}
+        onSuccess={() => {
+          // 刷新询价列表
+          loadInquiries()
+          loadTaskStats()
+        }}
+        customers={customers}
+      />
     </div>
   )
 }

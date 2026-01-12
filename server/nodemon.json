@@ -1,0 +1,23 @@
+{
+  "watch": ["*.js", "modules/**/*.js", "config/**/*.js", "middleware/**/*.js", "services/**/*.js", "utils/**/*.js"],
+  "ignore": [
+    "node_modules/**",
+    "uploads/**",
+    "exports/**",
+    "backups/**",
+    "data/**",
+    "*.log",
+    "*.sql"
+  ],
+  "ext": "js,json",
+  "delay": "2000",
+  "verbose": false,
+  "legacyWatch": false,
+  "signal": "SIGTERM",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "execMap": {
+    "js": "node"
+  }
+}

@@ -15,7 +15,7 @@ import { success, badRequest, notFound, serverError, successWithPagination } fro
  */
 export async function createInquiry(req, res) {
   try {
-    const { inquiryType, clearanceData, transportData, notes } = req.body
+    const { inquiryType, clearanceData, transportData, notes, source } = req.body
     
     if (!inquiryType) {
       return badRequest(res, '请选择询价类型')
@@ -45,7 +45,8 @@ export async function createInquiry(req, res) {
       inquiryType,
       clearanceData,
       transportData,
-      notes
+      notes,
+      source: source || 'portal' // 来源: portal=客户门户, crm=CRM系统
     })
     
     return success(res, result, '询价已提交')

@@ -83,11 +83,12 @@ export async function getCustomerAssignee(customerId) {
   
   // 从客户表查找负责的跟单员/业务员
   // 注意：客户表使用 assigned_to 和 assigned_name 字段存储负责人
+  // assigned_to 是 varchar 类型，需要转换为 integer 与 users.id 比较
   const customer = await db.prepare(`
     SELECT c.assigned_to, c.assigned_name, u.supervisor_id, s.name as supervisor_name,
            ss.supervisor_id as super_supervisor_id, ss2.name as super_supervisor_name
     FROM customers c
-    LEFT JOIN users u ON c.assigned_to = u.id
+    LEFT JOIN users u ON c.assigned_to::integer = u.id
     LEFT JOIN users s ON u.supervisor_id = s.id
     LEFT JOIN users ss ON s.supervisor_id = ss.id
     LEFT JOIN users ss2 ON ss.supervisor_id = ss2.id

@@ -5,7 +5,7 @@
   "description": "Sysafari Logistics Management System - Backend Server (模块化架构)",
   "main": "app.js",
   "scripts": {
-    "dev": "node --watch app.js",
+    "dev": "npx nodemon app.js",
     "start": "npx puppeteer browsers install chrome && node app.js",
     "postinstall": "npx puppeteer browsers install chrome",
     "init-production-db": "node scripts/init-production-db.js",

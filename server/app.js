@@ -59,6 +59,7 @@ import dataImportRoutes from './modules/data-import/routes.js'
 import helpVideoRoutes from './modules/help-video/routes.js'
 import portalApiRoutes from './modules/portal-api/routes.js'
 import openApiRoutes from './modules/open-api/routes.js'
+import internalApiRoutes from './modules/internal-api/routes.js'
 import businessInfoRoutes from './modules/business-info/routes.js'
 import inquiryRoutes from './modules/inquiry/routes.js'
 import subscriptionRoutes from './modules/subscription/routes.js'
@@ -117,7 +118,10 @@ app.use(cors({
     /\.oss-cn-hongkong\.aliyuncs\.com$/,
     // 演示环境
     'https://demo.xianfeng-eu.com',
-    'https://demo-api.xianfeng-eu.com'
+    'https://demo-api.xianfeng-eu.com',
+    // 集团ERP系统
+    'https://erp.group.xianfeng-eu.com',
+    'http://localhost:5180' // 集团ERP本地开发
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -238,6 +242,9 @@ app.use('/api/portal', portalApiRoutes)
 
 // 开放 API 模块（供客户 ERP/WMS 系统对接）
 app.use('/open-api', openApiRoutes)
+
+// 内部 API 模块（供集团ERP等内部系统对接）
+app.use('/internal-api', internalApiRoutes)
 
 // 工商信息管理模块
 app.use('/api/business-info', businessInfoRoutes)
@@ -372,23 +379,33 @@ async function startServer() {
   
   const server = httpServer
   
-  // 优雅关闭
-  process.on('SIGINT', () => {
-    console.log('\n⏹️  正在关闭服务器...')
+  // 优雅关闭（带超时机制，防止卡住）
+  const gracefulShutdown = (signal) => {
+    console.log(`\n⏹️  收到 ${signal} 信号，正在关闭服务器...`)
+    
+    // 设置强制退出超时（3秒）
+    const forceExitTimeout = setTimeout(() => {
+      console.log('⚠️  关闭超时，强制退出...')
+      process.exit(1)
+    }, 3000)
+    
+    // 关闭 Socket.io 连接
+    io.close(() => {
+      console.log('📡 WebSocket 连接已关闭')
+    })
+    
+    // 关闭 HTTP 服务器
     server.close(() => {
+      console.log('🌐 HTTP 服务器已关闭')
       closeDatabase()
       console.log('✅ 服务器已安全关闭')
+      clearTimeout(forceExitTimeout)
       process.exit(0)
     })
-  })
+  }
   
-  process.on('SIGTERM', () => {
-    console.log('\n⏹️  收到终止信号...')
-    server.close(() => {
-      closeDatabase()
-      process.exit(0)
-    })
-  })
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
 }
 
 // 如果直接运行此文件，则启动服务器
