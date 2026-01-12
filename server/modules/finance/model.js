@@ -993,6 +993,23 @@ async function updateInvoicePaidAmountDirect(invoiceId, amount) {
       updated_at = NOW()
     WHERE id = ?
   `).run(newPaidAmount, newStatus, invoiceId)
+  
+  // 如果发票变为已付清状态，且是销售发票，自动消除相关预警
+  if (newStatus === 'paid' && invoice.invoiceType === 'sales') {
+    // 1. 自动消除该发票相关的预警（账期即将到期、应收逾期）
+    await messageModel.autoResolveAlerts(
+      'invoice', 
+      invoiceId, 
+      ['payment_term_due', 'payment_due'], 
+      `发票已付清，系统自动处理`
+    )
+    console.log(`[预警自动消除] 发票 ${invoice.invoiceNumber} 已付清，相关预警已自动处理`)
+    
+    // 2. 检查并消除客户相关预警（多笔逾期、信用超限）
+    if (invoice.customerId) {
+      await messageModel.checkAndResolveCustomerAlerts(invoice.customerId)
+    }
+  }
 }
 
 /**
