@@ -32,6 +32,12 @@ interface Quotation {
   status: string
   items: QuotationItem[]
   createTime: string
+  // 扩展字段
+  origin?: string           // 起运点
+  destination?: string      // 目的地
+  notes?: string            // 备注
+  inquiryId?: string        // 关联询价ID
+  inquiryNumber?: string    // 关联询价编号
 }
 
 interface QuotationItem {
@@ -173,6 +179,10 @@ export default function CRMQuotations() {
   
   // 新建运输询价弹窗状态
   const [showNewInquiryForm, setShowNewInquiryForm] = useState(false)
+  
+  // 报价单详情弹窗状态
+  const [showQuotationDetail, setShowQuotationDetail] = useState(false)
+  const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null)
 
    
   useEffect(() => {
@@ -302,6 +312,12 @@ export default function CRMQuotations() {
   const handleViewInquiry = (inquiry: CustomerInquiry) => {
     setSelectedInquiry(inquiry)
     setShowInquiryDetail(true)
+  }
+
+  // 查看报价单详情
+  const handleViewQuotation = (quotation: Quotation) => {
+    setSelectedQuotation(quotation)
+    setShowQuotationDetail(true)
   }
 
   // 获取询价类型标签
@@ -667,7 +683,12 @@ export default function CRMQuotations() {
       width: 140,
       sorter: true,
       render: (_value, record) => (
-        <span className="text-primary-600 font-medium text-xs">{record.quoteNumber}</span>
+        <button
+          onClick={() => handleViewQuotation(record)}
+          className="text-primary-600 font-medium text-xs hover:text-primary-700 hover:underline"
+        >
+          {record.quoteNumber}
+        </button>
       )
     },
     {
@@ -1824,6 +1845,227 @@ export default function CRMQuotations() {
         }}
         customers={customers}
       />
+
+      {/* 报价单详情弹窗 */}
+      {showQuotationDetail && selectedQuotation && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-[700px] max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-medium">报价单详情</h3>
+                <span className="text-xs text-gray-400">{selectedQuotation.quoteNumber}</span>
+                {(() => {
+                  const info = getStatusInfo(selectedQuotation.status)
+                  const Icon = info.icon
+                  return (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
+                      <Icon className="w-3 h-3" />
+                      {info.label}
+                    </span>
+                  )
+                })()}
+              </div>
+              <button onClick={() => setShowQuotationDetail(false)} className="p-1 hover:bg-gray-100 rounded" title="关闭">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* 客户信息 */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="text-xs font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <User className="w-4 h-4 text-primary-500" />
+                  客户信息
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-gray-500">客户名称：</span>
+                    <span className="text-gray-900 ml-1 font-medium">{selectedQuotation.customerName}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">主题：</span>
+                    <span className="text-gray-900 ml-1">{selectedQuotation.subject || '-'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 运输路线信息（如有） */}
+              {(selectedQuotation.origin || selectedQuotation.destination) && (
+                <div className="bg-green-50 rounded-lg p-4">
+                  <h4 className="text-xs font-medium text-green-700 mb-3 flex items-center gap-2">
+                    <Truck className="w-4 h-4" />
+                    运输路线
+                  </h4>
+                  <div className="flex items-center gap-3 text-sm">
+                    <div className="flex items-center gap-2 flex-1 bg-white rounded-lg px-3 py-2 border border-green-200">
+                      <MapPin className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      <div>
+                        <div className="text-[10px] text-gray-400">起运点</div>
+                        <div className="text-gray-900 font-medium">{selectedQuotation.origin || '-'}</div>
+                      </div>
+                    </div>
+                    <div className="text-green-400 text-lg">→</div>
+                    <div className="flex items-center gap-2 flex-1 bg-white rounded-lg px-3 py-2 border border-green-200">
+                      <MapPin className="w-4 h-4 text-red-500 flex-shrink-0" />
+                      <div>
+                        <div className="text-[10px] text-gray-400">目的地</div>
+                        <div className="text-gray-900 font-medium">{selectedQuotation.destination || '-'}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 报价信息 */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h4 className="text-xs font-medium text-blue-700 mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  报价信息
+                </h4>
+                <div className="grid grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-gray-500">报价日期：</span>
+                    <span className="text-gray-900 ml-1">{formatDate(selectedQuotation.quoteDate)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">有效期至：</span>
+                    <span className={`ml-1 ${selectedQuotation.validUntil && new Date(selectedQuotation.validUntil) < new Date() ? 'text-red-600' : 'text-gray-900'}`}>
+                      {formatDate(selectedQuotation.validUntil)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">币种：</span>
+                    <span className="text-gray-900 ml-1">{selectedQuotation.currency}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">创建时间：</span>
+                    <span className="text-gray-900 ml-1">{formatDateTime(selectedQuotation.createTime)}</span>
+                  </div>
+                  {selectedQuotation.inquiryNumber && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500">关联询价：</span>
+                      <span className="text-primary-600 ml-1">{selectedQuotation.inquiryNumber}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 备注信息（如有） */}
+              {selectedQuotation.notes && (
+                <div className="bg-amber-50 rounded-lg p-4">
+                  <h4 className="text-xs font-medium text-amber-700 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    备注
+                  </h4>
+                  <div className="text-xs text-gray-700 whitespace-pre-wrap">
+                    {selectedQuotation.notes}
+                  </div>
+                </div>
+              )}
+
+              {/* 报价明细 */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-gray-100 px-4 py-2 flex items-center justify-between">
+                  <h4 className="text-xs font-medium text-gray-700">报价明细</h4>
+                  <span className="text-xs text-gray-500">{selectedQuotation.items?.length || 0} 项</span>
+                </div>
+                <div className="divide-y">
+                  {/* 表头 */}
+                  <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-gray-50 text-[10px] text-gray-500 font-medium">
+                    <div className="col-span-4">项目名称</div>
+                    <div className="col-span-2">英文名称</div>
+                    <div className="col-span-2 text-center">数量</div>
+                    <div className="col-span-2 text-right">单价</div>
+                    <div className="col-span-2 text-right">金额</div>
+                  </div>
+                  
+                  {/* 明细行 */}
+                  {selectedQuotation.items && selectedQuotation.items.length > 0 ? (
+                    selectedQuotation.items.map((item, index) => (
+                      <div key={index} className="grid grid-cols-12 gap-2 px-4 py-3 text-xs hover:bg-gray-50">
+                        <div className="col-span-4 text-gray-900">{item.name}</div>
+                        <div className="col-span-2 text-gray-500">{item.nameEn || '-'}</div>
+                        <div className="col-span-2 text-center text-gray-700">{item.quantity} {item.unit || ''}</div>
+                        <div className="col-span-2 text-right text-gray-700">
+                          {formatCurrency(item.price, selectedQuotation.currency)}
+                        </div>
+                        <div className="col-span-2 text-right font-medium text-gray-900">
+                          {formatCurrency(item.amount || item.quantity * item.price, selectedQuotation.currency)}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-8 text-center text-xs text-gray-400">
+                      暂无报价明细
+                    </div>
+                  )}
+                  
+                  {/* 合计行 */}
+                  {selectedQuotation.items && selectedQuotation.items.length > 0 && (
+                    <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-primary-50 border-t-2 border-primary-200">
+                      <div className="col-span-10 text-right text-xs font-medium text-gray-700">合计金额：</div>
+                      <div className="col-span-2 text-right text-sm font-bold text-primary-600">
+                        {formatCurrency(selectedQuotation.totalAmount, selectedQuotation.currency)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 金额汇总 */}
+              <div className="bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-gray-600">
+                    <div>小计：{formatCurrency(selectedQuotation.subtotal, selectedQuotation.currency)}</div>
+                    {selectedQuotation.discount > 0 && (
+                      <div>折扣：-{formatCurrency(selectedQuotation.discount, selectedQuotation.currency)}</div>
+                    )}
+                    {selectedQuotation.taxAmount > 0 && (
+                      <div>税额：{formatCurrency(selectedQuotation.taxAmount, selectedQuotation.currency)}</div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500 mb-1">报价总金额</div>
+                    <div className="text-2xl font-bold text-primary-600">
+                      {formatCurrency(selectedQuotation.totalAmount, selectedQuotation.currency)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center gap-2 p-4 border-t sticky bottom-0 bg-white">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleGeneratePdf(selectedQuotation)}
+                  disabled={generatingPdf}
+                  className="flex items-center gap-1 px-3 py-2 text-xs text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 disabled:opacity-50"
+                >
+                  {generatingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  下载PDF
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowQuotationDetail(false)
+                    handleOpenModal(selectedQuotation)
+                  }}
+                  className="px-4 py-2 text-xs text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50"
+                >
+                  编辑报价单
+                </button>
+                <button
+                  onClick={() => setShowQuotationDetail(false)}
+                  className="px-4 py-2 text-xs text-gray-600 border rounded-lg hover:bg-gray-50"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
