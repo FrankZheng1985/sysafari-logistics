@@ -607,21 +607,95 @@ export default function TariffRateLookup() {
                 </div>
               )}
 
-              {/* 面包屑导航 */}
+              {/* 层级路径 - 垂直树形结构 */}
               {resultV2.validation?.breadcrumb && resultV2.validation.breadcrumb.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 bg-gray-50 p-4 rounded-lg">
-                  <span className="text-sm text-gray-500">层级路径:</span>
-                  {resultV2.validation.breadcrumb.map((item, idx) => (
-                    <span key={idx} className="flex items-center">
-                      {idx > 0 && <span className="text-gray-400 mx-2">→</span>}
-                      <button
-                        onClick={() => navigate(buildHsDetailUrl(item.code))}
-                        className="text-blue-600 hover:text-blue-800 hover:underline text-sm"
-                      >
-                        {item.descriptionCn || item.description || item.code}
-                      </button>
-                    </span>
-                  ))}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <span className="text-sm text-gray-500 mb-3 block">层级路径:</span>
+                  <div className="space-y-1">
+                    {resultV2.validation.breadcrumb.map((item, idx) => {
+                      const isLast = idx === resultV2.validation!.breadcrumb.length - 1
+                      const currentFullCode = hsCode?.padEnd(10, '0') || ''
+                      const isSameAsCurrentPage = item.code === currentFullCode || item.code === hsCode
+                      const isDisabled = isLast || isSameAsCurrentPage
+                      
+                      // 获取层级名称
+                      const getLevelName = (level?: string) => {
+                        const levelMap: Record<string, string> = {
+                          'section': '类',
+                          'chapter': '章',
+                          'heading': '品目',
+                          'subheading': '子目',
+                          'cn': 'CN编码',
+                          'taric': 'TARIC编码'
+                        }
+                        return levelMap[level || ''] || level || ''
+                      }
+                      
+                      // 获取层级标签颜色
+                      const getLevelColor = (level?: string) => {
+                        switch (level) {
+                          case 'section': return 'bg-purple-100 text-purple-700'
+                          case 'chapter': return 'bg-blue-100 text-blue-700'
+                          case 'heading': return 'bg-green-100 text-green-700'
+                          case 'subheading': return 'bg-amber-100 text-amber-700'
+                          default: return 'bg-primary-100 text-primary-700'
+                        }
+                      }
+                      
+                      return (
+                        <div 
+                          key={`${item.code}-${idx}`}
+                          className="flex items-center"
+                          style={{ paddingLeft: `${idx * 24}px` }}
+                        >
+                          {/* 树形连接线 */}
+                          {idx > 0 && (
+                            <div className="flex items-center mr-2">
+                              <div className="w-4 h-px bg-gray-300"></div>
+                              <span className="text-gray-400 text-xs">→</span>
+                            </div>
+                          )}
+                          
+                          {/* 层级内容 */}
+                          <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md ${
+                            isLast 
+                              ? 'bg-primary-50 border border-primary-200' 
+                              : isSameAsCurrentPage
+                                ? 'bg-gray-100 border border-gray-200'
+                                : 'bg-white hover:bg-gray-50 border border-gray-200'
+                          }`}>
+                            {/* 层级标签 */}
+                            {item.level && (
+                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${getLevelColor(item.level)}`}>
+                                {getLevelName(item.level)}
+                              </span>
+                            )}
+                            
+                            {/* 描述 */}
+                            {isDisabled ? (
+                              <span className={`text-sm ${isLast ? 'text-primary-700 font-medium' : 'text-gray-500'}`}>
+                                {item.descriptionCn || item.description || item.code}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => navigate(buildHsDetailUrl(item.code))}
+                                className="text-sm text-gray-700 hover:text-primary-600 hover:underline text-left"
+                              >
+                                {item.descriptionCn || item.description || item.code}
+                              </button>
+                            )}
+                            
+                            {/* 编码 */}
+                            {item.code && item.level !== 'section' && (
+                              <span className="text-xs text-gray-400 font-mono">
+                                ({item.code.length > 4 ? item.code.replace(/(\d{4})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4').trim() : item.code})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
