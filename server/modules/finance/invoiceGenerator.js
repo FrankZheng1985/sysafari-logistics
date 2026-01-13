@@ -1030,12 +1030,17 @@ export async function regenerateInvoiceFiles(invoiceId) {
   const totalDiscountForExcel = invoiceSubtotal - invoiceTotal
   
   // 【重要】优先使用 parsedItems（从 items 字段解析的原始数据），包含手动添加的项目
+  // 同时尝试从发票的 containerNumbers 和 billNumber 字段获取默认值
+  const defaultContainerNo = containerNumbers.length > 0 ? containerNumbers[0] : ''
+  const defaultBillNo = invoice.bill_number || ''
+  
   if (parsedItems && parsedItems.length > 0) {
     // 使用 items 字段的数据（包含手动添加的项目）
     console.log(`[regenerateInvoiceFiles] Excel 使用 items 字段数据，共 ${parsedItems.length} 条`)
     excelItems = parsedItems.map(item => ({
-      containerNumber: item.containerNumber || '',
-      billNumber: item.billNumber || '',
+      // 如果 item 没有 containerNumber，使用发票的默认值
+      containerNumber: item.containerNumber || defaultContainerNo || '',
+      billNumber: item.billNumber || defaultBillNo || '',
       feeName: item.description || 'Other',
       feeNameEn: item.descriptionEn || null,
       amount: parseFloat(item.amount) || 0,
