@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   ChevronRight, 
   ChevronDown, 
@@ -25,9 +25,10 @@ export default function HsCodeDetail() {
   const { hsCode } = useParams<{ hsCode: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const location = useLocation()
   
   const originCountry = searchParams.get('originCountry') || ''
+  // 获取来源页面，用于返回按钮
+  const fromPage = searchParams.get('from') || ''
   
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,18 +40,19 @@ export default function HsCodeDetail() {
   // 数据源选择（EU TARIC / UK）
   const [dataSource, setDataSource] = useState<'eu' | 'uk'>('eu')
   
-  // 返回上一页，如果没有历史记录则返回默认页面
+  // 返回上一页 - 使用明确的路径导航避免 DOM 冲突
   const handleGoBack = useCallback(() => {
-    // 检查是否有上一页（通过 location.key 判断）
-    // 如果是首次进入（key === 'default'），则跳转到默认页面
-    if (location.key === 'default' || window.history.length <= 2) {
-      // 没有历史记录，跳转到 HS 编码数据库页面
-      navigate('/system/tariff-rates')
+    // 优先使用 from 参数指定的来源页面
+    if (fromPage) {
+      navigate(fromPage)
+    } else if (originCountry) {
+      // 如果有原产国参数，返回到税率查询页面
+      navigate(`/system/tariff-lookup?code=${hsCode}&country=${originCountry}`)
     } else {
-      // 有历史记录，返回上一页
-      navigate(-1)
+      // 默认返回 HS Code 数据库页面
+      navigate('/system/tariff-rates')
     }
-  }, [navigate, location.key])
+  }, [navigate, fromPage, originCountry, hsCode])
 
   // 加载数据
   useEffect(() => {
@@ -110,24 +112,60 @@ export default function HsCodeDetail() {
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
+  // 构建导航 URL 参数
+  const buildNavParams = (targetCode: string) => {
+    const params = new URLSearchParams()
+    if (originCountry) params.set('originCountry', originCountry)
+    // 记录当前页面作为来源，支持返回
+    params.set('from', `/hs/${hsCode}${originCountry ? `?originCountry=${originCountry}` : ''}`)
+    return params.toString() ? `?${params.toString()}` : ''
+  }
+
   // 处理搜索
   const handleSearch = () => {
     if (searchCode && searchCode !== hsCode) {
-      navigate(`/hs/${searchCode}${originCountry ? `?originCountry=${originCountry}` : ''}`)
+      navigate(`/hs/${searchCode}${buildNavParams(searchCode)}`)
     }
   }
 
-  // 格式化编码显示（不同部分用不同颜色）
-  const formatCodeDisplay = (code: string) => {
+  // 格式化编码显示（不同部分用不同颜色，添加空格分隔）
+  const formatCodeDisplay = (code: string, withSpaces = false) => {
     if (!code || code.length < 4) return <span className="font-mono">{code}</span>
+    
+    // 移除末尾的0以获取有效长度
+    const effectiveCode = code.replace(/0+$/, '')
+    
+    if (withSpaces) {
+      // 带空格的格式化显示：9401 69 00 00
+      const parts = []
+      if (code.length >= 4) parts.push(code.substring(0, 4))
+      if (code.length >= 6) parts.push(code.substring(4, 6))
+      if (code.length >= 8) parts.push(code.substring(6, 8))
+      if (code.length >= 10) parts.push(code.substring(8, 10))
+      return <span className="font-mono">{parts.join(' ')}</span>
+    }
     
     return (
       <span className="font-mono">
-        <span className="text-gray-500">{code.substring(0, 4)}</span>
-        <span className="text-primary-600 font-semibold">{code.substring(4, 8)}</span>
+        <span className="text-gray-600">{code.substring(0, 4)}</span>
+        <span className="text-primary-600 font-semibold">{code.substring(4, 6)}</span>
+        <span className="text-primary-500">{code.substring(6, 8)}</span>
         <span className="text-gray-400">{code.substring(8)}</span>
       </span>
     )
+  }
+
+  // 获取层级名称
+  const getLevelName = (level: string) => {
+    const levelMap: Record<string, string> = {
+      'section': '类',
+      'chapter': '章',
+      'heading': '品目',
+      'subheading': '子目',
+      'cn': 'CN编码',
+      'taric': 'TARIC编码'
+    }
+    return levelMap[level] || level
   }
 
   return (
@@ -218,20 +256,17 @@ export default function HsCodeDetail() {
           {/* 标题区域 */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-4">
             <h1 className="text-xl font-bold text-gray-900 mb-4">
-              {data.level === 'chapter' ? '章' : data.level === 'heading' ? '品目' : '子目'} {data.code} - {data.descriptionCn || data.description}
+              {getLevelName(data.level || '')} {formatCodeDisplay(data.code, true)} - {data.descriptionCn || data.description}
             </h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div>
                 <span className="text-gray-500">编码:</span>
-                <span className="ml-2 font-mono font-medium">{data.code}</span>
+                <span className="ml-2 font-mono font-medium">{formatCodeDisplay(data.code, true)}</span>
               </div>
               <div>
                 <span className="text-gray-500">层级:</span>
                 <span className="ml-2">
-                  {data.level === 'chapter' ? '章 (Chapter)' : 
-                   data.level === 'heading' ? '品目 (Heading)' : 
-                   data.level === 'subheading' ? '子目 (Subheading)' :
-                   data.level === 'cn' ? 'CN 编码' : 'TARIC 编码'}
+                  {getLevelName(data.level || '')} ({data.level})
                 </span>
               </div>
               <div>
@@ -244,19 +279,42 @@ export default function HsCodeDetail() {
                 {data.description}
               </div>
             )}
+            {/* Section 信息 */}
+            {data.section && (
+              <div className="mt-3 pt-3 border-t border-gray-100 text-sm">
+                <span className="text-gray-500">所属分类:</span>
+                <span className="ml-2 text-primary-600">
+                  第{data.section.number}类 - {data.section.titleCn || data.section.title}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* 提示信息 */}
-          {data.totalChildren > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-start gap-3">
-              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-800">
-                <p>
+          {/* 可申报状态提示 */}
+          {data.isDeclarable && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-start gap-3">
+              <Info className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-green-800">
+                <p className="font-medium">该编码是可申报编码</p>
+                <p className="mt-1">
+                  编码 <span className="font-mono font-medium">{formatCodeDisplay(data.code, true)}</span> 是最细分级别的编码，可以直接用于报关申报。
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 子编码提示信息 */}
+          {!data.isDeclarable && data.totalChildren > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <p className="font-medium">该编码不能直接用于报关申报</p>
+                <p className="mt-1">
                   该类别共有 <strong>{data.totalChildren} 个商品编码</strong>
                   {data.declarableCount > 0 && (
                     <>，其中 <strong>{data.declarableCount} 个可申报编码</strong></>
                   )}
-                  。选择最符合您商品的商品代码以查看更多信息。
+                  。请选择最符合您商品的具体编码。
                 </p>
               </div>
             </div>
@@ -265,20 +323,53 @@ export default function HsCodeDetail() {
           {/* 层级面包屑 */}
           {data.breadcrumb && data.breadcrumb.length > 0 && (
             <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="text-gray-500">层级路径:</span>
-                {data.breadcrumb.map((item, index) => (
-                  <span key={item.code} className="flex items-center">
-                    {index > 0 && <ChevronRight className="w-4 h-4 text-gray-400 mx-1" />}
-                    <button
-                      onClick={() => navigate(`/hs/${item.code}${originCountry ? `?originCountry=${originCountry}` : ''}`)}
-                      className="text-primary-600 hover:text-primary-800 hover:underline"
-                    >
-                      {item.descriptionCn || item.description || item.code}
-                    </button>
-                    <span className="text-gray-400 ml-1">({item.code})</span>
-                  </span>
-                ))}
+              <div className="text-sm mb-2 text-gray-500">层级路径:</div>
+              <div className="flex flex-wrap items-start gap-1">
+                {data.breadcrumb.map((item, index) => {
+                  const isSection = item.level === 'section'
+                  const isLast = index === data.breadcrumb.length - 1
+                  
+                  return (
+                    <span key={item.code} className="flex items-center">
+                      {index > 0 && <ChevronRight className="w-4 h-4 text-gray-300 mx-1 flex-shrink-0" />}
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded ${
+                        isLast 
+                          ? 'bg-primary-100 text-primary-700' 
+                          : 'bg-gray-50 hover:bg-gray-100'
+                      }`}>
+                        {/* 层级标签 */}
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          isSection ? 'bg-purple-100 text-purple-600' :
+                          item.level === 'chapter' ? 'bg-blue-100 text-blue-600' :
+                          item.level === 'heading' ? 'bg-green-100 text-green-600' :
+                          'bg-amber-100 text-amber-600'
+                        }`}>
+                          {getLevelName(item.level)}
+                        </span>
+                        {/* 可点击的描述 */}
+                        {isSection ? (
+                          <span className="text-sm text-gray-700">
+                            {item.descriptionCn || item.description}
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => !isLast && navigate(`/hs/${item.code}${buildNavParams(item.code)}`)}
+                            className={`text-sm ${isLast ? 'text-primary-700 font-medium cursor-default' : 'text-gray-700 hover:text-primary-600 hover:underline'}`}
+                            disabled={isLast}
+                          >
+                            {item.descriptionCn || item.description || item.code}
+                          </button>
+                        )}
+                        {/* 编码 */}
+                        {!isSection && (
+                          <span className="text-xs text-gray-400 font-mono">
+                            ({item.code.length > 6 ? formatCodeDisplay(item.code, true) : item.code})
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -351,7 +442,7 @@ export default function HsCodeDetail() {
                               className={`border-b last:border-b-0 hover:bg-blue-50 cursor-pointer transition-colors ${
                                 idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
                               }`}
-                              onClick={() => navigate(`/hs/${child.code}${originCountry ? `?originCountry=${originCountry}` : ''}`)}
+                              onClick={() => navigate(`/hs/${child.code}${buildNavParams(child.code)}`)}
                             >
                               <td className="px-4 py-3">
                                 <div className="text-gray-900">
@@ -426,7 +517,7 @@ export default function HsCodeDetail() {
                       className={`border-b last:border-b-0 hover:bg-blue-50 cursor-pointer ${
                         idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
                       }`}
-                      onClick={() => navigate(`/hs/${child.code}${originCountry ? `?originCountry=${originCountry}` : ''}`)}
+                      onClick={() => navigate(`/hs/${child.code}${buildNavParams(child.code)}`)}
                     >
                       <td className="px-4 py-3 font-mono">{child.code}</td>
                       <td className="px-4 py-3 text-gray-900">{child.description}</td>

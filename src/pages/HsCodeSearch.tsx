@@ -96,9 +96,19 @@ export default function HsCodeSearch() {
     setPage(newPage)
   }
 
+  // 构建当前页面 URL 作为返回地址
+  const buildFromUrl = useCallback(() => {
+    const params = new URLSearchParams()
+    if (searchQuery) params.set('q', searchQuery)
+    if (selectedChapter) params.set('chapter', selectedChapter)
+    return `/hs/search${params.toString() ? `?${params.toString()}` : ''}`
+  }, [searchQuery, selectedChapter])
+
   // 跳转到详情页
   const goToDetail = (hsCode: string) => {
-    navigate(`/hs/${hsCode}`)
+    const params = new URLSearchParams()
+    params.set('from', buildFromUrl())
+    navigate(`/hs/${hsCode}?${params.toString()}`)
   }
 
   // 格式化章节显示
@@ -300,7 +310,7 @@ export default function HsCodeSearch() {
                           <button 
                             onClick={(e) => {
                               e.stopPropagation()
-                              navigate(`/hs/${item.hsCode}`)
+                              goToDetail(item.hsCode)
                             }}
                             className="text-primary-600 hover:text-primary-800 flex items-center gap-1"
                           >

@@ -1060,6 +1060,7 @@ export async function validateHsCode(hsCode) {
 
 /**
  * 获取 HS 编码的层级树（含分组子编码）
+ * 升级版：支持完整的祖先链、Section 信息、材质分级
  * @param {string} prefixCode - 编码前缀
  * @param {string} originCountry - 原产国代码（可选）
  * @returns {Promise<Object>} 层级树结果
@@ -1068,7 +1069,7 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
   const normalizedCode = prefixCode.replace(/\D/g, '')
   
   // 检查缓存
-  const cacheKey = `hierarchy_${normalizedCode}_${originCountry || 'ALL'}`
+  const cacheKey = `hierarchy_v2_${normalizedCode}_${originCountry || 'ALL'}`
   const cached = getFromCache(cacheKey)
   if (cached) {
     return { ...cached, fromCache: true }
@@ -1079,19 +1080,268 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
     description: null,
     descriptionCn: null,
     level: null,
-    breadcrumb: [],
-    childGroups: [],
-    children: [],
+    section: null,        // Section 信息
+    breadcrumb: [],       // 完整祖先链
+    childGroups: [],      // 分组子编码
+    children: [],         // 简单子编码列表
     totalChildren: 0,
     declarableCount: 0,
+    isDeclarable: false,
     hasMore: false
   }
   
   try {
     const codeLength = normalizedCode.length
     
+    // 对于 6 位及以上的编码，使用 commodity API 获取完整层级
+    if (codeLength >= 6) {
+      const fullCode = normalizedCode.padEnd(10, '0')
+      const commodityUrl = `${XI_API_BASE}/commodities/${fullCode}`
+      const commodityData = await httpGetJson(commodityUrl)
+      
+      if (commodityData && commodityData.data) {
+        const commodity = commodityData.data
+        const included = commodityData.included || []
+        
+        result.description = commodity.attributes?.description
+        result.isDeclarable = commodity.attributes?.declarable === true
+        result.level = result.isDeclarable ? 'taric' : 'cn'
+        
+        // 提取 Section 信息
+        const section = included.find(i => i.type === 'section')
+        if (section) {
+          result.section = {
+            number: parseInt(section.id) || section.attributes?.numeral,
+            title: section.attributes?.title || section.attributes?.description,
+            titleCn: null
+          }
+          // 翻译 Section 标题
+          if (result.section.title) {
+            const cachedCn = getCachedTranslation(result.section.title)
+            if (cachedCn) {
+              result.section.titleCn = cachedCn
+            } else {
+              try {
+                const translated = await translateText(result.section.title, 'en', 'zh-CN', 3000)
+                if (translated && translated !== result.section.title) {
+                  result.section.titleCn = translated
+                  setCachedTranslation(result.section.title, translated)
+                }
+              } catch (e) { /* 忽略翻译错误 */ }
+            }
+          }
+        }
+        
+        // 提取 Chapter 信息
+        const chapter = included.find(i => i.type === 'chapter')
+        
+        // 提取 Heading 信息
+        const heading = included.find(i => i.type === 'heading')
+        
+        // 提取所有祖先 commodity（用于构建材质分级）
+        const ancestorCommodities = included
+          .filter(i => i.type === 'commodity' && i.attributes?.goods_nomenclature_item_id !== fullCode)
+          .sort((a, b) => {
+            const aLen = (a.attributes?.goods_nomenclature_item_id || '').length
+            const bLen = (b.attributes?.goods_nomenclature_item_id || '').length
+            return aLen - bLen
+          })
+        
+        // 构建完整的面包屑
+        const breadcrumb = []
+        
+        // 添加 Section
+        if (result.section) {
+          breadcrumb.push({
+            code: `S${result.section.number}`,
+            description: result.section.title,
+            descriptionCn: result.section.titleCn,
+            level: 'section'
+          })
+        }
+        
+        // 添加 Chapter
+        if (chapter) {
+          const chapterDesc = chapter.attributes?.description
+          let chapterDescCn = null
+          if (chapterDesc) {
+            chapterDescCn = getCachedTranslation(chapterDesc)
+            if (!chapterDescCn) {
+              try {
+                const translated = await translateText(chapterDesc, 'en', 'zh-CN', 3000)
+                if (translated && translated !== chapterDesc) {
+                  chapterDescCn = translated
+                  setCachedTranslation(chapterDesc, translated)
+                }
+              } catch (e) { /* 忽略翻译错误 */ }
+            }
+          }
+          breadcrumb.push({
+            code: chapter.attributes?.goods_nomenclature_item_id?.substring(0, 2) || chapter.id,
+            description: chapterDesc,
+            descriptionCn: chapterDescCn,
+            level: 'chapter'
+          })
+        }
+        
+        // 添加 Heading
+        if (heading) {
+          const headingDesc = heading.attributes?.description
+          let headingDescCn = null
+          if (headingDesc) {
+            headingDescCn = getCachedTranslation(headingDesc)
+            if (!headingDescCn) {
+              try {
+                const translated = await translateText(headingDesc, 'en', 'zh-CN', 3000)
+                if (translated && translated !== headingDesc) {
+                  headingDescCn = translated
+                  setCachedTranslation(headingDesc, translated)
+                }
+              } catch (e) { /* 忽略翻译错误 */ }
+            }
+          }
+          breadcrumb.push({
+            code: heading.attributes?.goods_nomenclature_item_id?.substring(0, 4) || heading.id,
+            description: headingDesc,
+            descriptionCn: headingDescCn,
+            level: 'heading'
+          })
+        }
+        
+        // 添加祖先 commodity（材质分级等中间层级）
+        for (const ancestor of ancestorCommodities) {
+          const ancestorCode = ancestor.attributes?.goods_nomenclature_item_id
+          const ancestorDesc = ancestor.attributes?.description
+          
+          // 跳过已经在面包屑中的编码
+          if (breadcrumb.some(b => b.code === ancestorCode)) continue
+          // 跳过不是当前编码祖先的编码
+          if (!fullCode.startsWith(ancestorCode?.substring(0, 6))) continue
+          
+          let ancestorDescCn = null
+          if (ancestorDesc) {
+            ancestorDescCn = getCachedTranslation(ancestorDesc)
+            if (!ancestorDescCn) {
+              try {
+                const translated = await translateText(ancestorDesc, 'en', 'zh-CN', 3000)
+                if (translated && translated !== ancestorDesc) {
+                  ancestorDescCn = translated
+                  setCachedTranslation(ancestorDesc, translated)
+                }
+              } catch (e) { /* 忽略翻译错误 */ }
+            }
+          }
+          
+          // 确定层级
+          const ancestorLen = ancestorCode?.replace(/0+$/, '').length || 0
+          let ancestorLevel = 'subheading'
+          if (ancestorLen <= 6) ancestorLevel = 'subheading'
+          else if (ancestorLen <= 8) ancestorLevel = 'cn'
+          else ancestorLevel = 'taric'
+          
+          breadcrumb.push({
+            code: ancestorCode,
+            description: ancestorDesc,
+            descriptionCn: ancestorDescCn,
+            level: ancestorLevel,
+            indent: ancestor.attributes?.number_indents
+          })
+        }
+        
+        // 添加当前编码到面包屑
+        let currentDescCn = null
+        if (result.description) {
+          currentDescCn = getCachedTranslation(result.description)
+          if (!currentDescCn) {
+            try {
+              const translated = await translateText(result.description, 'en', 'zh-CN', 3000)
+              if (translated && translated !== result.description) {
+                currentDescCn = translated
+                setCachedTranslation(result.description, translated)
+              }
+            } catch (e) { /* 忽略翻译错误 */ }
+          }
+        }
+        result.descriptionCn = currentDescCn
+        
+        breadcrumb.push({
+          code: fullCode,
+          description: result.description,
+          descriptionCn: currentDescCn,
+          level: result.level
+        })
+        
+        result.breadcrumb = breadcrumb
+        
+        // 如果是可申报编码，没有子编码
+        if (result.isDeclarable) {
+          result.totalChildren = 0
+          result.declarableCount = 0
+        } else {
+          // 获取子编码 - 从 heading 查询
+          const headingCode = normalizedCode.substring(0, 4)
+          const headingUrl = `${XI_API_BASE}/headings/${headingCode}`
+          const headingData = await httpGetJson(headingUrl)
+          
+          if (headingData && headingData.included) {
+            const prefix6 = normalizedCode.substring(0, Math.min(normalizedCode.length, 6))
+            const childCommodities = headingData.included.filter(i =>
+              i.type === 'commodity' &&
+              i.attributes?.goods_nomenclature_item_id?.startsWith(prefix6) &&
+              i.attributes?.goods_nomenclature_item_id !== fullCode
+            )
+            
+            // 按 8 位编码分组
+            const groupMap = new Map()
+            
+            for (const child of childCommodities) {
+              const childCode = child.attributes?.goods_nomenclature_item_id
+              if (!child.attributes?.declarable) continue
+              
+              const groupKey = childCode?.substring(0, 8)
+              
+              // 找到分组的父级描述
+              const parentNode = childCommodities.find(c =>
+                !c.attributes?.declarable &&
+                childCode?.startsWith(c.attributes?.goods_nomenclature_item_id?.substring(0, 8))
+              )
+              
+              const groupTitle = parentNode?.attributes?.description || 'Other'
+              
+              if (!groupMap.has(groupKey)) {
+                let groupTitleCn = getCachedTranslation(groupTitle)
+                groupMap.set(groupKey, {
+                  groupCode: groupKey,
+                  groupTitle,
+                  groupTitleCn,
+                  children: []
+                })
+              }
+              
+              let childDescCn = getCachedTranslation(child.attributes?.description)
+              
+              groupMap.get(groupKey).children.push({
+                code: childCode,
+                description: child.attributes?.description,
+                descriptionCn: childDescCn,
+                declarable: true
+              })
+            }
+            
+            result.childGroups = Array.from(groupMap.values()).filter(g => g.children.length > 0)
+            result.totalChildren = childCommodities.filter(c => c.attributes?.declarable).length
+            result.declarableCount = result.totalChildren
+          }
+        }
+        
+        // 缓存结果
+        setCache(cacheKey, result, 30 * 60 * 1000)
+        return result
+      }
+    }
+    
+    // 章节级别（2位）
     if (codeLength <= 2) {
-      // 章节级别 - 返回所有品目
       const chapterCode = normalizedCode.padStart(2, '0')
       const url = `${XI_API_BASE}/chapters/${chapterCode}`
       const data = await httpGetJson(url)
@@ -1099,6 +1349,31 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
       if (data && data.data) {
         result.description = data.data.attributes?.description
         result.level = 'chapter'
+        
+        // 获取 Section 信息
+        const section = (data.included || []).find(i => i.type === 'section')
+        if (section) {
+          result.section = {
+            number: parseInt(section.id) || section.attributes?.numeral,
+            title: section.attributes?.title || section.attributes?.description,
+            titleCn: null
+          }
+        }
+        
+        // 翻译描述
+        if (result.description) {
+          const cachedCn = getCachedTranslation(result.description)
+          result.descriptionCn = cachedCn || null
+          if (!cachedCn) {
+            try {
+              const translated = await translateText(result.description, 'en', 'zh-CN', 3000)
+              if (translated && translated !== result.description) {
+                result.descriptionCn = translated
+                setCachedTranslation(result.description, translated)
+              }
+            } catch (e) { /* 忽略翻译错误 */ }
+          }
+        }
         
         // 获取所有 headings
         const headings = (data.included || []).filter(i => i.type === 'heading')
@@ -1110,14 +1385,26 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         }))
         result.totalChildren = result.children.length
         
-        result.breadcrumb = [{
+        // 构建面包屑
+        result.breadcrumb = []
+        if (result.section) {
+          result.breadcrumb.push({
+            code: `S${result.section.number}`,
+            description: result.section.title,
+            descriptionCn: result.section.titleCn,
+            level: 'section'
+          })
+        }
+        result.breadcrumb.push({
           code: chapterCode,
           description: result.description,
+          descriptionCn: result.descriptionCn,
           level: 'chapter'
-        }]
+        })
       }
-    } else if (codeLength <= 4) {
-      // 品目级别 - 返回所有子目和商品编码，按描述分组
+    } 
+    // 品目级别（4位）
+    else if (codeLength <= 4) {
       const headingCode = normalizedCode.substring(0, 4)
       const url = `${XI_API_BASE}/headings/${headingCode}`
       const data = await httpGetJson(url)
@@ -1141,23 +1428,47 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
           }
         }
         
-        // 获取章节信息
+        // 获取章节和 Section 信息
         const chapter = (data.included || []).find(i => i.type === 'chapter')
-        result.breadcrumb = [
-          {
-            code: headingCode.substring(0, 2),
-            description: chapter?.attributes?.description || `Chapter ${headingCode.substring(0, 2)}`,
-            level: 'chapter'
-          },
-          {
-            code: headingCode,
-            description: result.description,
-            descriptionCn: result.descriptionCn,
-            level: 'heading'
-          }
-        ]
+        const section = (data.included || []).find(i => i.type === 'section')
         
-        // 获取所有商品编码
+        if (section) {
+          result.section = {
+            number: parseInt(section.id) || section.attributes?.numeral,
+            title: section.attributes?.title || section.attributes?.description,
+            titleCn: null
+          }
+        }
+        
+        // 构建面包屑
+        result.breadcrumb = []
+        if (result.section) {
+          result.breadcrumb.push({
+            code: `S${result.section.number}`,
+            description: result.section.title,
+            descriptionCn: result.section.titleCn,
+            level: 'section'
+          })
+        }
+        
+        if (chapter) {
+          let chapterDescCn = getCachedTranslation(chapter.attributes?.description)
+          result.breadcrumb.push({
+            code: headingCode.substring(0, 2),
+            description: chapter.attributes?.description || `Chapter ${headingCode.substring(0, 2)}`,
+            descriptionCn: chapterDescCn,
+            level: 'chapter'
+          })
+        }
+        
+        result.breadcrumb.push({
+          code: headingCode,
+          description: result.description,
+          descriptionCn: result.descriptionCn,
+          level: 'heading'
+        })
+        
+        // 获取所有商品编码并按子目分组
         const commodities = (data.included || []).filter(i => i.type === 'commodity')
         
         // 按6位子目分组
@@ -1176,177 +1487,32 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
               !c.attributes?.declarable
             )
             
+            const groupTitle = parentCommodity?.attributes?.description || `Subheading ${subheading6}`
+            let groupTitleCn = getCachedTranslation(groupTitle)
+            
             subheadingGroups.set(subheading6, {
               groupCode: subheading6,
-              groupTitle: parentCommodity?.attributes?.description || `Subheading ${subheading6}`,
-              groupTitleCn: null,
+              groupTitle,
+              groupTitleCn,
               children: []
             })
           }
           
           // 只添加可申报编码到子列表
           if (commodity.attributes?.declarable) {
+            let childDescCn = getCachedTranslation(commodity.attributes?.description)
             subheadingGroups.get(subheading6).children.push({
               code: code10,
               description: commodity.attributes?.description,
-              declarable: true,
-              vatRate: null,
-              thirdCountryDuty: null,
-              supplementaryUnit: null
+              descriptionCn: childDescCn,
+              declarable: true
             })
           }
         }
         
-        // 转换为数组并翻译分组标题
-        result.childGroups = Array.from(subheadingGroups.values())
-          .filter(g => g.children.length > 0)
-        
-        // 异步翻译分组标题（限制数量避免太慢）
-        for (const group of result.childGroups.slice(0, 10)) {
-          if (group.groupTitle) {
-            const cachedCn = getCachedTranslation(group.groupTitle)
-            if (cachedCn) {
-              group.groupTitleCn = cachedCn
-            } else {
-              try {
-                const translated = await translateText(group.groupTitle, 'en', 'zh-CN', 3000)
-                if (translated && translated !== group.groupTitle) {
-                  group.groupTitleCn = translated
-                  setCachedTranslation(group.groupTitle, translated)
-                }
-              } catch (e) { /* 忽略翻译错误 */ }
-            }
-          }
-        }
-        
-        // 如果请求了原产国，获取税率信息
-        if (originCountry) {
-          for (const group of result.childGroups) {
-            for (const child of group.children) {
-              try {
-                const rateData = await lookupTaricCode(child.code, originCountry)
-                if (rateData) {
-                  child.thirdCountryDuty = rateData.thirdCountryDuty
-                  child.vatRate = rateData.vatRate
-                  child.antiDumpingRate = rateData.antiDumpingRate
-                }
-              } catch (e) { /* 忽略单个编码查询错误 */ }
-            }
-          }
-        }
-        
+        result.childGroups = Array.from(subheadingGroups.values()).filter(g => g.children.length > 0)
         result.totalChildren = commodities.filter(c => c.attributes?.declarable).length
         result.declarableCount = result.totalChildren
-      }
-    } else {
-      // 子目级别 - 返回该子目下的所有可申报编码
-      const headingCode = normalizedCode.substring(0, 4)
-      const prefix = normalizedCode.substring(0, Math.min(normalizedCode.length, 8))
-      const url = `${XI_API_BASE}/headings/${headingCode}`
-      const data = await httpGetJson(url)
-      
-      if (data && data.data) {
-        // 过滤出匹配前缀的商品编码
-        const commodities = (data.included || []).filter(i => 
-          i.type === 'commodity' && 
-          i.attributes?.goods_nomenclature_item_id?.startsWith(prefix)
-        )
-        
-        // 找到当前编码的描述
-        const currentCommodity = commodities.find(c => 
-          c.attributes?.goods_nomenclature_item_id?.startsWith(normalizedCode)
-        )
-        
-        result.description = currentCommodity?.attributes?.description || data.data.attributes?.description
-        result.level = normalizedCode.length <= 6 ? 'subheading' : 'cn'
-        
-        // 翻译描述
-        if (result.description) {
-          const cachedCn = getCachedTranslation(result.description)
-          result.descriptionCn = cachedCn || null
-          if (!cachedCn) {
-            try {
-              const translated = await translateText(result.description, 'en', 'zh-CN', 3000)
-              if (translated && translated !== result.description) {
-                result.descriptionCn = translated
-                setCachedTranslation(result.description, translated)
-              }
-            } catch (e) { /* 忽略翻译错误 */ }
-          }
-        }
-        
-        // 构建面包屑
-        const chapter = (data.included || []).find(i => i.type === 'chapter')
-        result.breadcrumb = [
-          {
-            code: headingCode.substring(0, 2),
-            description: chapter?.attributes?.description,
-            level: 'chapter'
-          },
-          {
-            code: headingCode,
-            description: data.data.attributes?.description,
-            level: 'heading'
-          },
-          {
-            code: normalizedCode,
-            description: result.description,
-            descriptionCn: result.descriptionCn,
-            level: result.level
-          }
-        ]
-        
-        // 获取可申报子编码
-        const declarables = commodities.filter(c => c.attributes?.declarable === true)
-        
-        // 按描述特征分组（简化处理：按8位编码分组）
-        const groupMap = new Map()
-        
-        for (const commodity of declarables) {
-          const code10 = commodity.attributes?.goods_nomenclature_item_id
-          const code8 = code10?.substring(0, 8)
-          
-          // 找到非可申报的父级作为分组标题
-          const parentCommodity = commodities.find(c =>
-            !c.attributes?.declarable &&
-            code10?.startsWith(c.attributes?.goods_nomenclature_item_id?.substring(0, 8))
-          )
-          
-          const groupKey = parentCommodity?.attributes?.goods_nomenclature_item_id?.substring(0, 8) || code8
-          const groupTitle = parentCommodity?.attributes?.description || 'Other'
-          
-          if (!groupMap.has(groupKey)) {
-            groupMap.set(groupKey, {
-              groupCode: groupKey,
-              groupTitle,
-              groupTitleCn: null,
-              children: []
-            })
-          }
-          
-          groupMap.get(groupKey).children.push({
-            code: code10,
-            description: commodity.attributes?.description,
-            declarable: true,
-            vatRate: null,
-            thirdCountryDuty: null,
-            supplementaryUnit: null
-          })
-        }
-        
-        result.childGroups = Array.from(groupMap.values())
-        result.totalChildren = declarables.length
-        result.declarableCount = declarables.length
-        
-        // 翻译分组标题
-        for (const group of result.childGroups.slice(0, 10)) {
-          if (group.groupTitle) {
-            const cachedCn = getCachedTranslation(group.groupTitle)
-            if (cachedCn) {
-              group.groupTitleCn = cachedCn
-            }
-          }
-        }
       }
     }
   } catch (error) {

@@ -92,6 +92,20 @@ export default function TariffRateLookup() {
     setSearchParams(params, { replace: true })
   }, [setSearchParams])
 
+  // 构建导航到 HS 详情页的 URL（包含 from 参数用于返回）
+  const buildHsDetailUrl = useCallback((code: string) => {
+    const params = new URLSearchParams()
+    if (originCountry) params.set('originCountry', originCountry)
+    // 构建当前页面的 URL 作为返回地址
+    const currentParams = new URLSearchParams()
+    if (hsCode) currentParams.set('code', hsCode)
+    if (originCountry) currentParams.set('country', originCountry)
+    if (dataSource !== 'eu') currentParams.set('source', dataSource)
+    const fromUrl = `/system/tariff-lookup${currentParams.toString() ? `?${currentParams.toString()}` : ''}`
+    params.set('from', fromUrl)
+    return `/hs/${code}?${params.toString()}`
+  }, [originCountry, hsCode, dataSource])
+
   // 加载国家代码
   useEffect(() => {
     loadCountries()
@@ -601,7 +615,7 @@ export default function TariffRateLookup() {
                     <span key={idx} className="flex items-center">
                       {idx > 0 && <span className="text-gray-400 mx-2">→</span>}
                       <button
-                        onClick={() => navigate(`/hs/${item.code}`)}
+                        onClick={() => navigate(buildHsDetailUrl(item.code))}
                         className="text-blue-600 hover:text-blue-800 hover:underline text-sm"
                       >
                         {item.descriptionCn || item.description || item.code}
@@ -667,7 +681,7 @@ export default function TariffRateLookup() {
                       请选择具体的可申报编码 ({resultV2.hierarchy.totalChildren} 个)
                     </span>
                     <button
-                      onClick={() => navigate(`/hs/${hsCode}`)}
+                      onClick={() => navigate(buildHsDetailUrl(hsCode))}
                       className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
                     >
                       查看完整层级树 <ExternalLink className="w-4 h-4" />
@@ -741,7 +755,7 @@ export default function TariffRateLookup() {
               {/* 快捷操作 */}
               <div className="flex items-center gap-4 pt-4 border-t">
                 <button
-                  onClick={() => navigate(`/hs/${hsCode}`)}
+                  onClick={() => navigate(buildHsDetailUrl(hsCode))}
                   className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
                 >
                   查看编码详情页 <ExternalLink className="w-4 h-4" />

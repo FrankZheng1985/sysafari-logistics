@@ -4575,11 +4575,19 @@ export interface HsCodeHierarchy {
   description: string | null
   descriptionCn: string | null
   level: string | null
+  isDeclarable?: boolean
+  // Section 信息（类别）
+  section?: {
+    number: number
+    title: string
+    titleCn: string | null
+  } | null
   breadcrumb: Array<{
     code: string
     description: string
     descriptionCn?: string
     level: string
+    indent?: number
   }>
   childGroups: Array<{
     groupCode: string
@@ -4590,15 +4598,16 @@ export interface HsCodeHierarchy {
       description: string
       descriptionCn?: string
       declarable: boolean
-      vatRate: number | null
-      thirdCountryDuty: string | null
-      supplementaryUnit: string | null
+      vatRate?: number | null
+      thirdCountryDuty?: string | null
+      supplementaryUnit?: string | null
       antiDumpingRate?: number | null
     }>
   }>
   children?: Array<{
     code: string
     description: string
+    descriptionCn?: string
     level: string
     hasChildren: boolean
   }>
