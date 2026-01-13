@@ -983,10 +983,19 @@ export async function validateHsCode(hsCode) {
         
         // 添加 Section
         if (section) {
-          let sectionTitleCn = getCachedTranslation(section.attributes?.title || section.attributes?.description)
+          const sectionTitle = section.attributes?.title || section.attributes?.description
+          let sectionTitleCn = getCachedTranslation(sectionTitle)
+          if (!sectionTitleCn && sectionTitle) {
+            try {
+              sectionTitleCn = await translateText(sectionTitle, 'en', 'zh-CN', 3000)
+              if (sectionTitleCn && sectionTitleCn !== sectionTitle) {
+                setCachedTranslation(sectionTitle, sectionTitleCn)
+              }
+            } catch (e) { /* ignore */ }
+          }
           result.breadcrumb.push({
             code: `S${section.attributes?.numeral || section.id}`,
-            description: section.attributes?.title || section.attributes?.description,
+            description: sectionTitle,
             descriptionCn: sectionTitleCn,
             level: 'section'
           })
