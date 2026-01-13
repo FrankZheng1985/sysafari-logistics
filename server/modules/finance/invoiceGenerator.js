@@ -1039,17 +1039,13 @@ export async function regenerateInvoiceFiles(invoiceId) {
     parsedItems.every(item => !item.containerNumber) && 
     parsedItems.some(item => (item.quantity || 1) > 1)
   
-  console.log(`[regenerateInvoiceFiles] parsedItems 是否为汇总数据: ${isAggregatedItems}`)
-  
   // 如果 items 是汇总数据且有关联的 bill_id，尝试从 fees 表获取明细
   let detailedFeesFromDb = []
   if (isAggregatedItems && invoice.bill_id) {
-    console.log(`[regenerateInvoiceFiles] items 是汇总数据，尝试从 fees 表获取明细...`)
     const billIds = invoice.bill_id.split(',').map(id => id.trim()).filter(Boolean)
     
     // 获取 items 中的费用名称列表
     const itemFeeNames = parsedItems.map(item => item.description?.trim()).filter(Boolean)
-    console.log(`[regenerateInvoiceFiles] items 中的费用名称: ${itemFeeNames.join(', ')}`)
     
     if (billIds.length > 0) {
       // 从 fees 表获取这些 bill_id 对应的详细费用
@@ -1067,12 +1063,11 @@ export async function regenerateInvoiceFiles(invoiceId) {
       detailedFeesFromDb = allFees.filter(f => 
         itemFeeNames.some(name => f.fee_name && f.fee_name.includes(name) || name.includes(f.fee_name))
       )
-      console.log(`[regenerateInvoiceFiles] 从 fees 表获取到 ${detailedFeesFromDb.length} 条匹配的明细`)
     }
   }
   
   if (detailedFeesFromDb.length > 0) {
-    // 使用从 fees 表获取的详细数据
+    // 使用从 fees 表获取的详细数据（按集装箱展开的明细）
     console.log(`[regenerateInvoiceFiles] Excel 使用 fees 表明细数据，共 ${detailedFeesFromDb.length} 条`)
     excelItems = detailedFeesFromDb.map(f => ({
       containerNumber: f.container_number || '',
