@@ -53,13 +53,139 @@
 
 ### 标准间距
 
-- 表格单元格：`px-3 py-2`
-- 状态标签：`px-2 py-0.5`
+- 表格单元格：`px-2 py-2`（紧凑型）
+- 状态标签：`px-1.5 py-0.5`
 - 状态标签最小宽度：`min-w-[52px]`
+
+### 表格布局规范（重要）
+
+**✅ 正确的表格结构**
+
+```tsx
+<table className="w-full text-sm">
+  <thead>
+    <tr className="border-b border-gray-200 bg-gray-50">
+      <th className="text-center py-2 px-2 font-medium text-gray-600 w-10">#</th>
+      <th className="text-center py-2 px-2 font-medium text-gray-600 w-[110px]">集装箱号</th>
+      <th className="text-left py-2 px-2 font-medium text-gray-600">描述</th>
+      <th className="text-center py-2 px-2 font-medium text-gray-600 w-14">数量</th>
+      <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">单价</th>
+      <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">金额</th>
+      <th className="text-right py-2 px-2 font-medium text-gray-600 w-16">税额</th>
+      <th className="text-right py-2 px-2 font-medium text-gray-600 w-24">最终金额</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr className="border-b border-gray-100">
+      <td className="py-2 px-2 text-center text-gray-500">1</td>
+      <td className="py-2 px-2 text-center bg-gray-50/50" rowSpan={4}>
+        <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs">EGHU9389750</span>
+      </td>
+      <td className="py-2 px-2 text-gray-900">费用描述</td>
+      {/* ...其他列 */}
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr className="border-t-2 border-gray-300 bg-gray-100 font-medium">
+      <td colSpan={5} className="py-2.5 px-2 text-right text-gray-700">合计</td>
+      {/* ...合计金额 */}
+    </tr>
+  </tfoot>
+</table>
+```
+
+**列宽参考标准**
+
+| 列类型 | 宽度类 | 对齐方式 |
+|--------|--------|----------|
+| 序号 # | `w-10` | `text-center` |
+| 编码/柜号 | `w-[110px]` | `text-center` |
+| 描述/名称 | 不设宽度（自动伸缩） | `text-left` |
+| 数量 | `w-14` | `text-center` |
+| 单价 | `w-20` | `text-right` |
+| 金额 | `w-20` | `text-right` |
+| 税额 | `w-16` | `text-right` |
+| 最终金额 | `w-24` | `text-right` |
+| 状态标签 | `w-20` | `text-center` (flex居中) |
+| 操作按钮 | `w-20` ~ `w-24` | `text-center` (flex居中) |
+
+**列顺序规范**
+- 集装箱号/订单号等标识列应放在描述列**前面**，便于视觉分组
+
+**❌ 禁止的写法**
+
+```tsx
+// 1. 不要使用 table-fixed + 自动伸缩列（会导致列间距不均匀）
+<table className="w-full table-fixed">
+  <col /> {/* 自动伸缩会占用过多空间 */}
+</table>
+
+// 2. 不要给文本列设置过大的固定宽度
+<th className="w-[400px]">描述</th>
+
+// 3. 不要使用过大的 padding
+<td className="px-4 py-3">...</td>  // 间距过大，应使用 px-2 py-2
+```
+
+**合并单元格（rowSpan）规范**
+
+当需要合并相同内容的单元格时（如集装箱号）：
+
+```tsx
+// 1. 计算 rowSpan
+const containerRowSpans: { [key: number]: number } = {}
+const containerFirstRows: Set<number> = new Set()
+
+// 2. 只在第一行渲染合并单元格，放在描述列前面
+{isFirstRowOfContainer && (
+  <td className="py-2 px-2 text-center bg-gray-50/50" rowSpan={rowSpan}>
+    <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">
+      {containerNumber}
+    </span>
+  </td>
+)}
+```
 
 ---
 
 ## 📐 组件规范
+
+### 表格列宽可调节功能（DataTable）
+
+系统支持表格列宽拖拽调节，用户调整后的列宽会自动保存到 localStorage。
+
+**启用列宽调节**
+
+```tsx
+<DataTable
+  columns={columns}
+  data={data}
+  tableKey="invoiceList"  // 必填：表格唯一标识，用于保存列宽
+  resizable={true}        // 启用列宽调节
+/>
+```
+
+**列配置**
+
+```tsx
+const columns = [
+  {
+    key: 'name',
+    label: '名称',
+    width: 150,        // 默认宽度
+    minWidth: 80,      // 最小宽度（可选）
+    resizable: false,  // 单独禁用某列的调节（可选）
+  },
+  // ...
+]
+```
+
+**注意事项**
+- `tableKey` 必须唯一，建议使用页面路径或功能名称
+- 列宽会保存在 localStorage，key 格式为 `table_column_widths_{tableKey}`
+- 拖拽手柄在列头右侧，鼠标悬停时显示
+- 最小列宽 50px，最大列宽 600px
+
 
 ### 操作按钮组
 

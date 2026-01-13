@@ -796,24 +796,48 @@ export default function InvoiceDetail() {
                     }
                   }
                   
+                  // 计算集装箱号的 rowSpan（合并相同柜号）
+                  const containerRowSpans: { [key: number]: number } = {}
+                  const containerFirstRows: Set<number> = new Set()
+                  let currentContainer = ''
+                  let currentStartIdx = 0
+                  
+                  parsedItems.forEach((item, index) => {
+                    const containerNum = item.containerNumber || '-'
+                    if (containerNum !== currentContainer) {
+                      // 新的集装箱号
+                      if (currentContainer !== '') {
+                        // 保存上一个集装箱的 span
+                        containerRowSpans[currentStartIdx] = index - currentStartIdx
+                      }
+                      currentContainer = containerNum
+                      currentStartIdx = index
+                      containerFirstRows.add(index)
+                    }
+                  })
+                  // 处理最后一个集装箱
+                  if (parsedItems.length > 0) {
+                    containerRowSpans[currentStartIdx] = parsedItems.length - currentStartIdx
+                  }
+                  
                   return (
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-200 bg-gray-50">
                           <th className="text-center py-2 px-2 font-medium text-gray-600 w-10">#</th>
+                          <th className="text-center py-2 px-2 font-medium text-gray-600 w-[110px]">集装箱号</th>
                           <th className="text-left py-2 px-2 font-medium text-gray-600">描述</th>
-                          <th className="text-left py-2 px-2 font-medium text-gray-600 w-28">集装箱号</th>
                           {hasDetailedData && (
                             <>
-                              <th className="text-center py-2 px-2 font-medium text-gray-600 w-16">数量</th>
+                              <th className="text-center py-2 px-2 font-medium text-gray-600 w-14">数量</th>
                               <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">单价</th>
                             </>
                           )}
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-24">金额</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">税额</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">金额</th>
+                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-16">税额</th>
                           {(hasDiscountData || needDistributeDiscount) && (
                             <>
-                              <th className="text-center py-2 px-2 font-medium text-gray-600 w-16">优惠%</th>
+                              <th className="text-center py-2 px-2 font-medium text-gray-600 w-14">优惠%</th>
                               <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">优惠额</th>
                             </>
                           )}
@@ -839,14 +863,26 @@ export default function InvoiceDetail() {
                                     : amount + taxAmount - discountAmt)
                               const isNegative = finalAmount < 0
                               
+                              // 判断是否是某个集装箱的第一行
+                              const isFirstRowOfContainer = containerFirstRows.has(index)
+                              const rowSpan = containerRowSpans[index] || 1
+                              
                               return (
                                 <tr key={index} className={`border-b border-gray-100 ${isNegative ? 'bg-green-50' : ''}`}>
                                   <td className="py-2 px-2 text-center text-gray-500">{index + 1}</td>
+                                  {/* 集装箱号列放在描述前面，使用 rowSpan 合并 */}
+                                  {isFirstRowOfContainer && (
+                                    <td 
+                                      className="py-2 px-2 text-center bg-gray-50/50"
+                                      rowSpan={rowSpan}
+                                    >
+                                      <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">
+                                        {item.containerNumber || '-'}
+                                      </span>
+                                    </td>
+                                  )}
                                   <td className={`py-2 px-2 ${isNegative ? 'text-green-700 font-medium' : 'text-gray-900'}`}>
                                     {item.description}
-                                  </td>
-                                  <td className="py-2 px-2 text-gray-600 text-xs">
-                                    {item.containerNumber || '-'}
                                   </td>
                                   {hasDetailedData && (
                                     <>
@@ -877,7 +913,7 @@ export default function InvoiceDetail() {
                                       </td>
                                     </>
                                   )}
-                                  <td className={`py-2 px-2 text-right font-medium ${isNegative ? 'text-green-700' : 'text-gray-900'}`}>
+                                  <td className={`py-2 px-2 text-right font-medium ${isNegative ? 'text-green-700' : 'text-primary-600'}`}>
                                     {formatCurrency(finalAmount, invoice.currency)}
                                   </td>
                                 </tr>
@@ -890,8 +926,8 @@ export default function InvoiceDetail() {
                           invoice.description.split(';').filter((s: string) => s.trim()).map((item: string, index: number) => (
                             <tr key={index} className="border-b border-gray-100">
                               <td className="py-2 px-2 text-center text-gray-500">{index + 1}</td>
+                              <td className="py-2 px-2 text-center text-gray-500">-</td>
                               <td className="py-2 px-2 text-gray-900">{item.trim()}</td>
-                              <td className="py-2 px-2 text-gray-500">-</td>
                               {hasDetailedData && (
                                 <>
                                   <td className="py-2 px-2 text-center text-gray-500">-</td>
@@ -912,23 +948,23 @@ export default function InvoiceDetail() {
                         ) : null}
                       </tbody>
                       <tfoot>
-                        <tr className="border-t-2 border-gray-300 bg-gray-50 font-medium">
-                          <td colSpan={hasDetailedData ? 5 : 3} className="py-2 px-2 text-right text-gray-700">合计</td>
-                          <td className="py-2 px-2 text-right text-gray-700">
+                        <tr className="border-t-2 border-gray-300 bg-gray-100 font-medium">
+                          <td colSpan={hasDetailedData ? 5 : 3} className="py-2.5 px-2 text-right text-gray-700">合计</td>
+                          <td className="py-2.5 px-2 text-right text-gray-900 font-semibold">
                             {formatCurrency(totals.amount, invoice.currency)}
                           </td>
-                          <td className="py-2 px-2 text-right text-gray-700">
+                          <td className="py-2.5 px-2 text-right text-gray-700">
                             {formatCurrency(totals.taxAmount, invoice.currency)}
                           </td>
                           {(hasDiscountData || needDistributeDiscount) && (
                             <>
-                              <td className="py-2 px-2 text-center text-gray-500">-</td>
-                              <td className="py-2 px-2 text-right text-orange-600">
+                              <td className="py-2.5 px-2 text-center text-gray-500">-</td>
+                              <td className="py-2.5 px-2 text-right text-orange-600">
                                 {formatCurrency(needDistributeDiscount ? totalDiscount : totals.discountAmount, invoice.currency)}
                               </td>
                             </>
                           )}
-                          <td className="py-2 px-2 text-right text-primary-700 font-bold">
+                          <td className="py-2.5 px-2 text-right text-primary-600 font-bold">
                             {formatCurrency(displayTotal, invoice.currency)}
                           </td>
                         </tr>

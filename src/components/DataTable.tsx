@@ -1,5 +1,5 @@
-import React, { ReactNode, useState, useMemo, useEffect, useRef } from 'react'
-import { Filter, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import React, { ReactNode, useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { Filter, ChevronUp, ChevronDown, ChevronsUpDown, GripVertical } from 'lucide-react'
 
 export type SortOrder = 'asc' | 'desc' | null
 
@@ -15,8 +15,10 @@ export interface Column<T> {
   filters?: { text: string; value: string }[]
   onFilter?: (value: string, record: T) => boolean
   width?: string | number
+  minWidth?: number  // 最小宽度（用于可调节列宽）
   align?: 'left' | 'center' | 'right'
   fixed?: 'left' | 'right'  // 兼容旧格式
+  resizable?: boolean  // 单列是否可调节宽度，默认跟随全局设置
 }
 
 export interface DataTableProps<T> {
@@ -56,7 +58,13 @@ export interface DataTableProps<T> {
     expandedRowKeys?: string[]  // 展开的行 keys
     expandedRowRender?: (record: T) => ReactNode  // 展开行内容渲染
   }
+  // 列宽调节支持
+  tableKey?: string  // 表格唯一标识，用于保存列宽设置
+  resizable?: boolean  // 是否启用列宽调节，默认 false
 }
+
+// 列宽存储 key 前缀
+const COLUMN_WIDTH_STORAGE_PREFIX = 'table_column_widths_'
 
 export default function DataTable<T extends Record<string, any>>({
   columns,
@@ -73,6 +81,8 @@ export default function DataTable<T extends Record<string, any>>({
   initialFilters,
   onFilterChange,
   expandable,
+  tableKey,
+  resizable = false,
 }: DataTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState<SortOrder>(null)
@@ -84,6 +94,20 @@ export default function DataTable<T extends Record<string, any>>({
   )
   const [openFilterDropdown, setOpenFilterDropdown] = useState<string | null>(null)
   
+  // 列宽调节状态
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    if (!tableKey) return {}
+    try {
+      const saved = localStorage.getItem(COLUMN_WIDTH_STORAGE_PREFIX + tableKey)
+      return saved ? JSON.parse(saved) : {}
+    } catch {
+      return {}
+    }
+  })
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null)
+  const resizeStartX = useRef<number>(0)
+  const resizeStartWidth = useRef<number>(0)
+  
   // 当筛选状态变化时，通知父组件（使用 ref 避免依赖回调导致循环）
   const onFilterChangeRef = useRef(onFilterChange)
   onFilterChangeRef.current = onFilterChange
@@ -93,6 +117,62 @@ export default function DataTable<T extends Record<string, any>>({
       onFilterChangeRef.current(filterStates)
     }
   }, [filterStates])
+  
+  // 保存列宽到 localStorage
+  useEffect(() => {
+    if (tableKey && Object.keys(columnWidths).length > 0) {
+      try {
+        localStorage.setItem(COLUMN_WIDTH_STORAGE_PREFIX + tableKey, JSON.stringify(columnWidths))
+      } catch (e) {
+        console.warn('Failed to save column widths:', e)
+      }
+    }
+  }, [columnWidths, tableKey])
+  
+  // 开始调整列宽
+  const handleResizeStart = useCallback((e: React.MouseEvent, columnKey: string, currentWidth: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setResizingColumn(columnKey)
+    resizeStartX.current = e.clientX
+    resizeStartWidth.current = currentWidth
+  }, [])
+  
+  // 处理鼠标移动（调整列宽）
+  useEffect(() => {
+    if (!resizingColumn) return
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const diff = e.clientX - resizeStartX.current
+      const newWidth = Math.max(50, Math.min(600, resizeStartWidth.current + diff))
+      setColumnWidths(prev => ({
+        ...prev,
+        [resizingColumn]: newWidth
+      }))
+    }
+    
+    const handleMouseUp = () => {
+      setResizingColumn(null)
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [resizingColumn])
+  
+  // 获取列宽
+  const getColumnWidth = useCallback((column: Column<T>): number | string | undefined => {
+    // 如果有保存的宽度，使用保存的
+    if (columnWidths[column.key]) {
+      return columnWidths[column.key]
+    }
+    // 否则使用列配置的宽度
+    return column.width
+  }, [columnWidths])
 
   // Get row key
   const getRowKey = (record: T, index: number): string => {
@@ -682,11 +762,14 @@ export default function DataTable<T extends Record<string, any>>({
               )}
 
               {/* Data columns */}
-              {visibleCols.map((column) => {
+              {visibleCols.map((column, colIndex) => {
                 const hasFilter = column.filterable || column.filters || column.dateFilterable
                 const activeFilters = filterStates[column.key] || []
                 const isFixedLeft = column.fixed === 'left'
                 const isLastFixedLeft = column.key === lastFixedLeftColumnKey
+                const colWidth = getColumnWidth(column)
+                const isColumnResizable = resizable && (column.resizable !== false)
+                const isLastColumn = colIndex === visibleCols.length - 1
 
                 return (
                   <th
@@ -697,14 +780,14 @@ export default function DataTable<T extends Record<string, any>>({
                         : column.align === 'right'
                         ? 'text-right'
                         : ''
-                    } ${isFixedLeft ? 'sticky z-20 bg-gray-50' : ''} ${isLastFixedLeft ? 'after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[1px] after:bg-gray-300 after:shadow-[2px_0_4px_rgba(0,0,0,0.1)]' : ''}`}
+                    } ${isFixedLeft ? 'sticky z-20 bg-gray-50' : ''} ${isLastFixedLeft ? 'after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[1px] after:bg-gray-300 after:shadow-[2px_0_4px_rgba(0,0,0,0.1)]' : ''} ${resizingColumn === column.key ? 'select-none' : ''}`}
                     style={{
-                      ...(column.width ? { width: column.width, minWidth: column.width } : {}),
+                      ...(colWidth ? { width: colWidth, minWidth: column.minWidth || 50 } : {}),
                       ...(isFixedLeft ? { left: fixedLeftOffsets[column.key] || 0 } : {})
                     }}
                   >
                     <div className={`flex items-center ${compact ? 'gap-1' : 'gap-2'}`}>
-                      <span>{column.label || column.title}</span>
+                      <span className="truncate">{column.label || column.title}</span>
                       <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'}`}>
                         {column.sorter && (
                           <button
@@ -744,6 +827,18 @@ export default function DataTable<T extends Record<string, any>>({
                     </div>
                     {activeFilters.length > 0 && (
                       <div className="absolute top-1 right-1 w-2 h-2 bg-primary-600 rounded-full"></div>
+                    )}
+                    {/* 列宽调节手柄 */}
+                    {isColumnResizable && !isLastColumn && (
+                      <div
+                        className={`absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary-400 transition-colors group ${resizingColumn === column.key ? 'bg-primary-500' : 'bg-transparent hover:bg-primary-300'}`}
+                        onMouseDown={(e) => handleResizeStart(e, column.key, typeof colWidth === 'number' ? colWidth : parseInt(String(colWidth)) || 100)}
+                        title="拖拽调整列宽"
+                      >
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <GripVertical className="w-3 h-3 text-gray-400" />
+                        </div>
+                      </div>
                     )}
                   </th>
                 )
