@@ -328,6 +328,10 @@ export default function HsCodeDetail() {
                 {data.breadcrumb.map((item, index) => {
                   const isSection = item.level === 'section'
                   const isLast = index === data.breadcrumb.length - 1
+                  // 检查是否是当前页面的编码（即使不是最后一个也应该禁用）
+                  const currentFullCode = hsCode?.padEnd(10, '0') || ''
+                  const isSameAsCurrentPage = item.code === currentFullCode || item.code === hsCode
+                  const isDisabled = isLast || isSameAsCurrentPage
                   // 计算缩进：每级增加 24px
                   const indentLevel = index
                   
@@ -349,7 +353,9 @@ export default function HsCodeDetail() {
                       <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md ${
                         isLast 
                           ? 'bg-primary-50 border border-primary-200' 
-                          : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
+                          : isSameAsCurrentPage
+                            ? 'bg-gray-100 border border-gray-200'
+                            : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
                       }`}>
                         {/* 层级标签 */}
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
@@ -367,11 +373,14 @@ export default function HsCodeDetail() {
                           <span className="text-sm text-gray-700">
                             {item.descriptionCn || item.description}
                           </span>
+                        ) : isDisabled ? (
+                          <span className={`text-sm text-left ${isLast ? 'text-primary-700 font-medium' : 'text-gray-500'}`}>
+                            {item.descriptionCn || item.description || item.code}
+                          </span>
                         ) : (
                           <button
-                            onClick={() => !isLast && navigate(`/hs/${item.code}${buildNavParams(item.code)}`)}
-                            className={`text-sm text-left ${isLast ? 'text-primary-700 font-medium cursor-default' : 'text-gray-700 hover:text-primary-600 hover:underline'}`}
-                            disabled={isLast}
+                            onClick={() => navigate(`/hs/${item.code}${buildNavParams(item.code)}`)}
+                            className="text-sm text-left text-gray-700 hover:text-primary-600 hover:underline"
                           >
                             {item.descriptionCn || item.description || item.code}
                           </button>
