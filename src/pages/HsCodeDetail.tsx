@@ -276,13 +276,37 @@ export default function HsCodeDetail() {
         <>
           {/* 标题区域 */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-4">
-            <h1 className="text-xl font-bold text-gray-900 mb-4">
-              {getLevelName(data.level || '')} {formatCodeDisplay(data.code, true)} - {data.descriptionCn || data.description}
-            </h1>
+            <div className="flex items-center gap-2 mb-4">
+              <h1 className="text-xl font-bold text-gray-900">
+                {getLevelName(data.level || '')} {formatCodeDisplay(data.code, true)} - {data.descriptionCn || data.description}
+              </h1>
+              <button
+                onClick={() => copyCode(data.code.replace(/\s/g, ''))}
+                className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-colors"
+                title="复制编码（不带空格）"
+              >
+                {copiedCode === data.code.replace(/\s/g, '') ? (
+                  <Check className="w-5 h-5 text-green-500" />
+                ) : (
+                  <Copy className="w-5 h-5" />
+                )}
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-              <div>
+              <div className="flex items-center">
                 <span className="text-gray-500">编码:</span>
                 <span className="ml-2 font-mono font-medium">{formatCodeDisplay(data.code, true)}</span>
+                <button
+                  onClick={() => copyCode(data.code.replace(/\s/g, ''))}
+                  className="ml-2 p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-colors"
+                  title="复制编码"
+                >
+                  {copiedCode === data.code.replace(/\s/g, '') ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
               </div>
               <div>
                 <span className="text-gray-500">层级:</span>

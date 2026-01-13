@@ -707,8 +707,8 @@ function RealtimeLookupModal({
           // 如果有精确匹配且保存成功，刷新列表
           if (response.data.exactMatch && (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated')) {
             onSaveSuccess()
-          }
-        } else {
+        }
+      } else {
           setError(response.msg || '查询失败')
         }
       } else {
