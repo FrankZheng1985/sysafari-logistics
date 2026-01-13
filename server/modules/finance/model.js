@@ -266,6 +266,13 @@ export async function createInvoice(data) {
     console.error('[createInvoice] 解析 items 失败:', e)
   }
   
+  // 处理额外的已勾选费用ID（来自右侧供应商费用列表）
+  // 这些费用可能因为Excel匹配失败而没有被包含在items中，但用户已经勾选了它们
+  if (Array.isArray(data.additionalFeeIds) && data.additionalFeeIds.length > 0) {
+    console.log('[createInvoice] 收到额外的已勾选费用IDs:', data.additionalFeeIds)
+    feeIds.push(...data.additionalFeeIds)
+  }
+  
   // 将费用IDs存储为JSON，以便删除发票时能找到关联费用
   const feeIdsJson = feeIds.length > 0 ? JSON.stringify([...new Set(feeIds)]) : null
   
@@ -307,9 +314,11 @@ export async function createInvoice(data) {
   // 更新关联费用的开票状态
   if (feeIds.length > 0) {
     const uniqueFeeIds = [...new Set(feeIds)]
+    console.log(`[createInvoice] 准备更新 ${uniqueFeeIds.length} 条费用记录的开票状态, feeIds:`, uniqueFeeIds)
+    let updatedCount = 0
     for (const feeId of uniqueFeeIds) {
       try {
-        await db.prepare(`
+        const updateResult = await db.prepare(`
           UPDATE fees SET 
             invoice_status = 'invoiced',
             invoice_number = ?,
@@ -317,11 +326,20 @@ export async function createInvoice(data) {
             updated_at = NOW()
           WHERE id = ?
         `).run(invoiceNumber, data.invoiceDate || new Date().toISOString().split('T')[0], feeId)
+        
+        if (updateResult.changes > 0) {
+          updatedCount++
+          console.log(`[createInvoice] 成功更新费用 ${feeId} 的开票状态`)
+        } else {
+          console.warn(`[createInvoice] 费用 ${feeId} 未找到或未更新`)
+        }
       } catch (e) {
         console.error(`[createInvoice] 更新费用 ${feeId} 开票状态失败:`, e)
       }
     }
-    console.log(`[createInvoice] 已更新 ${uniqueFeeIds.length} 条费用记录的开票状态`)
+    console.log(`[createInvoice] 实际更新了 ${updatedCount}/${uniqueFeeIds.length} 条费用记录的开票状态`)
+  } else {
+    console.warn(`[createInvoice] 没有找到关联的费用ID，无法更新开票状态`)
   }
   
   return { id, invoiceNumber }
@@ -1163,6 +1181,7 @@ export async function getFees(params = {}) {
   // 排除已开票的费用（用于创建发票时，避免重复开票）
   if (excludeInvoiced === 'true' || excludeInvoiced === true) {
     whereClause += " AND (f.invoice_status IS NULL OR f.invoice_status != 'invoiced')"
+    console.log(`[getFees] 启用已开票费用过滤, supplierName=${supplierName}`)
   }
   
   if (feeType) {
@@ -1305,6 +1324,18 @@ export async function getFees(params = {}) {
     ORDER BY f.fee_date DESC, f.created_at DESC
   `
   const list = await db.prepare(feesQuery).all(...queryParams, ...groupKeys)
+  
+  // 调试日志：检查返回费用的 invoice_status
+  if (excludeInvoiced === 'true' || excludeInvoiced === true) {
+    const feesSummary = list.slice(0, 10).map(f => ({
+      id: f.id,
+      feeName: f.fee_name,
+      containerNumber: f.container_number || f.bill_container_number,
+      invoiceStatus: f.invoice_status,
+      amount: f.amount
+    }))
+    console.log(`[getFees] 返回 ${list.length} 条费用, 前10条:`, JSON.stringify(feesSummary, null, 2))
+  }
   
   return {
     list: list.map(convertFeeToCamelCase),

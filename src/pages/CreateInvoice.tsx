@@ -271,6 +271,9 @@ export default function CreateInvoice() {
 
   // 过滤后的费用列表（支持多集装箱号搜索，空格分隔）
   // 当有已选中的费用时，只显示已选中的费用
+  // 性能优化：当数据量超过100条且没有搜索时，只显示前100条
+  const MAX_DISPLAY_FEES = 100
+  
   const filteredSupplierFees = useMemo(() => {
     // 检查是否有已选中的费用
     const hasSelectedFees = supplierFees.some(fee => fee.selected)
@@ -282,13 +285,14 @@ export default function CreateInvoice() {
     
     // 没有已选中的费用时，按搜索条件过滤
     if (!feeSearchKeyword.trim()) {
-      return supplierFees
+      // 性能优化：限制显示数量，避免渲染过多DOM
+      return supplierFees.slice(0, MAX_DISPLAY_FEES)
     }
     
     // 将搜索词按空格分割成多个关键词
     const keywords = feeSearchKeyword.trim().split(/\s+/).filter(k => k)
     if (keywords.length === 0) {
-      return supplierFees
+      return supplierFees.slice(0, MAX_DISPLAY_FEES)
     }
     
     // 按搜索条件过滤
@@ -300,6 +304,11 @@ export default function CreateInvoice() {
       })
     })
   }, [supplierFees, feeSearchKeyword])
+  
+  // 是否有更多未显示的费用
+  const hasMoreFees = !feeSearchKeyword.trim() && 
+                      !supplierFees.some(fee => fee.selected) && 
+                      supplierFees.length > MAX_DISPLAY_FEES
 
   // 按集装箱号分组的费用
   const groupedSupplierFees = useMemo(() => {
@@ -313,6 +322,17 @@ export default function CreateInvoice() {
     })
     return groups
   }, [filteredSupplierFees])
+
+  // 缓存选中费用的统计信息（避免每次渲染重复计算）
+  const selectedFeesStats = useMemo(() => {
+    const selectedFees = supplierFees.filter(f => f.selected)
+    return {
+      hasSelected: selectedFees.length > 0,
+      count: selectedFees.length,
+      total: selectedFees.reduce((sum, f) => sum + Number(f.amount), 0),
+      currency: selectedFees[0]?.currency || 'EUR'
+    }
+  }, [supplierFees])
 
   // 获取汇率
   const fetchExchangeRate = async (currency: string) => {
@@ -800,15 +820,35 @@ export default function CreateInvoice() {
       // 获取该供应商的所有应付费用（跨订单），采购发票只显示应付费用
       // 使用供应商名称查询（兼容不同ID格式）
       // excludeInvoiced=true 排除已开票的费用，避免重复开票
-      const response = await fetch(`${API_BASE}/api/fees?supplierName=${encodeURIComponent(supplierName)}&feeType=payable&excludeInvoiced=true&pageSize=500`)
+      // 添加时间戳防止浏览器缓存
+      const timestamp = Date.now()
+      const response = await fetch(
+        `${API_BASE}/api/fees?supplierName=${encodeURIComponent(supplierName)}&feeType=payable&excludeInvoiced=true&pageSize=500&_t=${timestamp}`,
+        {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        }
+      )
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
+        // 🔥 前端额外过滤：确保已开票的费用不显示（双重保险）
+        const filteredList = data.data.list.filter((fee: Fee & { invoice_status?: string }) => {
+          const isInvoiced = fee.invoice_status === 'invoiced'
+          if (isInvoiced) {
+            console.log(`[fetchSupplierFees] 过滤掉已开票费用: ${fee.id} - ${fee.feeName}`)
+          }
+          return !isInvoiced
+        })
+        
         // 按订单分组显示费用，并标记选中状态
-        const fees: SupplierFee[] = data.data.list.map((fee: Fee & { billId: string; billNumber: string; feeDate?: string }) => ({
+        const fees: SupplierFee[] = filteredList.map((fee: Fee & { billId: string; billNumber: string; feeDate?: string }) => ({
           ...fee,
           selected: false
         }))
         setSupplierFees(fees)
+        console.log(`[fetchSupplierFees] 获取到 ${fees.length} 条未开票费用（后端返回 ${data.data.list.length}，前端过滤后 ${filteredList.length}）`)
       } else {
         setSupplierFees([])
       }
@@ -878,11 +918,11 @@ export default function CreateInvoice() {
 
   // 将选中的费用转换为发票明细
   const confirmSelectedFees = () => {
-    const selectedFeesList = supplierFees.filter(fee => fee.selected)
-    if (selectedFeesList.length === 0) {
+    if (!selectedFeesStats.hasSelected) {
       alert('请至少选择一项费用')
       return
     }
+    const selectedFeesList = supplierFees.filter(fee => fee.selected)
     
     // 验证选中的费用是否都属于当前供应商
     if (selectedSupplier) {
@@ -1081,13 +1121,16 @@ export default function CreateInvoice() {
             const feesResponse = await fetch(`${API_BASE}/api/fees?supplierName=${encodeURIComponent(selectedSupplier.supplierName)}&feeType=payable&excludeInvoiced=true&pageSize=500`)
             const feesData = await feesResponse.json()
             if (feesData.errCode === 200 && feesData.data?.list) {
+              // 🔥 前端额外过滤：确保已开票的费用不显示（双重保险）
+              const filteredList = feesData.data.list.filter((fee: any) => fee.invoice_status !== 'invoiced')
+              
               // 3. 自动勾选匹配的费用（按集装箱号匹配）
-              const feesWithSelection = feesData.data.list.map((fee: any) => ({
+              const feesWithSelection = filteredList.map((fee: any) => ({
                 ...fee,
                 selected: matchedContainerNumbers.includes(fee.containerNumber || '')
               }))
               setSupplierFees(feesWithSelection)
-              console.log('[Excel解析] 刷新费用列表，找到', feesWithSelection.filter((f: any) => f.selected).length, '条匹配费用')
+              console.log('[Excel解析] 刷新费用列表，找到', feesWithSelection.filter((f: any) => f.selected).length, '条匹配费用（过滤后）')
             }
           } catch (err) {
             console.error('[Excel解析] 刷新费用列表失败:', err)
@@ -1121,11 +1164,26 @@ export default function CreateInvoice() {
       return
     }
     
-    // 只导入选中的项目
-    const selectedItems = excelParseResult.data.filter(item => item._selected !== false)
+    // 只导入选中的项目，并排除已开票的费用
+    const selectedItems = excelParseResult.data.filter(item => {
+      if (item._selected === false) return false
+      
+      // 🔥 检查是否已开票：如果匹配了订单但在 supplierFees 中找不到，说明已开票
+      if (item.isMatched) {
+        const matchedFee = supplierFees.find(f => 
+          f.feeName === item.feeName && 
+          (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
+        )
+        if (!matchedFee) {
+          console.log(`[applyExcelToInvoice] 跳过已开票费用: ${item.feeName} - ${item.containerNumber}`)
+          return false // 已开票，不导入
+        }
+      }
+      return true
+    })
     
     if (selectedItems.length === 0) {
-      alert('请至少选择一条费用记录')
+      alert('请至少选择一条费用记录（已开票的费用不可重复开票）')
       return
     }
     
@@ -1688,6 +1746,31 @@ export default function CreateInvoice() {
         status: formData.status
       }
 
+      // 收集费用ID：从发票项中的feeId + 右侧已勾选的费用ID
+      // 这样即使Excel匹配失败，只要右侧费用被勾选，也会被标记为已开票
+      const feeIdsFromItems = formData.items
+        .map(item => item.feeId)
+        .filter(Boolean)
+        .flatMap(id => id.includes(',') ? id.split(',') : [id])
+      
+      // 采购发票场景：同时收集右侧已勾选的供应商费用ID
+      const selectedSupplierFeeIds = formData.invoiceType === 'purchase'
+        ? supplierFees.filter(fee => fee.selected).map(fee => fee.id)
+        : []
+      
+      // 合并所有费用ID（去重）
+      const allFeeIds = [...new Set([...feeIdsFromItems, ...selectedSupplierFeeIds])]
+      console.log('[CreateInvoice] 发票项费用IDs:', feeIdsFromItems)
+      console.log('[CreateInvoice] 已勾选供应商费用IDs:', selectedSupplierFeeIds)
+      console.log('[CreateInvoice] 合并后总费用IDs:', allFeeIds)
+      
+      // 🔥 直接发送所有勾选的费用ID（不做条件判断）
+      // 确保即使 Excel 费用名称不匹配，只要右侧费用被勾选，也会被标记为已开票
+      if (formData.invoiceType === 'purchase' && selectedSupplierFeeIds.length > 0) {
+        submitData.additionalFeeIds = selectedSupplierFeeIds
+        console.log('[CreateInvoice] 发送 additionalFeeIds:', selectedSupplierFeeIds)
+      }
+
       let response
       if (isEditMode && editInvoiceId) {
         // 编辑模式：更新发票
@@ -1718,12 +1801,28 @@ export default function CreateInvoice() {
           // 采购发票创建成功：刷新费用列表，允许继续添加
           alert(`发票 ${invoiceNumber} 创建成功！已开票的费用已从列表中移除，您可以继续选择其他费用创建新发票。`)
           
-          // 清空已选择的费用和发票项
+          // 完全清空所有状态，恢复到可以继续上传下一份账单的状态
           setFormData(prev => ({
             ...prev,
             items: [],
-            supplierInvoiceNumber: ''
+            supplierInvoiceNumber: '',
+            description: '',
+            notes: ''
           }))
+          
+          // 清空上传的文件、搜索关键词、预览状态
+          setUploadedFiles([])
+          setFeeSearchKeyword('')
+          setExcelParseResult(null)
+          setPreviewFile(null)
+          setShowExcelPreview(false)
+          
+          // 立即清空费用列表的选中状态（避免用户看到旧数据）
+          setSupplierFees([])
+          
+          // 等待数据库更新完成后再获取费用列表（避免获取到旧数据）
+          // 使用较长的延迟确保数据库事务完成
+          await new Promise(resolve => setTimeout(resolve, 1000))
           
           // 重新获取供应商费用列表（已开票的会被自动过滤）
           await fetchSupplierFees(selectedSupplier.id, selectedSupplier.supplierName)
@@ -1859,7 +1958,10 @@ export default function CreateInvoice() {
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
+                  id="customer-search"
+                  name="customer-search"
                   type="text"
+                  autoComplete="off"
                   value={customerSearch}
                   onChange={(e) => {
                     setCustomerSearch(e.target.value)
@@ -1980,7 +2082,10 @@ export default function CreateInvoice() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
+                  id="bill-search"
+                  name="bill-search"
                   type="text"
+                  autoComplete="off"
                   value={billSearch}
                   onChange={(e) => {
                     if (!formData.customerId) return
@@ -2032,6 +2137,7 @@ export default function CreateInvoice() {
                       <input
                         type="checkbox"
                         id="mergeSalesFees"
+                        name="mergeSalesFees"
                         checked={mergeSameFees}
                         onChange={(e) => setMergeSameFees(e.target.checked)}
                         title="合并相同费用项"
@@ -2238,7 +2344,10 @@ export default function CreateInvoice() {
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
+                  id="supplier-search"
+                  name="supplier-search"
                   type="text"
+                  autoComplete="off"
                   value={supplierSearch}
                   onChange={(e) => {
                     setSupplierSearch(e.target.value)
@@ -2405,9 +2514,12 @@ export default function CreateInvoice() {
               {/* 供应商发票号 */}
               <div className="space-y-3 pt-2 border-t border-gray-200">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">供应商发票号 <span className="text-gray-400">(Excel导入会自动提取)</span></label>
+                  <label htmlFor="supplier-invoice-number" className="block text-xs text-gray-500 mb-1">供应商发票号 <span className="text-gray-400">(Excel导入会自动提取)</span></label>
                   <input
+                    id="supplier-invoice-number"
+                    name="supplier-invoice-number"
                     type="text"
+                    autoComplete="off"
                     value={formData.supplierInvoiceNumber}
                     onChange={(e) => setFormData(prev => ({ ...prev, supplierInvoiceNumber: e.target.value }))}
                     placeholder="输入发票号（多个用逗号分隔）"
@@ -2445,7 +2557,10 @@ export default function CreateInvoice() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
+                      id="fee-search"
+                      name="fee-search"
                       type="text"
+                      autoComplete="off"
                       value={feeSearchKeyword}
                       onChange={(e) => setFeeSearchKeyword(e.target.value)}
                       placeholder="搜索集装箱号，多个用空格分隔"
@@ -2494,6 +2609,8 @@ export default function CreateInvoice() {
                         <div className="flex items-center gap-2">
                           <input
                             type="checkbox"
+                            id={`container-${containerKey}`}
+                            name={`container-${containerKey}`}
                             checked={fees.every(f => f.selected)}
                             onChange={() => {}}
                             title={fees.every(f => f.selected) ? '取消选择该集装箱所有费用' : '选择该集装箱所有费用'}
@@ -2521,6 +2638,8 @@ export default function CreateInvoice() {
                           >
                             <input
                               type="checkbox"
+                              id={`fee-${fee.id}`}
+                              name={`fee-${fee.id}`}
                               checked={fee.selected || false}
                               onChange={() => {}}
                               title="选择此费用项"
@@ -2539,18 +2658,30 @@ export default function CreateInvoice() {
                       </div>
                     </div>
                   ))}
+                  
+                  {/* 提示：有更多未显示的费用 */}
+                  {hasMoreFees && (
+                    <div className="mt-3 p-2 bg-blue-50 rounded-lg border border-blue-200 text-center">
+                      <p className="text-xs text-blue-700">
+                        📋 共 {supplierFees.length} 条费用，当前显示前 {MAX_DISPLAY_FEES} 条
+                      </p>
+                      <p className="text-[10px] text-blue-600 mt-0.5">
+                        请在上方搜索框输入集装箱号筛选查看更多
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* 确认选择按钮 - 如果发票明细已有内容（Excel导入），则不显示 */}
-              {supplierFees.some(f => f.selected) && formData.items.length === 0 && (
+              {selectedFeesStats.hasSelected && formData.items.length === 0 && (
                 <div className="mt-4 pt-3 border-t border-gray-200">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-gray-500">
-                      已选择 {supplierFees.filter(f => f.selected).length} 项费用
+                      已选择 {selectedFeesStats.count} 项费用
                     </span>
                     <span className="text-sm font-medium text-orange-600">
-                      合计: {supplierFees.filter(f => f.selected).reduce((sum, f) => sum + Number(f.amount), 0).toFixed(2)} {supplierFees.find(f => f.selected)?.currency || 'EUR'}
+                      合计: {selectedFeesStats.total.toFixed(2)} {selectedFeesStats.currency}
                     </span>
                   </div>
                   
@@ -2559,6 +2690,7 @@ export default function CreateInvoice() {
                     <input
                       type="checkbox"
                       id="mergeSameFees"
+                      name="mergeSameFees"
                       checked={mergeSameFees}
                       onChange={(e) => setMergeSameFees(e.target.checked)}
                       title="合并相同费用项"
@@ -2699,7 +2831,10 @@ export default function CreateInvoice() {
                         <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-500" />
                       )}
                       <input
+                        id="invoice-party"
+                        name="invoice-party"
                         type="text"
+                        autoComplete="off"
                         value={formData.invoiceType === 'sales' ? customerSearch : formData.supplierName}
                         onChange={(e) => {
                           if (formData.invoiceType === 'sales') {
@@ -2944,7 +3079,10 @@ export default function CreateInvoice() {
                           <td className="py-1.5 px-1.5 text-gray-500">{index + 1}</td>
                           <td className="py-1.5 px-1.5" style={{width: '100px'}}>
                             <input
+                              id={`item-desc-${index}`}
+                              name={`item-desc-${index}`}
                               type="text"
+                              autoComplete="off"
                               value={item.description}
                               onChange={(e) => updateItem(item.id, 'description', e.target.value)}
                               placeholder="描述..."
@@ -3090,9 +3228,12 @@ export default function CreateInvoice() {
               <h2 className="text-sm font-medium text-gray-900 mb-3">备注信息</h2>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">发票说明</label>
+                  <label htmlFor="invoice-description" className="block text-xs font-medium text-gray-700 mb-1">发票说明</label>
                   <input
+                    id="invoice-description"
+                    name="invoice-description"
                     type="text"
+                    autoComplete="off"
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="输入发票说明..."
@@ -3101,8 +3242,11 @@ export default function CreateInvoice() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">内部备注</label>
+                  <label htmlFor="invoice-notes" className="block text-xs font-medium text-gray-700 mb-1">内部备注</label>
                   <textarea
+                    id="invoice-notes"
+                    name="invoice-notes"
+                    autoComplete="off"
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="输入内部备注（不会显示在发票上）..."
@@ -3321,18 +3465,43 @@ export default function CreateInvoice() {
             
             {/* 订单匹配统计 */}
             <div className="px-6 py-3 bg-gray-50 border-b flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-green-600" />
-                <span className="text-sm text-gray-700">
-                  已匹配订单: <span className="font-medium text-green-600">{excelParseResult.matchedCount || 0}</span> 条
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-500" />
-                <span className="text-sm text-gray-700">
-                  未匹配订单: <span className="font-medium text-amber-600">{excelParseResult.unmatchedCount || 0}</span> 条
-                </span>
-              </div>
+              {(() => {
+                // 计算已开票的数量
+                const invoicedCount = excelParseResult.data?.filter(item => {
+                  if (!item.isMatched) return false
+                  const matchedFee = supplierFees.find(f => 
+                    f.feeName === item.feeName && 
+                    (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
+                  )
+                  return !matchedFee
+                }).length || 0
+                const canInvoiceCount = (excelParseResult.matchedCount || 0) - invoicedCount
+                
+                return (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-600" />
+                      <span className="text-sm text-gray-700">
+                        可开票: <span className="font-medium text-green-600">{canInvoiceCount}</span> 条
+                      </span>
+                    </div>
+                    {invoicedCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-700">
+                          已开票: <span className="font-medium text-gray-500">{invoicedCount}</span> 条
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm text-gray-700">
+                        未匹配: <span className="font-medium text-amber-600">{excelParseResult.unmatchedCount || 0}</span> 条
+                      </span>
+                    </div>
+                  </>
+                )
+              })()}
               <div className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() => toggleAllExcelItems(true)}
@@ -3357,6 +3526,8 @@ export default function CreateInvoice() {
                     <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 w-10">
                       <input
                         type="checkbox"
+                        id="excel-select-all"
+                        name="excel-select-all"
                         checked={excelParseResult.data.every(item => item._selected !== false)}
                         onChange={(e) => toggleAllExcelItems(e.target.checked)}
                         className="w-4 h-4 text-orange-600 rounded border-gray-300"
@@ -3371,21 +3542,33 @@ export default function CreateInvoice() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {excelParseResult.data.map((item, index) => (
+                  {excelParseResult.data.map((item, index) => {
+                    // 检查是否已开票
+                    const matchedFee = supplierFees.find(f => 
+                      f.feeName === item.feeName && 
+                      (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
+                    )
+                    const isInvoiced = item.isMatched && !matchedFee
+                    
+                    return (
                     <tr 
                       key={index} 
-                      className={`hover:bg-gray-50 ${item._selected === false ? 'opacity-50' : ''}`}
-                      onClick={() => toggleExcelItemSelection(index)}
+                      className={`hover:bg-gray-50 ${item._selected === false || isInvoiced ? 'opacity-50' : ''} ${isInvoiced ? 'bg-gray-50' : ''}`}
+                      onClick={() => !isInvoiced && toggleExcelItemSelection(index)}
+                      title={isInvoiced ? '此费用已开票，不可重复开票' : ''}
                     >
                       <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          checked={item._selected !== false}
-                          onChange={() => toggleExcelItemSelection(index)}
-                          className="w-4 h-4 text-orange-600 rounded border-gray-300"
+                          id={`excel-item-${index}`}
+                          name={`excel-item-${index}`}
+                          checked={item._selected !== false && !isInvoiced}
+                          onChange={() => !isInvoiced && toggleExcelItemSelection(index)}
+                          disabled={isInvoiced}
+                          className={`w-4 h-4 rounded border-gray-300 ${isInvoiced ? 'text-gray-300 cursor-not-allowed' : 'text-orange-600'}`}
                         />
                       </td>
-                      <td className="px-2 py-2 text-gray-900">{item.feeName || '-'}</td>
+                      <td className={`px-2 py-2 ${isInvoiced ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.feeName || '-'}</td>
                       <td className="px-2 py-2 text-gray-600 font-mono text-xs">
                         {item.containerNumber || item.billNumber || '-'}
                       </td>
@@ -3394,23 +3577,43 @@ export default function CreateInvoice() {
                       </td>
                       <td className="px-2 py-2 text-gray-600">{item.currency || 'EUR'}</td>
                       <td className="px-2 py-2 text-center">
-                        {item.isMatched ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
-                            <Check className="w-3 h-3" />
-                            已关联
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full">
-                            <AlertCircle className="w-3 h-3" />
-                            未匹配
-                          </span>
-                        )}
+                        {(() => {
+                          // 检查费用是否已开票：如果匹配了订单但在 supplierFees 中找不到对应费用，说明已开票
+                          const matchedFee = supplierFees.find(f => 
+                            f.feeName === item.feeName && 
+                            (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
+                          )
+                          const isInvoiced = item.isMatched && !matchedFee
+                          
+                          if (isInvoiced) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">
+                                <Check className="w-3 h-3" />
+                                已开票
+                              </span>
+                            )
+                          } else if (item.isMatched) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                                <Check className="w-3 h-3" />
+                                已关联
+                              </span>
+                            )
+                          } else {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full">
+                                <AlertCircle className="w-3 h-3" />
+                                未匹配
+                              </span>
+                            )
+                          }
+                        })()}
                       </td>
                       <td className="px-2 py-2 text-gray-500 max-w-[100px] truncate" title={item.remark}>
                         {item.remark || '-'}
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
                 <tfoot className="bg-gray-50 border-t">
                   <tr>
@@ -3421,7 +3624,16 @@ export default function CreateInvoice() {
                     <td></td>
                     <td className="px-2 py-2 text-right text-sm font-bold text-orange-600">
                       €{excelParseResult.data
-                        .filter(item => item._selected !== false)
+                        .filter(item => {
+                          if (item._selected === false) return false
+                          // 排除已开票的
+                          const matchedFee = supplierFees.find(f => 
+                            f.feeName === item.feeName && 
+                            (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
+                          )
+                          const isInvoiced = item.isMatched && !matchedFee
+                          return !isInvoiced
+                        })
                         .reduce((sum, item) => sum + (item.amount || 0), 0)
                         .toFixed(2)}
                     </td>
@@ -3450,7 +3662,14 @@ export default function CreateInvoice() {
                   className="px-4 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 flex items-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  确认导入 ({excelParseResult.data.filter(item => item._selected !== false).length} 条)
+                  确认导入 ({excelParseResult.data.filter(item => {
+                    if (item._selected === false) return false
+                    const matchedFee = supplierFees.find(f => 
+                      f.feeName === item.feeName && 
+                      (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
+                    )
+                    return !(item.isMatched && !matchedFee)
+                  }).length} 条)
                 </button>
               </div>
             </div>

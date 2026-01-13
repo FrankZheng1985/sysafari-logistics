@@ -4535,6 +4535,277 @@ export async function checkAllTaricApiHealth(): Promise<ApiResponse<{
   }
 }
 
+// ==================== HS 编码验证和智能查询 V2 API ====================
+
+/**
+ * HS 编码验证结果
+ */
+export interface HsCodeValidation {
+  inputCode: string
+  normalizedCode: string
+  isValid: boolean
+  isDeclarable: boolean
+  level: 'chapter' | 'heading' | 'subheading' | 'cn' | 'taric' | null
+  hasChildren: boolean
+  childCount: number
+  declarableCount?: number
+  description: string | null
+  descriptionCn: string | null
+  parentCode: string | null
+  parentDescription: string | null
+  breadcrumb: Array<{
+    code: string
+    description: string
+    descriptionCn?: string
+    level: string
+  }>
+  similarCodes?: Array<{
+    code: string
+    description: string
+  }>
+  error: string | null
+  fromCache?: boolean
+}
+
+/**
+ * HS 编码层级树结果
+ */
+export interface HsCodeHierarchy {
+  code: string
+  description: string | null
+  descriptionCn: string | null
+  level: string | null
+  breadcrumb: Array<{
+    code: string
+    description: string
+    descriptionCn?: string
+    level: string
+  }>
+  childGroups: Array<{
+    groupCode: string
+    groupTitle: string
+    groupTitleCn: string | null
+    children: Array<{
+      code: string
+      description: string
+      descriptionCn?: string
+      declarable: boolean
+      vatRate: number | null
+      thirdCountryDuty: string | null
+      supplementaryUnit: string | null
+      antiDumpingRate?: number | null
+    }>
+  }>
+  children?: Array<{
+    code: string
+    description: string
+    level: string
+    hasChildren: boolean
+  }>
+  totalChildren: number
+  declarableCount: number
+  hasMore: boolean
+  error?: string
+  fromCache?: boolean
+}
+
+/**
+ * 商品搜索结果
+ */
+export interface HsCodeSearchResult {
+  query: string
+  total: number
+  chapterStats: Array<{
+    chapter: string
+    description: string | null
+    count: number
+  }>
+  results: Array<{
+    hsCode: string
+    description: string
+    descriptionCn: string | null
+    declarable: boolean
+    chapter: string
+    keywords: string[]
+    dutyRate: number | null
+    links: {
+      detail: string
+    }
+  }>
+  page: number
+  pageSize: number
+  hasMore: boolean
+  error?: string
+  fromCache?: boolean
+}
+
+/**
+ * 改进的查询结果 V2
+ */
+export interface TaricLookupV2Result {
+  inputCode: string
+  normalizedCode: string
+  matchStatus: 'exact' | 'parent_node' | 'not_found' | 'partial_match' | 'error'
+  exactMatch: TaricRealtimeResult | null
+  validation: HsCodeValidation | null
+  hierarchy: HsCodeHierarchy | null
+  candidates: Array<{
+    code: string
+    description: string
+    matchScore: number
+  }>
+  suggestion: string
+  warning: string | null
+  queryTime: string
+  savedToDb?: string
+  dbError?: string
+  fromCache?: boolean
+  error?: string
+}
+
+/**
+ * 验证 HS 编码有效性
+ * @param hsCode HS 编码
+ */
+export async function validateHsCode(hsCode: string): Promise<ApiResponse<HsCodeValidation>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/taric/validate/${hsCode}`)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('HS 编码验证失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取 HS 编码层级树
+ * @param prefix 编码前缀
+ * @param originCountry 原产国代码（可选）
+ */
+export async function getHsCodeHierarchy(
+  prefix: string, 
+  originCountry?: string
+): Promise<ApiResponse<HsCodeHierarchy>> {
+  try {
+    const params = originCountry ? `?originCountry=${originCountry}` : ''
+    const response = await fetch(`${API_BASE_URL}/api/taric/hierarchy/${prefix}${params}`)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取 HS 编码层级失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 搜索商品描述
+ * @param query 搜索关键词
+ * @param options 搜索选项
+ */
+export async function searchHsCodes(
+  query: string,
+  options?: {
+    chapter?: string
+    page?: number
+    pageSize?: number
+    originCountry?: string
+  }
+): Promise<ApiResponse<HsCodeSearchResult>> {
+  try {
+    const params = new URLSearchParams()
+    params.append('q', query)
+    if (options?.chapter) params.append('chapter', options.chapter)
+    if (options?.page) params.append('page', String(options.page))
+    if (options?.pageSize) params.append('pageSize', String(options.pageSize))
+    if (options?.originCountry) params.append('originCountry', options.originCountry)
+    
+    const response = await fetch(`${API_BASE_URL}/api/taric/search?${params.toString()}`)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('商品搜索失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 改进的 HS 编码查询（V2版本）
+ * 不自动替换，返回验证结果和候选列表
+ * @param hsCode HS 编码
+ * @param originCountry 原产国代码（可选）
+ * @param saveToDb 是否保存到数据库
+ */
+export async function lookupTaricV2(
+  hsCode: string,
+  originCountry?: string,
+  saveToDb?: boolean
+): Promise<ApiResponse<TaricLookupV2Result>> {
+  try {
+    const params = new URLSearchParams()
+    if (originCountry) params.append('originCountry', originCountry)
+    if (saveToDb) params.append('saveToDb', 'true')
+    
+    const queryString = params.toString()
+    const url = queryString
+      ? `${API_BASE_URL}/api/taric/lookup-v2/${hsCode}?${queryString}`
+      : `${API_BASE_URL}/api/taric/lookup-v2/${hsCode}`
+    
+    const response = await fetch(url)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('HS 编码查询 V2 失败:', error)
+    throw error
+  }
+}
+
+/**
+ * 获取可申报编码列表
+ * @param prefix 编码前缀（4-8位）
+ * @param originCountry 原产国代码（可选）
+ */
+export async function getDeclarableCodes(
+  prefix: string,
+  originCountry?: string
+): Promise<ApiResponse<{
+  prefix: string
+  total: number
+  codes: Array<{
+    code: string
+    description: string
+    declarable: boolean
+    dutyRate?: number | null
+    thirdCountryDuty?: number | null
+    antiDumpingRate?: number | null
+  }>
+}>> {
+  try {
+    const params = originCountry ? `?originCountry=${originCountry}` : ''
+    const response = await fetch(`${API_BASE_URL}/api/taric/declarable/${prefix}${params}`)
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.msg || `HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error('获取可申报编码失败:', error)
+    throw error
+  }
+}
+
 // ==================== 系统设置 API 接口 ====================
 
 /**

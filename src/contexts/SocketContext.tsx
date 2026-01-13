@@ -4,7 +4,7 @@
  * 管理WebSocket连接和实时消息
  */
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from './AuthContext'
 
@@ -30,6 +30,10 @@ function getSocketUrl(): string {
   
   return window.location.origin
 }
+
+// 全局 socket 实例（避免 StrictMode 重复创建）
+let globalSocket: Socket | null = null
+let globalSocketUserId: string | null = null
 
 // 消息类型
 export interface ChatMessage {
@@ -138,17 +142,54 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const { user, isAuthenticated } = useAuth()
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  
+  // 使用 ref 追踪组件是否仍然挂载（避免 StrictMode 警告）
+  const isMountedRef = useRef(true)
+  const userRef = useRef(user)
+  
+  // 保持 userRef 最新
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
 
   // 初始化 Socket 连接
   useEffect(() => {
+    isMountedRef.current = true
+    
     if (!isAuthenticated || !user?.id) {
       // 未登录，断开连接
-      if (socket) {
-        socket.disconnect()
-        setSocket(null)
-        setIsConnected(false)
+      if (globalSocket && globalSocketUserId) {
+        globalSocket.emit('user:offline', { userId: globalSocketUserId })
+        globalSocket.disconnect()
+        globalSocket = null
+        globalSocketUserId = null
+      }
+      setSocket(null)
+      setIsConnected(false)
+      return
+    }
+
+    // 如果已有相同用户的连接（无论是否已连接成功），直接复用
+    if (globalSocket && globalSocketUserId === user.id) {
+      setSocket(globalSocket)
+      setIsConnected(globalSocket.connected)
+      
+      // 如果已经连接，发送上线事件
+      if (globalSocket.connected) {
+        globalSocket.emit('user:online', {
+          userId: user.id,
+          userName: user.name || user.username,
+        })
       }
       return
+    }
+    
+    // 如果有旧的不同用户的连接，先断开
+    if (globalSocket && globalSocketUserId !== user.id) {
+      globalSocket.emit('user:offline', { userId: globalSocketUserId })
+      globalSocket.disconnect()
+      globalSocket = null
+      globalSocketUserId = null
     }
 
     // 创建 Socket 连接
@@ -166,39 +207,52 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       // 生产环境添加路径前缀
       path: '/socket.io/',
     })
+    
+    // 存储全局引用
+    globalSocket = newSocket
+    globalSocketUserId = user.id
 
     // 连接成功
     newSocket.on('connect', () => {
+      // 只有在组件仍然挂载时才更新状态
+      if (!isMountedRef.current) return
+      
       console.log('[Socket] 已连接:', newSocket.id)
       setIsConnected(true)
       
       // 发送用户上线事件
-      newSocket.emit('user:online', {
-        userId: user.id,
-        userName: user.name || user.username,
-      })
+      const currentUser = userRef.current
+      if (currentUser) {
+        newSocket.emit('user:online', {
+          userId: currentUser.id,
+          userName: currentUser.name || currentUser.username,
+        })
+      }
     })
 
     // 断开连接
     newSocket.on('disconnect', (reason) => {
+      if (!isMountedRef.current) return
       console.log('[Socket] 断开连接:', reason)
       setIsConnected(false)
     })
 
     // 连接错误 - 静默处理，避免控制台噪音
     newSocket.on('connect_error', () => {
+      if (!isMountedRef.current) return
       // 静默处理连接错误，不打印到控制台
       setIsConnected(false)
     })
 
     setSocket(newSocket)
 
-    // 清理函数
+    // 清理函数 - 在 StrictMode 下不立即断开连接
     return () => {
-      newSocket.emit('user:offline', { userId: user.id })
-      newSocket.disconnect()
+      isMountedRef.current = false
+      // 注意：不在这里断开连接，让全局实例保持
+      // 只有在用户登出或切换用户时才断开
     }
-  }, [isAuthenticated, user?.id, user?.name, user?.username])
+  }, [isAuthenticated, user?.id])
 
   // 加入会话
   const joinConversation = useCallback((conversationId: string) => {

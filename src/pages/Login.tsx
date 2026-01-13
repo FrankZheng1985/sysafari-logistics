@@ -207,13 +207,16 @@ export default function Login() {
 
               <form onSubmit={handleLocalLogin} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <User className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
+                      id="username"
+                      name="username"
                       type="text"
+                      autoComplete="username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="输入用户名"
@@ -224,13 +227,16 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">密码</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <Lock className="h-5 w-5 text-gray-400" />
                     </div>
                     <input
+                      id="password"
+                      name="password"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="输入密码"

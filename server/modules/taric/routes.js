@@ -161,4 +161,31 @@ router.get('/unified/:hsCode', controller.lookupHsCodeUnified)
 // GET /api/taric/all-api-health
 router.get('/all-api-health', controller.checkAllApiHealth)
 
+// ==================== V2 改进 API（HS编码验证和智能查询） ====================
+
+// 验证 HS 编码有效性
+// GET /api/taric/validate/:hsCode
+// 返回：编码是否有效、是否可申报、层级、子编码数量等
+router.get('/validate/:hsCode', controller.validateHsCodeApi)
+
+// 获取 HS 编码层级树（含分组子编码）
+// GET /api/taric/hierarchy/:prefix?originCountry=CN
+// 返回：面包屑导航、按特征分组的子编码列表
+router.get('/hierarchy/:prefix', controller.getHsCodeHierarchy)
+
+// 搜索商品描述
+// GET /api/taric/search?q=xxx&chapter=xx&page=1&pageSize=20
+// 返回：章节分类统计、搜索结果列表
+router.get('/search', controller.searchHsCodes)
+
+// 改进的 HS 编码查询（V2版本，不自动替换）
+// GET /api/taric/lookup-v2/:hsCode?originCountry=CN&saveToDb=true
+// 返回：匹配状态、验证结果、层级树或候选列表
+router.get('/lookup-v2/:hsCode', controller.lookupHsCodeV2)
+
+// 获取可申报编码列表
+// GET /api/taric/declarable/:prefix?originCountry=CN
+// 返回：指定前缀下的所有可申报编码
+router.get('/declarable/:prefix', controller.getDeclarableCodes)
+
 export default router

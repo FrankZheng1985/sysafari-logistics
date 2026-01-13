@@ -23,6 +23,9 @@ import {
   CountryCode,
   TaricDataSource,
   UkRegion,
+  // V2 改进 API
+  lookupTaricV2,
+  TaricLookupV2Result,
 } from '../utils/api'
 
 // 导入弹窗组件
@@ -587,10 +590,12 @@ function RealtimeLookupModal({
   onClose: () => void
   onSaveSuccess: () => void
 }) {
+  const navigate = useNavigate()
   const [hsCode, setHsCode] = useState('')
   const [originCountry, setOriginCountry] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TaricRealtimeResult | UkTaricRealtimeResult | null>(null)
+  const [resultV2, setResultV2] = useState<TaricLookupV2Result | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [countries, setCountries] = useState<CountryCode[]>([])
   const [loadingCountries, setLoadingCountries] = useState(false)
@@ -598,6 +603,8 @@ function RealtimeLookupModal({
   // 数据源选择
   const [dataSource, setDataSource] = useState<TaricDataSource>('eu')
   const [ukRegion, setUkRegion] = useState<UkRegion>('uk')
+  // 使用 V2 API（智能查询）
+  const [useV2Api, setUseV2Api] = useState(true)
   // 国家搜索
   const [countrySearch, setCountrySearch] = useState('')
   const [showCountryDropdown, setShowCountryDropdown] = useState(false)
@@ -614,8 +621,9 @@ function RealtimeLookupModal({
   // 切换数据源时清除结果
   useEffect(() => {
     setResult(null)
+    setResultV2(null)
     setError(null)
-  }, [dataSource, ukRegion])
+  }, [dataSource, ukRegion, useV2Api])
 
   // 点击外部关闭国家下拉框
   useEffect(() => {
@@ -668,14 +676,15 @@ function RealtimeLookupModal({
   }
 
   const handleLookup = async () => {
-    if (!hsCode || hsCode.length < 6) {
-      setError('请输入至少6位的 HS 编码')
+    if (!hsCode || hsCode.length < 4) {
+      setError('请输入至少4位的 HS 编码')
       return
     }
 
     setLoading(true)
     setError(null)
     setResult(null)
+    setResultV2(null)
 
     try {
       if (dataSource === 'uk') {
@@ -690,8 +699,20 @@ function RealtimeLookupModal({
         } else {
           setError(response.msg || '查询失败')
         }
+      } else if (useV2Api) {
+        // 使用 V2 智能查询 API
+        const response = await lookupTaricV2(hsCode, originCountry || undefined, true)
+        if (response.errCode === 200 && response.data) {
+          setResultV2(response.data)
+          // 如果有精确匹配且保存成功，刷新列表
+          if (response.data.exactMatch && (response.data.savedToDb === 'inserted' || response.data.savedToDb === 'updated')) {
+            onSaveSuccess()
+          }
+        } else {
+          setError(response.msg || '查询失败')
+        }
       } else {
-        // 使用 EU TARIC API，查询完成后自动保存到数据库
+        // 使用传统 EU TARIC API，查询完成后自动保存到数据库
         const response = await lookupTaricRealtime(hsCode, originCountry || undefined, true)
         if (response.errCode === 200 && response.data) {
           setResult(response.data)
@@ -771,7 +792,7 @@ function RealtimeLookupModal({
 
         <div className="p-4 space-y-4">
           {/* 数据源选择 */}
-          <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg flex-wrap">
             <span className="text-xs text-gray-600 font-medium">数据源:</span>
             <div className="flex items-center gap-2">
               <button
@@ -806,6 +827,20 @@ function RealtimeLookupModal({
                   <option value="uk">英国本土</option>
                   <option value="xi">北爱尔兰 (EU规则)</option>
                 </select>
+              </div>
+            )}
+            {dataSource === 'eu' && (
+              <div className="flex items-center gap-2 ml-2 pl-2 border-l border-gray-300">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useV2Api}
+                    onChange={(e) => setUseV2Api(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-600">智能验证模式</span>
+                </label>
+                <span className="text-[10px] text-gray-400" title="智能验证模式会检查编码有效性，显示层级结构和候选编码">(?)</span>
               </div>
             )}
           </div>
@@ -905,7 +940,253 @@ function RealtimeLookupModal({
             </div>
           )}
 
-          {/* 查询结果 */}
+          {/* V2 智能查询结果 */}
+          {resultV2 && (
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-700">智能查询结果</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                    resultV2.matchStatus === 'exact' ? 'bg-green-100 text-green-700' :
+                    resultV2.matchStatus === 'parent_node' ? 'bg-blue-100 text-blue-700' :
+                    resultV2.matchStatus === 'not_found' ? 'bg-red-100 text-red-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {resultV2.matchStatus === 'exact' ? '✓ 精确匹配' :
+                     resultV2.matchStatus === 'parent_node' ? '📂 分类编码' :
+                     resultV2.matchStatus === 'not_found' ? '✗ 编码不存在' :
+                     resultV2.matchStatus}
+                  </span>
+                  {resultV2.savedToDb && (
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      resultV2.savedToDb === 'inserted' ? 'bg-green-100 text-green-700' :
+                      resultV2.savedToDb === 'updated' ? 'bg-blue-100 text-blue-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {resultV2.savedToDb === 'inserted' ? '已新增' :
+                       resultV2.savedToDb === 'updated' ? '已更新' : '保存失败'}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400">
+                  查询时间: {formatDateTime(resultV2.queryTime)}
+                </span>
+              </div>
+
+              <div className="p-3 space-y-3">
+                {/* 建议和警告 */}
+                {resultV2.suggestion && (
+                  <div className={`p-2 rounded text-xs flex items-start gap-2 ${
+                    resultV2.matchStatus === 'exact' ? 'bg-green-50 text-green-700' :
+                    resultV2.matchStatus === 'parent_node' ? 'bg-blue-50 text-blue-700' :
+                    'bg-amber-50 text-amber-700'
+                  }`}>
+                    <span>{resultV2.matchStatus === 'exact' ? '✓' : resultV2.matchStatus === 'parent_node' ? 'ℹ️' : '⚠️'}</span>
+                    <div>
+                      <p>{resultV2.suggestion}</p>
+                      {resultV2.warning && <p className="mt-1 font-medium">{resultV2.warning}</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* 编码验证信息 */}
+                {resultV2.validation && (
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="bg-gray-50 rounded p-2">
+                      <p className="text-[10px] text-gray-500">输入编码</p>
+                      <p className="font-mono font-medium">{resultV2.inputCode}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-2">
+                      <p className="text-[10px] text-gray-500">层级</p>
+                      <p className="font-medium">
+                        {resultV2.validation.level === 'chapter' ? '章' :
+                         resultV2.validation.level === 'heading' ? '品目' :
+                         resultV2.validation.level === 'subheading' ? '子目' :
+                         resultV2.validation.level === 'cn' ? 'CN编码' :
+                         resultV2.validation.level === 'taric' ? 'TARIC' : '-'}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-2">
+                      <p className="text-[10px] text-gray-500">是否有效</p>
+                      <p className={`font-medium ${resultV2.validation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                        {resultV2.validation.isValid ? '✓ 有效' : '✗ 无效'}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-2">
+                      <p className="text-[10px] text-gray-500">可申报</p>
+                      <p className={`font-medium ${resultV2.validation.isDeclarable ? 'text-green-600' : 'text-amber-600'}`}>
+                        {resultV2.validation.isDeclarable ? '✓ 可申报' : '需选择子编码'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 面包屑导航 */}
+                {resultV2.validation?.breadcrumb && resultV2.validation.breadcrumb.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 text-xs bg-gray-50 p-2 rounded">
+                    <span className="text-gray-500">层级:</span>
+                    {resultV2.validation.breadcrumb.map((item, idx) => (
+                      <span key={idx} className="flex items-center">
+                        {idx > 0 && <span className="text-gray-400 mx-1">→</span>}
+                        <button
+                          onClick={() => navigate(`/hs/${item.code}`)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {item.descriptionCn || item.description || item.code}
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* 精确匹配结果 - 显示税率 */}
+                {resultV2.exactMatch && (
+                  <>
+                    {/* 商品描述 */}
+                    {resultV2.exactMatch.goodsDescription && (
+                      <div className="bg-blue-50 rounded p-2">
+                        <p className="text-[10px] text-gray-500 mb-0.5">商品描述</p>
+                        <p className="text-xs text-gray-800">{resultV2.exactMatch.goodsDescription}</p>
+                        {resultV2.exactMatch.goodsDescriptionCn && (
+                          <p className="text-xs text-blue-600 mt-1 pt-1 border-t border-blue-100">{resultV2.exactMatch.goodsDescriptionCn}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 税率信息 */}
+                    <div className="grid grid-cols-5 gap-2">
+                      <div className="bg-green-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-gray-500">第三国关税</p>
+                        <p className="text-lg font-bold text-green-700">
+                          {typeof resultV2.exactMatch.thirdCountryDuty === 'number' ? `${resultV2.exactMatch.thirdCountryDuty}%` : '-'}
+                        </p>
+                      </div>
+                      <div className="bg-blue-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-gray-500">适用关税</p>
+                        <p className="text-lg font-bold text-blue-700">
+                          {typeof resultV2.exactMatch.dutyRate === 'number' ? `${resultV2.exactMatch.dutyRate}%` : '-'}
+                        </p>
+                      </div>
+                      <div className="bg-purple-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-gray-500">VAT</p>
+                        <p className="text-lg font-bold text-purple-700">19%</p>
+                      </div>
+                      <div className="bg-orange-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-gray-500">反倾销税</p>
+                        <p className="text-lg font-bold text-orange-700">
+                          {typeof resultV2.exactMatch.antiDumpingRate === 'number' ? `${resultV2.exactMatch.antiDumpingRate}%` : '-'}
+                        </p>
+                      </div>
+                      <div className="bg-red-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-gray-500">反补贴税</p>
+                        <p className="text-lg font-bold text-red-700">
+                          {typeof resultV2.exactMatch.countervailingRate === 'number' ? `${resultV2.exactMatch.countervailingRate}%` : '-'}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* 层级树 - 分类编码情况下显示子编码选择 */}
+                {resultV2.matchStatus === 'parent_node' && resultV2.hierarchy && (
+                  <div className="border border-blue-200 rounded bg-blue-50/50">
+                    <div className="px-3 py-2 border-b border-blue-200 flex items-center justify-between">
+                      <span className="text-xs font-medium text-blue-800">
+                        请选择具体的可申报编码 ({resultV2.hierarchy.totalChildren} 个)
+                      </span>
+                      <button
+                        onClick={() => navigate(`/hs/${hsCode}`)}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      >
+                        查看完整层级树 →
+                      </button>
+                    </div>
+                    <div className="p-2 max-h-48 overflow-auto">
+                      {resultV2.hierarchy.childGroups?.slice(0, 3).map((group, gIdx) => (
+                        <div key={gIdx} className="mb-2">
+                          <p className="text-[10px] text-gray-600 font-medium mb-1">{group.groupTitleCn || group.groupTitle}</p>
+                          <div className="space-y-1">
+                            {group.children.slice(0, 5).map((child) => (
+                              <button
+                                key={child.code}
+                                onClick={() => {
+                                  setHsCode(child.code)
+                                  handleLookup()
+                                }}
+                                className="w-full text-left px-2 py-1.5 bg-white rounded border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-xs flex items-center justify-between"
+                              >
+                                <div>
+                                  <span className="font-mono text-blue-600">{child.code}</span>
+                                  <span className="text-gray-600 ml-2">{child.descriptionCn || child.description}</span>
+                                </div>
+                                {child.thirdCountryDuty && (
+                                  <span className="text-green-600 font-medium">{child.thirdCountryDuty}</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 候选编码 - 编码不存在时显示建议 */}
+                {resultV2.matchStatus === 'not_found' && resultV2.candidates && resultV2.candidates.length > 0 && (
+                  <div className="border border-amber-200 rounded bg-amber-50/50">
+                    <div className="px-3 py-2 border-b border-amber-200 flex items-center justify-between">
+                      <span className="text-xs font-medium text-amber-800">
+                        推荐的可申报编码 ({resultV2.candidates.length} 个)
+                      </span>
+                      <button
+                        onClick={() => navigate(`/hs/search?q=${hsCode.substring(0, 6)}`)}
+                        className="text-xs text-amber-600 hover:text-amber-800 flex items-center gap-1"
+                      >
+                        搜索更多 →
+                      </button>
+                    </div>
+                    <div className="p-2 max-h-40 overflow-auto space-y-1">
+                      {resultV2.candidates.slice(0, 8).map((candidate) => (
+                        <button
+                          key={candidate.code}
+                          onClick={() => {
+                            setHsCode(candidate.code)
+                            handleLookup()
+                          }}
+                          className="w-full text-left px-2 py-1.5 bg-white rounded border border-gray-200 hover:border-amber-400 hover:bg-amber-50 text-xs flex items-center justify-between"
+                        >
+                          <div>
+                            <span className="font-mono text-amber-600">{candidate.code}</span>
+                            <span className="text-gray-600 ml-2">{candidate.description}</span>
+                          </div>
+                          <span className="text-gray-400 text-[10px]">匹配度: {candidate.matchScore}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 快捷操作 */}
+                <div className="flex items-center gap-2 pt-2 border-t">
+                  <button
+                    onClick={() => navigate(`/hs/${hsCode}`)}
+                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    查看编码详情页 →
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    onClick={() => navigate(`/hs/search?q=${hsCode}`)}
+                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    搜索相关编码 →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 传统查询结果 */}
           {result && (
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">

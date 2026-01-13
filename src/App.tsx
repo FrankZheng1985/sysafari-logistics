@@ -122,6 +122,9 @@ import HelpCenter from './pages/HelpCenter'
 import HelpVideoManage from './pages/HelpVideoManage'
 // 工作台模块
 import Workbench from './pages/Workbench'
+// HS编码查询模块
+import HsCodeDetail from './pages/HsCodeDetail'
+import HsCodeSearch from './pages/HsCodeSearch'
 import { initMenuSettings } from './utils/menuSettings'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { SocketProvider } from './contexts/SocketContext'
@@ -212,6 +215,9 @@ function AppRoutes() {
         <Route path="/system/basic-data/fee-category" element={<BasicDataManage />} />
         <Route path="/system/basic-data/transport-method" element={<BasicDataManage />} />
         <Route path="/system/tariff-rates" element={<TariffRateManage />} />
+        {/* HS编码查询模块 */}
+        <Route path="/hs/search" element={<HsCodeSearch />} />
+        <Route path="/hs/:hsCode" element={<HsCodeDetail />} />
         <Route path="/system/approvals" element={<ApprovalWorkbench />} />
         <Route path="/system/approval-center" element={<ApprovalCenter />} />
         <Route path="/system/approval-settings" element={<ApprovalSettings />} />

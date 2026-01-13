@@ -1069,6 +1069,187 @@ export async function checkAllApiHealth(req, res) {
   }
 }
 
+// ==================== HS 编码验证和改进查询 V2 API ====================
+
+/**
+ * 验证 HS 编码有效性
+ * GET /api/taric/validate/:hsCode
+ */
+export async function validateHsCodeApi(req, res) {
+  try {
+    const { hsCode } = req.params
+    
+    if (!hsCode || hsCode.length < 2) {
+      return badRequest(res, '请提供有效的 HS 编码（至少2位）')
+    }
+    
+    const result = await apiClient.validateHsCode(hsCode)
+    return success(res, result)
+  } catch (error) {
+    console.error('HS 编码验证失败:', error)
+    return serverError(res, 'HS 编码验证失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取 HS 编码层级树
+ * GET /api/taric/hierarchy/:prefix
+ */
+export async function getHsCodeHierarchy(req, res) {
+  try {
+    const { prefix } = req.params
+    const { originCountry } = req.query
+    
+    if (!prefix || prefix.length < 2) {
+      return badRequest(res, '请提供有效的编码前缀（至少2位）')
+    }
+    
+    const result = await apiClient.getHsCodeHierarchy(prefix, originCountry || '')
+    return success(res, result)
+  } catch (error) {
+    console.error('获取 HS 编码层级失败:', error)
+    return serverError(res, '获取 HS 编码层级失败: ' + error.message)
+  }
+}
+
+/**
+ * 搜索商品描述
+ * GET /api/taric/search?q=xxx&chapter=xx&page=1&pageSize=20
+ */
+export async function searchHsCodes(req, res) {
+  try {
+    const { q, chapter, page, pageSize, originCountry } = req.query
+    
+    if (!q || q.length < 2) {
+      return badRequest(res, '请提供至少2个字符的搜索关键词')
+    }
+    
+    const result = await apiClient.searchHsCodes(q, {
+      chapter,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20,
+      originCountry
+    })
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('商品搜索失败:', error)
+    return serverError(res, '商品搜索失败: ' + error.message)
+  }
+}
+
+/**
+ * 改进的 HS 编码查询（V2版本）
+ * GET /api/taric/lookup-v2/:hsCode?originCountry=CN
+ */
+export async function lookupHsCodeV2(req, res) {
+  try {
+    const { hsCode } = req.params
+    const { originCountry, saveToDb } = req.query
+    
+    if (!hsCode || hsCode.length < 4) {
+      return badRequest(res, '请提供有效的 HS 编码（至少4位）')
+    }
+    
+    const result = await apiClient.lookupTaricCodeV2(hsCode, originCountry || '')
+    
+    // 如果请求保存精确匹配结果到数据库
+    if (saveToDb === 'true' && result.exactMatch) {
+      try {
+        const { getDatabase } = await import('../../config/database.js')
+        const db = getDatabase()
+        
+        const exactMatch = result.exactMatch
+        const hsCodeForDb = exactMatch.hsCode10 || exactMatch.hsCode
+        
+        // 检查是否已存在
+        const existing = await db.prepare(`
+          SELECT id FROM tariff_rates 
+          WHERE (hs_code = ? OR hs_code = ?) AND COALESCE(origin_country_code, '') = ?
+        `).get(hsCodeForDb, exactMatch.hsCode, exactMatch.originCountryCode || '')
+        
+        if (existing) {
+          await db.prepare(`
+            UPDATE tariff_rates SET
+              hs_code_10 = COALESCE(?, hs_code_10),
+              goods_description = COALESCE(?, goods_description),
+              goods_description_cn = COALESCE(?, goods_description_cn),
+              third_country_duty = COALESCE(?, third_country_duty),
+              duty_rate = COALESCE(?, duty_rate),
+              anti_dumping_rate = COALESCE(?, anti_dumping_rate),
+              api_source = 'taric_api_v2',
+              last_api_sync = NOW(),
+              updated_at = NOW()
+            WHERE id = ?
+          `).run(
+            exactMatch.hsCode10 || null,
+            exactMatch.goodsDescription || null,
+            exactMatch.goodsDescriptionCn || null,
+            exactMatch.thirdCountryDuty ?? null,
+            exactMatch.dutyRate ?? null,
+            exactMatch.antiDumpingRate ?? null,
+            existing.id
+          )
+          result.savedToDb = 'updated'
+        } else {
+          await db.prepare(`
+            INSERT INTO tariff_rates (
+              hs_code, hs_code_10, origin_country_code,
+              goods_description, goods_description_cn,
+              third_country_duty, duty_rate, vat_rate,
+              anti_dumping_rate, api_source, last_api_sync, data_source, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 19, ?, 'taric_api_v2', NOW(), 'taric', 1)
+          `).run(
+            hsCodeForDb,
+            exactMatch.hsCode10 || null,
+            exactMatch.originCountryCode || null,
+            exactMatch.goodsDescription || 'No description',
+            exactMatch.goodsDescriptionCn || null,
+            exactMatch.thirdCountryDuty ?? null,
+            exactMatch.dutyRate ?? null,
+            exactMatch.antiDumpingRate ?? null
+          )
+          result.savedToDb = 'inserted'
+        }
+      } catch (dbError) {
+        console.error('保存到数据库失败:', dbError)
+        result.savedToDb = 'failed'
+        result.dbError = dbError.message
+      }
+    }
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('HS 编码查询 V2 失败:', error)
+    return serverError(res, 'HS 编码查询失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取可申报编码列表
+ * GET /api/taric/declarable/:prefix?originCountry=CN
+ */
+export async function getDeclarableCodes(req, res) {
+  try {
+    const { prefix } = req.params
+    const { originCountry } = req.query
+    
+    if (!prefix || prefix.length < 4) {
+      return badRequest(res, '请提供有效的编码前缀（至少4位）')
+    }
+    
+    const result = await apiClient.getDeclarableCodes(prefix, originCountry || '')
+    return success(res, {
+      prefix,
+      total: result.length,
+      codes: result
+    })
+  } catch (error) {
+    console.error('获取可申报编码失败:', error)
+    return serverError(res, '获取可申报编码失败: ' + error.message)
+  }
+}
+
 // ==================== 导出 ====================
 
 export default {
@@ -1104,5 +1285,11 @@ export default {
   // 中国反倾销税查询
   getChinaAntiDumpingSummary,
   getChinaAntiDumpingCodes,
-  lookupChinaAntiDumping
+  lookupChinaAntiDumping,
+  // V2 改进 API
+  validateHsCodeApi,
+  getHsCodeHierarchy,
+  searchHsCodes,
+  lookupHsCodeV2,
+  getDeclarableCodes
 }

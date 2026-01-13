@@ -13,6 +13,9 @@ const db = getDatabase()
  */
 export const getInvoiceTemplates = async (req, res) => {
   try {
+    // 首先检查并添加缺失的字段
+    await ensureInvoiceTemplateFields()
+    
     const rows = await db.prepare(`
       SELECT id, template_name, is_default, languages, content, logo_url, stamp_url, created_at, updated_at
       FROM invoice_templates
@@ -37,6 +40,29 @@ export const getInvoiceTemplates = async (req, res) => {
   } catch (error) {
     console.error('获取发票模板列表失败:', error)
     res.status(500).json({ errCode: 500, msg: '获取发票模板列表失败' })
+  }
+}
+
+/**
+ * 确保发票模板表有必要的字段
+ */
+async function ensureInvoiceTemplateFields() {
+  try {
+    // 检查 logo_url 字段是否存在
+    const columns = await db.prepare(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'invoice_templates' AND column_name = 'logo_url'
+    `).all()
+    
+    if (columns.length === 0) {
+      console.log('[invoiceTemplate] 添加缺失的 logo_url 字段...')
+      await db.prepare(`ALTER TABLE invoice_templates ADD COLUMN logo_url VARCHAR(500)`).run()
+      await db.prepare(`ALTER TABLE invoice_templates ADD COLUMN stamp_url VARCHAR(500)`).run()
+      console.log('[invoiceTemplate] 字段添加成功')
+    }
+  } catch (e) {
+    // 忽略错误（可能字段已存在）
+    console.log('[invoiceTemplate] 字段检查/添加:', e.message)
   }
 }
 
