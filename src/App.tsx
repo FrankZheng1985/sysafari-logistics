@@ -133,6 +133,7 @@ import { TabsProvider } from './contexts/TabsContext'
 import { KeepAliveProvider } from './contexts/KeepAliveContext'
 import { ImportProvider } from './contexts/ImportContext'
 import { ToastProvider } from './components/Toast'
+import { ErrorBoundary, PageErrorBoundary } from './components/ErrorBoundary'
 import { Loader2 } from 'lucide-react'
 // Vercel Speed Insights 已移除 - 系统已迁移至阿里云
 
@@ -155,6 +156,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <Layout>
+      <PageErrorBoundary>
       <Routes>
         <Route path="/" element={<SystemDashboard />} />
         <Route path="/dashboard" element={<SystemDashboard />} />
@@ -304,6 +306,7 @@ function AppRoutes() {
         <Route path="/finance/commission/penalties" element={<CRMPenaltyRecords />} />
         <Route path="/finance/commission/settlements" element={<CRMCommissionSettlements />} />
       </Routes>
+      </PageErrorBoundary>
     </Layout>
   )
 }
@@ -314,34 +317,42 @@ function App() {
     initMenuSettings()
   }, [])
 
+  // 全局错误处理回调
+  const handleGlobalError = (error: Error, errorInfo: React.ErrorInfo) => {
+    console.error('[App] 全局错误:', error.message)
+    // 可以在这里添加错误上报逻辑
+  }
+
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <Routes>
-            {/* 登录页面 */}
-            <Route path="/login" element={<Login />} />
-            {/* 受保护的路由 */}
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <SocketProvider>
-                    <TabsProvider>
-                      <KeepAliveProvider>
-                        <ImportProvider>
-                          <AppRoutes />
-                        </ImportProvider>
-                      </KeepAliveProvider>
-                    </TabsProvider>
-                  </SocketProvider>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </Router>
-      </AuthProvider>
-    </ToastProvider>
+    <ErrorBoundary onError={handleGlobalError}>
+      <ToastProvider>
+        <AuthProvider>
+          <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <Routes>
+              {/* 登录页面 */}
+              <Route path="/login" element={<Login />} />
+              {/* 受保护的路由 */}
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <SocketProvider>
+                      <TabsProvider>
+                        <KeepAliveProvider>
+                          <ImportProvider>
+                            <AppRoutes />
+                          </ImportProvider>
+                        </KeepAliveProvider>
+                      </TabsProvider>
+                    </SocketProvider>
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </Router>
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   )
 }
 

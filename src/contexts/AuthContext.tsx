@@ -229,7 +229,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     syncUser()
-  }, [auth0IsAuthenticated, auth0IsLoading, auth0User, getAccessTokenSilently, fetchUserProfile, state.isTestMode])
+    // 注意：移除 state.isTestMode 依赖，避免循环更新
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth0IsAuthenticated, auth0IsLoading, auth0User, getAccessTokenSilently, fetchUserProfile])
 
   // 正式登录（跳转到 Auth0）
   const login = useCallback(() => {
