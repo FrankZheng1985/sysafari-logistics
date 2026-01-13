@@ -164,7 +164,7 @@ export default function TMSDashboard() {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-2 sm:p-3 lg:p-4 space-y-2 sm:space-y-3 lg:space-y-4">
       <PageHeader
         title="TMS运输管理"
         tabs={tabs}
@@ -172,76 +172,76 @@ export default function TMSDashboard() {
         onTabChange={(path) => navigate(path)}
       />
 
-      {/* 核心指标卡片 */}
-      <div className="grid grid-cols-5 gap-4">
+      {/* 核心指标卡片 - 响应式网格 */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
         {/* 待派送 */}
         <div 
-          className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-lg p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
+          className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-lg p-3 lg:p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
           onClick={() => navigate('/cmr-manage?type=pending')}
         >
-          <div className="absolute top-3 right-3 p-2 bg-white/20 rounded-lg">
-            <Clock className="w-5 h-5" />
+          <div className="absolute top-2 right-2 lg:top-3 lg:right-3 p-1.5 lg:p-2 bg-white/20 rounded-lg">
+            <Clock className="w-4 h-4 lg:w-5 lg:h-5" />
           </div>
-          <div className="text-gray-100 text-xs mb-1">待派送</div>
-          <div className="text-2xl font-bold">{stats?.pending || 0}</div>
-          <div className="mt-2 text-gray-200 text-xs">等待开始派送</div>
+          <div className="text-gray-100 text-[10px] lg:text-xs mb-1">待派送</div>
+          <div className="text-lg lg:text-2xl font-bold">{stats?.pending || 0}</div>
+          <div className="mt-1 lg:mt-2 text-gray-200 text-[10px] lg:text-xs hidden sm:block">等待开始派送</div>
         </div>
 
         {/* 派送中 */}
         <div 
-          className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
+          className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-3 lg:p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
           onClick={() => navigate('/cmr-manage/delivering')}
         >
-          <div className="absolute top-3 right-3 p-2 bg-white/20 rounded-lg">
-            <Truck className="w-5 h-5" />
+          <div className="absolute top-2 right-2 lg:top-3 lg:right-3 p-1.5 lg:p-2 bg-white/20 rounded-lg">
+            <Truck className="w-4 h-4 lg:w-5 lg:h-5" />
           </div>
-          <div className="text-blue-100 text-xs mb-1">派送中</div>
-          <div className="text-2xl font-bold">{stats?.delivering || 0}</div>
-          <div className="mt-2 text-blue-200 text-xs">正在配送途中</div>
+          <div className="text-blue-100 text-[10px] lg:text-xs mb-1">派送中</div>
+          <div className="text-lg lg:text-2xl font-bold">{stats?.delivering || 0}</div>
+          <div className="mt-1 lg:mt-2 text-blue-200 text-[10px] lg:text-xs hidden sm:block">正在配送途中</div>
         </div>
 
         {/* 已完成 */}
         <div 
-          className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
+          className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-3 lg:p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
           onClick={() => navigate('/cmr-manage/archived')}
         >
-          <div className="absolute top-3 right-3 p-2 bg-white/20 rounded-lg">
-            <CheckCircle className="w-5 h-5" />
+          <div className="absolute top-2 right-2 lg:top-3 lg:right-3 p-1.5 lg:p-2 bg-white/20 rounded-lg">
+            <CheckCircle className="w-4 h-4 lg:w-5 lg:h-5" />
           </div>
-          <div className="text-green-100 text-xs mb-1">已送达</div>
-          <div className="text-2xl font-bold">{stats?.delivered || 0}</div>
-          <div className="mt-2 text-green-200 text-xs">成功送达</div>
+          <div className="text-green-100 text-[10px] lg:text-xs mb-1">已送达</div>
+          <div className="text-lg lg:text-2xl font-bold">{stats?.delivered || 0}</div>
+          <div className="mt-1 lg:mt-2 text-green-200 text-[10px] lg:text-xs hidden sm:block">成功送达</div>
         </div>
 
         {/* 异常订单 */}
         <div 
-          className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
+          className="bg-gradient-to-br from-red-500 to-red-600 rounded-lg p-3 lg:p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
           onClick={() => navigate('/cmr-manage/exception')}
         >
-          <div className="absolute top-3 right-3 p-2 bg-white/20 rounded-lg">
-            <AlertTriangle className="w-5 h-5" />
+          <div className="absolute top-2 right-2 lg:top-3 lg:right-3 p-1.5 lg:p-2 bg-white/20 rounded-lg">
+            <AlertTriangle className="w-4 h-4 lg:w-5 lg:h-5" />
           </div>
-          <div className="text-red-100 text-xs mb-1">异常订单</div>
-          <div className="text-2xl font-bold">{stats?.exception || 0}</div>
-          <div className="mt-2 text-red-200 text-xs">需要处理</div>
+          <div className="text-red-100 text-[10px] lg:text-xs mb-1">异常订单</div>
+          <div className="text-lg lg:text-2xl font-bold">{stats?.exception || 0}</div>
+          <div className="mt-1 lg:mt-2 text-red-200 text-[10px] lg:text-xs hidden sm:block">需要处理</div>
         </div>
 
         {/* 已关闭 */}
         <div 
-          className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative"
+          className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-3 lg:p-4 text-white cursor-pointer hover:shadow-lg transition-shadow relative col-span-2 sm:col-span-1"
           onClick={() => navigate('/tms/exceptions')}
         >
-          <div className="absolute top-3 right-3 p-2 bg-white/20 rounded-lg">
-            <XCircle className="w-5 h-5" />
+          <div className="absolute top-2 right-2 lg:top-3 lg:right-3 p-1.5 lg:p-2 bg-white/20 rounded-lg">
+            <XCircle className="w-4 h-4 lg:w-5 lg:h-5" />
           </div>
-          <div className="text-purple-100 text-xs mb-1">异常管理</div>
-          <div className="text-2xl font-bold">{stats?.exception || 0}</div>
-          <div className="mt-2 text-purple-200 text-xs">异常订单跟进</div>
+          <div className="text-purple-100 text-[10px] lg:text-xs mb-1">异常管理</div>
+          <div className="text-lg lg:text-2xl font-bold">{stats?.exception || 0}</div>
+          <div className="mt-1 lg:mt-2 text-purple-200 text-[10px] lg:text-xs hidden sm:block">异常订单跟进</div>
         </div>
       </div>
 
-      {/* 今日统计 & 效率指标 */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* 今日统计 & 效率指标 - 响应式网格 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h3 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-gray-500" />

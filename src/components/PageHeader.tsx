@@ -112,14 +112,14 @@ export default function PageHeader({
         </div>
       </div>
       {tabs && tabs.length > 0 && (
-        <div className="flex gap-0.5 mb-1 border-b border-gray-200 -mx-2 px-2">
+        <div className="flex gap-0.5 mb-1 border-b border-gray-200 -mx-2 px-2 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.path}
               onClick={() => onTabChange?.(tab.path)}
               title={tab.label}
               aria-label={tab.label}
-              className={`px-2 py-1 text-xs font-medium border-b-2 transition-all ${
+              className={`px-2 py-1 text-xs font-medium border-b-2 transition-all whitespace-nowrap flex-shrink-0 ${
                 activeTab === tab.path
                   ? 'border-primary-600 text-primary-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'

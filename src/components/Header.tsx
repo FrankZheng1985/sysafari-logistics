@@ -1,9 +1,10 @@
-import { User, Key, LogOut, Shield, MessageCircle } from 'lucide-react'
+import { User, Key, LogOut, Shield, MessageCircle, Menu, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import UserPasswordModal from './UserPasswordModal'
 import NotificationBell from './NotificationBell'
 import MessageCenterModal from './MessageCenterModal'
+import { useSidebar } from './Sidebar'
 import { useAuth } from '../contexts/AuthContext'
 import { useSocket } from '../contexts/SocketContext'
 import { changePassword, getApiBaseUrl } from '../utils/api'
@@ -119,11 +120,32 @@ export default function Header() {
 
   const displayName = currentUser?.email || currentUser?.username || currentUser?.name || '未登录'
   const roleName = currentUser?.roleName || currentUser?.role || ''
+  
+  // 获取侧边栏控制
+  let sidebarControl: { isMobileOpen: boolean; setIsMobileOpen: (open: boolean) => void } | null = null
+  try {
+    sidebarControl = useSidebar()
+  } catch {
+    // 在某些情况下可能没有 SidebarProvider
+  }
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm z-10">
-      <div className="flex items-center gap-4">
-        <h1 className="text-lg font-semibold text-gray-900">BP Logistics 物流管理系统</h1>
+    <header className="h-14 lg:h-16 bg-white border-b border-gray-200 flex items-center justify-between px-3 lg:px-6 shadow-sm z-10">
+      <div className="flex items-center gap-2 lg:gap-4">
+        {/* 移动端菜单按钮 */}
+        {sidebarControl && (
+          <button
+            onClick={() => sidebarControl?.setIsMobileOpen(!sidebarControl?.isMobileOpen)}
+            className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="切换菜单"
+          >
+            {sidebarControl.isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        )}
+        <h1 className="text-base lg:text-lg font-semibold text-gray-900 truncate">
+          <span className="hidden sm:inline">BP Logistics 物流管理系统</span>
+          <span className="sm:hidden">BP Logistics</span>
+        </h1>
       </div>
       <div className="flex items-center gap-3 relative" ref={dropdownRef}>
         {/* 消息中心按钮 */}
@@ -145,11 +167,11 @@ export default function Header() {
         
         <button
           onClick={handleUserClick}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-900 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-100 hover:border-primary-300 hover:text-primary-600 transition-all cursor-pointer"
+          className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-gray-900 bg-gray-50 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-gray-200 hover:bg-gray-100 hover:border-primary-300 hover:text-primary-600 transition-all cursor-pointer"
           title="点击查看用户信息"
         >
-          <User className="w-4 h-4" />
-          <span>{displayName}</span>
+          <User className="w-4 h-4 flex-shrink-0" />
+          <span className="hidden sm:inline truncate max-w-[120px]">{displayName}</span>
         </button>
 
         {/* 下拉菜单 */}

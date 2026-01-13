@@ -10,6 +10,7 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Users,
   Image,
   ToggleLeft,
@@ -32,14 +33,72 @@ import {
   Link2,
   AlertTriangle,
   CalendarClock,
-  LayoutDashboard
+  LayoutDashboard,
+  Menu,
+  X
 } from 'lucide-react'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react'
 import clsx from 'clsx'
 import { loadMenuSettingsAsync } from '../utils/menuSettings'
 import { getApiBaseUrl } from '../utils/api'
 import { getCachedSystemSettings, invalidateSystemSettings } from '../utils/apiCache'
 import { useAuth } from '../contexts/AuthContext'
+
+// 侧边栏折叠状态 Context
+interface SidebarContextType {
+  isCollapsed: boolean
+  setIsCollapsed: (collapsed: boolean) => void
+  isMobileOpen: boolean
+  setIsMobileOpen: (open: boolean) => void
+}
+
+const SidebarContext = createContext<SidebarContextType | null>(null)
+
+export const useSidebar = () => {
+  const context = useContext(SidebarContext)
+  if (!context) {
+    throw new Error('useSidebar must be used within a SidebarProvider')
+  }
+  return context
+}
+
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  // 从 localStorage 读取折叠状态
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebar-collapsed')
+      return saved === 'true'
+    }
+    return false
+  })
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
+  
+  // 保存折叠状态到 localStorage
+  useEffect(() => {
+    localStorage.setItem('sidebar-collapsed', String(isCollapsed))
+  }, [isCollapsed])
+  
+  // 监听窗口大小变化，小屏幕自动折叠
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setIsCollapsed(true)
+      }
+    }
+    
+    // 初始化检查
+    handleResize()
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+  
+  return (
+    <SidebarContext.Provider value={{ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }}>
+      {children}
+    </SidebarContext.Provider>
+  )
+}
 
 const API_BASE = getApiBaseUrl()
 
@@ -210,12 +269,48 @@ const menuItems: MenuItem[] = [
 // 自动收起延迟时间（毫秒）
 const AUTO_COLLAPSE_DELAY = 15000
 
+// 移动端菜单遮罩组件
+export function MobileMenuOverlay() {
+  const { isMobileOpen, setIsMobileOpen } = useSidebar()
+  
+  if (!isMobileOpen) return null
+  
+  return (
+    <div 
+      className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+      onClick={() => setIsMobileOpen(false)}
+    />
+  )
+}
+
+// 移动端菜单按钮组件
+export function MobileMenuButton() {
+  const { isMobileOpen, setIsMobileOpen } = useSidebar()
+  
+  return (
+    <button
+      onClick={() => setIsMobileOpen(!isMobileOpen)}
+      className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+      aria-label="切换菜单"
+    >
+      {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+    </button>
+  )
+}
+
 export default function Sidebar() {
   const navigate = useNavigate()
   const { hasAnyPermission, isAdmin, isManager } = useAuth()
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({})
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  
+  // 获取侧边栏折叠状态
+  const sidebarContext = useContext(SidebarContext)
+  const isCollapsed = sidebarContext?.isCollapsed ?? false
+  const setIsCollapsed = sidebarContext?.setIsCollapsed ?? (() => {})
+  const isMobileOpen = sidebarContext?.isMobileOpen ?? false
+  const setIsMobileOpen = sidebarContext?.setIsMobileOpen ?? (() => {})
   
   // 存储每个父级菜单的自动收起定时器
   const collapseTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
@@ -379,6 +474,69 @@ export default function Sidebar() {
     const hasChildren = item.children && item.children.length > 0
     const expanded = isExpanded(item.path)
 
+    // 折叠状态下的菜单项（只显示图标）
+    if (isCollapsed && level === 0) {
+      return (
+        <div key={item.path} className="relative group">
+          <NavLink
+            to={hasChildren ? '#' : item.path}
+            onClick={(e) => {
+              if (hasChildren) {
+                e.preventDefault()
+                handleParentClick(item)
+              } else {
+                setIsMobileOpen(false)
+              }
+            }}
+            className={({ isActive }) =>
+              clsx(
+                'flex items-center justify-center p-2 transition-colors rounded mx-1',
+                isActive && !hasChildren
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'hover:bg-gray-100 text-gray-600'
+              )
+            }
+            title={item.label}
+          >
+            <item.icon className="w-4 h-4" />
+          </NavLink>
+          {/* 悬停显示子菜单 */}
+          {hasChildren && (
+            <div className="absolute left-full top-0 ml-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <div className="px-3 py-1.5 text-xs font-medium text-gray-500 border-b border-gray-100">{item.label}</div>
+              {item.children
+                ?.filter((child) => {
+                  if (!canAccessMenu(child.path)) return false
+                  if (item.path === '/bookings') {
+                    if (Object.keys(menuSettings).length === 0) return true
+                    return menuSettings[child.path] !== false
+                  }
+                  return true
+                })
+                .map((child) => (
+                  <NavLink
+                    key={child.path}
+                    to={child.path}
+                    onClick={() => setIsMobileOpen(false)}
+                    className={({ isActive }) =>
+                      clsx(
+                        'flex items-center gap-2 px-3 py-1.5 text-xs transition-colors',
+                        isActive
+                          ? 'bg-primary-50 text-primary-700 font-medium'
+                          : 'hover:bg-gray-50 text-gray-700'
+                      )
+                    }
+                  >
+                    <child.icon className="w-3 h-3" />
+                    <span>{child.label}</span>
+                  </NavLink>
+                ))}
+            </div>
+          )}
+        </div>
+      )
+    }
+
     return (
       <div key={item.path}>
         {hasChildren ? (
@@ -424,7 +582,10 @@ export default function Sidebar() {
         ) : (
           <NavLink
             to={item.path}
-            onClick={() => parentPath && handleChildClick(parentPath)}
+            onClick={() => {
+              if (parentPath) handleChildClick(parentPath)
+              setIsMobileOpen(false)
+            }}
             className={({ isActive }) =>
               clsx(
                 'flex items-center gap-1 px-2 py-1 text-xs transition-colors rounded mx-1',
@@ -444,26 +605,41 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-48 bg-white border-r border-gray-200 flex flex-col shadow-sm z-20">
-      <div className="p-2 border-b border-gray-200">
-        <div className="flex items-center gap-1.5">
+    <aside 
+      className={clsx(
+        'bg-white border-r border-gray-200 flex-col shadow-sm z-40 transition-all duration-300',
+        // 桌面端：根据折叠状态显示不同宽度
+        isCollapsed ? 'lg:w-14' : 'lg:w-48',
+        // 移动端：默认隐藏（hidden），打开时显示（flex）；桌面端始终显示
+        'fixed lg:relative h-full w-48',
+        // 移动端使用 hidden/flex 控制显示，桌面端始终 flex
+        isMobileOpen ? 'flex' : 'hidden lg:flex'
+      )}
+    >
+      {/* Logo 区域 */}
+      <div className={clsx('border-b border-gray-200', isCollapsed ? 'p-2' : 'p-2')}>
+        <div className={clsx('flex items-center', isCollapsed ? 'justify-center' : 'gap-1.5')}>
           {logoUrl ? (
             <img
               src={logoUrl}
               alt="系统 Logo"
-              className="w-6 h-6 object-contain"
+              className="w-6 h-6 object-contain flex-shrink-0"
             />
           ) : (
-            <div className="w-6 h-6 bg-primary-600 rounded flex items-center justify-center shadow-sm">
+            <div className="w-6 h-6 bg-primary-600 rounded flex items-center justify-center shadow-sm flex-shrink-0">
               <span className="text-white text-xs font-bold">S</span>
             </div>
           )}
-          <div>
-            <div className="text-xs font-semibold text-gray-900">BP Logistics</div>
-            <div className="text-[10px] text-gray-500">V{__APP_VERSION__}</div>
-          </div>
+          {!isCollapsed && (
+            <div className="overflow-hidden">
+              <div className="text-xs font-semibold text-gray-900 whitespace-nowrap">BP Logistics</div>
+              <div className="text-[10px] text-gray-500">V{__APP_VERSION__}</div>
+            </div>
+          )}
         </div>
       </div>
+      
+      {/* 菜单区域 */}
       <nav className="flex-1 overflow-y-auto py-1">
         {menuItems
           .filter(item => {
@@ -479,21 +655,46 @@ export default function Sidebar() {
           })
           .map(item => renderMenuItem(item))}
       </nav>
-      <div className="p-2 border-t border-gray-200 bg-gray-50">
+      
+      {/* 底部区域：帮助 + 折叠按钮 */}
+      <div className={clsx('border-t border-gray-200 bg-gray-50', isCollapsed ? 'p-1' : 'p-2')}>
+        {/* 帮助链接 */}
         <NavLink
           to="/help"
+          onClick={() => setIsMobileOpen(false)}
           className={({ isActive }) =>
             clsx(
-              'flex items-center gap-1 text-xs transition-colors rounded px-2 py-1',
+              'flex items-center text-xs transition-colors rounded',
+              isCollapsed ? 'justify-center p-2' : 'gap-1 px-2 py-1',
               isActive
                 ? 'bg-primary-100 text-primary-700 font-medium'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             )
           }
+          title={isCollapsed ? '帮助' : undefined}
         >
           <HelpCircle className="w-3 h-3" />
-          <span>帮助</span>
+          {!isCollapsed && <span>帮助</span>}
         </NavLink>
+        
+        {/* 折叠/展开按钮 - 仅桌面端显示 */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className={clsx(
+            'hidden lg:flex items-center text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors rounded mt-1',
+            isCollapsed ? 'justify-center p-2 w-full' : 'gap-1 px-2 py-1 w-full'
+          )}
+          title={isCollapsed ? '展开侧边栏' : '收起侧边栏'}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="w-3 h-3" />
+          ) : (
+            <>
+              <ChevronLeft className="w-3 h-3" />
+              <span>收起</span>
+            </>
+          )}
+        </button>
       </div>
     </aside>
   )

@@ -1101,8 +1101,8 @@ export default function CRMQuotations() {
       {/* 客户询价视图 */}
       {activeView === 'inquiries' && (
         <>
-          {/* 统计卡片 */}
-          <div className="grid grid-cols-4 gap-4">
+          {/* 统计卡片 - 响应式网格 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center justify-between">
                 <div>

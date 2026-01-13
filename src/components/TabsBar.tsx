@@ -80,9 +80,9 @@ export default function TabsBar() {
   }
 
   return (
-    <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
+    <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between min-w-0">
       {/* 标签列表 */}
-      <div className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-hide">
+      <div className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-hide min-w-0">
         {tabs.map((tab, index) => {
           const isDragging = dragIndex === index
           const isDropTarget = dropIndex === index && dragIndex !== null
@@ -120,7 +120,7 @@ export default function TabsBar() {
                 />
               )}
               
-              <span className="max-w-[150px] truncate" title={tab.title}>{tab.title}</span>
+              <span className="max-w-[100px] sm:max-w-[150px] truncate" title={tab.title}>{tab.title}</span>
               
               {tab.closable && (
                 <button
@@ -147,7 +147,7 @@ export default function TabsBar() {
 
       {/* 批量操作按钮 */}
       {hasClosableTabs && (
-        <div className="flex items-center gap-1 ml-2 flex-shrink-0 pl-2 border-l border-gray-200">
+        <div className="hidden sm:flex items-center gap-1 ml-2 flex-shrink-0 pl-2 border-l border-gray-200">
           {hasMultipleClosable && (
             <button
               onClick={removeOthers}

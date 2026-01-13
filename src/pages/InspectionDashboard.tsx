@@ -164,8 +164,8 @@ export default function InspectionDashboard() {
         </div>
       ) : (
         <>
-          {/* 统计概览 */}
-          <div className="grid grid-cols-4 gap-4">
+          {/* 统计概览 - 响应式网格 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* 待查验 */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center justify-between">
@@ -231,8 +231,8 @@ export default function InspectionDashboard() {
             </div>
           </div>
 
-          {/* 快捷操作 */}
-          <div className="grid grid-cols-4 gap-4">
+          {/* 快捷操作 - 响应式网格 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {quickActions.map((action, index) => (
               <button
                 key={index}
@@ -256,7 +256,7 @@ export default function InspectionDashboard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             {/* 查验状态分布 */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <h3 className="text-sm font-medium text-gray-900 mb-4">查验状态分布</h3>
@@ -336,9 +336,9 @@ export default function InspectionDashboard() {
           </div>
 
           {/* 查验流程说明 */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
             <h3 className="text-sm font-medium text-gray-900 mb-4">查验处理流程</h3>
-            <div className="grid grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
               <div className="text-center">
                 <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
                   <FileText className="w-6 h-6 text-amber-600" />

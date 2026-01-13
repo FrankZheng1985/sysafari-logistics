@@ -1232,8 +1232,8 @@ export default function BillDetails() {
                 <Activity className="w-3 h-3 text-primary-600" />
                 状态信息
               </h3>
-              {/* 状态卡片 */}
-              <div className="grid grid-cols-6 gap-2 mb-3">
+              {/* 状态卡片 - 响应式网格 */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">
                 {/* 船状态 */}
                 <div className={`rounded-lg border p-2 ${
                   billDetail.shipStatus === '已到港' ? 'border-green-200 bg-green-50' :
@@ -1386,9 +1386,9 @@ export default function BillDetails() {
 
         {/* 费用管理 */}
         {activeTab === 'fees' && (
-          <div className="space-y-4">
-            {/* 费用汇总卡片 */}
-            <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-3 sm:space-y-4">
+            {/* 费用汇总卡片 - 响应式网格 */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               {/* 应收汇总 */}
               <div className="bg-white rounded-lg border border-blue-200 p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -1457,8 +1457,8 @@ export default function BillDetails() {
               </div>
             )}
 
-            {/* 费用列表 - 分应收应付显示 */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* 费用列表 - 分应收应付显示，响应式网格 */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               {/* 应收费用列表 */}
               <div className="bg-white rounded-lg border border-gray-200">
                 <div className="px-4 py-3 border-b border-gray-100 bg-blue-50">

@@ -1975,19 +1975,19 @@ export default function CreateBillModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 bg-black bg-opacity-50 overflow-y-auto">
-      <div className={`bg-white rounded-lg shadow-xl w-full ${currentStep === 3 ? 'max-w-5xl' : 'max-w-2xl'} max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col`}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-2 sm:pt-4 lg:pt-8 pb-2 sm:pb-4 lg:pb-8 px-2 sm:px-4 bg-black bg-opacity-50 overflow-y-auto">
+      <div className={`bg-white rounded-lg shadow-xl w-full ${currentStep === 3 ? 'max-w-5xl' : 'max-w-2xl'} max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] lg:max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Play className="w-4 h-4 text-primary-600" />
-            <h2 className="text-lg font-semibold text-gray-900">{isEditMode ? '编辑提单' : '创建提单'}</h2>
+        <div className="flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-gray-200 flex-shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary-600" />
+            <h2 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-900">{isEditMode ? '编辑提单' : '创建提单'}</h2>
           </div>
           <button
             onClick={handleCancel}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 

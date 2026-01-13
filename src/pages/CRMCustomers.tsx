@@ -1141,7 +1141,7 @@ export default function CRMCustomers() {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-2 sm:p-3 lg:p-4 space-y-2 sm:space-y-3 lg:space-y-4">
       <PageHeader
         title="CRM客户关系管理"
         tabs={tabs}
@@ -1149,19 +1149,19 @@ export default function CRMCustomers() {
         onTabChange={(path) => navigate(path)}
       />
 
-      {/* 工具栏 */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
-        <div className="flex items-center gap-3">
+      {/* 工具栏 - 响应式布局 */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between bg-white rounded-lg border border-gray-200 p-2 sm:p-3 gap-2 lg:gap-3">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3">
           {/* 搜索 */}
-          <div className="relative">
+          <div className="relative flex-1 min-w-[150px] sm:min-w-[200px] lg:flex-none lg:w-64">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="搜索客户名称、编号、联系人..."
+              placeholder="搜索客户..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && loadCustomers()}
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+              className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
             />
           </div>
 
@@ -1169,7 +1169,7 @@ export default function CRMCustomers() {
           <select
             value={filterLevel}
             onChange={(e) => setFilterLevel(e.target.value)}
-            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            className="px-2 sm:px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             title="客户级别筛选"
             aria-label="客户级别筛选"
           >
@@ -1184,7 +1184,7 @@ export default function CRMCustomers() {
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            className="px-2 sm:px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
             title="客户类型筛选"
             aria-label="客户类型筛选"
           >
@@ -1197,7 +1197,7 @@ export default function CRMCustomers() {
 
         <button
           onClick={() => navigate('/crm/customers/new')}
-          className="flex items-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors"
+          className="flex items-center justify-center gap-1 px-3 py-1.5 bg-primary-600 text-white text-xs rounded-lg hover:bg-primary-700 transition-colors w-full lg:w-auto"
         >
           <Plus className="w-4 h-4" />
           新增客户

@@ -41,16 +41,16 @@ export function StatsCard({
   onClick,
   className = ''
 }: StatsCardProps) {
-  const baseClass = `bg-gradient-to-br ${gradientMap[gradient]} rounded-lg p-4 text-white relative overflow-hidden`
+  const baseClass = `bg-gradient-to-br ${gradientMap[gradient]} rounded-lg p-3 sm:p-4 text-white relative overflow-hidden`
   const clickableClass = onClick ? 'cursor-pointer hover:shadow-lg transition-shadow' : ''
   
   return (
     <div className={`${baseClass} ${clickableClass} ${className}`} onClick={onClick}>
-      <div className="text-xs font-medium opacity-90 mb-1">{title}</div>
-      <div className="text-2xl font-bold">{value}</div>
-      {detail && <div className="text-xs opacity-80 mt-1">{detail}</div>}
+      <div className="text-[10px] sm:text-xs font-medium opacity-90 mb-1">{title}</div>
+      <div className="text-lg sm:text-2xl font-bold">{value}</div>
+      {detail && <div className="text-[10px] sm:text-xs opacity-80 mt-1">{detail}</div>}
       {icon && (
-        <div className="absolute top-3 right-3 opacity-80">
+        <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-80 scale-75 sm:scale-100">
           {icon}
         </div>
       )}
@@ -68,7 +68,7 @@ interface PageContainerProps {
 
 export function PageContainer({ children, className = '' }: PageContainerProps) {
   return (
-    <div className={`p-4 space-y-4 ${className}`}>
+    <div className={`p-2 sm:p-3 lg:p-4 space-y-2 sm:space-y-3 lg:space-y-4 ${className}`}>
       {children}
     </div>
   )
@@ -384,13 +384,13 @@ interface TabsProps {
 
 export function Tabs({ tabs, activeKey, onChange, className = '' }: TabsProps) {
   return (
-    <div className={`flex gap-0.5 border-b border-gray-200 ${className}`}>
+    <div className={`flex gap-0.5 border-b border-gray-200 overflow-x-auto scrollbar-hide ${className}`}>
       {tabs.map(tab => (
         <button
           key={tab.key}
           onClick={() => onChange(tab.key)}
           className={`
-            px-3 py-1.5 text-xs font-medium rounded-t transition-colors
+            px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-t transition-colors whitespace-nowrap flex-shrink-0
             ${activeKey === tab.key 
               ? 'text-primary-600 bg-primary-50 border-b-2 border-primary-600' 
               : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -399,7 +399,7 @@ export function Tabs({ tabs, activeKey, onChange, className = '' }: TabsProps) {
         >
           {tab.label}
           {tab.badge !== undefined && (
-            <span className={`ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full ${
+            <span className={`ml-1 sm:ml-1.5 px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[10px] rounded-full ${
               activeKey === tab.key ? 'bg-primary-200 text-primary-700' : 'bg-gray-200 text-gray-600'
             }`}>
               {tab.badge}
@@ -427,18 +427,19 @@ interface DescriptionListProps {
 }
 
 export function DescriptionList({ items, columns = 2, className = '' }: DescriptionListProps) {
+  // 响应式网格：移动端1列，平板端2列，桌面端根据设置
   const gridCols = {
-    2: 'grid-cols-2',
-    3: 'grid-cols-3',
-    4: 'grid-cols-4',
+    2: 'grid-cols-1 sm:grid-cols-2',
+    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
   }
   
   return (
-    <div className={`grid ${gridCols[columns]} gap-4 ${className}`}>
+    <div className={`grid ${gridCols[columns]} gap-2 sm:gap-3 lg:gap-4 ${className}`}>
       {items.map((item, index) => (
         <div key={index} className={item.span ? `col-span-${item.span}` : ''}>
-          <div className="text-xs text-gray-500 mb-1">{item.label}</div>
-          <div className="text-sm text-gray-900">{item.value || '-'}</div>
+          <div className="text-[10px] sm:text-xs text-gray-500 mb-0.5 sm:mb-1">{item.label}</div>
+          <div className="text-xs sm:text-sm text-gray-900">{item.value || '-'}</div>
         </div>
       ))}
     </div>
@@ -456,18 +457,19 @@ interface GridProps {
 }
 
 export function Grid({ cols = 4, gap = 4, children, className = '' }: GridProps) {
+  // 响应式网格：移动端1列，平板端2列，桌面端根据设置
   const gridCols = {
-    2: 'grid-cols-2',
-    3: 'grid-cols-3',
-    4: 'grid-cols-4',
-    5: 'grid-cols-5',
+    2: 'grid-cols-1 sm:grid-cols-2',
+    3: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+    5: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5',
   }
   const gapSize = {
     2: 'gap-2',
-    3: 'gap-3',
-    4: 'gap-4',
-    5: 'gap-5',
-    6: 'gap-6',
+    3: 'gap-2 sm:gap-3',
+    4: 'gap-2 sm:gap-3 lg:gap-4',
+    5: 'gap-2 sm:gap-3 lg:gap-5',
+    6: 'gap-3 sm:gap-4 lg:gap-6',
   }
   
   return (

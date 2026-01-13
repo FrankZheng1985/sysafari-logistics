@@ -328,33 +328,34 @@ export default function SystemDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-gray-50 min-h-full">
+    <div className="p-3 sm:p-4 lg:p-6 space-y-4 lg:space-y-6 bg-gray-50 min-h-full">
       {/* 头部 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <LayoutDashboard className="w-7 h-7 text-primary-600" />
+          <h1 className="text-xl lg:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <LayoutDashboard className="w-6 h-6 lg:w-7 lg:h-7 text-primary-600" />
             系统概览
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
             {currentTime.toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
         <button
           onClick={fetchDashboardData}
-          className="flex items-center gap-2 px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+          className="flex items-center justify-center gap-2 px-3 lg:px-4 py-2 text-xs lg:text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 self-start sm:self-auto"
         >
           <RefreshCw className="w-4 h-4" />
-          刷新数据
+          <span className="hidden sm:inline">刷新数据</span>
+          <span className="sm:hidden">刷新</span>
         </button>
       </div>
 
-      {/* 核心指标 - 四个卡片一行 */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* 核心指标 - 响应式网格 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 lg:gap-4">
         {/* 订单管理卡片 */}
         <DraggableCard id={CARD_IDS.ORDER_STATS} darkMode>
           <div 
-            className={`bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white transition-all relative h-full ${
+            className={`bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-3 sm:p-4 lg:p-5 text-white transition-all relative h-full ${
               canAccessModule('order') ? 'cursor-pointer hover:shadow-lg' : 'opacity-80'
             }`}
             onClick={() => handleCardClick('order', '/bookings/bill')}
@@ -365,20 +366,20 @@ export default function SystemDashboard() {
               </div>
             )}
             <div className="flex items-start justify-between">
-              <div>
-                <div className="text-blue-100 text-sm mb-1">订单管理</div>
-                <div className="text-3xl font-bold">{stats?.orders.total || 0}</div>
-                <div className="mt-3 flex items-center gap-4 text-xs text-blue-100">
+              <div className="min-w-0 flex-1">
+                <div className="text-blue-100 text-xs sm:text-sm mb-1">订单管理</div>
+                <div className="text-2xl sm:text-3xl font-bold">{stats?.orders.total || 0}</div>
+                <div className="mt-2 sm:mt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-blue-100">
                   <span>待处理: {stats?.orders.pending}</span>
                   <span>进行中: {stats?.orders.inProgress}</span>
                 </div>
               </div>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Package className="w-6 h-6" />
+              <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg flex-shrink-0">
+                <Package className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
             </div>
             {stats?.orders.trend !== undefined && stats.orders.trend > 0 && (
-              <div className="mt-3 flex items-center gap-1 text-xs text-blue-100">
+              <div className="mt-2 sm:mt-3 flex items-center gap-1 text-[10px] sm:text-xs text-blue-100">
                 <ArrowUpRight className="w-3 h-3" />
                 较上周增长 {stats.orders.trend}%
               </div>
@@ -389,7 +390,7 @@ export default function SystemDashboard() {
         {/* TMS运输卡片 */}
         <DraggableCard id={CARD_IDS.TMS_STATS} darkMode>
           <div 
-            className={`bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-5 text-white transition-all relative h-full ${
+            className={`bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-3 sm:p-4 lg:p-5 text-white transition-all relative h-full ${
               canAccessModule('tms') ? 'cursor-pointer hover:shadow-lg' : 'opacity-80'
             }`}
             onClick={() => handleCardClick('tms', '/tms')}
@@ -400,20 +401,20 @@ export default function SystemDashboard() {
               </div>
             )}
             <div className="flex items-start justify-between">
-              <div>
-                <div className="text-emerald-100 text-sm mb-1">TMS运输</div>
-                <div className="text-3xl font-bold">{(stats?.tms.pending || 0) + (stats?.tms.delivering || 0)}</div>
-                <div className="mt-3 flex items-center gap-4 text-xs text-emerald-100">
+              <div className="min-w-0 flex-1">
+                <div className="text-emerald-100 text-xs sm:text-sm mb-1">TMS运输</div>
+                <div className="text-2xl sm:text-3xl font-bold">{(stats?.tms.pending || 0) + (stats?.tms.delivering || 0)}</div>
+                <div className="mt-2 sm:mt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-emerald-100">
                   <span>待派送: {stats?.tms.pending}</span>
                   <span>派送中: {stats?.tms.delivering}</span>
                 </div>
               </div>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Truck className="w-6 h-6" />
+              <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg flex-shrink-0">
+                <Truck className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
             </div>
             {stats?.tms.exception !== undefined && stats.tms.exception > 0 && (
-              <div className="mt-3 flex items-center gap-1 text-xs text-yellow-200">
+              <div className="mt-2 sm:mt-3 flex items-center gap-1 text-[10px] sm:text-xs text-yellow-200">
                 <AlertTriangle className="w-3 h-3" />
                 {stats.tms.exception} 个异常订单需处理
               </div>
@@ -424,7 +425,7 @@ export default function SystemDashboard() {
         {/* CRM客户卡片 */}
         <DraggableCard id={CARD_IDS.CRM_STATS} darkMode>
           <div 
-            className={`bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-5 text-white transition-all relative h-full ${
+            className={`bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-3 sm:p-4 lg:p-5 text-white transition-all relative h-full ${
               canAccessModule('crm') ? 'cursor-pointer hover:shadow-lg' : 'opacity-80'
             }`}
             onClick={() => handleCardClick('crm', '/crm')}
@@ -435,20 +436,20 @@ export default function SystemDashboard() {
               </div>
             )}
             <div className="flex items-start justify-between">
-              <div>
-                <div className="text-purple-100 text-sm mb-1">CRM客户</div>
-                <div className="text-3xl font-bold">{stats?.crm.customers || 0}</div>
-                <div className="mt-3 flex items-center gap-4 text-xs text-purple-100">
+              <div className="min-w-0 flex-1">
+                <div className="text-purple-100 text-xs sm:text-sm mb-1">CRM客户</div>
+                <div className="text-2xl sm:text-3xl font-bold">{stats?.crm.customers || 0}</div>
+                <div className="mt-2 sm:mt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-purple-100">
                   <span>机会: {stats?.crm.opportunities}</span>
                   <span>成交: {formatCurrency(stats?.crm.wonAmount || 0)}</span>
                 </div>
               </div>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Users className="w-6 h-6" />
+              <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg flex-shrink-0">
+                <Users className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
             </div>
             {stats?.crm.pendingFeedbacks !== undefined && stats.crm.pendingFeedbacks > 0 && (
-              <div className="mt-3 flex items-center gap-1 text-xs text-purple-100">
+              <div className="mt-2 sm:mt-3 flex items-center gap-1 text-[10px] sm:text-xs text-purple-100">
                 <Clock className="w-3 h-3" />
                 {stats.crm.pendingFeedbacks} 个待处理反馈
               </div>
@@ -459,7 +460,7 @@ export default function SystemDashboard() {
         {/* 财务卡片 */}
         <DraggableCard id={CARD_IDS.FINANCE_STATS} darkMode>
           <div 
-            className={`bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-5 text-white transition-all relative h-full ${
+            className={`bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-3 sm:p-4 lg:p-5 text-white transition-all relative h-full ${
               canAccessModule('finance') ? 'cursor-pointer hover:shadow-lg' : 'opacity-80'
             }`}
             onClick={() => handleCardClick('finance', '/finance')}
@@ -470,20 +471,20 @@ export default function SystemDashboard() {
               </div>
             )}
             <div className="flex items-start justify-between">
-              <div>
-                <div className="text-amber-100 text-sm mb-1">
+              <div className="min-w-0 flex-1">
+                <div className="text-amber-100 text-xs sm:text-sm mb-1">
                   总营业收入（{stats?.finance.currentMonth || new Date().getMonth() + 1}月）
                 </div>
-                <div className="text-2xl font-bold">{formatCurrency(stats?.finance.monthlyIncome || 0)}</div>
-                <div className="mt-3 flex items-center gap-4 text-xs text-amber-100">
+                <div className="text-xl sm:text-2xl font-bold">{formatCurrency(stats?.finance.monthlyIncome || 0)}</div>
+                <div className="mt-2 sm:mt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-amber-100">
                   <span>应收: {formatCurrency(stats?.finance.receivable || 0)}</span>
                 </div>
               </div>
-              <div className="p-2 bg-white/20 rounded-lg">
-                <DollarSign className="w-6 h-6" />
+              <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg flex-shrink-0">
+                <DollarSign className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-1 text-xs text-amber-100">
+            <div className="mt-2 sm:mt-3 flex items-center gap-1 text-[10px] sm:text-xs text-amber-100">
               应付: {formatCurrency(stats?.finance.payable || 0)}
             </div>
           </div>
@@ -492,18 +493,18 @@ export default function SystemDashboard() {
 
       {/* 订单量趋势图表 - 在四个卡片下方 */}
       <DraggableCard id={CARD_IDS.ORDER_TREND}>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-gray-900 flex items-center gap-2">
+        <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 lg:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h3 className="font-medium text-gray-900 flex items-center gap-2 text-sm sm:text-base">
               <TrendingUp className="w-4 h-4 text-gray-500" />
               订单量趋势
             </h3>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {/* 日期类型切换 */}
-              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <div className="flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-lg p-0.5">
                 <button
                   onClick={() => setTrendDateType('created')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium rounded-md transition-colors ${
                     trendDateType === 'created'
                       ? 'bg-white text-blue-600 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
@@ -513,7 +514,7 @@ export default function SystemDashboard() {
                 </button>
                 <button
                   onClick={() => setTrendDateType('cleared')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium rounded-md transition-colors ${
                     trendDateType === 'cleared'
                       ? 'bg-white text-green-600 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
@@ -523,26 +524,26 @@ export default function SystemDashboard() {
                 </button>
               </div>
               {/* 时间维度切换 */}
-              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+              <div className="flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-lg p-0.5">
                 <button
                   onClick={() => handleTrendDimensionChange('month')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium rounded-md transition-colors ${
                     trendDimension === 'month'
                       ? 'bg-white text-primary-600 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  <Calendar className="w-3 h-3 inline-block mr-1" />月
+                  <Calendar className="w-3 h-3 inline-block mr-0.5 sm:mr-1" />月
                 </button>
                 <button
                   onClick={() => handleTrendDimensionChange('year')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-1.5 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium rounded-md transition-colors ${
                     trendDimension === 'year'
                       ? 'bg-white text-primary-600 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  <Calendar className="w-3 h-3 inline-block mr-1" />年
+                  <Calendar className="w-3 h-3 inline-block mr-0.5 sm:mr-1" />年
                 </button>
               </div>
             </div>
@@ -686,7 +687,7 @@ export default function SystemDashboard() {
         onDragEnd={(e) => handleDragEnd(e, 'middle')}
       >
         <SortableContext items={cardOrder.middle} strategy={rectSortingStrategy}>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
             {cardOrder.middle.map(cardId => {
               if (cardId === CARD_IDS.QUICK_ACCESS) {
                 return (

@@ -532,7 +532,7 @@ export default function FinanceInvoices() {
   ], [navigate, filterType])
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-3 lg:p-4 space-y-3 lg:space-y-4">
       <PageHeader
         title="财务管理"
         tabs={tabs}
@@ -540,62 +540,62 @@ export default function FinanceInvoices() {
         onTabChange={(path) => navigate(path)}
       />
 
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* 统计卡片 - 响应式网格 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4">
         {/* 销售发票统计 */}
-        <div className="bg-blue-50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-blue-700">销售发票（应收）</span>
+        <div className="bg-blue-50 rounded-lg p-3 lg:p-4">
+          <div className="flex items-center justify-between mb-2 lg:mb-3">
+            <span className="text-xs lg:text-sm font-medium text-blue-700">销售发票（应收）</span>
             <span className="text-xs text-blue-600">{(stats?.sales?.pendingCount || 0) + (stats?.sales?.overdueCount || 0)} 张</span>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 lg:gap-3">
             <div>
               <div className="text-xs text-gray-500">总金额</div>
-              <div className="text-sm font-medium text-gray-900">{formatCurrency(stats?.sales?.totalAmount || 0)}</div>
+              <div className="text-xs lg:text-sm font-medium text-gray-900 truncate">{formatCurrency(stats?.sales?.totalAmount || 0)}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500">已收款</div>
-              <div className="text-sm font-medium text-green-600">{formatCurrency(stats?.sales?.paidAmount || 0)}</div>
+              <div className="text-xs lg:text-sm font-medium text-green-600 truncate">{formatCurrency(stats?.sales?.paidAmount || 0)}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500">未收款</div>
-              <div className="text-sm font-medium text-red-600">{formatCurrency(stats?.sales?.unpaidAmount || 0)}</div>
+              <div className="text-xs lg:text-sm font-medium text-red-600 truncate">{formatCurrency(stats?.sales?.unpaidAmount || 0)}</div>
             </div>
           </div>
         </div>
 
         {/* 采购发票统计 */}
-        <div className="bg-orange-50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-orange-700">采购发票（应付）</span>
+        <div className="bg-orange-50 rounded-lg p-3 lg:p-4">
+          <div className="flex items-center justify-between mb-2 lg:mb-3">
+            <span className="text-xs lg:text-sm font-medium text-orange-700">采购发票（应付）</span>
             <span className="text-xs text-orange-600">{(stats?.purchase?.pendingCount || 0) + (stats?.purchase?.overdueCount || 0)} 张</span>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 lg:gap-3">
             <div>
               <div className="text-xs text-gray-500">总金额</div>
-              <div className="text-sm font-medium text-gray-900">{formatCurrency(stats?.purchase?.totalAmount || 0)}</div>
+              <div className="text-xs lg:text-sm font-medium text-gray-900 truncate">{formatCurrency(stats?.purchase?.totalAmount || 0)}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500">已付款</div>
-              <div className="text-sm font-medium text-green-600">{formatCurrency(stats?.purchase?.paidAmount || 0)}</div>
+              <div className="text-xs lg:text-sm font-medium text-green-600 truncate">{formatCurrency(stats?.purchase?.paidAmount || 0)}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500">未付款</div>
-              <div className="text-sm font-medium text-red-600">{formatCurrency(stats?.purchase?.unpaidAmount || 0)}</div>
+              <div className="text-xs lg:text-sm font-medium text-red-600 truncate">{formatCurrency(stats?.purchase?.unpaidAmount || 0)}</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 工具栏 */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
-        <div className="flex items-center gap-3">
+      {/* 工具栏 - 响应式布局 */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between bg-white rounded-lg border border-gray-200 p-2 lg:p-3 gap-2 lg:gap-3">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3">
           {/* 搜索 */}
-          <div className="relative">
+          <div className="relative flex-1 min-w-[180px] lg:min-w-[200px] lg:flex-none lg:w-auto">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="搜索发票号、客户名、集装箱号、提单号..."
+              placeholder="搜索发票号、客户名..."
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && fetchInvoices()}

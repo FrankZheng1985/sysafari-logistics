@@ -2425,7 +2425,7 @@ export default function CreateInvoice() {
             <span className="text-xs text-gray-500">（上传供应商对账单/发票，勾选需要核对的费用项）</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
             {/* 左侧：上传对账单/发票 */}
             <div className="space-y-4">
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-orange-400 transition-colors">
@@ -2721,9 +2721,9 @@ export default function CreateInvoice() {
 
       {/* 发票信息（销售发票选择订单后显示 / 采购发票确认费用后显示） */}
       {((formData.invoiceType === 'sales' && selectedBill) || (formData.invoiceType === 'purchase' && formData.items.length > 0)) && (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* 左侧：基本信息 */}
-          <div className="col-span-2 space-y-4">
+          <div className="lg:col-span-2 space-y-4">
             {/* 发票基本信息 */}
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center gap-2 mb-4">

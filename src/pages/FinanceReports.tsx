@@ -355,8 +355,8 @@ export default function FinanceReports() {
       {/* ========== 综合概览 ========== */}
       {reportType === 'overview' && (
         <>
-          {/* 核心指标 */}
-          <div className="grid grid-cols-4 gap-4">
+          {/* 核心指标 - 响应式网格 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -448,8 +448,8 @@ export default function FinanceReports() {
             )}
           </div>
 
-          {/* 概览简要 */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* 概览简要 - 响应式网格 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200 p-4">
               <h4 className="text-sm font-medium text-green-800 mb-2">应收概况</h4>
               <div className="text-2xl font-bold text-green-600">{formatCurrency(reportData?.receivables.total || 0)}</div>
@@ -472,8 +472,8 @@ export default function FinanceReports() {
       {/* ========== 利润分析 ========== */}
       {reportType === 'profit' && (
         <>
-          {/* 利润核心指标 */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* 利润核心指标 - 响应式网格 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="text-center">
                 <div className="text-xs text-gray-500 mb-2">总收入</div>
@@ -623,7 +623,7 @@ export default function FinanceReports() {
               <DollarSign className="w-5 h-5 text-green-500" />
               现金流量表
             </h3>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl text-center border border-green-200">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-green-100 flex items-center justify-center">
                   <ArrowUpRight className="w-6 h-6 text-green-600" />
@@ -731,8 +731,8 @@ export default function FinanceReports() {
       {/* ========== 应收应付 ========== */}
       {reportType === 'receivables' && (
         <>
-          {/* 应收应付对比 */}
-          <div className="grid grid-cols-2 gap-6">
+          {/* 应收应付对比 - 响应式网格 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* 应收账款 */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">

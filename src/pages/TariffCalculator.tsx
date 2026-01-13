@@ -359,7 +359,7 @@ export default function TariffCalculator() {
               货物关税计算器
             </h2>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               {/* 左侧：HS编码搜索 */}
               <div className="space-y-3">
                 <h3 className="text-xs font-medium text-gray-700 border-b pb-1">海关编码查询</h3>
