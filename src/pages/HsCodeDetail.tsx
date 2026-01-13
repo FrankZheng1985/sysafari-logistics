@@ -26,7 +26,8 @@ export default function HsCodeDetail() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   
-  const originCountry = searchParams.get('originCountry') || ''
+  // 原产国参数，默认为中国（CN），因为大部分查询是中国进口商品
+  const originCountry = searchParams.get('originCountry') || 'CN'
   // 获取来源页面，用于返回按钮
   const fromPage = searchParams.get('from') || ''
   
