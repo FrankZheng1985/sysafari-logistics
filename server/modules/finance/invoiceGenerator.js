@@ -1034,21 +1034,31 @@ export async function regenerateInvoiceFiles(invoiceId) {
   const defaultContainerNo = containerNumbers.length > 0 ? containerNumbers[0] : ''
   const defaultBillNo = invoice.bill_number || ''
   
+  // 调试日志
+  console.log(`[regenerateInvoiceFiles] containerNumbers 原始值: ${JSON.stringify(invoice.container_numbers)}`)
+  console.log(`[regenerateInvoiceFiles] containerNumbers 解析后: ${JSON.stringify(containerNumbers)}`)
+  console.log(`[regenerateInvoiceFiles] defaultContainerNo: "${defaultContainerNo}"`)
+  console.log(`[regenerateInvoiceFiles] defaultBillNo: "${defaultBillNo}"`)
+  
   if (parsedItems && parsedItems.length > 0) {
     // 使用 items 字段的数据（包含手动添加的项目）
     console.log(`[regenerateInvoiceFiles] Excel 使用 items 字段数据，共 ${parsedItems.length} 条`)
-    excelItems = parsedItems.map(item => ({
-      // 如果 item 没有 containerNumber，使用发票的默认值
-      containerNumber: item.containerNumber || defaultContainerNo || '',
-      billNumber: item.billNumber || defaultBillNo || '',
-      feeName: item.description || 'Other',
-      feeNameEn: item.descriptionEn || null,
-      amount: parseFloat(item.amount) || 0,
-      discountAmount: parseFloat(item.discountAmount) || 0,
-      finalAmount: item.finalAmount !== undefined 
-        ? parseFloat(item.finalAmount) 
-        : (parseFloat(item.amount) || 0) - (parseFloat(item.discountAmount) || 0)
-    }))
+    excelItems = parsedItems.map(item => {
+      const result = {
+        // 如果 item 没有 containerNumber，使用发票的默认值
+        containerNumber: item.containerNumber || defaultContainerNo || '',
+        billNumber: item.billNumber || defaultBillNo || '',
+        feeName: item.description || 'Other',
+        feeNameEn: item.descriptionEn || null,
+        amount: parseFloat(item.amount) || 0,
+        discountAmount: parseFloat(item.discountAmount) || 0,
+        finalAmount: item.finalAmount !== undefined 
+          ? parseFloat(item.finalAmount) 
+          : (parseFloat(item.amount) || 0) - (parseFloat(item.discountAmount) || 0)
+      }
+      console.log(`[regenerateInvoiceFiles] Excel Item: ${result.feeName}, containerNo="${result.containerNumber}", billNo="${result.billNumber}"`)
+      return result
+    })
     // 按集装箱号排序
     excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
   } else if (fees && fees.length > 0) {
