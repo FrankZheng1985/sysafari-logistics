@@ -168,6 +168,26 @@ export default function HsCodeDetail() {
     return levelMap[level] || level
   }
 
+  // 翻译补充单位
+  const translateUnit = (unit: string) => {
+    const unitMap: Record<string, string> = {
+      'Number of items': '件',
+      'Number of pairs': '双',
+      'Kilogram': '千克',
+      'Litre': '升',
+      'Square metre': '平方米',
+      'Cubic metre': '立方米',
+      'Metre': '米',
+      'Piece': '件',
+      'Gram': '克',
+      '100 items': '百件',
+      '1000 items': '千件',
+      '1000 litres': '千升',
+      'Terajoule': '太焦耳'
+    }
+    return unitMap[unit] || unit
+  }
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* 顶部导航和搜索 */}
@@ -489,7 +509,11 @@ export default function HsCodeDetail() {
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-center text-gray-600">
-                                {child.supplementaryUnit || '-'}
+                                {child.supplementaryUnit ? (
+                                  typeof child.supplementaryUnit === 'object' 
+                                    ? `${child.supplementaryUnit.code} (${translateUnit(child.supplementaryUnit.description)})`
+                                    : child.supplementaryUnit
+                                ) : '-'}
                               </td>
                               <td className="px-4 py-3 text-right">
                                 {formatCodeDisplay(child.code)}

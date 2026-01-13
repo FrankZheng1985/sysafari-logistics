@@ -403,6 +403,30 @@ function parseXICommodityResponse(data, originCountry) {
   
   const thirdCountryDuty = extractDutyRateFromXI(enhancedMeasures)
   
+  // 提取补充单位 (Supplementary Unit, measure_type_id = "109")
+  let supplementaryUnit = null
+  const supplementaryMeasure = measures.find(m => {
+    const measureTypeRel = m.relationships?.measure_type?.data
+    return measureTypeRel?.id === '109'
+  })
+  
+  if (supplementaryMeasure) {
+    // 获取关联的 measure_component
+    const componentRels = supplementaryMeasure.relationships?.measure_components?.data || []
+    for (const compRel of componentRels) {
+      const component = includedMap.get(`measure_component_${compRel.id}`)
+      if (component?.attributes?.measurement_unit_code) {
+        const unitCode = component.attributes.measurement_unit_code
+        const unitObj = includedMap.get(`measurement_unit_${unitCode}`)
+        supplementaryUnit = {
+          code: unitCode,
+          description: unitObj?.attributes?.description || unitCode
+        }
+        break
+      }
+    }
+  }
+  
   return {
     hsCode: commodity.attributes?.goods_nomenclature_item_id?.substring(0, 8),
     hsCode10: commodity.attributes?.goods_nomenclature_item_id,
@@ -411,6 +435,7 @@ function parseXICommodityResponse(data, originCountry) {
     originCountryCode: originCountry || null,
     dutyRate: thirdCountryDuty,
     thirdCountryDuty: thirdCountryDuty,
+    supplementaryUnit: supplementaryUnit,
     antiDumpingRate: extractAntiDumpingRateFromXI(filteredMeasures, originCountry),
     countervailingRate: extractCountervailingRateFromXI(filteredMeasures, originCountry),
         measures: enhancedMeasures.map(m => {
@@ -602,6 +627,7 @@ export async function lookupTaricCode(hsCode, originCountry = '') {
         // XI 数据覆盖本地数据（如果有）
         dutyRate: xiResult.thirdCountryDuty ?? result.dutyRate,
         thirdCountryDuty: xiResult.thirdCountryDuty ?? result.thirdCountryDuty,
+        supplementaryUnit: xiResult.supplementaryUnit ?? result.supplementaryUnit,
         // 反倾销税：优先使用中国数据库（更准确），否则用 XI 数据
         antiDumpingRate: result.antiDumpingRate ?? xiResult.antiDumpingRate,
         countervailingRate: result.countervailingRate ?? xiResult.countervailingRate,
