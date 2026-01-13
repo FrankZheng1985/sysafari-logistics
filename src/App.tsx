@@ -39,6 +39,7 @@ import SecurityCenter from './pages/SecurityCenter'
 import LogoManage from './pages/LogoManage'
 import BasicDataManage from './pages/BasicDataManage'
 import TariffRateManage from './pages/TariffRateManage'
+import TariffRateLookup from './pages/TariffRateLookup'
 // CRM 模块
 import CRMDashboard from './pages/CRMDashboard'
 import CRMCustomers from './pages/CRMCustomers'
@@ -215,6 +216,7 @@ function AppRoutes() {
         <Route path="/system/basic-data/fee-category" element={<BasicDataManage />} />
         <Route path="/system/basic-data/transport-method" element={<BasicDataManage />} />
         <Route path="/system/tariff-rates" element={<TariffRateManage />} />
+        <Route path="/system/tariff-lookup" element={<TariffRateLookup />} />
         {/* HS编码查询模块 */}
         <Route path="/hs/search" element={<HsCodeSearch />} />
         <Route path="/hs/:hsCode" element={<HsCodeDetail />} />

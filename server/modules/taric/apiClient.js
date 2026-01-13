@@ -1393,36 +1393,66 @@ export async function searchHsCodes(query, options = {}) {
     const searchData = await httpGetJson(searchUrl)
     
     if (searchData && searchData.data) {
-      const allResults = searchData.data
+      // 新版 API 响应格式：data.attributes.goods_nomenclature_match.commodities
+      const attributes = searchData.data.attributes || {}
+      const goodsMatch = attributes.goods_nomenclature_match || {}
+      const referenceMatch = attributes.reference_match || {}
+      
+      // 合并商品匹配和引用匹配的结果
+      const commodities = goodsMatch.commodities || []
+      const headings = [...(goodsMatch.headings || []), ...(referenceMatch.headings || [])]
+      
+      // 从 commodities 提取结果
+      const allResults = commodities.map(item => {
+        const source = item._source || {}
+        return {
+          hsCode: source.goods_nomenclature_item_id,
+          description: source.description,
+          descriptionIndexed: source.description_indexed,
+          ancestorDescriptions: source.ancestor_descriptions || [],
+          declarable: source.declarable === true,
+          chapter: source.chapter,
+          heading: source.heading,
+          section: source.section,
+          score: item._score
+        }
+      })
+      
+      // 从 headings 补充结果
+      for (const heading of headings) {
+        const source = heading._source || {}
+        const ref = source.reference || {}
+        if (ref.goods_nomenclature_item_id && !allResults.find(r => r.hsCode === ref.goods_nomenclature_item_id)) {
+          allResults.push({
+            hsCode: ref.goods_nomenclature_item_id,
+            description: ref.description,
+            descriptionIndexed: ref.description_indexed,
+            ancestorDescriptions: [],
+            declarable: ref.class !== 'Heading', // Heading 通常不能直接申报
+            chapter: ref.chapter,
+            heading: null,
+            section: ref.section,
+            score: heading._score
+          })
+        }
+      }
       
       // 按章节统计
       const chapterMap = new Map()
       
       for (const item of allResults) {
-        const code = item.attributes?.goods_nomenclature_item_id || ''
+        const code = item.hsCode || ''
         const chapterCode = code.substring(0, 2)
         
         if (!chapterMap.has(chapterCode)) {
+          const chapterDesc = item.chapter?.description || `Chapter ${chapterCode}`
           chapterMap.set(chapterCode, {
             chapter: chapterCode,
-            description: null,
+            description: chapterDesc,
             count: 0
           })
         }
         chapterMap.get(chapterCode).count++
-      }
-      
-      // 获取章节描述
-      for (const [chapterCode, stats] of chapterMap) {
-        try {
-          const chapterUrl = `${XI_API_BASE}/chapters/${chapterCode}`
-          const chapterData = await httpGetJson(chapterUrl)
-          if (chapterData && chapterData.data) {
-            stats.description = chapterData.data.attributes?.description || `Chapter ${chapterCode}`
-          }
-        } catch (e) {
-          stats.description = `Chapter ${chapterCode}`
-        }
       }
       
       result.chapterStats = Array.from(chapterMap.values())
@@ -1432,10 +1462,13 @@ export async function searchHsCodes(query, options = {}) {
       let filteredResults = allResults
       if (chapter) {
         filteredResults = allResults.filter(item => {
-          const code = item.attributes?.goods_nomenclature_item_id || ''
+          const code = item.hsCode || ''
           return code.startsWith(chapter)
         })
       }
+      
+      // 按相关度排序
+      filteredResults.sort((a, b) => (b.score || 0) - (a.score || 0))
       
       result.total = filteredResults.length
       
@@ -1448,15 +1481,15 @@ export async function searchHsCodes(query, options = {}) {
       
       // 格式化结果
       result.results = pagedResults.map(item => ({
-        hsCode: item.attributes?.goods_nomenclature_item_id,
-        description: item.attributes?.description,
+        hsCode: item.hsCode,
+        description: item.description,
         descriptionCn: null,
-        declarable: item.attributes?.declarable === true,
-        chapter: (item.attributes?.goods_nomenclature_item_id || '').substring(0, 2),
-        keywords: [], // TODO: 从搜索结果中提取关键词
+        declarable: item.declarable,
+        chapter: (item.hsCode || '').substring(0, 2),
+        keywords: item.ancestorDescriptions?.slice(0, 3) || [],
         dutyRate: null, // 需要单独查询
         links: {
-          detail: `/hs/${item.attributes?.goods_nomenclature_item_id}`,
+          detail: `/hs/${item.hsCode}`,
         }
       }))
       

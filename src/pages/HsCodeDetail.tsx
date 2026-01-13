@@ -4,8 +4,8 @@
  * 参考北爱尔兰在线关税系统界面设计
  */
 
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { 
   ChevronRight, 
   ChevronDown, 
@@ -25,6 +25,7 @@ export default function HsCodeDetail() {
   const { hsCode } = useParams<{ hsCode: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
   
   const originCountry = searchParams.get('originCountry') || ''
   
@@ -37,6 +38,19 @@ export default function HsCodeDetail() {
   
   // 数据源选择（EU TARIC / UK）
   const [dataSource, setDataSource] = useState<'eu' | 'uk'>('eu')
+  
+  // 返回上一页，如果没有历史记录则返回默认页面
+  const handleGoBack = useCallback(() => {
+    // 检查是否有上一页（通过 location.key 判断）
+    // 如果是首次进入（key === 'default'），则跳转到默认页面
+    if (location.key === 'default' || window.history.length <= 2) {
+      // 没有历史记录，跳转到 HS 编码数据库页面
+      navigate('/system/tariff-rates')
+    } else {
+      // 有历史记录，返回上一页
+      navigate(-1)
+    }
+  }, [navigate, location.key])
 
   // 加载数据
   useEffect(() => {
@@ -48,7 +62,7 @@ export default function HsCodeDetail() {
       
       try {
         const response = await getHsCodeHierarchy(hsCode, originCountry)
-        if (response.success && response.data) {
+        if (response.errCode === 200 && response.data) {
           setData(response.data)
           // 默认展开所有分组
           const allGroups = new Set(response.data.childGroups?.map(g => g.groupCode) || [])
@@ -122,7 +136,7 @@ export default function HsCodeDetail() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleGoBack}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft className="w-5 h-5" />

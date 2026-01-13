@@ -1711,7 +1711,7 @@ export default function TariffRateManage() {
           {/* 操作按钮区域 */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={() => setRealtimeLookupVisible(true)}
+              onClick={() => navigate('/system/tariff-lookup')}
               className="px-2.5 py-1.5 border border-blue-500 text-blue-600 rounded-md text-xs hover:bg-blue-50 flex items-center gap-1 transition-all whitespace-nowrap"
             >
               <Globe className="w-3 h-3" />
