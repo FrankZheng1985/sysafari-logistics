@@ -1144,34 +1144,57 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         const heading = included.find(i => i.type === 'heading')
         
         // 从 heading 数据中获取完整的 commodity 列表用于构建祖先链
+        // 重要：必须保持 API 原始顺序，因为祖先关系是基于位置和 indent 确定的
         const allCommodities = headingData?.included?.filter(i => i.type === 'commodity') || []
         
         // 使用 indent 字段构建正确的祖先链
         // 找到当前编码在列表中的位置和 indent
-        const currentInHeading = allCommodities.find(c => 
-          c.attributes?.goods_nomenclature_item_id === fullCode
-        )
-        const currentIndent = currentInHeading?.attributes?.number_indents || 0
+        // 注意：同一个编码可能出现两次（一次是分类节点 declarable=false，一次是可申报编码 declarable=true）
+        // 需要找到 declarable=true 且编码匹配的记录
+        let currentIndex = -1
+        let currentIndent = 0
         
-        // 构建祖先链：向前查找 indent 更小的编码
+        for (let i = 0; i < allCommodities.length; i++) {
+          const item = allCommodities[i]
+          if (item.attributes?.goods_nomenclature_item_id === fullCode && 
+              item.attributes?.declarable === true) {
+            currentIndex = i
+            currentIndent = item.attributes?.number_indents || 0
+            break
+          }
+        }
+        
+        // 如果没找到 declarable=true 的记录，尝试查找任何匹配的记录
+        if (currentIndex === -1) {
+          for (let i = 0; i < allCommodities.length; i++) {
+            const item = allCommodities[i]
+            if (item.attributes?.goods_nomenclature_item_id === fullCode) {
+              currentIndex = i
+              currentIndent = item.attributes?.number_indents || 0
+              break
+            }
+          }
+        }
+        
+        // 构建祖先链：向前查找 indent 更小的编码（材质分级）
+        // 祖先必须是 declarable=false（分类节点），不是可申报编码
         const ancestors = []
-        if (currentInHeading) {
-          const currentIndex = allCommodities.indexOf(currentInHeading)
+        if (currentIndex >= 0) {
           let targetIndent = currentIndent - 1
           
           // 从当前位置向前查找
           for (let i = currentIndex - 1; i >= 0 && targetIndent >= 1; i--) {
             const item = allCommodities[i]
             const itemIndent = item.attributes?.number_indents || 0
-            const itemCode = item.attributes?.goods_nomenclature_item_id
+            const itemDeclarable = item.attributes?.declarable
             
-            // 找到目标 indent 的祖先
-            if (itemIndent === targetIndent && fullCode.startsWith(itemCode?.substring(0, 6))) {
+            // 找到目标 indent 的祖先（必须是分类节点 declarable=false/null）
+            if (itemIndent === targetIndent && !itemDeclarable) {
               ancestors.unshift({
-                code: itemCode,
+                code: item.attributes?.goods_nomenclature_item_id,
                 description: item.attributes?.description,
                 indent: itemIndent,
-                declarable: item.attributes?.declarable
+                declarable: itemDeclarable
               })
               targetIndent--
             }
