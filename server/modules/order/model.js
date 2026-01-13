@@ -144,34 +144,35 @@ export async function getBills(params = {}) {
   
   // 搜索（支持订单号、提单号、集装箱号、客户名称等）
   // 支持多关键词批量搜索：用空格、逗号、分号分隔的多个关键词
+  // 使用 ILIKE 实现大小写不敏感的模糊搜索
   if (search) {
     // 将搜索词按分隔符拆分，过滤空值
     const keywords = search.split(/[\s,;，；]+/).filter(k => k.trim().length > 0)
     
     if (keywords.length === 1) {
-      // 单关键词：原有逻辑
+      // 单关键词：使用 ILIKE 进行大小写不敏感模糊搜索
       query += ` AND (
-        b.order_number LIKE ? OR
-        b.bill_number LIKE ? OR 
-        b.container_number LIKE ? OR 
-        b.customer_name LIKE ? OR
-        b.shipper LIKE ? OR 
-        b.consignee LIKE ? OR
-        b.vessel LIKE ?
+        b.order_number ILIKE ? OR
+        b.bill_number ILIKE ? OR 
+        b.container_number ILIKE ? OR 
+        b.customer_name ILIKE ? OR
+        b.shipper ILIKE ? OR 
+        b.consignee ILIKE ? OR
+        b.vessel ILIKE ?
       )`
       const searchPattern = `%${search}%`
       queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
     } else {
-      // 多关键词：每个关键词都能匹配的订单（集装箱号精确匹配优先）
-      // 构建 OR 条件：任意一个关键词匹配即可
+      // 多关键词：任意一个关键词匹配即可（OR 逻辑）
+      // 使用 ILIKE 进行大小写不敏感模糊搜索
       const keywordConditions = keywords.map(() => `(
-        b.order_number LIKE ? OR
-        b.bill_number LIKE ? OR 
-        b.container_number LIKE ? OR 
-        b.customer_name LIKE ? OR
-        b.shipper LIKE ? OR 
-        b.consignee LIKE ? OR
-        b.vessel LIKE ?
+        b.order_number ILIKE ? OR
+        b.bill_number ILIKE ? OR 
+        b.container_number ILIKE ? OR 
+        b.customer_name ILIKE ? OR
+        b.shipper ILIKE ? OR 
+        b.consignee ILIKE ? OR
+        b.vessel ILIKE ?
       )`).join(' OR ')
       
       query += ` AND (${keywordConditions})`
@@ -1091,9 +1092,9 @@ export async function getCMRList(type = 'delivering', params = {}) {
       query += " AND delivery_status != '待派送'"
   }
   
-  // 搜索
+  // 搜索（使用 ILIKE 实现大小写不敏感模糊搜索）
   if (search) {
-    query += ` AND (bill_number LIKE ? OR container_number LIKE ? OR shipper LIKE ?)`
+    query += ` AND (bill_number ILIKE ? OR container_number ILIKE ? OR shipper ILIKE ?)`
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern, searchPattern)
   }
@@ -1143,9 +1144,9 @@ export async function getInspectionList(type = 'pending', params = {}) {
       query += " AND inspection IN ('待查验', '查验中', '已查验', '查验放行')"
   }
   
-  // 搜索
+  // 搜索（使用 ILIKE 实现大小写不敏感模糊搜索）
   if (search) {
-    query += ` AND (bill_number LIKE ? OR container_number LIKE ? OR shipper LIKE ?)`
+    query += ` AND (bill_number ILIKE ? OR container_number ILIKE ? OR shipper ILIKE ?)`
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern, searchPattern)
   }

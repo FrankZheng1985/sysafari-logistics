@@ -66,7 +66,7 @@ export async function getProducts(params = {}) {
   }
   
   if (search) {
-    query += ' AND (p.product_name LIKE ? OR p.product_code LIKE ? OR p.product_name_en LIKE ?)'
+    query += ' AND (p.product_name ILIKE ? OR p.product_code ILIKE ? OR p.product_name_en ILIKE ?)'
     const searchPattern = `%${search}%`
     queryParams.push(searchPattern, searchPattern, searchPattern)
   }
@@ -75,7 +75,7 @@ export async function getProducts(params = {}) {
   const countQuery = 'SELECT COUNT(*) as total FROM products p WHERE 1=1' + 
     (category ? ' AND p.category = ?' : '') +
     (isActive !== undefined ? ' AND p.is_active = ?' : '') +
-    (search ? ' AND (p.product_name LIKE ? OR p.product_code LIKE ? OR p.product_name_en LIKE ?)' : '')
+    (search ? ' AND (p.product_name ILIKE ? OR p.product_code ILIKE ? OR p.product_name_en ILIKE ?)' : '')
   const countParams = queryParams.slice(0, queryParams.length) // 复制参数用于计数查询
   const totalResult = await db.prepare(countQuery).get(...countParams)
   
