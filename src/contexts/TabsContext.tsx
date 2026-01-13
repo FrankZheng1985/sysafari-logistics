@@ -145,6 +145,8 @@ const routeTitleMap: Record<string, string> = {
   '/system/basic-data/fee-category': '系统管理 - 费用类目',
   '/system/basic-data/transport-method': '系统管理 - 运输方式',
   '/system/tariff-rates': '系统管理 - HS Code数据库',
+  '/system/tariff-lookup': '系统管理 - 税率查询',
+  '/system/invoice-templates': '系统管理 - 发票模板编辑',
   '/system/approvals': '系统管理 - 审批工作台',
   '/system/approval-center': '系统管理 - 审批中心',
   '/system/approval-settings': '系统管理 - 审批权限设置',
@@ -152,6 +154,10 @@ const routeTitleMap: Record<string, string> = {
   '/system/alerts': '系统管理 - 预警管理',
   '/system/api-integrations': '系统管理 - API对接管理',
   '/system/subscriptions': '系统管理 - 服务订阅管理',
+  // HS编码查询
+  '/hs/search': 'HS Code - 编码查询',
+  // 供应商比价
+  '/suppliers/compare': '供应商管理 - 价格比较',
 }
 
 // 模块前缀映射（用于动态路由的回退）
@@ -172,6 +178,7 @@ const moduleNameMap: Record<string, string> = {
   'help': '帮助中心',
   'system': '系统管理',
   'bp-view': 'BP View',
+  'hs': 'HS Code',
 }
 
 // 获取路由标题
@@ -221,14 +228,37 @@ export function getRouteTitle(path: string): string {
   if (pathParts[0] === 'last-mile' && pathParts[1]) {
     return 'TMS运输管理 - 最后里程'
   }
-  
-  // 使用模块前缀映射作为回退
-  const moduleName = moduleNameMap[pathParts[0]]
-  if (moduleName) {
-    return `${moduleName} - 页面`
+  // HS编码详情页
+  if (pathParts[0] === 'hs' && pathParts[1] && pathParts[1] !== 'search') {
+    return `HS Code - ${pathParts[1]}`
   }
   
-  return '页面'
+  // 使用模块前缀映射作为回退，生成更明确的标题
+  const moduleName = moduleNameMap[pathParts[0]]
+  if (moduleName) {
+    // 尝试从路径中提取子页面名称
+    const subPage = pathParts[1] || '概览'
+    // 将英文路径转为更友好的显示
+    const subPageMap: Record<string, string> = {
+      'list': '列表',
+      'detail': '详情',
+      'edit': '编辑',
+      'create': '新建',
+      'new': '新建',
+      'manage': '管理',
+      'settings': '设置',
+      'config': '配置',
+      'import': '导入',
+      'export': '导出',
+      'search': '查询',
+      'overview': '概览',
+    }
+    const displaySubPage = subPageMap[subPage] || subPage
+    return `${moduleName} - ${displaySubPage}`
+  }
+  
+  // 最后的回退：使用路径作为标题（避免显示简单的"页面"）
+  return path.replace(/^\//, '').replace(/\//g, ' - ') || '首页'
 }
 
 // Storage key
