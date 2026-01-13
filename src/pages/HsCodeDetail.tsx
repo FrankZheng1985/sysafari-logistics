@@ -538,13 +538,13 @@ export default function HsCodeDetail() {
             </div>
           )}
 
-          {/* 无数据提示 */}
-          {!data.childGroups?.length && !data.children?.length && (
+          {/* 无子编码提示 - 只有在不可申报且无子编码时显示 */}
+          {!data.isDeclarable && !data.childGroups?.length && !data.children?.length && (
             <div className="bg-white rounded-lg shadow-sm p-8 text-center">
               <Info className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <h3 className="text-lg font-medium text-gray-600 mb-2">该编码是可申报编码</h3>
+              <h3 className="text-lg font-medium text-gray-600 mb-2">暂无子编码数据</h3>
               <p className="text-gray-500">
-                编码 <span className="font-mono font-medium">{data.code}</span> 是最细分级别的编码，可以直接用于报关申报。
+                未能获取编码 <span className="font-mono font-medium">{data.code}</span> 的子编码列表，请稍后重试。
               </p>
             </div>
           )}

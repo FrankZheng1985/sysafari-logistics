@@ -1093,11 +1093,16 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
   try {
     const codeLength = normalizedCode.length
     
-    // 对于 6 位及以上的编码，使用 commodity API 获取完整层级
+    // 对于 6 位及以上的编码，需要综合 commodity 和 heading 数据构建完整层级
     if (codeLength >= 6) {
       const fullCode = normalizedCode.padEnd(10, '0')
-      const commodityUrl = `${XI_API_BASE}/commodities/${fullCode}`
-      const commodityData = await httpGetJson(commodityUrl)
+      const headingCode = normalizedCode.substring(0, 4)
+      
+      // 并行获取 commodity 和 heading 数据
+      const [commodityData, headingData] = await Promise.all([
+        httpGetJson(`${XI_API_BASE}/commodities/${fullCode}`),
+        httpGetJson(`${XI_API_BASE}/headings/${headingCode}`)
+      ])
       
       if (commodityData && commodityData.data) {
         const commodity = commodityData.data
@@ -1138,14 +1143,40 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         // 提取 Heading 信息
         const heading = included.find(i => i.type === 'heading')
         
-        // 提取所有祖先 commodity（用于构建材质分级）
-        const ancestorCommodities = included
-          .filter(i => i.type === 'commodity' && i.attributes?.goods_nomenclature_item_id !== fullCode)
-          .sort((a, b) => {
-            const aLen = (a.attributes?.goods_nomenclature_item_id || '').length
-            const bLen = (b.attributes?.goods_nomenclature_item_id || '').length
-            return aLen - bLen
-          })
+        // 从 heading 数据中获取完整的 commodity 列表用于构建祖先链
+        const allCommodities = headingData?.included?.filter(i => i.type === 'commodity') || []
+        
+        // 使用 indent 字段构建正确的祖先链
+        // 找到当前编码在列表中的位置和 indent
+        const currentInHeading = allCommodities.find(c => 
+          c.attributes?.goods_nomenclature_item_id === fullCode
+        )
+        const currentIndent = currentInHeading?.attributes?.number_indents || 0
+        
+        // 构建祖先链：向前查找 indent 更小的编码
+        const ancestors = []
+        if (currentInHeading) {
+          const currentIndex = allCommodities.indexOf(currentInHeading)
+          let targetIndent = currentIndent - 1
+          
+          // 从当前位置向前查找
+          for (let i = currentIndex - 1; i >= 0 && targetIndent >= 1; i--) {
+            const item = allCommodities[i]
+            const itemIndent = item.attributes?.number_indents || 0
+            const itemCode = item.attributes?.goods_nomenclature_item_id
+            
+            // 找到目标 indent 的祖先
+            if (itemIndent === targetIndent && fullCode.startsWith(itemCode?.substring(0, 6))) {
+              ancestors.unshift({
+                code: itemCode,
+                description: item.attributes?.description,
+                indent: itemIndent,
+                declarable: item.attributes?.declarable
+              })
+              targetIndent--
+            }
+          }
+        }
         
         // 构建完整的面包屑
         const breadcrumb = []
@@ -1163,18 +1194,15 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         // 添加 Chapter
         if (chapter) {
           const chapterDesc = chapter.attributes?.description
-          let chapterDescCn = null
-          if (chapterDesc) {
-            chapterDescCn = getCachedTranslation(chapterDesc)
-            if (!chapterDescCn) {
-              try {
-                const translated = await translateText(chapterDesc, 'en', 'zh-CN', 3000)
-                if (translated && translated !== chapterDesc) {
-                  chapterDescCn = translated
-                  setCachedTranslation(chapterDesc, translated)
-                }
-              } catch (e) { /* 忽略翻译错误 */ }
-            }
+          let chapterDescCn = getCachedTranslation(chapterDesc)
+          if (!chapterDescCn && chapterDesc) {
+            try {
+              const translated = await translateText(chapterDesc, 'en', 'zh-CN', 3000)
+              if (translated && translated !== chapterDesc) {
+                chapterDescCn = translated
+                setCachedTranslation(chapterDesc, translated)
+              }
+            } catch (e) { /* 忽略翻译错误 */ }
           }
           breadcrumb.push({
             code: chapter.attributes?.goods_nomenclature_item_id?.substring(0, 2) || chapter.id,
@@ -1187,18 +1215,15 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         // 添加 Heading
         if (heading) {
           const headingDesc = heading.attributes?.description
-          let headingDescCn = null
-          if (headingDesc) {
-            headingDescCn = getCachedTranslation(headingDesc)
-            if (!headingDescCn) {
-              try {
-                const translated = await translateText(headingDesc, 'en', 'zh-CN', 3000)
-                if (translated && translated !== headingDesc) {
-                  headingDescCn = translated
-                  setCachedTranslation(headingDesc, translated)
-                }
-              } catch (e) { /* 忽略翻译错误 */ }
-            }
+          let headingDescCn = getCachedTranslation(headingDesc)
+          if (!headingDescCn && headingDesc) {
+            try {
+              const translated = await translateText(headingDesc, 'en', 'zh-CN', 3000)
+              if (translated && translated !== headingDesc) {
+                headingDescCn = translated
+                setCachedTranslation(headingDesc, translated)
+              }
+            } catch (e) { /* 忽略翻译错误 */ }
           }
           breadcrumb.push({
             code: heading.attributes?.goods_nomenclature_item_id?.substring(0, 4) || heading.id,
@@ -1209,58 +1234,38 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         }
         
         // 添加祖先 commodity（材质分级等中间层级）
-        for (const ancestor of ancestorCommodities) {
-          const ancestorCode = ancestor.attributes?.goods_nomenclature_item_id
-          const ancestorDesc = ancestor.attributes?.description
-          
-          // 跳过已经在面包屑中的编码
-          if (breadcrumb.some(b => b.code === ancestorCode)) continue
-          // 跳过不是当前编码祖先的编码
-          if (!fullCode.startsWith(ancestorCode?.substring(0, 6))) continue
-          
-          let ancestorDescCn = null
-          if (ancestorDesc) {
-            ancestorDescCn = getCachedTranslation(ancestorDesc)
-            if (!ancestorDescCn) {
-              try {
-                const translated = await translateText(ancestorDesc, 'en', 'zh-CN', 3000)
-                if (translated && translated !== ancestorDesc) {
-                  ancestorDescCn = translated
-                  setCachedTranslation(ancestorDesc, translated)
-                }
-              } catch (e) { /* 忽略翻译错误 */ }
-            }
+        for (const ancestor of ancestors) {
+          const ancestorDesc = ancestor.description
+          let ancestorDescCn = getCachedTranslation(ancestorDesc)
+          if (!ancestorDescCn && ancestorDesc) {
+            try {
+              const translated = await translateText(ancestorDesc, 'en', 'zh-CN', 3000)
+              if (translated && translated !== ancestorDesc) {
+                ancestorDescCn = translated
+                setCachedTranslation(ancestorDesc, translated)
+              }
+            } catch (e) { /* 忽略翻译错误 */ }
           }
           
-          // 确定层级
-          const ancestorLen = ancestorCode?.replace(/0+$/, '').length || 0
-          let ancestorLevel = 'subheading'
-          if (ancestorLen <= 6) ancestorLevel = 'subheading'
-          else if (ancestorLen <= 8) ancestorLevel = 'cn'
-          else ancestorLevel = 'taric'
-          
           breadcrumb.push({
-            code: ancestorCode,
+            code: ancestor.code,
             description: ancestorDesc,
             descriptionCn: ancestorDescCn,
-            level: ancestorLevel,
-            indent: ancestor.attributes?.number_indents
+            level: 'subheading',
+            indent: ancestor.indent
           })
         }
         
         // 添加当前编码到面包屑
-        let currentDescCn = null
-        if (result.description) {
-          currentDescCn = getCachedTranslation(result.description)
-          if (!currentDescCn) {
-            try {
-              const translated = await translateText(result.description, 'en', 'zh-CN', 3000)
-              if (translated && translated !== result.description) {
-                currentDescCn = translated
-                setCachedTranslation(result.description, translated)
-              }
-            } catch (e) { /* 忽略翻译错误 */ }
-          }
+        let currentDescCn = getCachedTranslation(result.description)
+        if (!currentDescCn && result.description) {
+          try {
+            const translated = await translateText(result.description, 'en', 'zh-CN', 3000)
+            if (translated && translated !== result.description) {
+              currentDescCn = translated
+              setCachedTranslation(result.description, translated)
+            }
+          } catch (e) { /* 忽略翻译错误 */ }
         }
         result.descriptionCn = currentDescCn
         
@@ -1268,7 +1273,7 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
           code: fullCode,
           description: result.description,
           descriptionCn: currentDescCn,
-          level: result.level
+          level: result.isDeclarable ? 'taric' : 'cn'
         })
         
         result.breadcrumb = breadcrumb
@@ -1278,11 +1283,7 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
           result.totalChildren = 0
           result.declarableCount = 0
         } else {
-          // 获取子编码 - 从 heading 查询
-          const headingCode = normalizedCode.substring(0, 4)
-          const headingUrl = `${XI_API_BASE}/headings/${headingCode}`
-          const headingData = await httpGetJson(headingUrl)
-          
+          // 获取子编码
           if (headingData && headingData.included) {
             const prefix6 = normalizedCode.substring(0, Math.min(normalizedCode.length, 6))
             const childCommodities = headingData.included.filter(i =>
