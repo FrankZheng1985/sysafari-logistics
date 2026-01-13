@@ -1182,7 +1182,9 @@ export async function regenerateInvoiceFiles(invoiceId) {
     }
   }
   
-  // 更新发票记录（包括 items 字段，使前端能正确显示费用明细金额）
+  // 更新发票记录（只更新文件URL，不覆盖原始 items 数据）
+  // 【重要】不要更新 items 字段！items 包含原始的详细费用数据（含 containerNumber、billNumber）
+  // 如果覆盖成合并后的 items，会丢失这些重要信息
   try {
     const updateFields = []
     const updateValues = []
@@ -1194,11 +1196,6 @@ export async function regenerateInvoiceFiles(invoiceId) {
     if (excelUrl) {
       updateFields.push('excel_url = ?')
       updateValues.push(excelUrl)
-    }
-    // 更新 items 字段，保存费用明细数据
-    if (items && items.length > 0) {
-      updateFields.push('items = ?')
-      updateValues.push(JSON.stringify(items))
     }
     
     if (updateFields.length > 0) {
