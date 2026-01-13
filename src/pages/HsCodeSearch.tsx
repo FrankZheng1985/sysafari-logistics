@@ -51,7 +51,7 @@ export default function HsCodeSearch() {
         pageSize
       })
       
-      if (response.success && response.data) {
+      if (response.errCode === 200 && response.data) {
         setData(response.data)
       } else {
         setError(response.msg || '搜索失败')
@@ -256,7 +256,7 @@ export default function HsCodeSearch() {
               <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 {data.results.map((item, index) => (
                   <div 
-                    key={item.hsCode}
+                    key={`${item.hsCode}-${index}`}
                     className={`p-4 hover:bg-blue-50 cursor-pointer transition-colors ${
                       index > 0 ? 'border-t' : ''
                     }`}
