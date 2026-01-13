@@ -217,6 +217,7 @@ const FEE_NAME_MAP = {
   '保险费': 'Insurance Fee',
   '文件费': 'Documentation Fee',
   '查验费': 'Inspection Fee',
+  '扫描费': 'Scanning Fee',
   '加班费': 'Overtime Fee',
   '滞港费': 'Demurrage Fee',
   '滞箱费': 'Detention Fee',
