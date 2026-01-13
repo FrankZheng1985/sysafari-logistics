@@ -258,6 +258,145 @@ const columns = [
 
 ---
 
+## 📱 响应式设计规范（必须遵守）
+
+所有新开发的页面和组件**必须**支持响应式布局，确保在不同屏幕尺寸下正常显示。
+
+### Tailwind 响应式断点
+
+| 断点 | 最小宽度 | 典型设备 |
+|------|----------|----------|
+| `sm` | 640px | 大屏手机 |
+| `md` | 768px | 平板竖屏 |
+| `lg` | 1024px | 平板横屏/笔记本 |
+| `xl` | 1280px | 桌面显示器 |
+| `2xl` | 1536px | 大屏显示器 |
+
+### 网格布局规范
+
+**✅ 正确写法：使用响应式网格**
+
+```tsx
+// 统计卡片：移动端1列，平板2列，桌面4列
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <StatsCard />
+  <StatsCard />
+  <StatsCard />
+  <StatsCard />
+</div>
+
+// 表单布局：移动端1列，桌面2列
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <Input label="字段1" />
+  <Input label="字段2" />
+</div>
+```
+
+**❌ 禁止写法**
+
+```tsx
+// 不要使用固定列数
+<div className="grid grid-cols-4 gap-4">...</div>
+
+// 不要使用固定宽度
+<div className="w-[800px]">...</div>
+```
+
+### 字体自适应规范
+
+```tsx
+// 标题：小屏 text-lg，大屏 text-xl
+<h1 className="text-lg lg:text-xl font-semibold">页面标题</h1>
+
+// 数值：小屏 text-xl，大屏 text-2xl
+<span className="text-xl lg:text-2xl font-bold">€1,234.56</span>
+
+// 正文：统一使用 text-sm
+<p className="text-sm text-gray-600">描述文字</p>
+
+// 表格/标签：统一使用 text-xs
+<span className="text-xs">表格内容</span>
+```
+
+### 间距自适应规范
+
+```tsx
+// 页面容器
+<div className="p-4 lg:p-6">...</div>
+
+// 卡片内边距
+<div className="p-3 lg:p-4">...</div>
+
+// 元素间距
+<div className="gap-3 lg:gap-4">...</div>
+```
+
+### 工具栏响应式布局
+
+```tsx
+// 工具栏：移动端垂直堆叠，桌面水平排列
+<div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+  <div className="flex flex-col sm:flex-row gap-2">
+    <Input placeholder="搜索..." className="w-full sm:w-64" />
+    <Select className="w-full sm:w-40">...</Select>
+  </div>
+  <div className="flex gap-2">
+    <Button>操作1</Button>
+    <Button>操作2</Button>
+  </div>
+</div>
+```
+
+### 表格响应式规范
+
+```tsx
+// 表格容器必须支持横向滚动
+<div className="overflow-x-auto">
+  <table className="min-w-full">...</table>
+</div>
+```
+
+### 模态框响应式规范
+
+```tsx
+// 模态框容器
+<div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 overflow-y-auto">
+  <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[calc(100vh-4rem)] overflow-hidden flex flex-col mx-4">
+    {/* Header - 固定 */}
+    <div className="flex-shrink-0 p-4 border-b">...</div>
+    
+    {/* Content - 可滚动 */}
+    <div className="flex-1 overflow-y-auto p-4">...</div>
+    
+    {/* Footer - 固定 */}
+    <div className="flex-shrink-0 p-4 border-t">...</div>
+  </div>
+</div>
+```
+
+### 侧边栏响应式行为
+
+- **移动端 (`<lg`)**：侧边栏默认隐藏，通过 Header 汉堡菜单切换
+- **桌面端 (`lg+`)**：侧边栏默认展开，支持手动折叠/展开
+- 使用 `useSidebar()` hook 获取侧边栏状态
+
+### 隐藏/显示元素
+
+```tsx
+// 仅桌面显示
+<span className="hidden lg:inline">完整文字</span>
+
+// 仅移动端显示
+<span className="lg:hidden">简短</span>
+
+// 小屏隐藏某些操作按钮
+<div className="hidden sm:flex gap-2">
+  <Button>批量操作</Button>
+</div>
+```
+
+---
+
 ## 🔧 代码风格
 
 ### 命名规范
