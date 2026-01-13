@@ -1583,6 +1583,67 @@ export async function searchHsCodes(query, options = {}) {
     const searchData = await httpGetJson(searchUrl)
     
     if (searchData && searchData.data) {
+      // 检查是否是精确匹配（搜索纯编码时会返回 exact_search 类型）
+      if (searchData.data.type === 'exact_search') {
+        const exactMatch = searchData.data.attributes || {}
+        if (exactMatch.type === 'exact_match' && exactMatch.entry) {
+          const entry = exactMatch.entry
+          const matchedCode = entry.id
+          
+          // 获取该编码的详细信息
+          try {
+            const detailUrl = `${XI_API_BASE}/${entry.endpoint}/${matchedCode}`
+            const detailData = await httpGetJson(detailUrl)
+            
+            if (detailData && detailData.data) {
+              const commodity = detailData.data
+              const included = detailData.included || []
+              const chapter = included.find(i => i.type === 'chapter')
+              const section = included.find(i => i.type === 'section')
+              
+              // 翻译描述
+              let descriptionCn = getCachedTranslation(commodity.attributes?.description)
+              if (!descriptionCn && commodity.attributes?.description) {
+                try {
+                  descriptionCn = await translateText(commodity.attributes.description, 'en', 'zh-CN', 3000)
+                  if (descriptionCn && descriptionCn !== commodity.attributes.description) {
+                    setCachedTranslation(commodity.attributes.description, descriptionCn)
+                  }
+                } catch (e) { /* ignore */ }
+              }
+              
+              result.total = 1
+              result.results = [{
+                hsCode: matchedCode,
+                description: commodity.attributes?.description,
+                descriptionCn: descriptionCn,
+                declarable: commodity.attributes?.declarable === true,
+                chapter: chapter?.attributes?.goods_nomenclature_item_id?.substring(0, 2),
+                chapterDescription: chapter?.attributes?.description,
+                section: section?.attributes?.numeral,
+                sectionTitle: section?.attributes?.title,
+                isExactMatch: true
+              }]
+              
+              // 章节统计
+              if (chapter) {
+                result.chapterStats = [{
+                  chapter: chapter.attributes?.goods_nomenclature_item_id?.substring(0, 2),
+                  description: chapter.attributes?.description,
+                  count: 1
+                }]
+              }
+              
+              setCache(cacheKey, result, 30 * 60 * 1000)
+              return result
+            }
+          } catch (e) {
+            // 如果获取详情失败，继续正常流程
+            console.error('获取精确匹配详情失败:', e.message)
+          }
+        }
+      }
+      
       // 新版 API 响应格式：data.attributes.goods_nomenclature_match.commodities
       const attributes = searchData.data.attributes || {}
       const goodsMatch = attributes.goods_nomenclature_match || {}
