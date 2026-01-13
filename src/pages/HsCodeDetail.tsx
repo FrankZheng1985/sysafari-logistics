@@ -320,32 +320,48 @@ export default function HsCodeDetail() {
             </div>
           )}
 
-          {/* 层级面包屑 */}
+          {/* 层级面包屑 - 垂直树形结构 */}
           {data.breadcrumb && data.breadcrumb.length > 0 && (
             <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-              <div className="text-sm mb-2 text-gray-500">层级路径:</div>
-              <div className="flex flex-wrap items-start gap-1">
+              <div className="text-sm mb-3 text-gray-500">层级路径:</div>
+              <div className="space-y-1">
                 {data.breadcrumb.map((item, index) => {
                   const isSection = item.level === 'section'
                   const isLast = index === data.breadcrumb.length - 1
+                  // 计算缩进：每级增加 24px
+                  const indentLevel = index
                   
                   return (
-                    <span key={item.code} className="flex items-center">
-                      {index > 0 && <ChevronRight className="w-4 h-4 text-gray-300 mx-1 flex-shrink-0" />}
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded ${
+                    <div 
+                      key={`${item.code}-${index}`} 
+                      className="flex items-center"
+                      style={{ paddingLeft: `${indentLevel * 24}px` }}
+                    >
+                      {/* 树形连接线 */}
+                      {index > 0 && (
+                        <div className="flex items-center mr-2">
+                          <div className="w-4 h-px bg-gray-300"></div>
+                          <ChevronRight className="w-3 h-3 text-gray-400" />
+                        </div>
+                      )}
+                      
+                      {/* 层级内容 */}
+                      <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md ${
                         isLast 
-                          ? 'bg-primary-100 text-primary-700' 
-                          : 'bg-gray-50 hover:bg-gray-100'
+                          ? 'bg-primary-50 border border-primary-200' 
+                          : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
                       }`}>
                         {/* 层级标签 */}
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${
-                          isSection ? 'bg-purple-100 text-purple-600' :
-                          item.level === 'chapter' ? 'bg-blue-100 text-blue-600' :
-                          item.level === 'heading' ? 'bg-green-100 text-green-600' :
-                          'bg-amber-100 text-amber-600'
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                          isSection ? 'bg-purple-100 text-purple-700' :
+                          item.level === 'chapter' ? 'bg-blue-100 text-blue-700' :
+                          item.level === 'heading' ? 'bg-green-100 text-green-700' :
+                          item.level === 'subheading' ? 'bg-amber-100 text-amber-700' :
+                          'bg-primary-100 text-primary-700'
                         }`}>
                           {getLevelName(item.level)}
                         </span>
+                        
                         {/* 可点击的描述 */}
                         {isSection ? (
                           <span className="text-sm text-gray-700">
@@ -354,20 +370,21 @@ export default function HsCodeDetail() {
                         ) : (
                           <button
                             onClick={() => !isLast && navigate(`/hs/${item.code}${buildNavParams(item.code)}`)}
-                            className={`text-sm ${isLast ? 'text-primary-700 font-medium cursor-default' : 'text-gray-700 hover:text-primary-600 hover:underline'}`}
+                            className={`text-sm text-left ${isLast ? 'text-primary-700 font-medium cursor-default' : 'text-gray-700 hover:text-primary-600 hover:underline'}`}
                             disabled={isLast}
                           >
                             {item.descriptionCn || item.description || item.code}
                           </button>
                         )}
+                        
                         {/* 编码 */}
                         {!isSection && (
-                          <span className="text-xs text-gray-400 font-mono">
+                          <span className="text-xs text-gray-400 font-mono ml-1">
                             ({item.code.length > 6 ? formatCodeDisplay(item.code, true) : item.code})
                           </span>
                         )}
-                      </span>
-                    </span>
+                      </div>
+                    </div>
                   )
                 })}
               </div>
