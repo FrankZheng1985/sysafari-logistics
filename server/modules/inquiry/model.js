@@ -60,13 +60,29 @@ export async function generateInquiryNumber() {
   const db = getDatabase()
   const year = new Date().getFullYear()
   
-  // 获取并更新序号
-  const result = await db.prepare(`
+  // 先尝试更新序号
+  let result = await db.prepare(`
     UPDATE order_sequences 
     SET current_seq = current_seq + 1, updated_at = CURRENT_TIMESTAMP
     WHERE business_type = 'inquiry'
     RETURNING current_seq
   `).get()
+  
+  // 如果序列不存在，先创建再获取
+  if (!result?.current_seq) {
+    // 插入初始序列（如果不存在）
+    await db.prepare(`
+      INSERT INTO order_sequences (business_type, current_seq, prefix, description)
+      VALUES ('inquiry', 1, 'INQ', '客户询价编号')
+      ON CONFLICT (business_type) DO UPDATE SET current_seq = order_sequences.current_seq + 1
+      RETURNING current_seq
+    `).run()
+    
+    // 重新获取序列号
+    result = await db.prepare(`
+      SELECT current_seq FROM order_sequences WHERE business_type = 'inquiry'
+    `).get()
+  }
   
   const seq = result?.current_seq || 1
   return `INQ${year}${String(seq).padStart(6, '0')}`

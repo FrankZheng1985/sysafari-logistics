@@ -2619,6 +2619,13 @@ export async function runMigrations() {
       console.log('    + 默认卡车类型数据已初始化')
     }
     
+    // 初始化询价序列（确保 order_sequences 表中有 inquiry 类型）
+    await client.query(`
+      INSERT INTO order_sequences (business_type, current_seq, prefix, description)
+      VALUES ('inquiry', 0, 'INQ', '客户询价编号')
+      ON CONFLICT (business_type) DO NOTHING
+    `)
+    
     console.log('  ✅ 询价工作流模块表就绪')
 
     // ==================== 税费计算精准改进 - 贸易条件字段 ====================
