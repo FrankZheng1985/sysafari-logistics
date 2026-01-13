@@ -32,15 +32,16 @@ jobs:
             # ==========================================
             echo ""
             echo "📦 [1/4] 部署生产环境后端..."
-            cd /var/www/sysafari-logistics
             
-            # 拉取最新代码
+            # 同步代码到生产环境后端目录
+            cd /var/www/prod/server
             git pull origin main
-            
-            # 更新后端
-            cd server
             npm install --production
-            pm2 restart sysafari-prod
+            pm2 restart sysafari-api
+            
+            # 同步代码到前端构建目录
+            cd /var/www/sysafari-logistics
+            git pull origin main
             
             # 构建前端
             cd /var/www/sysafari-logistics
