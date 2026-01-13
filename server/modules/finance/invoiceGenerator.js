@@ -1034,31 +1034,72 @@ export async function regenerateInvoiceFiles(invoiceId) {
   const defaultContainerNo = containerNumbers.length > 0 ? containerNumbers[0] : ''
   const defaultBillNo = invoice.bill_number || ''
   
-  // 调试日志
-  console.log(`[regenerateInvoiceFiles] containerNumbers 原始值: ${JSON.stringify(invoice.container_numbers)}`)
-  console.log(`[regenerateInvoiceFiles] containerNumbers 解析后: ${JSON.stringify(containerNumbers)}`)
-  console.log(`[regenerateInvoiceFiles] defaultContainerNo: "${defaultContainerNo}"`)
-  console.log(`[regenerateInvoiceFiles] defaultBillNo: "${defaultBillNo}"`)
+  // 检查 parsedItems 是否是汇总数据（没有 containerNumber 或者有 quantity > 1）
+  const isAggregatedItems = parsedItems && parsedItems.length > 0 && 
+    parsedItems.every(item => !item.containerNumber) && 
+    parsedItems.some(item => (item.quantity || 1) > 1)
   
-  if (parsedItems && parsedItems.length > 0) {
+  console.log(`[regenerateInvoiceFiles] parsedItems 是否为汇总数据: ${isAggregatedItems}`)
+  
+  // 如果 items 是汇总数据且有关联的 bill_id，尝试从 fees 表获取明细
+  let detailedFeesFromDb = []
+  if (isAggregatedItems && invoice.bill_id) {
+    console.log(`[regenerateInvoiceFiles] items 是汇总数据，尝试从 fees 表获取明细...`)
+    const billIds = invoice.bill_id.split(',').map(id => id.trim()).filter(Boolean)
+    
+    // 获取 items 中的费用名称列表
+    const itemFeeNames = parsedItems.map(item => item.description?.trim()).filter(Boolean)
+    console.log(`[regenerateInvoiceFiles] items 中的费用名称: ${itemFeeNames.join(', ')}`)
+    
+    if (billIds.length > 0) {
+      // 从 fees 表获取这些 bill_id 对应的详细费用
+      const placeholders = billIds.map(() => '?').join(',')
+      const feesQuery = `
+        SELECT f.fee_name, f.amount, b.container_number, b.bill_number
+        FROM fees f
+        JOIN bills_of_lading b ON f.bill_id = b.id
+        WHERE b.id IN (${placeholders})
+        ORDER BY b.container_number, f.fee_name
+      `
+      const allFees = await db.prepare(feesQuery).all(...billIds)
+      
+      // 只保留 items 中存在的费用类型
+      detailedFeesFromDb = allFees.filter(f => 
+        itemFeeNames.some(name => f.fee_name && f.fee_name.includes(name) || name.includes(f.fee_name))
+      )
+      console.log(`[regenerateInvoiceFiles] 从 fees 表获取到 ${detailedFeesFromDb.length} 条匹配的明细`)
+    }
+  }
+  
+  if (detailedFeesFromDb.length > 0) {
+    // 使用从 fees 表获取的详细数据
+    console.log(`[regenerateInvoiceFiles] Excel 使用 fees 表明细数据，共 ${detailedFeesFromDb.length} 条`)
+    excelItems = detailedFeesFromDb.map(f => ({
+      containerNumber: f.container_number || '',
+      billNumber: f.bill_number || '',
+      feeName: f.fee_name || 'Other',
+      feeNameEn: null,
+      amount: parseFloat(f.amount) || 0,
+      discountAmount: 0,
+      finalAmount: parseFloat(f.amount) || 0
+    }))
+    // 按集装箱号排序
+    excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
+  } else if (parsedItems && parsedItems.length > 0) {
     // 使用 items 字段的数据（包含手动添加的项目）
     console.log(`[regenerateInvoiceFiles] Excel 使用 items 字段数据，共 ${parsedItems.length} 条`)
-    excelItems = parsedItems.map(item => {
-      const result = {
-        // 如果 item 没有 containerNumber，使用发票的默认值
-        containerNumber: item.containerNumber || defaultContainerNo || '',
-        billNumber: item.billNumber || defaultBillNo || '',
-        feeName: item.description || 'Other',
-        feeNameEn: item.descriptionEn || null,
-        amount: parseFloat(item.amount) || 0,
-        discountAmount: parseFloat(item.discountAmount) || 0,
-        finalAmount: item.finalAmount !== undefined 
-          ? parseFloat(item.finalAmount) 
-          : (parseFloat(item.amount) || 0) - (parseFloat(item.discountAmount) || 0)
-      }
-      console.log(`[regenerateInvoiceFiles] Excel Item: ${result.feeName}, containerNo="${result.containerNumber}", billNo="${result.billNumber}"`)
-      return result
-    })
+    excelItems = parsedItems.map(item => ({
+      // 如果 item 没有 containerNumber，使用发票的默认值
+      containerNumber: item.containerNumber || defaultContainerNo || '',
+      billNumber: item.billNumber || defaultBillNo || '',
+      feeName: item.description || 'Other',
+      feeNameEn: item.descriptionEn || null,
+      amount: parseFloat(item.amount) || 0,
+      discountAmount: parseFloat(item.discountAmount) || 0,
+      finalAmount: item.finalAmount !== undefined 
+        ? parseFloat(item.finalAmount) 
+        : (parseFloat(item.amount) || 0) - (parseFloat(item.discountAmount) || 0)
+    }))
     // 按集装箱号排序
     excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
   } else if (fees && fees.length > 0) {
