@@ -80,6 +80,10 @@ const TEMPLATE_FIELDS: InvoiceTemplateField[] = [
   { key: 'labelTotal', label: '总计标签', type: 'text', group: 'labels', placeholder: 'Total' },
   { key: 'labelBankDetails', label: '银行信息标签', type: 'text', group: 'labels', placeholder: 'Bank Details' },
   { key: 'labelPaymentTerms', label: '付款条款标签', type: 'text', group: 'labels', placeholder: 'Payment Terms' },
+  { key: 'labelContainerNo', label: '集装箱号标签', type: 'text', group: 'labels', placeholder: 'Container No.' },
+  { key: 'labelDiscount', label: '折扣标签', type: 'text', group: 'labels', placeholder: 'Discount' },
+  { key: 'labelFinal', label: '最终金额标签', type: 'text', group: 'labels', placeholder: 'Final' },
+  { key: 'labelPaymentDate', label: '付款日期标签', type: 'text', group: 'labels', placeholder: 'Payment Date' },
 ]
 
 // 默认模板值
@@ -117,6 +121,10 @@ const DEFAULT_TEMPLATE: Record<string, Record<string, string>> = {
     labelTotal: '总计',
     labelBankDetails: '银行信息',
     labelPaymentTerms: '付款条款',
+    labelContainerNo: '集装箱号',
+    labelDiscount: '折扣',
+    labelFinal: '最终金额',
+    labelPaymentDate: '付款日期',
   },
   en: {
     companyName: '',
@@ -151,6 +159,10 @@ const DEFAULT_TEMPLATE: Record<string, Record<string, string>> = {
     labelTotal: 'Total',
     labelBankDetails: 'Bank Details',
     labelPaymentTerms: 'Payment Terms',
+    labelContainerNo: 'Container No.',
+    labelDiscount: 'Discount',
+    labelFinal: 'Final',
+    labelPaymentDate: 'Payment Date',
   },
 }
 
@@ -1154,7 +1166,7 @@ function InvoicePreviewModal({
                 <p className="text-sm font-bold mb-1">Sample Customer Co., Ltd</p>
                 <p className="text-[10px] text-gray-600">123 Business Street, Berlin 10115, Germany</p>
                 <div className="mt-3 text-[10px]">
-                  <span className="font-bold">Container No:</span> CMAU1234567
+                  <span className="font-bold">{content.labelContainerNo || 'Container No'}:</span> CMAU1234567
                 </div>
               </div>
               <div className="text-right">
@@ -1164,7 +1176,7 @@ function InvoicePreviewModal({
                 <div className="text-[10px] text-gray-600 space-y-0.5">
                   <p>{content.labelInvoiceNumber || 'Invoice No'}: <span>INV20260001</span></p>
                   <p>{content.labelDate || 'Invoice Date'}: 2026-01-09</p>
-                  <p>Payment Terms: 30 Days</p>
+                  <p>{content.labelPaymentTerms || 'Payment Terms'}: 30 Days</p>
                   <p>{content.labelDueDate || 'Due Date'}: 2026-02-08</p>
                 </div>
               </div>
@@ -1187,10 +1199,10 @@ function InvoicePreviewModal({
                     {content.labelAmount || 'Amount'} EUR
                   </th>
                   <th className="border border-gray-200 px-2 py-1.5 text-right font-bold" style={{ width: '10%', color: primaryColor }}>
-                    Discount
+                    {content.labelDiscount || 'Discount'}
                   </th>
                   <th className="border border-gray-200 px-2 py-1.5 text-right font-bold" style={{ width: '10%' }}>
-                    Final
+                    {content.labelFinal || 'Final'}
                   </th>
                 </tr>
               </thead>
@@ -1213,17 +1225,17 @@ function InvoicePreviewModal({
             </table>
             
             {/* 合计区域 */}
-            <div className="flex justify-between items-end mb-4">
-              <div>
-                {/* 公章 */}
+            <div className="flex justify-end items-start mb-4">
+              {/* 公章 - 放在合计金额左侧 */}
+              <div className="mr-6 mt-2">
                 {template.stampUrl ? (
                   <img 
                     src={template.stampUrl.startsWith('http') ? template.stampUrl : `${API_BASE}${template.stampUrl}`}
                     alt="公章" 
-                    className="w-20 h-20 object-contain opacity-80"
+                    className="w-16 h-16 object-contain opacity-80"
                   />
                 ) : (
-                  <div className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-[9px]">
+                  <div className="w-16 h-16 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center text-gray-400 text-[9px]">
                     公章
                   </div>
                 )}
@@ -1235,7 +1247,7 @@ function InvoicePreviewModal({
                 </div>
                 {totalDiscount > 0 && (
                   <div className="flex justify-end gap-10 mb-1" style={{ color: primaryColor }}>
-                    <span>Discount</span>
+                    <span>{content.labelDiscount || 'Discount'}</span>
                     <span>-{totalDiscount.toFixed(2)} EUR</span>
                   </div>
                 )}

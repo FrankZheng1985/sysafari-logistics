@@ -212,7 +212,11 @@ export function convertTemplateToCompanyInfo(dbTemplate) {
       tax: dbTemplate.labelTax || 'Tax',
       total: dbTemplate.labelTotal || 'Total',
       bankDetails: dbTemplate.labelBankDetails || 'Bank Details',
-      paymentTerms: dbTemplate.labelPaymentTerms || 'Payment Terms'
+      paymentTerms: dbTemplate.labelPaymentTerms || 'Payment Terms',
+      containerNo: dbTemplate.labelContainerNo || 'Container No',
+      discount: dbTemplate.labelDiscount || 'Discount',
+      final: dbTemplate.labelFinal || 'Final',
+      paymentDate: dbTemplate.labelPaymentDate || 'Payment Date'
     },
     
     // 发票条款
@@ -620,14 +624,16 @@ export function generateInvoiceHTML(data) {
     /* 合计区域 */
     .totals-section {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
+      justify-content: flex-end;
+      align-items: flex-start;
       margin-bottom: 15px;
+      gap: 20px;
     }
     .stamp {
-      width: 80px;
-      height: 80px;
+      width: 70px;
+      height: 70px;
       opacity: 0.8;
+      margin-top: 5px;
     }
     .totals {
       text-align: right;
@@ -700,7 +706,7 @@ export function generateInvoiceHTML(data) {
       <div class="bill-to-address">${customer.address || ''}</div>
       ${containerNumbers && containerNumbers.length > 0 ? `
       <div class="container-info">
-        <span class="container-label">Container No:</span> ${containerNumbers.join(', ')}
+        <span class="container-label">${labels.containerNo || 'Container No'}:</span> ${containerNumbers.join(', ')}
       </div>
       ` : ''}
     </div>
@@ -708,7 +714,7 @@ export function generateInvoiceHTML(data) {
       <div class="invoice-title">${labels.invoice || 'INVOICE'}</div>
       <div class="invoice-detail">${labels.invoiceNumber || 'Invoice No'}: <span>${invoiceNumber}</span></div>
       <div class="invoice-detail">${labels.date || 'Invoice Date'}: ${formattedDate}</div>
-      <div class="invoice-detail">Payment Terms: ${paymentDays ? `${paymentDays} Days` : 'Due on Receipt'}</div>
+      <div class="invoice-detail">${labels.paymentTerms || 'Payment Terms'}: ${paymentDays ? `${paymentDays} Days` : 'Due on Receipt'}</div>
       ${formattedDueDate ? `<div class="invoice-detail">${labels.dueDate || 'Due Date'}: ${formattedDueDate}</div>` : ''}
       ${exchangeRateText ? `<div class="invoice-detail">${exchangeRateText}</div>` : ''}
     </div>
@@ -722,8 +728,8 @@ export function generateInvoiceHTML(data) {
         <th style="width: 10%" class="quantity">${labels.quantity || 'Quantity'}</th>
         ${isMultiContainerInvoice ? '' : `<th style="width: 15%" class="amount">${labels.unitPrice || 'Unit Value'}</th>`}
         <th style="width: ${isMultiContainerInvoice ? '20%' : '20%'}" class="amount">${labels.amount || 'Amount'} ${currency}</th>
-        <th style="width: ${isMultiContainerInvoice ? '12%' : '12%'}" class="amount discount-col">Discount</th>
-        <th style="width: ${isMultiContainerInvoice ? '13%' : '18%'}" class="amount">Final</th>
+        <th style="width: ${isMultiContainerInvoice ? '12%' : '12%'}" class="amount discount-col">${labels.discount || 'Discount'}</th>
+        <th style="width: ${isMultiContainerInvoice ? '13%' : '18%'}" class="amount">${labels.final || 'Final'}</th>
       </tr>
     </thead>
     <tbody>
@@ -745,7 +751,7 @@ export function generateInvoiceHTML(data) {
   
   <!-- 合计区域 -->
   <div class="totals-section">
-    <div>
+    <div class="stamp-container">
       ${stampHtml}
     </div>
     <div class="totals">
@@ -755,7 +761,7 @@ export function generateInvoiceHTML(data) {
       </div>
       ${subtotal > total ? `
       <div class="discount-row">
-        <span>Discount</span>
+        <span>${labels.discount || 'Discount'}</span>
         <span>-${formatNumber(subtotal - total)} ${currency}</span>
       </div>
       ` : ''}
