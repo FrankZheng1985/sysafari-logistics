@@ -734,6 +734,11 @@ export default function InvoiceDetail() {
                     item.quantity !== undefined || item.unitPrice !== undefined
                   )
                   
+                  // 检查是否有优惠数据（优惠百分比或优惠金额）
+                  const hasDiscountData = parsedItems.some(item => 
+                    (Number(item.discountPercent) || 0) > 0 || (Number(item.discountAmount) || 0) > 0
+                  )
+                  
                   // 计算合计
                   const totals = parsedItems.reduce((acc, item) => {
                     acc.amount += Number(item.amount) || 0
@@ -806,8 +811,12 @@ export default function InvoiceDetail() {
                           )}
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-24">金额</th>
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">税额</th>
-                          <th className="text-center py-2 px-2 font-medium text-gray-600 w-16">优惠%</th>
-                          <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">优惠额</th>
+                          {(hasDiscountData || needDistributeDiscount) && (
+                            <>
+                              <th className="text-center py-2 px-2 font-medium text-gray-600 w-16">优惠%</th>
+                              <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">优惠额</th>
+                            </>
+                          )}
                           <th className="text-right py-2 px-2 font-medium text-gray-600 w-24">最终金额</th>
                         </tr>
                       </thead>
@@ -858,12 +867,16 @@ export default function InvoiceDetail() {
                                   <td className="py-2 px-2 text-right text-gray-600">
                                     {formatCurrency(taxAmount, invoice.currency)}
                                   </td>
-                                  <td className="py-2 px-2 text-center text-gray-600">
-                                    {discountPct > 0 ? `${discountPct}%` : '-'}
-                                  </td>
-                                  <td className={`py-2 px-2 text-right ${discountAmt > 0 ? 'text-orange-600' : 'text-gray-600'}`}>
-                                    {discountAmt > 0.01 ? formatCurrency(discountAmt, invoice.currency) : '-'}
-                                  </td>
+                                  {(hasDiscountData || needDistributeDiscount) && (
+                                    <>
+                                      <td className="py-2 px-2 text-center text-gray-600">
+                                        {discountPct > 0 ? `${discountPct}%` : '-'}
+                                      </td>
+                                      <td className={`py-2 px-2 text-right ${discountAmt > 0 ? 'text-orange-600' : 'text-gray-600'}`}>
+                                        {discountAmt > 0.01 ? formatCurrency(discountAmt, invoice.currency) : '-'}
+                                      </td>
+                                    </>
+                                  )}
                                   <td className={`py-2 px-2 text-right font-medium ${isNegative ? 'text-green-700' : 'text-gray-900'}`}>
                                     {formatCurrency(finalAmount, invoice.currency)}
                                   </td>
@@ -887,8 +900,12 @@ export default function InvoiceDetail() {
                               )}
                               <td className="py-2 px-2 text-right text-gray-500">-</td>
                               <td className="py-2 px-2 text-right text-gray-500">-</td>
-                              <td className="py-2 px-2 text-center text-gray-500">-</td>
-                              <td className="py-2 px-2 text-right text-gray-500">-</td>
+                              {(hasDiscountData || needDistributeDiscount) && (
+                                <>
+                                  <td className="py-2 px-2 text-center text-gray-500">-</td>
+                                  <td className="py-2 px-2 text-right text-gray-500">-</td>
+                                </>
+                              )}
                               <td className="py-2 px-2 text-right text-gray-500">-</td>
                             </tr>
                           ))
@@ -903,10 +920,14 @@ export default function InvoiceDetail() {
                           <td className="py-2 px-2 text-right text-gray-700">
                             {formatCurrency(totals.taxAmount, invoice.currency)}
                           </td>
-                          <td className="py-2 px-2 text-center text-gray-500">-</td>
-                          <td className="py-2 px-2 text-right text-orange-600">
-                            {formatCurrency(needDistributeDiscount ? totalDiscount : totals.discountAmount, invoice.currency)}
-                          </td>
+                          {(hasDiscountData || needDistributeDiscount) && (
+                            <>
+                              <td className="py-2 px-2 text-center text-gray-500">-</td>
+                              <td className="py-2 px-2 text-right text-orange-600">
+                                {formatCurrency(needDistributeDiscount ? totalDiscount : totals.discountAmount, invoice.currency)}
+                              </td>
+                            </>
+                          )}
                           <td className="py-2 px-2 text-right text-primary-700 font-bold">
                             {formatCurrency(displayTotal, invoice.currency)}
                           </td>

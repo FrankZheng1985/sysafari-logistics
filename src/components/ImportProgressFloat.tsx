@@ -1,13 +1,20 @@
-import { useState } from 'react'
+import { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileSpreadsheet, RefreshCw, Check, X, ChevronUp, ChevronDown, Upload, FileCheck } from 'lucide-react'
-import { useImport, type ImportTask } from '../contexts/ImportContext'
+import { ImportContext, type ImportTask } from '../contexts/ImportContext'
 
 export default function ImportProgressFloat() {
   const navigate = useNavigate()
-  const { state } = useImport()
+  const importContext = useContext(ImportContext)
   const [isExpanded, setIsExpanded] = useState(true)
   const [isMinimized, setIsMinimized] = useState(false)
+  
+  // 安全检查：如果 Context 不可用（如 HMR 期间），不渲染组件
+  if (!importContext) {
+    return null
+  }
+  
+  const { state } = importContext
 
   // 获取正在处理的任务（解析中或导入中）
   const processingTasks = state.tasks.filter(

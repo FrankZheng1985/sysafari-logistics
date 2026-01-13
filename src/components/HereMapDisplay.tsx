@@ -1,19 +1,113 @@
 /**
  * HERE Map Display Component
  * 用于显示运输路线地图
+ * 
+ * SDK 按需动态加载，避免在不需要地图的页面加载资源
  */
 
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { MapPin, Navigation, AlertCircle, Loader2 } from 'lucide-react'
 
 // HERE Maps API Key（从环境变量获取）
 const HERE_API_KEY = import.meta.env.VITE_HERE_API_KEY || ''
 
+// HERE Maps SDK 版本
+const HERE_SDK_VERSION = '3.1'
+const HERE_SDK_BASE_URL = `https://js.api.here.com/v3/${HERE_SDK_VERSION}`
+
 // 声明全局 H 对象类型
 declare global {
   interface Window {
     H: any
+    __hereMapsLoading?: Promise<void>
+    __hereMapsLoaded?: boolean
   }
+}
+
+/**
+ * 动态加载单个脚本
+ */
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // 检查是否已加载
+    const existingScript = document.querySelector(`script[src="${src}"]`)
+    if (existingScript) {
+      resolve()
+      return
+    }
+    
+    const script = document.createElement('script')
+    script.src = src
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error(`加载脚本失败: ${src}`))
+    document.head.appendChild(script)
+  })
+}
+
+/**
+ * 动态加载 CSS
+ */
+function loadCSS(href: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // 检查是否已加载
+    const existingLink = document.querySelector(`link[href="${href}"]`)
+    if (existingLink) {
+      resolve()
+      return
+    }
+    
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.type = 'text/css'
+    link.href = href
+    link.onload = () => resolve()
+    link.onerror = () => reject(new Error(`加载样式失败: ${href}`))
+    document.head.appendChild(link)
+  })
+}
+
+/**
+ * 动态加载 HERE Maps SDK（单例模式，避免重复加载）
+ */
+async function loadHereMapsSDK(): Promise<void> {
+  // 如果已加载完成，直接返回
+  if (window.__hereMapsLoaded && typeof window.H !== 'undefined') {
+    return
+  }
+  
+  // 如果正在加载中，等待加载完成
+  if (window.__hereMapsLoading) {
+    return window.__hereMapsLoading
+  }
+  
+  // 开始加载
+  window.__hereMapsLoading = (async () => {
+    try {
+      // 先加载 CSS
+      await loadCSS(`${HERE_SDK_BASE_URL}/mapsjs-ui.css`)
+      
+      // 按顺序加载 JS（因为有依赖关系）
+      await loadScript(`${HERE_SDK_BASE_URL}/mapsjs-core.js`)
+      await loadScript(`${HERE_SDK_BASE_URL}/mapsjs-service.js`)
+      await loadScript(`${HERE_SDK_BASE_URL}/mapsjs-ui.js`)
+      await loadScript(`${HERE_SDK_BASE_URL}/mapsjs-mapevents.js`)
+      
+      // 验证加载成功
+      if (typeof window.H === 'undefined') {
+        throw new Error('HERE Maps SDK 加载后 H 对象不可用')
+      }
+      
+      window.__hereMapsLoaded = true
+      console.log('HERE Maps SDK 加载成功')
+    } catch (error) {
+      // 清除加载状态以便重试
+      delete window.__hereMapsLoading
+      throw error
+    }
+  })()
+  
+  return window.__hereMapsLoading
 }
 
 interface Location {
@@ -168,41 +262,44 @@ export default function HereMapDisplay({
     return `${origin.lat},${origin.lng}-${destination.lat},${destination.lng}`
   }, [origin?.lat, origin?.lng, destination?.lat, destination?.lng])
   
+  // 动态加载 HERE Maps SDK
   useEffect(() => {
-    // 检查 HERE SDK 是否加载
-    const checkHereSDK = () => {
-      if (typeof window.H !== 'undefined') {
-        setIsLoaded(true)
-        return true
-      }
-      return false
-    }
-    
-    if (checkHereSDK()) {
+    // 如果没有起点和终点，不需要加载 SDK
+    if (!origin || !destination) {
+      setIsLoading(false)
       return
     }
     
-    // 等待 SDK 加载
-    const interval = setInterval(() => {
-      if (checkHereSDK()) {
-        clearInterval(interval)
-      }
-    }, 100)
+    let cancelled = false
     
-    // 5秒超时
-    const timeout = setTimeout(() => {
-      clearInterval(interval)
-      if (!isLoaded) {
-        setError('HERE Maps SDK 加载超时')
-        setIsLoading(false)
+    const loadSDK = async () => {
+      try {
+        // 设置超时（15秒，考虑到网络可能较慢）
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('HERE Maps SDK 加载超时，请检查网络连接')), 15000)
+        })
+        
+        await Promise.race([loadHereMapsSDK(), timeoutPromise])
+        
+        if (!cancelled) {
+          setIsLoaded(true)
+          setError(null)
+        }
+      } catch (err: any) {
+        console.error('HERE Maps SDK 加载失败:', err)
+        if (!cancelled) {
+          setError(err.message || 'HERE Maps SDK 加载失败')
+          setIsLoading(false)
+        }
       }
-    }, 5000)
+    }
+    
+    loadSDK()
     
     return () => {
-      clearInterval(interval)
-      clearTimeout(timeout)
+      cancelled = true
     }
-  }, [])
+  }, [origin, destination])
   
   useEffect(() => {
     if (!isLoaded || !mapRef.current) return

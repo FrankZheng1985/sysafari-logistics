@@ -109,7 +109,7 @@ const createEmptyTask = (): ImportTask => ({
   selectedTaxNumber: null,
 })
 
-const ImportContext = createContext<ImportContextType | undefined>(undefined)
+export const ImportContext = createContext<ImportContextType | undefined>(undefined)
 
 export function ImportProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ImportState>(initialState)
