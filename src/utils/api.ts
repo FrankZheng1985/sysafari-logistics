@@ -95,14 +95,65 @@ function showTestModeWarning(action: string): void {
   console.warn(`🧪 测试模式: ${action} 操作被拦截，数据不会被保存`)
 }
 
+// ==================== API 请求配置 ====================
+const DEFAULT_TIMEOUT = 30000 // 默认30秒超时
+const RETRY_COUNT = 1 // 重试次数（GET请求）
+const RETRY_DELAY = 1000 // 重试延迟（毫秒）
+
 /**
- * 通用 API 请求函数
+ * 自定义 API 错误类
+ */
+export class ApiError extends Error {
+  status: number
+  code: string
+  isTimeout: boolean
+  isNetworkError: boolean
+
+  constructor(message: string, status = 0, code = 'UNKNOWN_ERROR', isTimeout = false, isNetworkError = false) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.isTimeout = isTimeout
+    this.isNetworkError = isNetworkError
+  }
+}
+
+/**
+ * 请求选项扩展
+ */
+interface RequestOptions extends RequestInit {
+  timeout?: number // 超时时间（毫秒）
+  retry?: boolean // 是否自动重试（仅GET请求）
+  retryCount?: number // 重试次数
+  showErrorToast?: boolean // 是否显示错误提示
+}
+
+/**
+ * 延迟函数
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 通用 API 请求函数（带超时和重试机制）
  */
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestOptions = {}
 ): Promise<T> {
+  const { 
+    timeout = DEFAULT_TIMEOUT, 
+    retry = true,
+    retryCount = RETRY_COUNT,
+    showErrorToast = true,
+    ...fetchOptions 
+  } = options
+  
   const url = API_BASE_URL ? `${API_BASE_URL}${endpoint}` : endpoint
+  const method = (fetchOptions.method || 'GET').toUpperCase()
+  const shouldRetry = retry && method === 'GET' && retryCount > 0
 
   // 获取存储的 token 用于认证
   const token = getStoredToken()
@@ -111,31 +162,123 @@ async function request<T>(
     authHeaders['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-      ...options.headers,
-    },
-  })
+  // 内部执行函数（支持重试）
+  async function executeRequest(attemptNumber: number): Promise<T> {
+    // 创建 AbortController 用于超时控制
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, timeout)
 
-  if (!response.ok) {
-    // 尝试读取响应体中的错误信息
     try {
-      const errorData = await response.json()
-      const errorMsg = errorData.msg || errorData.message || response.statusText
-      throw new Error(errorMsg)
-    } catch (parseError) {
-      // 如果无法解析响应体，使用 statusText
-      if (parseError instanceof Error && parseError.message !== response.statusText) {
-        throw parseError
+      const response = await fetch(url, {
+        ...fetchOptions,
+        signal: fetchOptions.signal || controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+          ...fetchOptions.headers,
+        },
+      })
+
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        // 尝试读取响应体中的错误信息
+        let errorMsg = response.statusText
+        let errorCode = `HTTP_${response.status}`
+        
+        try {
+          const errorData = await response.json()
+          errorMsg = errorData.msg || errorData.message || errorMsg
+          errorCode = errorData.errCode?.toString() || errorCode
+        } catch {
+          // 无法解析响应体，使用默认错误信息
+        }
+
+        // 401 未授权，可能需要重新登录
+        if (response.status === 401) {
+          throw new ApiError('登录已过期，请重新登录', 401, 'UNAUTHORIZED')
+        }
+
+        // 403 禁止访问
+        if (response.status === 403) {
+          throw new ApiError('没有权限访问此资源', 403, 'FORBIDDEN')
+        }
+
+        // 404 资源不存在
+        if (response.status === 404) {
+          throw new ApiError('请求的资源不存在', 404, 'NOT_FOUND')
+        }
+
+        // 500+ 服务器错误
+        if (response.status >= 500) {
+          throw new ApiError(errorMsg || '服务器错误，请稍后重试', response.status, 'SERVER_ERROR')
+        }
+
+        throw new ApiError(errorMsg, response.status, errorCode)
       }
-      throw new Error(`API请求失败: ${response.statusText}`)
+
+      return response.json()
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+
+      // 处理请求被取消的情况
+      if (error.name === 'AbortError') {
+        // 检查是否是超时导致的取消
+        const isTimeoutError = !fetchOptions.signal?.aborted
+        if (isTimeoutError) {
+          const timeoutError = new ApiError(
+            `请求超时（${timeout / 1000}秒），请检查网络连接`,
+            0,
+            'TIMEOUT',
+            true
+          )
+          
+          // 超时可以重试
+          if (shouldRetry && attemptNumber < retryCount) {
+            console.warn(`[API] 请求超时，${RETRY_DELAY / 1000}秒后重试... (${attemptNumber + 1}/${retryCount})`)
+            await delay(RETRY_DELAY)
+            return executeRequest(attemptNumber + 1)
+          }
+          
+          throw timeoutError
+        }
+        // 用户主动取消，直接抛出
+        throw new ApiError('请求已取消', 0, 'CANCELLED')
+      }
+
+      // 处理网络错误
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        const networkError = new ApiError(
+          '网络连接失败，请检查网络设置',
+          0,
+          'NETWORK_ERROR',
+          false,
+          true
+        )
+        
+        // 网络错误可以重试
+        if (shouldRetry && attemptNumber < retryCount) {
+          console.warn(`[API] 网络错误，${RETRY_DELAY / 1000}秒后重试... (${attemptNumber + 1}/${retryCount})`)
+          await delay(RETRY_DELAY)
+          return executeRequest(attemptNumber + 1)
+        }
+        
+        throw networkError
+      }
+
+      // 如果已经是 ApiError，直接抛出
+      if (error instanceof ApiError) {
+        throw error
+      }
+
+      // 其他错误
+      throw new ApiError(error.message || '请求失败', 0, 'UNKNOWN_ERROR')
     }
   }
 
-  return response.json()
+  return executeRequest(0)
 }
 
 // fetchApi 是 request 的别名，用于保持向后兼容
@@ -144,24 +287,63 @@ const fetchApi = request
 // ==================== 便捷 API 对象 ====================
 // 提供 api.get(), api.post() 等便捷方法
 
+interface ApiRequestOptions {
+  timeout?: number
+  signal?: AbortSignal
+  retry?: boolean
+}
+
 const api = {
-  get: <T>(endpoint: string) => request<T>(endpoint, { method: 'GET' }),
-  post: <T>(endpoint: string, data?: unknown) => request<T>(endpoint, {
-    method: 'POST',
-    body: data ? JSON.stringify(data) : undefined
-  }),
-  put: <T>(endpoint: string, data?: unknown) => request<T>(endpoint, {
-    method: 'PUT',
-    body: data ? JSON.stringify(data) : undefined
-  }),
-  delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
-  patch: <T>(endpoint: string, data?: unknown) => request<T>(endpoint, {
-    method: 'PATCH',
-    body: data ? JSON.stringify(data) : undefined
-  })
+  get: <T>(endpoint: string, options?: ApiRequestOptions) => 
+    request<T>(endpoint, { method: 'GET', ...options }),
+  
+  post: <T>(endpoint: string, data?: unknown, options?: ApiRequestOptions) => 
+    request<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options
+    }),
+  
+  put: <T>(endpoint: string, data?: unknown, options?: ApiRequestOptions) => 
+    request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options
+    }),
+  
+  delete: <T>(endpoint: string, options?: ApiRequestOptions) => 
+    request<T>(endpoint, { method: 'DELETE', ...options }),
+  
+  patch: <T>(endpoint: string, data?: unknown, options?: ApiRequestOptions) => 
+    request<T>(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+      ...options
+    })
 }
 
 export default api
+
+/**
+ * 创建一个可取消的请求
+ * 返回 [promise, abortController]
+ * 在组件卸载时调用 abortController.abort() 取消请求
+ */
+export function createCancellableRequest<T>(
+  requestFn: (signal: AbortSignal) => Promise<T>
+): [Promise<T>, AbortController] {
+  const controller = new AbortController()
+  const promise = requestFn(controller.signal)
+  return [promise, controller]
+}
+
+/**
+ * 用于 React 组件的 hook 辅助函数
+ * 在组件卸载时自动取消所有未完成的请求
+ */
+export function createAbortController(): AbortController {
+  return new AbortController()
+}
 
 // ==================== 用户管理 API 接口 ====================
 

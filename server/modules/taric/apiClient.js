@@ -1348,13 +1348,55 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
                 code: childCode,
                 description: child.attributes?.description,
                 descriptionCn: childDescCn,
-                declarable: true
+                declarable: true,
+                vatRate: null,
+                thirdCountryDuty: null,
+                supplementaryUnit: null
               })
             }
             
             result.childGroups = Array.from(groupMap.values()).filter(g => g.children.length > 0)
             result.totalChildren = childCommodities.filter(c => c.attributes?.declarable).length
             result.declarableCount = result.totalChildren
+            
+            // 如果传入了原产国，获取子编码的税率信息（并行获取，最多处理20个）
+            if (originCountry && result.childGroups.length > 0) {
+              const allChildren = result.childGroups.flatMap(g => g.children)
+              const childrenToFetch = allChildren.slice(0, 20) // 限制数量避免过多请求
+              
+              // 并行获取税率
+              const ratePromises = childrenToFetch.map(async (child) => {
+                try {
+                  const rateData = await lookupTaricCode(child.code, originCountry)
+                  // 使用 ?? 运算符处理 0 值（0% 税率是有效值）
+                  return {
+                    code: child.code,
+                    thirdCountryDuty: rateData?.thirdCountryDuty ?? null,
+                    vatRate: rateData?.vatRate ?? null,
+                    supplementaryUnit: rateData?.supplementaryUnit ?? null,
+                    antiDumpingRate: rateData?.antiDumpingRate ?? null
+                  }
+                } catch (e) {
+                  return { code: child.code, thirdCountryDuty: null, vatRate: null }
+                }
+              })
+              
+              const rateResults = await Promise.all(ratePromises)
+              const rateMap = new Map(rateResults.map(r => [r.code, r]))
+              
+              // 更新子编码税率信息
+              for (const group of result.childGroups) {
+                for (const child of group.children) {
+                  const rate = rateMap.get(child.code)
+                  if (rate) {
+                    child.thirdCountryDuty = rate.thirdCountryDuty
+                    child.vatRate = rate.vatRate
+                    child.supplementaryUnit = rate.supplementaryUnit
+                    child.antiDumpingRate = rate.antiDumpingRate
+                  }
+                }
+              }
+            }
           }
         }
         
@@ -1529,7 +1571,11 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
               code: code10,
               description: commodity.attributes?.description,
               descriptionCn: childDescCn,
-              declarable: true
+              declarable: true,
+              vatRate: null,
+              thirdCountryDuty: null,
+              supplementaryUnit: null,
+              antiDumpingRate: null
             })
           }
         }
@@ -1537,6 +1583,45 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         result.childGroups = Array.from(subheadingGroups.values()).filter(g => g.children.length > 0)
         result.totalChildren = commodities.filter(c => c.attributes?.declarable).length
         result.declarableCount = result.totalChildren
+        
+        // 如果传入了原产国，获取子编码的税率信息（并行获取，最多处理30个）
+        if (originCountry && result.childGroups.length > 0) {
+          const allChildren = result.childGroups.flatMap(g => g.children)
+          const childrenToFetch = allChildren.slice(0, 30) // 限制数量避免过多请求
+          
+          // 并行获取税率
+          const ratePromises = childrenToFetch.map(async (child) => {
+            try {
+              const rateData = await lookupTaricCode(child.code, originCountry)
+              // 使用 ?? 运算符处理 0 值（0% 税率是有效值）
+              return {
+                code: child.code,
+                thirdCountryDuty: rateData?.thirdCountryDuty ?? null,
+                vatRate: rateData?.vatRate ?? null,
+                supplementaryUnit: rateData?.supplementaryUnit ?? null,
+                antiDumpingRate: rateData?.antiDumpingRate ?? null
+              }
+            } catch (e) {
+              return { code: child.code, thirdCountryDuty: null, vatRate: null }
+            }
+          })
+          
+          const rateResults = await Promise.all(ratePromises)
+          const rateMap = new Map(rateResults.map(r => [r.code, r]))
+          
+          // 更新子编码税率信息
+          for (const group of result.childGroups) {
+            for (const child of group.children) {
+              const rate = rateMap.get(child.code)
+              if (rate) {
+                child.thirdCountryDuty = rate.thirdCountryDuty
+                child.vatRate = rate.vatRate
+                child.supplementaryUnit = rate.supplementaryUnit
+                child.antiDumpingRate = rate.antiDumpingRate
+              }
+            }
+          }
+        }
       }
     }
   } catch (error) {
