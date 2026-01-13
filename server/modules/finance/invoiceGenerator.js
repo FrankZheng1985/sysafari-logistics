@@ -1486,30 +1486,33 @@ export async function generateFilesForNewInvoice(invoiceId, invoiceData) {
     }
 
     // Excel 数据使用已解析的 items（复用上面的 rawItems）
+    // 【重要】不要分组合并，保留每个费用项的集装箱号和提单号
     let excelItems = []
     if (rawItems && Array.isArray(rawItems) && rawItems.length > 0) {
-      const feeGroups = {}
-      rawItems.forEach(item => {
-        const feeName = item.description || 'Other'
-        if (!feeGroups[feeName]) {
-          feeGroups[feeName] = 0
-        }
-        const itemAmount = parseFloat(item.finalAmount) || parseFloat(item.amount) || 0
-        feeGroups[feeName] += itemAmount
-      })
-      excelItems = Object.entries(feeGroups).map(([feeName, amount]) => ({
-        containerNo: excelContainerNo,
-        billNumber: blNumber,
-        feeName: feeName,
-        amount: amount
+      // 保留每个费用项的明细，不合并
+      excelItems = rawItems.map(item => ({
+        containerNumber: item.containerNumber || excelContainerNo || '',
+        billNumber: item.billNumber || blNumber || '',
+        feeName: item.description || 'Other',
+        feeNameEn: item.descriptionEn || null,
+        amount: parseFloat(item.amount) || 0,
+        discountAmount: parseFloat(item.discountAmount) || 0,
+        finalAmount: item.finalAmount !== undefined 
+          ? parseFloat(item.finalAmount) 
+          : (parseFloat(item.amount) || 0) - (parseFloat(item.discountAmount) || 0)
       }))
+      // 按集装箱号排序，让同一个柜子的费用显示在一起
+      excelItems.sort((a, b) => (a.containerNumber || '').localeCompare(b.containerNumber || ''))
     } else if (items.length > 0) {
       // 使用已处理的 items（从 description 解析的）
       excelItems = items.map(item => ({
-        containerNo: excelContainerNo,
-        billNumber: blNumber,
+        containerNumber: item.containerNumber || excelContainerNo || '',
+        billNumber: item.billNumber || blNumber || '',
         feeName: item.description,
-        amount: item.amount
+        feeNameEn: item.descriptionEn || null,
+        amount: item.amount,
+        discountAmount: item.discountAmount || 0,
+        finalAmount: item.finalAmount || item.amount
       }))
     }
 
