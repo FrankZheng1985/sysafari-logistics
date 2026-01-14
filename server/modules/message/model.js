@@ -341,69 +341,79 @@ export async function getApprovals(params = {}) {
 
 /**
  * 获取待审批数量
- * @param {string} approverId - 审批人ID
+ * @param {string} userId - 用户ID（用于查询自己提交的审批）
  * @param {string} userRole - 用户角色（用于判断审批权限）
  */
-export async function getPendingApprovalCount(approverId, userRole) {
+export async function getPendingApprovalCount(userId, userRole) {
   const db = getDatabase()
   
   // 使用默认角色（最低权限）如果没有提供
   const effectiveRole = userRole || 'operator'
   
-  // 只有有审批权限的角色才能看到待审批数量
-  // admin, boss, finance_manager, finance, czjl, manager 有审批权限
+  // 有审批权限的角色列表
   const approverRoles = ['admin', 'boss', 'finance_manager', 'finance', 'czjl', 'manager']
-  
-  if (!approverRoles.includes(effectiveRole)) {
-    // 普通用户（如 do、operator）没有审批权限，返回0
-    return 0
-  }
+  const hasApprovalPermission = approverRoles.includes(effectiveRole)
   
   // 同时查询旧审批表和新统一审批表的待审批数量
   let oldCount = 0
   let newCount = 0
   
-  // 1. 查询旧审批表 (approvals)
-  try {
-    const visibleTypes = getVisibleApprovalTypes(effectiveRole)
-    let sql = `SELECT COUNT(*) as count FROM approvals WHERE status = 'pending'`
-    const params = []
-    let paramIndex = 1
-    
-    if (!['admin', 'boss'].includes(effectiveRole) && visibleTypes.length > 0) {
-      const typePlaceholders = visibleTypes.map((_, i) => `$${paramIndex++}`).join(', ')
-      sql += ` AND approval_type IN (${typePlaceholders})`
-      params.push(...visibleTypes)
+  // 1. 查询旧审批表 (approvals) - 有审批权限的用户才查询
+  if (hasApprovalPermission) {
+    try {
+      const visibleTypes = getVisibleApprovalTypes(effectiveRole)
+      let sql = `SELECT COUNT(*) as count FROM approvals WHERE status = 'pending'`
+      const params = []
+      let paramIndex = 1
+      
+      if (!['admin', 'boss'].includes(effectiveRole) && visibleTypes.length > 0) {
+        const typePlaceholders = visibleTypes.map((_, i) => `$${paramIndex++}`).join(', ')
+        sql += ` AND approval_type IN (${typePlaceholders})`
+        params.push(...visibleTypes)
+      }
+      
+      if (userId && !['admin', 'boss'].includes(effectiveRole)) {
+        sql += ` AND (approver_id = $${paramIndex++} OR approver_id IS NULL)`
+        params.push(userId)
+      }
+      
+      const result = await db.prepare(sql).get(...params)
+      oldCount = parseInt(result?.count || 0)
+    } catch (e) {
+      console.warn('查询旧审批表失败:', e.message)
     }
-    
-    if (approverId && !['admin', 'boss'].includes(userRole)) {
-      sql += ` AND (approver_id = $${paramIndex++} OR approver_id IS NULL)`
-      params.push(approverId)
-    }
-    
-    const result = await db.prepare(sql).get(...params)
-    oldCount = parseInt(result?.count || 0)
-  } catch (e) {
-    console.warn('查询旧审批表失败:', e.message)
   }
   
   // 2. 查询新统一审批表 (unified_approvals)
   try {
-    let sql = `
-      SELECT COUNT(*) as count FROM unified_approvals ua
-      WHERE ua.status = 'pending'
-    `
+    let sql = ''
     const params = []
     let paramIndex = 1
     
-    // 非 admin/boss 需要根据角色过滤
-    if (!['admin', 'boss'].includes(effectiveRole)) {
-      sql += ` AND EXISTS (
-        SELECT 1 FROM sensitive_operations so 
-        WHERE so.operation_code = ua.approval_type 
-        AND $${paramIndex++} = ANY(so.approver_roles)
-      )`
-      params.push(effectiveRole)
+    if (['admin', 'boss'].includes(effectiveRole)) {
+      // admin/boss 可以看到所有待审批
+      sql = `SELECT COUNT(*) as count FROM unified_approvals WHERE status = 'pending'`
+    } else if (hasApprovalPermission) {
+      // 有审批权限的角色：看到有权审批的类型 + 自己提交的
+      sql = `
+        SELECT COUNT(*) as count FROM unified_approvals ua
+        WHERE ua.status = 'pending' AND (
+          EXISTS (
+            SELECT 1 FROM sensitive_operations so 
+            WHERE so.operation_code = ua.approval_type 
+            AND $${paramIndex++} = ANY(so.approver_roles)
+          )
+          OR ua.applicant_id = $${paramIndex++}
+        )
+      `
+      params.push(effectiveRole, userId || '')
+    } else {
+      // 没有审批权限的角色：只能看到自己提交的
+      sql = `
+        SELECT COUNT(*) as count FROM unified_approvals 
+        WHERE status = 'pending' AND applicant_id = $${paramIndex++}
+      `
+      params.push(userId || '')
     }
     
     const result = await db.prepare(sql).get(...params)
