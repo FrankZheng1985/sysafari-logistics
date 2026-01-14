@@ -462,7 +462,7 @@ export async function deleteInvoice(id) {
     }
   }
   
-  // 5. 重置关联费用的开票状态
+  // 5. 重置关联费用的开票状态和付款状态
   if (feeIds.length > 0) {
     const uniqueFeeIds = [...new Set(feeIds)]
     for (const feeId of uniqueFeeIds) {
@@ -472,6 +472,7 @@ export async function deleteInvoice(id) {
             invoice_status = 'not_invoiced',
             invoice_number = NULL,
             invoice_date = NULL,
+            payment_status = 'unpaid',
             updated_at = NOW()
           WHERE id = ?
         `).run(feeId)
@@ -479,7 +480,7 @@ export async function deleteInvoice(id) {
         console.error(`[deleteInvoice] 重置费用 ${feeId} 状态失败:`, e)
       }
     }
-    console.log(`[deleteInvoice] 已重置 ${uniqueFeeIds.length} 条费用记录的开票状态，恢复为可选择`)
+    console.log(`[deleteInvoice] 已重置 ${uniqueFeeIds.length} 条费用记录的开票状态和付款状态，恢复为可选择`)
   }
   
   // 6. 软删除：标记为已删除，记录删除时间
@@ -505,9 +506,9 @@ export async function updateInvoicePaidAmount(id) {
   
   const paidAmount = result.total_paid
   
-  // 获取发票信息（包含 bill_id、invoice_number 和 customer_id）
+  // 获取发票信息（包含 bill_id、invoice_number、customer_id 和 fee_ids）
   const invoice = await db.prepare(`
-    SELECT total_amount, bill_id, invoice_number, invoice_type, customer_id 
+    SELECT total_amount, bill_id, invoice_number, invoice_type, customer_id, fee_ids 
     FROM invoices WHERE id = ?
   `).get(id)
   if (!invoice) return false
@@ -526,6 +527,33 @@ export async function updateInvoicePaidAmount(id) {
     SET paid_amount = ?, status = ?, updated_at = NOW()
     WHERE id = ?
   `).run(paidAmount, status, id)
+  
+  // 同步更新关联费用的 payment_status
+  let feeIds = []
+  if (invoice.fee_ids) {
+    try {
+      feeIds = JSON.parse(invoice.fee_ids)
+    } catch (e) {
+      feeIds = []
+    }
+  }
+  
+  if (feeIds.length > 0) {
+    const feePaymentStatus = status === 'paid' ? 'paid' : (status === 'partial' ? 'partial' : 'unpaid')
+    for (const feeId of feeIds) {
+      try {
+        await db.prepare(`
+          UPDATE fees SET 
+            payment_status = ?,
+            updated_at = NOW()
+          WHERE id = ?
+        `).run(feePaymentStatus, feeId)
+      } catch (e) {
+        console.error(`[updateInvoicePaidAmount] 更新费用 ${feeId} 的 payment_status 失败:`, e)
+      }
+    }
+    console.log(`[核销同步] 发票 ${invoice.invoice_number} 状态变为 ${status}，已同步更新 ${feeIds.length} 条费用的 payment_status 为 ${feePaymentStatus}`)
+  }
   
   // 如果发票变为已付清状态，且是销售发票
   if (status === 'paid' && invoice.invoice_type === 'sales') {
@@ -1060,6 +1088,25 @@ async function updateInvoicePaidAmountDirect(invoiceId, amount) {
     WHERE id = ?
   `).run(newPaidAmount, newStatus, invoiceId)
   
+  // 同步更新关联费用的 payment_status
+  // 费用的付款状态应该与发票状态同步
+  if (invoice.feeIds && invoice.feeIds.length > 0) {
+    const feePaymentStatus = newStatus === 'paid' ? 'paid' : (newStatus === 'partial' ? 'partial' : 'unpaid')
+    for (const feeId of invoice.feeIds) {
+      try {
+        await db.prepare(`
+          UPDATE fees SET 
+            payment_status = ?,
+            updated_at = NOW()
+          WHERE id = ?
+        `).run(feePaymentStatus, feeId)
+      } catch (e) {
+        console.error(`[updateInvoicePaidAmountDirect] 更新费用 ${feeId} 的 payment_status 失败:`, e)
+      }
+    }
+    console.log(`[核销同步] 发票 ${invoice.invoiceNumber} 状态变为 ${newStatus}，已同步更新 ${invoice.feeIds.length} 条费用的 payment_status 为 ${feePaymentStatus}`)
+  }
+  
   // 如果发票变为已付清状态，且是销售发票，自动消除相关预警
   if (newStatus === 'paid' && invoice.invoiceType === 'sales') {
     // 1. 自动消除该发票相关的预警（账期即将到期、应收逾期）
@@ -1533,17 +1580,20 @@ export async function getFeeStats(params = {}) {
   `).all(...queryParams)
   
   // 按费用类型统计总额（应收/应付）- 使用无别名的 whereClause
+  // 只统计未付款的费用（payment_status 不是 'paid'），显示待收/待付金额
   const simpleWhereClause = whereClause.replace(/f\./g, '')
   const receivableResult = await db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count
     FROM fees 
     ${simpleWhereClause} AND (fee_type = 'receivable' OR fee_type IS NULL)
+    AND (payment_status IS NULL OR payment_status != 'paid')
   `).get(...queryParams)
   
   const payableResult = await db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count
     FROM fees 
     ${simpleWhereClause} AND fee_type = 'payable'
+    AND (payment_status IS NULL OR payment_status != 'paid')
   `).get(...queryParams)
   
   // 确保数值类型正确（PostgreSQL返回字符串）
