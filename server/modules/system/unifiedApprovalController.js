@@ -17,6 +17,7 @@ export async function getApprovals(req, res) {
   try {
     const { status, category, approvalType, page = 1, pageSize = 20 } = req.query
     const userRole = req.user?.role
+    const userId = req.user?.id
     
     const db = getDatabase()
     
@@ -40,7 +41,7 @@ export async function getApprovals(req, res) {
       query += ` AND approval_type = $${++paramIndex}`
     }
     
-    // 非管理员只能看到可审批的类型
+    // 非管理员需要过滤：可以看到有审批权限的类型 OR 自己提交的审批
     if (!['admin', 'boss'].includes(userRole)) {
       // 获取该角色可审批的操作类型
       const triggerResult = await db.pool.query(`
@@ -51,11 +52,14 @@ export async function getApprovals(req, res) {
       const approvalTypes = triggerResult.rows.map(r => r.operation_code)
       
       if (approvalTypes.length > 0) {
+        // 用户可以看到有审批权限的类型 OR 自己提交的审批
         params.push(approvalTypes)
-        query += ` AND approval_type = ANY($${++paramIndex})`
+        params.push(userId || '')
+        query += ` AND (approval_type = ANY($${++paramIndex}) OR applicant_id = $${++paramIndex})`
       } else {
-        // 如果没有可审批类型，返回空列表
-        return success(res, { list: [], total: 0, page: parseInt(page), pageSize: parseInt(pageSize) })
+        // 没有审批权限，只能看自己提交的审批
+        params.push(userId || '')
+        query += ` AND applicant_id = $${++paramIndex}`
       }
     }
     
@@ -125,12 +129,14 @@ export async function getApprovals(req, res) {
 export async function getPendingCount(req, res) {
   try {
     const userRole = req.user?.role
+    const userId = req.user?.id
     const db = getDatabase()
     
     let query = `SELECT COUNT(*) FROM unified_approvals WHERE status = 'pending'`
     const params = []
+    let paramIndex = 0
     
-    // 非管理员只统计可审批的类型
+    // 非管理员：统计可审批的类型 + 自己提交的审批
     if (!['admin', 'boss'].includes(userRole)) {
       const triggerResult = await db.pool.query(`
         SELECT operation_code FROM sensitive_operations 
@@ -141,9 +147,12 @@ export async function getPendingCount(req, res) {
       
       if (approvalTypes.length > 0) {
         params.push(approvalTypes)
-        query += ` AND approval_type = ANY($1)`
+        params.push(userId || '')
+        query += ` AND (approval_type = ANY($${++paramIndex}) OR applicant_id = $${++paramIndex})`
       } else {
-        return success(res, { count: 0 })
+        // 没有审批权限，只统计自己提交的
+        params.push(userId || '')
+        query += ` AND applicant_id = $${++paramIndex}`
       }
     }
     
@@ -162,12 +171,13 @@ export async function getPendingCount(req, res) {
 export async function getStats(req, res) {
   try {
     const userRole = req.user?.role
+    const userId = req.user?.id
     const db = getDatabase()
     
     let baseCondition = ''
     const params = []
     
-    // 非管理员只统计可审批的类型
+    // 非管理员：统计可审批的类型 + 自己提交的审批
     if (!['admin', 'boss'].includes(userRole)) {
       const triggerResult = await db.pool.query(`
         SELECT operation_code FROM sensitive_operations 
@@ -178,14 +188,12 @@ export async function getStats(req, res) {
       
       if (approvalTypes.length > 0) {
         params.push(approvalTypes)
-        baseCondition = 'WHERE approval_type = ANY($1)'
+        params.push(userId || '')
+        baseCondition = 'WHERE (approval_type = ANY($1) OR applicant_id = $2)'
       } else {
-        return success(res, {
-          pending: 0,
-          approved: 0,
-          rejected: 0,
-          total: 0
-        })
+        // 没有审批权限，只统计自己提交的
+        params.push(userId || '')
+        baseCondition = 'WHERE applicant_id = $1'
       }
     }
     
