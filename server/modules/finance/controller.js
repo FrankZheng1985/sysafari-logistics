@@ -2478,7 +2478,59 @@ export async function parseInvoiceExcel(req, res) {
       }
     }
     
-    // 为每个费用项匹配订单
+    // 🔥 查询系统中已录入的费用（用于检查已开票状态和金额对比）
+    let systemFees = []
+    if (matchedBills.length > 0) {
+      try {
+        const { getDatabase } = await import('../../config/database.js')
+        const db = getDatabase()
+        
+        const billIds = matchedBills.map(b => b.id)
+        
+        // 查询这些订单下的所有应付费用（payable = 供应商费用）
+        const feesQuery = `
+          SELECT 
+            f.id,
+            f.fee_name as "feeName",
+            f.amount,
+            f.currency,
+            f.invoice_status as "invoiceStatus",
+            f.invoice_number as "invoiceNumber",
+            f.bill_id as "billId",
+            b.container_number as "containerNumber",
+            b.bill_number as "billNumber"
+          FROM fees f
+          JOIN bills_of_lading b ON f.bill_id = b.id
+          WHERE f.bill_id = ANY($1)
+            AND f.fee_type = 'payable'
+          ORDER BY f.created_at DESC
+        `
+        
+        const feesResult = await db.pool.query(feesQuery, [billIds])
+        systemFees = feesResult.rows
+        console.log(`✅ 查询到 ${systemFees.length} 条系统费用记录`)
+      } catch (err) {
+        console.error('查询系统费用失败:', err)
+      }
+    }
+    
+    // 🔥 费用名称模糊匹配辅助函数
+    const feeNameMatches = (excelName, systemName) => {
+      if (!excelName || !systemName) return false
+      const excelLower = excelName.toLowerCase().trim()
+      const systemLower = systemName.toLowerCase().trim()
+      // 完全匹配
+      if (excelLower === systemLower) return true
+      // 包含匹配（关税 vs 关税费）
+      if (excelLower.includes(systemLower) || systemLower.includes(excelLower)) return true
+      // 去掉"费"字后匹配
+      const excelNoFee = excelLower.replace(/费$/, '')
+      const systemNoFee = systemLower.replace(/费$/, '')
+      if (excelNoFee === systemNoFee) return true
+      return false
+    }
+    
+    // 为每个费用项匹配订单和系统费用
     const itemsWithBill = items.map(item => {
       // 优先按集装箱号匹配，其次按提单号匹配
       let matched = matchedBills.find(b => 
@@ -2486,20 +2538,59 @@ export async function parseInvoiceExcel(req, res) {
         (item.billNumber && b.billNumber === item.billNumber)
       )
       
+      // 🔥 查找匹配的系统费用（同时匹配柜号和费用名称）
+      let matchedSystemFee = null
+      if (matched) {
+        matchedSystemFee = systemFees.find(f => {
+          const containerMatch = f.containerNumber === item.containerNumber
+          const feeNameMatch = feeNameMatches(item.feeName, f.feeName)
+          return containerMatch && feeNameMatch
+        })
+      }
+      
+      // 🔥 检查是否已开票
+      const isInvoiced = matchedSystemFee?.invoiceStatus === 'invoiced'
+      
+      // 🔥 检查金额差异
+      const systemAmount = matchedSystemFee?.amount ? parseFloat(matchedSystemFee.amount) : null
+      const excelAmount = item.amount || 0
+      let amountWarning = null
+      let amountDiff = null
+      
+      if (systemAmount !== null && excelAmount > 0) {
+        amountDiff = excelAmount - systemAmount
+        if (excelAmount > systemAmount) {
+          // Excel金额大于系统金额，需要警告
+          amountWarning = `导入金额 ${excelAmount.toFixed(2)} 大于系统录入金额 ${systemAmount.toFixed(2)}，差额 ${amountDiff.toFixed(2)}`
+        }
+      }
+      
       return {
         ...item,
         billId: matched?.id || null,
         matchedBillNumber: matched?.billNumber || null,
         matchedContainerNumber: matched?.containerNumber || null,
-        isMatched: !!matched
+        isMatched: !!matched,
+        // 🔥 新增字段
+        systemFeeId: matchedSystemFee?.id || null,
+        systemAmount: systemAmount,
+        isInvoiced: isInvoiced,
+        invoiceNumber: matchedSystemFee?.invoiceNumber || null,
+        amountDiff: amountDiff,
+        amountWarning: amountWarning,
+        // 如果已开票或金额超出，默认不选中
+        _selected: !isInvoiced && !amountWarning
       }
     })
     
     // 统计匹配情况
     const matchedCount = itemsWithBill.filter(i => i.isMatched).length
     const unmatchedCount = itemsWithBill.filter(i => !i.isMatched).length
+    const invoicedCount = itemsWithBill.filter(i => i.isInvoiced).length
+    const amountWarningCount = itemsWithBill.filter(i => i.amountWarning).length
     
     console.log(`📊 匹配结果: ${matchedCount}/${items.length} 条费用已关联订单, ${unmatchedCount} 条未匹配`)
+    console.log(`📊 已开票: ${invoicedCount} 条, 金额异常: ${amountWarningCount} 条`)
     
     // 计算合计
     const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
@@ -2523,8 +2614,10 @@ export async function parseInvoiceExcel(req, res) {
       matchedBills,
       matchedCount,
       unmatchedCount,
-      extractedDueDate,  // 从Excel提取的到期日期
-      invoiceNumbers     // 从Excel提取的发票号列表
+      invoicedCount,        // 🔥 已开票数量
+      amountWarningCount,   // 🔥 金额异常数量
+      extractedDueDate,     // 从Excel提取的到期日期
+      invoiceNumbers        // 从Excel提取的发票号列表
     })
     
   } catch (error) {

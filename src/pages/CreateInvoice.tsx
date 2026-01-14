@@ -189,10 +189,19 @@ export default function CreateInvoice() {
       matchedContainerNumber?: string
       isMatched?: boolean
       _selected?: boolean
+      // 🔥 新增字段：后端返回的已开票状态和系统金额
+      systemFeeId?: string      // 系统中匹配的费用ID
+      systemAmount?: number     // 系统录入的金额
+      isInvoiced?: boolean      // 是否已开票
+      invoiceNumber?: string    // 发票号
+      amountDiff?: number       // 金额差异
+      amountWarning?: string    // 金额警告信息
     }>
     matchedCount?: number
     unmatchedCount?: number
-    extractedDueDate?: string  // 从Excel提取的到期日期
+    invoicedCount?: number      // 🔥 已开票数量
+    amountWarningCount?: number // 🔥 金额异常数量
+    extractedDueDate?: string   // 从Excel提取的到期日期
     error?: string
   } | null>(null)
   const [showExcelPreview, setShowExcelPreview] = useState(false)
@@ -1164,41 +1173,49 @@ export default function CreateInvoice() {
       return
     }
     
-    // 只导入选中的项目，并排除已开票的费用
+    // 🔥 只导入选中的项目，并排除已开票和金额超出的费用（使用后端返回的状态）
     const selectedItems = excelParseResult.data.filter(item => {
       if (item._selected === false) return false
       
-      // 🔥 检查是否已开票：如果匹配了订单但在 supplierFees 中找不到，说明已开票
-      if (item.isMatched) {
-        const matchedFee = supplierFees.find(f => 
-          f.feeName === item.feeName && 
-          (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
-        )
-        if (!matchedFee) {
-          console.log(`[applyExcelToInvoice] 跳过已开票费用: ${item.feeName} - ${item.containerNumber}`)
-          return false // 已开票，不导入
-        }
+      // 使用后端返回的已开票状态
+      if (item.isInvoiced === true) {
+        console.log(`[applyExcelToInvoice] 跳过已开票费用: ${item.feeName} - ${item.containerNumber}`)
+        return false
       }
+      
+      // 检查金额是否超出系统录入
+      if (item.amountWarning) {
+        console.log(`[applyExcelToInvoice] 跳过金额异常费用: ${item.feeName} - ${item.amountWarning}`)
+        return false
+      }
+      
       return true
     })
     
     if (selectedItems.length === 0) {
-      alert('请至少选择一条费用记录（已开票的费用不可重复开票）')
+      alert('请至少选择一条费用记录（已开票或金额超出系统录入的费用不可导入）')
       return
     }
     
     const newItems: InvoiceItem[] = selectedItems.map((item, index) => {
-      // 在右侧供应商费用列表中查找匹配的费用（用于关联feeId）
-      const matchedFee = supplierFees.find(fee => {
-        // 集装箱号匹配
-        const containerMatch = item.containerNumber && fee.containerNumber === item.containerNumber
-        if (!containerMatch) return false
-        
-        // 费用名称模糊匹配
-        const excelFeeName = (item.feeName || '').toLowerCase().trim()
-        const feeNameLower = (fee.feeName || '').toLowerCase().trim()
-        return feeNameLower.includes(excelFeeName) || excelFeeName.includes(feeNameLower)
-      })
+      // 🔥 优先使用后端返回的系统费用ID，否则在右侧供应商费用列表中查找
+      let feeId = item.systemFeeId || undefined
+      let matchedBillId = item.billId
+      
+      if (!feeId) {
+        // 兜底：在右侧供应商费用列表中查找匹配的费用
+        const matchedFee = supplierFees.find(fee => {
+          const containerMatch = item.containerNumber && fee.containerNumber === item.containerNumber
+          if (!containerMatch) return false
+          const excelFeeName = (item.feeName || '').toLowerCase().trim()
+          const feeNameLower = (fee.feeName || '').toLowerCase().trim()
+          return feeNameLower.includes(excelFeeName) || excelFeeName.includes(feeNameLower)
+        })
+        if (matchedFee) {
+          feeId = matchedFee.id
+          matchedBillId = matchedBillId || matchedFee.billId
+        }
+      }
       
       return {
         id: `excel-${Date.now()}-${index}`,
@@ -1213,11 +1230,11 @@ export default function CreateInvoice() {
         discountAmount: 0,
         finalAmount: item.amount || 0,
         // 关联订单信息
-        billId: item.billId || matchedFee?.billId || undefined,
+        billId: matchedBillId || undefined,
         billNumber: item.matchedBillNumber || item.billNumber || '', // 订单号/提单号
         containerNumber: item.containerNumber || '', // 集装箱号
-        feeId: matchedFee?.id || undefined,  // 关联供应商费用ID，用于标记已开票
-        isFromOrder: !!(item.billId || matchedFee?.billId)  // 如果关联了订单，标记为来自订单
+        feeId: feeId,  // 🔥 使用后端返回的系统费用ID
+        isFromOrder: !!matchedBillId  // 如果关联了订单，标记为来自订单
       }
     })
     
@@ -3464,18 +3481,14 @@ export default function CreateInvoice() {
             </div>
             
             {/* 订单匹配统计 */}
-            <div className="px-6 py-3 bg-gray-50 border-b flex items-center gap-4">
+            <div className="px-6 py-3 bg-gray-50 border-b flex items-center gap-4 flex-wrap">
               {(() => {
-                // 计算已开票的数量
-                const invoicedCount = excelParseResult.data?.filter(item => {
-                  if (!item.isMatched) return false
-                  const matchedFee = supplierFees.find(f => 
-                    f.feeName === item.feeName && 
-                    (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
-                  )
-                  return !matchedFee
-                }).length || 0
-                const canInvoiceCount = (excelParseResult.matchedCount || 0) - invoicedCount
+                // 🔥 使用后端返回的统计数据
+                const invoicedCount = excelParseResult.data?.filter(item => item.isInvoiced).length || 0
+                const amountWarningCount = excelParseResult.data?.filter(item => item.amountWarning && !item.isInvoiced).length || 0
+                const canInvoiceCount = excelParseResult.data?.filter(item => 
+                  item.isMatched && !item.isInvoiced && !item.amountWarning
+                ).length || 0
                 
                 return (
                   <>
@@ -3490,6 +3503,14 @@ export default function CreateInvoice() {
                         <Check className="w-4 h-4 text-gray-400" />
                         <span className="text-sm text-gray-700">
                           已开票: <span className="font-medium text-gray-500">{invoicedCount}</span> 条
+                        </span>
+                      </div>
+                    )}
+                    {amountWarningCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-500" />
+                        <span className="text-sm text-gray-700">
+                          金额异常: <span className="font-medium text-red-600">{amountWarningCount}</span> 条
                         </span>
                       </div>
                     )}
@@ -3535,61 +3556,69 @@ export default function CreateInvoice() {
                     </th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">费用名称</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">集装箱号</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">金额</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">导入金额</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">系统金额</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">币种</th>
-                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500">订单关联</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500">状态</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">备注</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {excelParseResult.data.map((item, index) => {
-                    // 检查是否已开票
-                    const matchedFee = supplierFees.find(f => 
-                      f.feeName === item.feeName && 
-                      (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
-                    )
-                    const isInvoiced = item.isMatched && !matchedFee
+                    // 🔥 使用后端返回的 isInvoiced 字段
+                    const isInvoiced = item.isInvoiced === true
+                    const hasAmountWarning = !!item.amountWarning
+                    const isDisabled = isInvoiced || hasAmountWarning
                     
                     return (
                     <tr 
                       key={index} 
-                      className={`hover:bg-gray-50 ${item._selected === false || isInvoiced ? 'opacity-50' : ''} ${isInvoiced ? 'bg-gray-50' : ''}`}
-                      onClick={() => !isInvoiced && toggleExcelItemSelection(index)}
-                      title={isInvoiced ? '此费用已开票，不可重复开票' : ''}
+                      className={`hover:bg-gray-50 ${item._selected === false || isDisabled ? 'opacity-60' : ''} ${isInvoiced ? 'bg-gray-100' : hasAmountWarning ? 'bg-red-50' : ''}`}
+                      onClick={() => !isDisabled && toggleExcelItemSelection(index)}
+                      title={isInvoiced ? '此费用已开票，不可重复开票' : hasAmountWarning ? item.amountWarning : ''}
                     >
                       <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           id={`excel-item-${index}`}
                           name={`excel-item-${index}`}
-                          checked={item._selected !== false && !isInvoiced}
-                          onChange={() => !isInvoiced && toggleExcelItemSelection(index)}
-                          disabled={isInvoiced}
-                          className={`w-4 h-4 rounded border-gray-300 ${isInvoiced ? 'text-gray-300 cursor-not-allowed' : 'text-orange-600'}`}
+                          checked={item._selected !== false && !isDisabled}
+                          onChange={() => !isDisabled && toggleExcelItemSelection(index)}
+                          disabled={isDisabled}
+                          className={`w-4 h-4 rounded border-gray-300 ${isDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-orange-600'}`}
                         />
                       </td>
                       <td className={`px-2 py-2 ${isInvoiced ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.feeName || '-'}</td>
                       <td className="px-2 py-2 text-gray-600 font-mono text-xs">
                         {item.containerNumber || item.billNumber || '-'}
                       </td>
-                      <td className="px-2 py-2 text-right text-gray-900 font-medium">
+                      <td className={`px-2 py-2 text-right font-medium ${hasAmountWarning ? 'text-red-600' : 'text-gray-900'}`}>
                         {item.amount?.toFixed(2) || '0.00'}
+                        {hasAmountWarning && (
+                          <span className="ml-1 text-red-500" title={item.amountWarning}>⚠</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-right text-gray-500 text-xs">
+                        {item.systemAmount !== null && item.systemAmount !== undefined 
+                          ? item.systemAmount.toFixed(2) 
+                          : '-'}
                       </td>
                       <td className="px-2 py-2 text-gray-600">{item.currency || 'EUR'}</td>
                       <td className="px-2 py-2 text-center">
                         {(() => {
-                          // 检查费用是否已开票：如果匹配了订单但在 supplierFees 中找不到对应费用，说明已开票
-                          const matchedFee = supplierFees.find(f => 
-                            f.feeName === item.feeName && 
-                            (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
-                          )
-                          const isInvoiced = item.isMatched && !matchedFee
-                          
+                          // 🔥 使用后端返回的状态
                           if (isInvoiced) {
                             return (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">
                                 <Check className="w-3 h-3" />
                                 已开票
+                              </span>
+                            )
+                          } else if (hasAmountWarning) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full" title={item.amountWarning}>
+                                <AlertCircle className="w-3 h-3" />
+                                金额超出
                               </span>
                             )
                           } else if (item.isMatched) {
@@ -3609,8 +3638,8 @@ export default function CreateInvoice() {
                           }
                         })()}
                       </td>
-                      <td className="px-2 py-2 text-gray-500 max-w-[100px] truncate" title={item.remark}>
-                        {item.remark || '-'}
+                      <td className="px-2 py-2 text-gray-500 max-w-[100px] truncate" title={item.remark || item.amountWarning}>
+                        {item.amountWarning ? <span className="text-red-500 text-xs">{item.amountWarning}</span> : (item.remark || '-')}
                       </td>
                     </tr>
                   )})}
@@ -3626,15 +3655,17 @@ export default function CreateInvoice() {
                       €{excelParseResult.data
                         .filter(item => {
                           if (item._selected === false) return false
-                          // 排除已开票的
-                          const matchedFee = supplierFees.find(f => 
-                            f.feeName === item.feeName && 
-                            (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
-                          )
-                          const isInvoiced = item.isMatched && !matchedFee
-                          return !isInvoiced
+                          // 🔥 排除已开票和金额异常的
+                          const isDisabled = item.isInvoiced === true || !!item.amountWarning
+                          return !isDisabled
                         })
                         .reduce((sum, item) => sum + (item.amount || 0), 0)
+                        .toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2 text-right text-sm text-gray-500">
+                      €{excelParseResult.data
+                        .filter(item => item._selected !== false && !item.isInvoiced && !item.amountWarning)
+                        .reduce((sum, item) => sum + (item.systemAmount || 0), 0)
                         .toFixed(2)}
                     </td>
                     <td className="px-2 py-2 text-gray-600">EUR</td>
@@ -3648,7 +3679,8 @@ export default function CreateInvoice() {
             <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
               <p className="text-xs text-gray-500">
                 <span className="text-green-600">✓ 已关联订单</span>的费用保存后可自动核销 | 
-                <span className="text-amber-600 ml-1">⚠ 未匹配</span>的费用需手动关联或后续核销
+                <span className="text-amber-600 ml-1">⚠ 未匹配</span>的费用需手动关联 | 
+                <span className="text-red-600 ml-1">⚠ 金额超出</span>系统录入金额的费用不可导入
               </p>
               <div className="flex items-center gap-3">
                 <button
@@ -3664,11 +3696,9 @@ export default function CreateInvoice() {
                   <Check className="w-4 h-4" />
                   确认导入 ({excelParseResult.data.filter(item => {
                     if (item._selected === false) return false
-                    const matchedFee = supplierFees.find(f => 
-                      f.feeName === item.feeName && 
-                      (f.containerNumber === item.containerNumber || f.billNumber === item.billNumber)
-                    )
-                    return !(item.isMatched && !matchedFee)
+                    // 🔥 使用后端返回的状态
+                    const isDisabled = item.isInvoiced === true || !!item.amountWarning
+                    return !isDisabled
                   }).length} 条)
                 </button>
               </div>
