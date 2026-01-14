@@ -1446,10 +1446,30 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         } else {
           // 获取子编码
           if (headingData && headingData.included) {
-            const prefix6 = normalizedCode.substring(0, Math.min(normalizedCode.length, 6))
+            // 根据编码长度确定合适的前缀
+            // 对于较长的编码，需要使用更精确的前缀来找到直接子编码
+            const codeLen = normalizedCode.length
+            let searchPrefix = normalizedCode.substring(0, 6) // 默认使用前6位
+            
+            // 对于 8 位或 10 位编码，先尝试使用更精确的前缀
+            if (codeLen >= 8) {
+              // 先尝试用前 8 位前缀查找子编码
+              const prefix8 = normalizedCode.substring(0, 8)
+              const childrenWith8 = headingData.included.filter(i =>
+                i.type === 'commodity' &&
+                i.attributes?.goods_nomenclature_item_id?.startsWith(prefix8) &&
+                i.attributes?.goods_nomenclature_item_id !== fullCode &&
+                i.attributes?.declarable === true
+              )
+              // 如果用前 8 位能找到子编码，就用前 8 位
+              if (childrenWith8.length > 0) {
+                searchPrefix = prefix8
+              }
+            }
+            
             const childCommodities = headingData.included.filter(i =>
               i.type === 'commodity' &&
-              i.attributes?.goods_nomenclature_item_id?.startsWith(prefix6) &&
+              i.attributes?.goods_nomenclature_item_id?.startsWith(searchPrefix) &&
               i.attributes?.goods_nomenclature_item_id !== fullCode
             )
             
@@ -1496,6 +1516,37 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
             result.childGroups = Array.from(groupMap.values()).filter(g => g.children.length > 0)
             result.totalChildren = childCommodities.filter(c => c.attributes?.declarable).length
             result.declarableCount = result.totalChildren
+            
+            // 特殊处理：如果编码被标记为不可申报，但找不到任何子编码
+            // 这可能是 API 数据不一致的情况，将其视为可申报编码
+            if (result.totalChildren === 0 && result.childGroups.length === 0) {
+              // 检查该编码在 heading 数据中是否存在
+              const selfInHeading = headingData.included.find(i =>
+                i.type === 'commodity' &&
+                i.attributes?.goods_nomenclature_item_id === fullCode
+              )
+              
+              if (selfInHeading) {
+                // 如果在 heading 数据中该编码被标记为可申报，更新状态
+                if (selfInHeading.attributes?.declarable === true) {
+                  result.isDeclarable = true
+                  result.level = 'taric'
+                } else {
+                  // 如果确实是父节点但没有子编码，可能是该编码下的所有子编码都已废弃
+                  // 提供简单的子编码列表供参考
+                  const simpleChildren = childCommodities.map(c => ({
+                    code: c.attributes?.goods_nomenclature_item_id,
+                    description: c.attributes?.description,
+                    declarable: c.attributes?.declarable
+                  })).filter(c => c.code)
+                  
+                  if (simpleChildren.length > 0) {
+                    result.children = simpleChildren
+                    result.totalChildren = simpleChildren.length
+                  }
+                }
+              }
+            }
             
             // 如果传入了原产国，获取子编码的税率信息（并行获取，最多处理20个）
             if (originCountry && result.childGroups.length > 0) {
@@ -2057,14 +2108,42 @@ export async function lookupTaricCodeV2(hsCode, originCountry = '') {
             i.attributes?.goods_nomenclature_item_id?.startsWith(prefix6)
           )
           
-          result.candidates = declarables.slice(0, 10).map(c => ({
-            code: c.attributes?.goods_nomenclature_item_id,
-            description: c.attributes?.description,
-            matchScore: calculateMatchScore(normalizedCode, c.attributes?.goods_nomenclature_item_id)
-          }))
+          // 转换为候选编码格式并计算匹配度
+          let candidates = declarables.map(c => {
+            const code = c.attributes?.goods_nomenclature_item_id || ''
+            const description = (c.attributes?.description || '').toLowerCase()
+            return {
+              code,
+              description: c.attributes?.description,
+              matchScore: calculateMatchScore(normalizedCode, code),
+              // 标记"其他"类型编码（以 90 或 99 结尾，或描述为 Other/其他）
+              isOther: code.endsWith('90') || code.endsWith('99') || 
+                       description === 'other' || description.startsWith('other ') ||
+                       description === '其他' || description.startsWith('其他')
+            }
+          })
           
-          // 按匹配度排序
-          result.candidates.sort((a, b) => b.matchScore - a.matchScore)
+          // 智能排序：确保"其他"编码被包含
+          // 1. 先按编码排序（保持编码顺序）
+          candidates.sort((a, b) => a.code.localeCompare(b.code))
+          
+          // 2. 分离"其他"编码和普通编码
+          const otherCandidates = candidates.filter(c => c.isOther)
+          const regularCandidates = candidates.filter(c => !c.isOther)
+          
+          // 3. 普通编码按匹配度排序，取前 8 个
+          regularCandidates.sort((a, b) => b.matchScore - a.matchScore)
+          const topRegular = regularCandidates.slice(0, 8)
+          
+          // 4. "其他"编码取最多 2 个（通常是最后的兜底编码）
+          const topOther = otherCandidates.slice(-2) // 取最后的"其他"编码
+          
+          // 5. 合并结果，确保"其他"编码在列表末尾
+          result.candidates = [...topRegular, ...topOther].map(c => ({
+            code: c.code,
+            description: c.description,
+            matchScore: c.matchScore
+          }))
         }
       } catch (e) {
         // 忽略错误
