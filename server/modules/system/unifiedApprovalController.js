@@ -77,30 +77,48 @@ export async function getApprovals(req, res) {
     const result = await db.pool.query(query, params)
     
     // 处理 request_data JSON 字段，确保前端能正确读取
-    // 对于追加费用审批，如果 request_data 中没有 containerNumber，从关联表中补充获取
+    // 对于追加费用审批，如果 request_data 中没有 containerNumber 或 orderNumber，从关联表中补充获取
     const list = await Promise.all(result.rows.map(async (row) => {
       let requestData = row.request_data && typeof row.request_data === 'string' 
         ? JSON.parse(row.request_data) 
         : row.request_data || {}
       
-      // 如果是追加费用审批且没有集装箱号，尝试从关联表获取
-      if (row.approval_type === 'FEE_SUPPLEMENT' && !requestData.containerNumber && row.business_id) {
-        try {
-          const feeResult = await db.pool.query(`
-            SELECT b.container_number 
-            FROM fees f 
-            LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
-            WHERE f.id = $1
-          `, [row.business_id])
-          
-          if (feeResult.rows[0]?.container_number) {
-            requestData = {
-              ...requestData,
-              containerNumber: feeResult.rows[0].container_number
+      // 如果是追加费用审批，补充缺失的字段（集装箱号、订单号）
+      if (row.approval_type === 'FEE_SUPPLEMENT' && row.business_id) {
+        const needContainerNumber = !requestData.containerNumber
+        const needOrderNumber = !requestData.orderNumber
+        
+        if (needContainerNumber || needOrderNumber) {
+          try {
+            const feeResult = await db.pool.query(`
+              SELECT b.container_number, b.order_number, b.order_seq, b.created_at
+              FROM fees f 
+              LEFT JOIN bills_of_lading b ON f.bill_id = b.id 
+              WHERE f.id = $1
+            `, [row.business_id])
+            
+            const billData = feeResult.rows[0]
+            if (billData) {
+              // 补充集装箱号
+              if (needContainerNumber && billData.container_number) {
+                requestData.containerNumber = billData.container_number
+              }
+              // 补充订单号（如果数据库中有 order_number 直接用，否则根据 order_seq 生成）
+              if (needOrderNumber) {
+                let orderNumber = billData.order_number
+                if (!orderNumber && billData.order_seq) {
+                  const createDate = billData.created_at ? new Date(billData.created_at) : new Date()
+                  const year = createDate.getFullYear().toString().slice(-2)
+                  orderNumber = `BP${year}${String(billData.order_seq).padStart(5, '0')}`
+                }
+                if (orderNumber) {
+                  requestData.orderNumber = orderNumber
+                }
+              }
             }
+          } catch (e) {
+            // 忽略补充查询错误
           }
-        } catch (e) {
-          // 忽略补充查询错误
         }
       }
       
