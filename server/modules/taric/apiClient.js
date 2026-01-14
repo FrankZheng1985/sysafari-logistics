@@ -1592,6 +1592,198 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
         // 缓存结果
         setCache(cacheKey, result, 30 * 60 * 1000)
         return result
+      } else if (headingData && headingData.included) {
+        // Fallback: commodity 编码不存在（如 3926900000 这类"分类节点"编码）
+        // 但可以从 heading 数据中查找该编码的信息和子编码
+        
+        const allCommodities = headingData.included.filter(i => i.type === 'commodity') || []
+        
+        // 查找该编码在 heading 数据中的信息（可能是分类节点）
+        const targetCommodity = allCommodities.find(c => 
+          c.attributes?.goods_nomenclature_item_id === fullCode
+        )
+        
+        if (targetCommodity) {
+          result.description = targetCommodity.attributes?.description
+          result.isDeclarable = targetCommodity.attributes?.declarable === true
+          result.level = result.isDeclarable ? 'taric' : 'subheading'
+        } else {
+          // 编码本身不存在，尝试作为前缀查找子编码
+          result.description = `Subheading ${normalizedCode}`
+          result.isDeclarable = false
+          result.level = 'subheading'
+        }
+        
+        // 翻译描述
+        if (result.description) {
+          const cachedCn = getCachedTranslation(result.description)
+          result.descriptionCn = cachedCn || null
+          if (!cachedCn) {
+            try {
+              const translated = await translateText(result.description, 'en', 'zh-CN', 3000)
+              if (translated && translated !== result.description) {
+                result.descriptionCn = translated
+                setCachedTranslation(result.description, translated)
+              }
+            } catch (e) { /* 忽略翻译错误 */ }
+          }
+        }
+        
+        // 提取 Section、Chapter、Heading 信息用于面包屑
+        const section = (headingData.included || []).find(i => i.type === 'section')
+        const chapter = (headingData.included || []).find(i => i.type === 'chapter')
+        
+        if (section) {
+          result.section = {
+            number: parseInt(section.id) || section.attributes?.numeral,
+            title: section.attributes?.title || section.attributes?.description,
+            titleCn: null
+          }
+          // 翻译 Section 标题
+          if (result.section.title) {
+            const cachedCn = getCachedTranslation(result.section.title)
+            if (cachedCn) {
+              result.section.titleCn = cachedCn
+            }
+          }
+        }
+        
+        // 构建面包屑
+        result.breadcrumb = []
+        if (result.section) {
+          result.breadcrumb.push({
+            code: `S${result.section.number}`,
+            description: result.section.title,
+            descriptionCn: result.section.titleCn,
+            level: 'section'
+          })
+        }
+        
+        if (chapter) {
+          let chapterDescCn = getCachedTranslation(chapter.attributes?.description)
+          result.breadcrumb.push({
+            code: headingCode.substring(0, 2),
+            description: chapter.attributes?.description || `Chapter ${headingCode.substring(0, 2)}`,
+            descriptionCn: chapterDescCn,
+            level: 'chapter'
+          })
+        }
+        
+        // 添加 Heading
+        const headingDesc = headingData.data?.attributes?.description
+        let headingDescCn = getCachedTranslation(headingDesc)
+        result.breadcrumb.push({
+          code: headingCode,
+          description: headingDesc,
+          descriptionCn: headingDescCn,
+          level: 'heading'
+        })
+        
+        // 添加当前编码到面包屑
+        result.breadcrumb.push({
+          code: fullCode,
+          description: result.description,
+          descriptionCn: result.descriptionCn,
+          level: result.level
+        })
+        
+        // 获取该前缀下的所有可申报子编码
+        // 使用输入编码的有效位作为前缀（去除末尾的0）
+        const effectivePrefix = normalizedCode.replace(/0+$/, '')
+        const prefixLength = effectivePrefix.length
+        
+        const childCommodities = allCommodities.filter(c => {
+          const code = c.attributes?.goods_nomenclature_item_id
+          if (!code) return false
+          // 必须以有效前缀开头，但不是编码本身
+          return code.startsWith(effectivePrefix) && 
+                 code !== fullCode &&
+                 c.attributes?.declarable === true
+        })
+        
+        // 按 8 位编码分组
+        const groupMap = new Map()
+        
+        for (const child of childCommodities) {
+          const childCode = child.attributes?.goods_nomenclature_item_id
+          const groupKey = childCode?.substring(0, 8)
+          
+          // 找到分组的父级描述（非可申报的分类节点）
+          const parentNode = allCommodities.find(c =>
+            !c.attributes?.declarable &&
+            childCode?.startsWith(c.attributes?.goods_nomenclature_item_id?.substring(0, 8)) &&
+            c.attributes?.goods_nomenclature_item_id?.substring(0, prefixLength) === effectivePrefix
+          )
+          
+          const groupTitle = parentNode?.attributes?.description || 'Other'
+          
+          if (!groupMap.has(groupKey)) {
+            let groupTitleCn = getCachedTranslation(groupTitle)
+            groupMap.set(groupKey, {
+              groupCode: groupKey,
+              groupTitle,
+              groupTitleCn,
+              children: []
+            })
+          }
+          
+          let childDescCn = getCachedTranslation(child.attributes?.description)
+          
+          groupMap.get(groupKey).children.push({
+            code: childCode,
+            description: child.attributes?.description,
+            descriptionCn: childDescCn,
+            declarable: true,
+            vatRate: null,
+            thirdCountryDuty: null,
+            supplementaryUnit: null,
+            antiDumpingRate: null
+          })
+        }
+        
+        result.childGroups = Array.from(groupMap.values()).filter(g => g.children.length > 0)
+        result.totalChildren = childCommodities.length
+        result.declarableCount = result.totalChildren
+        
+        // 如果传入了原产国，获取子编码的税率信息
+        if (originCountry && result.childGroups.length > 0) {
+          const allChildren = result.childGroups.flatMap(g => g.children)
+          const childrenToFetch = allChildren.slice(0, 20)
+          
+          const ratePromises = childrenToFetch.map(async (child) => {
+            try {
+              const rateData = await lookupTaricCode(child.code, originCountry)
+              return {
+                code: child.code,
+                thirdCountryDuty: rateData?.thirdCountryDuty ?? null,
+                vatRate: rateData?.vatRate ?? null,
+                supplementaryUnit: rateData?.supplementaryUnit ?? null,
+                antiDumpingRate: rateData?.antiDumpingRate ?? null
+              }
+            } catch (e) {
+              return { code: child.code, thirdCountryDuty: null, vatRate: null }
+            }
+          })
+          
+          const rateResults = await Promise.all(ratePromises)
+          const rateMap = new Map(rateResults.map(r => [r.code, r]))
+          
+          for (const group of result.childGroups) {
+            for (const child of group.children) {
+              const rate = rateMap.get(child.code)
+              if (rate) {
+                child.thirdCountryDuty = rate.thirdCountryDuty
+                child.vatRate = rate.vatRate
+                child.supplementaryUnit = rate.supplementaryUnit
+                child.antiDumpingRate = rate.antiDumpingRate
+              }
+            }
+          }
+        }
+        
+        // 缓存结果
+        setCache(cacheKey, result, 30 * 60 * 1000)
+        return result
       }
     }
     
@@ -1817,8 +2009,21 @@ export async function getHsCodeHierarchy(prefixCode, originCountry = '') {
     result.error = `获取层级树失败: ${error.message}`
   }
   
-  // 缓存结果（30分钟）
-  setCache(cacheKey, result, 30 * 60 * 1000)
+  // 缓存结果
+  // 如果是空结果（没有描述且没有子编码），使用较短的 TTL（5分钟）或不缓存
+  const hasValidData = result.description || 
+                       result.childGroups?.length > 0 || 
+                       result.children?.length > 0 ||
+                       result.isDeclarable
+  
+  if (hasValidData) {
+    // 有效数据缓存 30 分钟
+    setCache(cacheKey, result, 30 * 60 * 1000)
+  } else if (result.error) {
+    // 错误结果缓存 5 分钟，避免频繁重试
+    setCache(cacheKey, result, 5 * 60 * 1000)
+  }
+  // 空结果不缓存，下次请求会重新尝试
   
   return result
 }
