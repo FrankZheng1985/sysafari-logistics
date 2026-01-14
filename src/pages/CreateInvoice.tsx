@@ -717,8 +717,9 @@ export default function CreateInvoice() {
       // 根据发票类型确定费用类型
       // 销售发票(sales) -> 应收费用(receivable)
       // 采购发票(purchase) -> 应付费用(payable)
+      // excludeInvoiced=true: 只获取未开票的费用，避免重复开票
       const feeType = invoiceType === 'purchase' ? 'payable' : 'receivable'
-      const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&feeType=${feeType}&pageSize=100`)
+      const response = await fetch(`${API_BASE}/api/fees?billId=${billId}&feeType=${feeType}&pageSize=100&excludeInvoiced=true`)
       const data = await response.json()
       if (data.errCode === 200 && data.data?.list) {
         // 基于 feeId 去重，并过滤掉待审批和已拒绝的费用
@@ -1517,13 +1518,14 @@ export default function CreateInvoice() {
     setCustomerSearch(firstBill.customerName || firstBill.consignee || '')
     
     // 获取所有订单的费用（根据发票类型筛选费用类型）
+    // excludeInvoiced=true: 只获取未开票的费用，避免重复开票
     setLoadingFees(true)
     try {
       const allFees: (Fee & { billId: string; billNumber: string })[] = []
       // 销售发票(sales) -> 应收费用(receivable)，采购发票(purchase) -> 应付费用(payable)
       const feeType = formData.invoiceType === 'purchase' ? 'payable' : 'receivable'
       for (const bill of selectedBills) {
-        const response = await fetch(`${API_BASE}/api/fees?billId=${bill.id}&feeType=${feeType}&pageSize=100`)
+        const response = await fetch(`${API_BASE}/api/fees?billId=${bill.id}&feeType=${feeType}&pageSize=100&excludeInvoiced=true`)
         const data = await response.json()
         if (data.errCode === 200 && data.data?.list) {
           // 为每个费用添加订单信息

@@ -37,11 +37,25 @@ export async function getBills(params = {}) {
   } = params
   
   // 如果需要包含费用金额，使用带子查询的 SQL
+  // 注意：当 forInvoiceType 存在时，只统计未开票的费用金额
   let selectFields = 'b.*'
   if (includeFeeAmount) {
-    selectFields = `b.*, 
-      COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND (f.fee_type = 'receivable' OR f.fee_type IS NULL)), 0) as receivable_amount,
-      COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND f.fee_type = 'payable'), 0) as payable_amount`
+    if (forInvoiceType === 'sales') {
+      // 销售发票：只统计未开票的应收费用
+      selectFields = `b.*, 
+        COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND (f.fee_type = 'receivable' OR f.fee_type IS NULL) AND (f.invoice_status IS NULL OR f.invoice_status != 'invoiced')), 0) as receivable_amount,
+        COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND f.fee_type = 'payable' AND (f.invoice_status IS NULL OR f.invoice_status != 'invoiced')), 0) as payable_amount`
+    } else if (forInvoiceType === 'purchase') {
+      // 采购发票：只统计未开票的应付费用
+      selectFields = `b.*, 
+        COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND (f.fee_type = 'receivable' OR f.fee_type IS NULL) AND (f.invoice_status IS NULL OR f.invoice_status != 'invoiced')), 0) as receivable_amount,
+        COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND f.fee_type = 'payable' AND (f.invoice_status IS NULL OR f.invoice_status != 'invoiced')), 0) as payable_amount`
+    } else {
+      // 无发票类型筛选时，统计全部费用金额
+      selectFields = `b.*, 
+        COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND (f.fee_type = 'receivable' OR f.fee_type IS NULL)), 0) as receivable_amount,
+        COALESCE((SELECT SUM(f.amount) FROM fees f WHERE f.bill_id = b.id AND f.fee_type = 'payable'), 0) as payable_amount`
+    }
   }
   
   let query = `SELECT ${selectFields} FROM bills_of_lading b WHERE 1=1`
@@ -64,25 +78,21 @@ export async function getBills(params = {}) {
                    AND (b.status IN ('已完成', '已归档', '已取消') 
                         OR b.delivery_status IN ('已送达', '异常关闭'))`
         
-        // 如果是为新建发票筛选，排除已经开具发票的订单（未取消/未删除的发票）
+        // 如果是为新建发票筛选，只显示有未开票费用的订单
         if (forInvoiceType) {
-          // 排除该类型已有未取消且未删除发票的订单
-          // 注意：bill_id 可能是逗号分隔的多个订单ID，需要用 LIKE 匹配
-          // 修复：同时排除 is_deleted = TRUE 的发票，确保删除发票后订单能回流到待开票
-          query += ` AND NOT EXISTS (
-            SELECT 1 FROM invoices 
-            WHERE invoice_type = ? 
-              AND status != 'cancelled' 
-              AND (is_deleted IS NULL OR is_deleted = FALSE)
-              AND bill_id IS NOT NULL
-              AND (
-                bill_id = b.id 
-                OR bill_id LIKE b.id || ',%'
-                OR bill_id LIKE '%,' || b.id || ',%'
-                OR bill_id LIKE '%,' || b.id
-              )
+          // 根据发票类型筛选有未开票费用的订单：
+          // - 销售发票(sales): 需要有未开票的应收费用 (fee_type = 'receivable' 或 NULL)
+          // - 采购发票(purchase): 需要有未开票的应付费用 (fee_type = 'payable')
+          const feeTypeCondition = forInvoiceType === 'sales' 
+            ? "(fee_type = 'receivable' OR fee_type IS NULL)"
+            : "fee_type = 'payable'"
+          
+          query += ` AND EXISTS (
+            SELECT 1 FROM fees 
+            WHERE bill_id = b.id 
+              AND ${feeTypeCondition}
+              AND (invoice_status IS NULL OR invoice_status != 'invoiced')
           )`
-          queryParams.push(forInvoiceType)
         }
         break
       case 'draft':
