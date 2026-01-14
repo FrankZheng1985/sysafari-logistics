@@ -317,6 +317,26 @@ function App() {
     initMenuSettings()
   }, [])
 
+  // 全局禁用数字输入框的滚轮滚动改变值的行为
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'number') {
+        // 阻止默认滚轮行为（改变数字值）
+        e.preventDefault()
+        // 让输入框失去焦点，确保滚轮不会改变值
+        target.blur()
+      }
+    }
+    
+    // 使用 capture 阶段捕获事件，确保在任何子元素之前处理
+    document.addEventListener('wheel', handleWheel, { passive: false, capture: true })
+    
+    return () => {
+      document.removeEventListener('wheel', handleWheel, { capture: true })
+    }
+  }, [])
+
   // 全局错误处理回调
   const handleGlobalError = (error: Error, errorInfo: React.ErrorInfo) => {
     console.error('[App] 全局错误:', error.message)
