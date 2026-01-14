@@ -976,7 +976,7 @@ export default function ApprovalWorkbench() {
                 )}
 
                 {/* 关联业务 */}
-                {(detailApproval.business_id || detailApproval.request_data?.fee?.billId) && (
+                {(detailApproval.business_id || detailApproval.request_data?.fee?.billId || detailApproval.request_data?.billNumber) && (
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h4 className="text-sm font-medium text-gray-900 flex items-center gap-2 mb-3">
                       <Hash className="w-4 h-4" />
@@ -985,7 +985,7 @@ export default function ApprovalWorkbench() {
                     <div className="flex items-center justify-between">
                       <div className="text-sm text-gray-600">
                         {detailApproval.approval_type === 'FEE_SUPPLEMENT' ? (
-                          <span>提单: <span className="font-mono">{detailApproval.request_data?.fee?.billId || '-'}</span></span>
+                          <span>订单号: <span className="font-mono">{detailApproval.request_data?.billNumber || '-'}</span></span>
                         ) : (
                           <span className="font-mono">{detailApproval.business_id}</span>
                         )}
