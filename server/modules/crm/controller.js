@@ -79,7 +79,7 @@ export async function getCustomerById(req, res) {
 
 /**
  * 创建客户
- * 支持自动生成报价单、上传COS、发送邮件
+ * 支持自动生成报价单、上传COS、发送邮件（可选）
  */
 export async function createCustomer(req, res) {
   try {
@@ -96,13 +96,10 @@ export async function createCustomer(req, res) {
       return badRequest(res, '客户名称为必填项')
     }
     
-    // 产品和费用项为必填（强制生成报价）
-    if (!productId) {
-      return badRequest(res, '请选择产品')
-    }
-    
-    if (!selectedFeeItemIds || selectedFeeItemIds.length === 0) {
-      return badRequest(res, '请选择至少一项费用')
+    // 产品和费用项为可选（如果提供了产品，则费用项为必填）
+    const shouldGenerateQuotation = !!productId
+    if (productId && (!selectedFeeItemIds || selectedFeeItemIds.length === 0)) {
+      return badRequest(res, '已选择产品时，请选择至少一项费用')
     }
     
     // 如果提供了customerCode，检查是否已存在
@@ -126,74 +123,76 @@ export async function createCustomer(req, res) {
       }
     }
     
-    // 3. 自动生成报价单
+    // 3. 自动生成报价单（仅当提供了产品和费用项时）
     let quotation = null
     let pdfUrl = null
     let emailResults = null
     
-    try {
-      quotation = await model.createQuotationForCustomer({
-        customerId,
-        customerName,
-        productId,
-        selectedFeeItemIds,
-        user: req.user
-      })
-      
-      console.log(`✅ 报价单已生成: ${quotation.quoteNumber}`)
-      
-      // 4. 生成PDF并上传到OSS
+    if (shouldGenerateQuotation) {
       try {
-        // 获取完整的报价单数据用于生成PDF
-        const fullQuotation = await model.getQuotationById(quotation.id)
-        const html = generateQuotationHtml(fullQuotation)
-        let pdfData = await generatePdfFromHtml(html)
+        quotation = await model.createQuotationForCustomer({
+          customerId,
+          customerName,
+          productId,
+          selectedFeeItemIds,
+          user: req.user
+        })
         
-        // 将 Uint8Array 转换为 Buffer（puppeteer返回的是Uint8Array）
-        const pdfBuffer = pdfData ? Buffer.from(pdfData) : null
+        console.log(`✅ 报价单已生成: ${quotation.quoteNumber}`)
         
-        // 检查OSS配置
-        const ossCheck = ossService.checkOssConfig()
-        if (ossCheck.configured && pdfBuffer && pdfBuffer.length > 0) {
-          const uploadResult = await ossService.uploadQuotationPdf({
-            customerId,
-            quoteNumber: quotation.quoteNumber,
-            pdfBuffer
-          })
-          pdfUrl = uploadResult.url
-          console.log(`✅ PDF已上传到OSS: ${pdfUrl}`)
-        } else if (!ossCheck.configured) {
-          console.warn('⚠️ OSS未配置，跳过PDF上传')
-        } else {
-          console.warn('⚠️ PDF生成失败，跳过上传')
-        }
-        
-        // 5. 发送邮件给选中的联系人
-        if (selectedContactEmails && selectedContactEmails.length > 0) {
-          const emailCheck = emailService.checkEmailConfig()
-          if (emailCheck.configured) {
-            emailResults = await emailService.sendQuotationEmailBatch(
-              selectedContactEmails,
-              {
-                customerName,
-                quoteNumber: quotation.quoteNumber,
-                validUntil: quotation.validUntil,
-                pdfUrl,
-                pdfBuffer
-              }
-            )
-            console.log(`✅ 邮件发送完成: 成功${emailResults.success.length}封, 失败${emailResults.failed.length}封`)
+        // 4. 生成PDF并上传到OSS
+        try {
+          // 获取完整的报价单数据用于生成PDF
+          const fullQuotation = await model.getQuotationById(quotation.id)
+          const html = generateQuotationHtml(fullQuotation)
+          let pdfData = await generatePdfFromHtml(html)
+          
+          // 将 Uint8Array 转换为 Buffer（puppeteer返回的是Uint8Array）
+          const pdfBuffer = pdfData ? Buffer.from(pdfData) : null
+          
+          // 检查OSS配置
+          const ossCheck = ossService.checkOssConfig()
+          if (ossCheck.configured && pdfBuffer && pdfBuffer.length > 0) {
+            const uploadResult = await ossService.uploadQuotationPdf({
+              customerId,
+              quoteNumber: quotation.quoteNumber,
+              pdfBuffer
+            })
+            pdfUrl = uploadResult.url
+            console.log(`✅ PDF已上传到OSS: ${pdfUrl}`)
+          } else if (!ossCheck.configured) {
+            console.warn('⚠️ OSS未配置，跳过PDF上传')
           } else {
-            console.warn('⚠️ 邮件服务未配置，跳过邮件发送')
+            console.warn('⚠️ PDF生成失败，跳过上传')
           }
+          
+          // 5. 发送邮件给选中的联系人
+          if (selectedContactEmails && selectedContactEmails.length > 0) {
+            const emailCheck = emailService.checkEmailConfig()
+            if (emailCheck.configured) {
+              emailResults = await emailService.sendQuotationEmailBatch(
+                selectedContactEmails,
+                {
+                  customerName,
+                  quoteNumber: quotation.quoteNumber,
+                  validUntil: quotation.validUntil,
+                  pdfUrl,
+                  pdfBuffer
+                }
+              )
+              console.log(`✅ 邮件发送完成: 成功${emailResults.success.length}封, 失败${emailResults.failed.length}封`)
+            } else {
+              console.warn('⚠️ 邮件服务未配置，跳过邮件发送')
+            }
+          }
+        } catch (pdfError) {
+          console.error('PDF生成或邮件发送失败:', pdfError)
+          // 不影响客户创建，继续返回成功
         }
-      } catch (pdfError) {
-        console.error('PDF生成或邮件发送失败:', pdfError)
+      } catch (quotationError) {
+        console.error('报价单生成失败:', quotationError)
         // 不影响客户创建，继续返回成功
       }
-    } catch (quotationError) {
-      console.error('报价单生成失败:', quotationError)
-      // 不影响客户创建，继续返回成功
     }
     
     // 获取完整的客户信息
