@@ -612,6 +612,16 @@ export default function ApprovalWorkbench() {
                           <span className={`px-2 py-0.5 text-xs rounded ${typeConfig.color}`}>
                             {typeConfig.label}
                           </span>
+                          {/* 追加费用显示应付/应收标签 */}
+                          {approval.approval_type === 'FEE_SUPPLEMENT' && approval.request_data?.fee?.feeType && (
+                            <span className={`px-2 py-0.5 text-xs rounded ${
+                              approval.request_data.fee.feeType === 'payable' 
+                                ? 'bg-red-100 text-red-700' 
+                                : 'bg-green-100 text-green-700'
+                            }`}>
+                              {approval.request_data.fee.feeType === 'payable' ? '应付' : '应收'}
+                            </span>
+                          )}
                           <span className="text-sm font-medium text-gray-900">{approval.title}</span>
                           <span className={`px-2 py-0.5 text-xs rounded flex items-center gap-1 ${statusConfig.color}`}>
                             <StatusIcon className="w-3 h-3" />
@@ -833,6 +843,16 @@ export default function ApprovalWorkbench() {
                         <span className={`px-3 py-1 text-sm rounded-lg ${typeConfig.color}`}>
                           {typeConfig.label}
                         </span>
+                        {/* 追加费用显示应付/应收标签 */}
+                        {detailApproval.approval_type === 'FEE_SUPPLEMENT' && detailApproval.request_data?.fee?.feeType && (
+                          <span className={`px-3 py-1 text-sm rounded-lg ${
+                            detailApproval.request_data.fee.feeType === 'payable' 
+                              ? 'bg-red-100 text-red-700' 
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {detailApproval.request_data.fee.feeType === 'payable' ? '应付' : '应收'}
+                          </span>
+                        )}
                         <span className={`px-3 py-1 text-sm rounded-lg flex items-center gap-1.5 ${statusConfig.color}`}>
                           <StatusIcon className="w-4 h-4" />
                           {statusConfig.label}
