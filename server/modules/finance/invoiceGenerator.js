@@ -1049,20 +1049,24 @@ export async function regenerateInvoiceFiles(invoiceId) {
     
     if (billIds.length > 0) {
       // 从 fees 表获取这些 bill_id 对应的详细费用
+      // 【重要】必须按费用类型筛选，避免销售发票获取到应付费用导致重复
       const placeholders = billIds.map(() => '?').join(',')
       const feesQuery = `
         SELECT f.fee_name, f.amount, b.container_number, b.bill_number
         FROM fees f
         JOIN bills_of_lading b ON f.bill_id = b.id
         WHERE b.id IN (${placeholders})
+          AND (f.fee_type = ? OR f.fee_type IS NULL)
         ORDER BY b.container_number, f.fee_name
       `
-      const allFees = await db.prepare(feesQuery).all(...billIds)
+      const allFees = await db.prepare(feesQuery).all(...billIds, targetFeeType)
       
-      // 只保留 items 中存在的费用类型
+      // 只保留 items 中存在的费用类型（修复运算符优先级问题）
       detailedFeesFromDb = allFees.filter(f => 
-        itemFeeNames.some(name => f.fee_name && f.fee_name.includes(name) || name.includes(f.fee_name))
+        itemFeeNames.some(name => (f.fee_name && f.fee_name.includes(name)) || (name && name.includes(f.fee_name)))
       )
+      
+      console.log(`[regenerateInvoiceFiles] 从 fees 表获取明细: 查询到 ${allFees.length} 条, 过滤后 ${detailedFeesFromDb.length} 条 (费用类型: ${targetFeeType})`)
     }
   }
   
