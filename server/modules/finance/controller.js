@@ -822,11 +822,13 @@ export async function createFee(req, res) {
     // 如果需要审批，同时在统一审批表创建审批记录
     if (feeData.isSupplementary === 1 && feeData.approvalStatus === 'pending') {
       try {
-        // 获取提单信息以获取集装箱号
+        // 获取提单信息以获取集装箱号和订单号
         let containerNumber = ''
+        let orderNumber = ''
         if (billId) {
           const billInfo = await orderModel.getBillById(billId)
           containerNumber = billInfo?.containerNumber || ''
+          orderNumber = billInfo?.orderNumber || ''
         }
         
         // 使用统一审批服务创建审批记录
@@ -834,7 +836,7 @@ export async function createFee(req, res) {
           operationCode: 'FEE_SUPPLEMENT',
           category: 'business',
           title: `追加费用审批 - ${feeName}`,
-          content: `${userName} 在提单 ${req.body.billNumber || ''} 上追加了费用「${feeName}」，金额 ${amount} ${req.body.currency || 'EUR'}，请审批。`,
+          content: `${userName} 在订单 ${orderNumber || req.body.billNumber || ''} 上追加了费用「${feeName}」，金额 ${amount} ${req.body.currency || 'EUR'}，请审批。`,
           businessId: result.id?.toString(),
           businessTable: 'fees',
           amount: amount,
@@ -845,6 +847,7 @@ export async function createFee(req, res) {
           requestData: { 
             fee: feeData, 
             billNumber: req.body.billNumber,
+            orderNumber: orderNumber,
             containerNumber: containerNumber
           }
         })
