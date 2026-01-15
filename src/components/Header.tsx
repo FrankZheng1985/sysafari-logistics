@@ -130,7 +130,7 @@ export default function Header() {
   }
 
   return (
-    <header className="h-14 lg:h-16 bg-white border-b border-gray-200 flex items-center justify-between px-3 lg:px-6 shadow-sm z-10">
+    <header className="h-14 lg:h-16 bg-white border-b border-gray-200 flex items-center justify-between px-3 lg:px-6 shadow-sm z-[60]">
       <div className="flex items-center gap-2 lg:gap-4">
         {/* 移动端菜单按钮 */}
         {sidebarControl && (
