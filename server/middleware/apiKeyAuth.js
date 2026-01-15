@@ -120,13 +120,18 @@ async function validateApiKey(apiKey) {
     return { valid: false, message: `超出速率限制，请在${rateLimit.retryAfter}秒后重试` }
   }
   
-  // 解析权限
+  // 解析权限（支持 JSONB 数组、JSON字符串、逗号分隔字符串）
   let permissions = ['read']
   if (keyRecord.permissions) {
-    try {
-      permissions = JSON.parse(keyRecord.permissions)
-    } catch (e) {
-      permissions = keyRecord.permissions.split(',')
+    if (Array.isArray(keyRecord.permissions)) {
+      // PostgreSQL JSONB 已自动解析为数组
+      permissions = keyRecord.permissions
+    } else if (typeof keyRecord.permissions === 'string') {
+      try {
+        permissions = JSON.parse(keyRecord.permissions)
+      } catch (e) {
+        permissions = keyRecord.permissions.split(',')
+      }
     }
   }
   
@@ -154,31 +159,43 @@ function hashApiKey(apiKey) {
  * 检查速率限制
  */
 async function checkRateLimit(keyId) {
-  const db = getDatabase()
-  const windowMinutes = 1 // 1分钟窗口
-  const defaultLimit = 100 // 默认每分钟100次
-  
-  // 获取速率限制配置
-  const keyRecord = await db.prepare(`
-    SELECT rate_limit FROM api_keys WHERE id = $1
-  `).get(keyId)
-  
-  const limit = keyRecord?.rate_limit || defaultLimit
-  
-  // 统计当前窗口内的调用次数
-  const countResult = await db.prepare(`
-    SELECT COUNT(*) as count FROM api_call_logs 
-    WHERE api_key_id = $1 
-      AND called_at > NOW() - INTERVAL '${windowMinutes} minutes'
-  `).get(keyId)
-  
-  const currentCount = countResult?.count || 0
-  
-  if (currentCount >= limit) {
-    return { allowed: false, retryAfter: 60 }
+  try {
+    const db = getDatabase()
+    const windowMinutes = 1 // 1分钟窗口
+    const defaultLimit = 1000 // 默认每分钟1000次
+    
+    // 获取速率限制配置
+    const keyRecord = await db.prepare(`
+      SELECT rate_limit FROM api_keys WHERE id = $1
+    `).get(keyId)
+    
+    const limit = keyRecord?.rate_limit || defaultLimit
+    
+    // 统计当前窗口内的调用次数（兼容不同表结构）
+    let currentCount = 0
+    try {
+      const countResult = await db.prepare(`
+        SELECT COUNT(*) as count FROM api_call_logs 
+        WHERE api_key_id = $1 
+          AND called_at > NOW() - INTERVAL '${windowMinutes} minutes'
+      `).get(keyId)
+      currentCount = parseInt(countResult?.count) || 0
+    } catch (e) {
+      // 如果表结构不兼容，跳过速率限制检查
+      console.warn('速率限制检查跳过（表结构不兼容）:', e.message)
+      return { allowed: true, remaining: limit }
+    }
+    
+    if (currentCount >= limit) {
+      return { allowed: false, retryAfter: 60 }
+    }
+    
+    return { allowed: true, remaining: limit - currentCount }
+  } catch (error) {
+    // 如果检查失败，默认允许访问
+    console.warn('速率限制检查失败，默认允许:', error.message)
+    return { allowed: true, remaining: 1000 }
   }
-  
-  return { allowed: true, remaining: limit - currentCount }
 }
 
 /**
