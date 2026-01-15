@@ -729,32 +729,41 @@ export async function getFinanceStats(userId, role) {
 
 /**
  * 获取查验统计 - 从bills表
+ * 根据 inspection 字段判断是否需要查验
+ * inspection 字段值：'-' 表示不查验，'查验' 或其他非空值表示需要查验
  */
 export async function getInspectionStats(userId, role) {
   const db = getDatabase()
   try {
-    // 从bills表获取查验相关统计（根据is_inspected字段）
+    // 从bills表获取查验相关统计
+    // inspection 字段不为空且不为 '-' 表示需要查验
     const statsResult = await db.prepare(
       `SELECT 
-         COUNT(*) FILTER (WHERE is_inspected = true AND inspection_status = '待查验') as pending,
-         COUNT(*) FILTER (WHERE is_inspected = true AND inspection_status = '查验中') as inspecting,
-         COUNT(*) FILTER (WHERE is_inspected = true AND inspection_status IN ('已放行', '查验通过')) as released,
-         COUNT(*) FILTER (WHERE is_inspected = true) as total
+         COUNT(*) FILTER (
+           WHERE inspection IS NOT NULL AND inspection != '-' AND inspection != ''
+             AND status NOT IN ('已完成', 'completed', 'archived')
+         ) as pending,
+         COUNT(*) FILTER (
+           WHERE inspection IS NOT NULL AND inspection != '-' AND inspection != ''
+             AND status IN ('已完成', 'completed', 'archived')
+         ) as released,
+         COUNT(*) FILTER (
+           WHERE inspection IS NOT NULL AND inspection != '-' AND inspection != ''
+         ) as total
        FROM bills`
     ).get()
     
-    // 如果没有 inspection_status 字段，尝试用其他逻辑
     let pending = parseInt(statsResult?.pending) || 0
-    let inspecting = parseInt(statsResult?.inspecting) || 0
     let released = parseInt(statsResult?.released) || 0
     let total = parseInt(statsResult?.total) || 0
     
-    // 如果所有值都是0，尝试用 is_inspected 字段
+    // 如果使用 inspection 字段没有数据，尝试用其他字段判断
+    // 比如 customs_status = '查验' 也可能表示需要查验
     if (total === 0) {
       const fallbackResult = await db.prepare(
         `SELECT 
-           COUNT(*) FILTER (WHERE is_inspected = true OR is_inspected = 1) as inspected,
-           COUNT(*) FILTER (WHERE (is_inspected = true OR is_inspected = 1) AND status IN ('已完成', 'completed')) as released_count
+           COUNT(*) FILTER (WHERE customs_status LIKE '%查验%') as inspected,
+           COUNT(*) FILTER (WHERE customs_status LIKE '%查验%' AND status IN ('已完成', 'completed', 'archived')) as released_count
          FROM bills`
       ).get()
       
@@ -767,7 +776,7 @@ export async function getInspectionStats(userId, role) {
     
     return {
       pending,
-      inspecting,
+      inspecting: 0, // 目前没有"查验中"状态的数据
       released,
       total,
       releaseRate,
@@ -780,32 +789,38 @@ export async function getInspectionStats(userId, role) {
 
 /**
  * 获取单证统计
+ * 基于 cargo_items 表的匹配状态来统计单证情况
  */
 export async function getDocumentStats(userId, role) {
   const db = getDatabase()
   try {
-    // 从bills表统计单证状态
-    const statsResult = await db.prepare(
-      `SELECT 
-         COUNT(*) FILTER (WHERE doc_status = '待匹配' OR doc_status IS NULL) as pending_match,
-         COUNT(*) FILTER (WHERE doc_status = '待补充') as pending_supplement,
-         COUNT(*) FILTER (WHERE doc_status = '已完成') as completed,
-         COUNT(*) as total
-       FROM bills
-       WHERE status NOT IN ('已完成', 'completed', 'archived')`
-    ).get()
+    // 先尝试从 cargo_items 表获取单证匹配统计
+    let pendingMatch = 0
+    let pendingSupplement = 0
+    let completed = 0
     
-    let pendingMatch = parseInt(statsResult?.pending_match) || 0
-    let pendingSupplement = parseInt(statsResult?.pending_supplement) || 0
-    let completed = parseInt(statsResult?.completed) || 0
-    let total = parseInt(statsResult?.total) || 0
+    try {
+      const cargoStats = await db.prepare(
+        `SELECT 
+           COUNT(DISTINCT bill_id) FILTER (WHERE match_status = 'pending' OR match_status IS NULL) as pending_match,
+           COUNT(DISTINCT bill_id) FILTER (WHERE match_status = 'matched') as completed
+         FROM cargo_items
+         WHERE bill_id IS NOT NULL`
+      ).get()
+      
+      pendingMatch = parseInt(cargoStats?.pending_match) || 0
+      completed = parseInt(cargoStats?.completed) || 0
+    } catch (e) {
+      // cargo_items 表可能不存在或结构不同
+    }
     
-    // 如果没有 doc_status 字段，用订单状态估算
-    if (total === 0) {
+    // 如果 cargo_items 没有数据，使用订单状态来估算
+    if (pendingMatch === 0 && completed === 0) {
       const fallbackResult = await db.prepare(
         `SELECT 
-           COUNT(*) FILTER (WHERE status IN ('pending', '待处理')) as pending,
-           COUNT(*) FILTER (WHERE status IN ('已完成', 'completed')) as done
+           COUNT(*) FILTER (WHERE status IN ('pending', '待处理', '船未到港')) as pending,
+           COUNT(*) FILTER (WHERE status IN ('已完成', 'completed', 'archived')) as done,
+           COUNT(*) as total
          FROM bills`
       ).get()
       
@@ -813,8 +828,9 @@ export async function getDocumentStats(userId, role) {
       completed = parseInt(fallbackResult?.done) || 0
     }
     
-    const matchRate = (pendingMatch + completed) > 0 
-      ? Math.round((completed / (pendingMatch + completed)) * 100) 
+    const total = pendingMatch + pendingSupplement + completed
+    const matchRate = total > 0 
+      ? Math.round((completed / total) * 100) 
       : 0
     
     return {

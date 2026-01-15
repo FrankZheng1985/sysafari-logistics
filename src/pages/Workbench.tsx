@@ -122,7 +122,8 @@ export default function Workbench() {
     // 检查角色要求
     if (cardDef.requiredRole) {
       const userRole = user?.role || ''
-      if (cardDef.requiredRole === 'manager' && !isManager()) return false
+      // manager 级别的卡片，boss 也可以看到（老板可以看到整个公司的团队）
+      if (cardDef.requiredRole === 'manager' && !isManager() && userRole !== 'boss') return false
       if (cardDef.requiredRole === 'boss' && !['boss', 'admin'].includes(userRole)) return false
       if (cardDef.requiredRole === 'finance_director' && !['finance_director', 'boss', 'admin'].includes(userRole)) return false
     }
