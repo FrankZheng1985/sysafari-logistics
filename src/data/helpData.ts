@@ -145,15 +145,15 @@ export const helpItems: HelpItem[] = [
 
   // ==================== 订单管理 ====================
   {
-    id: 'bp-view',
-    title: 'BP视图 - 提单总览',
+    id: 'bill-list',
+    title: '提单管理 - 提单列表',
     module: 'bookings',
     moduleIcon: 'Package',
-    path: '/bp-view',
+    path: '/bookings/bill',
     videoUrl: '',
-    description: 'BP视图是提单管理的核心页面，展示所有进行中的提单信息，支持多维度筛选和批量操作。',
+    description: '提单管理是订单管理的核心页面，展示所有进行中的提单信息，支持多维度筛选和批量操作。',
     steps: [
-      '进入BP视图页面查看所有提单列表',
+      '进入提单管理页面查看所有提单列表',
       '使用顶部筛选条件过滤提单（按状态、日期、船名等）',
       '点击提单号可进入详情页查看完整信息',
       '使用批量操作功能处理多个提单'
@@ -169,17 +169,17 @@ export const helpItems: HelpItem[] = [
     ]
   },
   {
-    id: 'bp-history',
-    title: '历史提单',
+    id: 'bill-history',
+    title: '提单管理 - 历史订单',
     module: 'bookings',
     moduleIcon: 'Package',
-    path: '/bp-view/history',
+    path: '/bookings/bill/history',
     videoUrl: '',
-    description: '查看和管理已完成的历史提单记录，支持按时间范围查询历史数据。',
+    description: '查看和管理已完成的历史订单记录，支持按时间范围查询历史数据。',
     steps: [
-      '选择日期范围筛选历史提单',
-      '查看已完成提单的完整信息',
-      '可下载历史提单的相关文档'
+      '选择日期范围筛选历史订单',
+      '查看已完成订单的完整信息',
+      '可下载历史订单的相关文档'
     ],
     tips: [
       '历史数据保留期限为两年',

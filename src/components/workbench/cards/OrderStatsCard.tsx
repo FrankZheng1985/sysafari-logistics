@@ -157,7 +157,7 @@ export default function OrderStatsCard({ refreshKey }: OrderStatsCardProps) {
         </div>
         <div 
           className="p-2 bg-green-50 rounded-lg text-center cursor-pointer hover:bg-green-100 transition-colors"
-          onClick={() => navigate('/bp-view/history')}
+          onClick={() => navigate('/bookings/bill/history')}
         >
           <CheckCircle className="w-4 h-4 text-green-600 mx-auto mb-1" />
           <div className="text-lg font-semibold text-green-700">{stats.completed}</div>

@@ -18,7 +18,6 @@ import {
   Shield,
   UserCircle,
   Wallet,
-  Monitor,
   Home,
   Building2,
   TrendingUp,
@@ -106,7 +105,6 @@ const API_BASE = getApiBaseUrl()
 const MENU_PERMISSIONS: Record<string, string[]> = {
   '/workbench': [], // 所有用户都可以访问工作台
   '/dashboard': ['dashboard:view'],
-  '/bp-view': ['bp:view'],
   '/bookings': ['bill:view', 'bill:create', 'bill:edit'],
   '/bookings/bill': ['bill:view'],
   '/bookings/labels': ['bill:view'],
@@ -159,11 +157,6 @@ const menuItems: MenuItem[] = [
     path: '/dashboard',
     label: '系统概览',
     icon: Home,
-  },
-  {
-    path: '/bp-view',
-    label: 'BP View',
-    icon: Monitor,
   },
   {
     path: '/bookings',

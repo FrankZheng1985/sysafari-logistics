@@ -14,6 +14,7 @@ export interface Column<T> {
   dateField?: string  // 日期字段名（用于从 record 中获取日期值）
   filters?: { text: string; value: string }[]
   onFilter?: (value: string, record: T) => boolean
+  filterValueGetter?: (record: T) => string  // 自定义筛选值获取函数，用于动态生成筛选选项
   width?: string | number
   minWidth?: number  // 最小宽度（用于可调节列宽）
   align?: 'left' | 'center' | 'right'
@@ -88,6 +89,11 @@ export default function DataTable<T extends Record<string, any>>({
   const [sortOrder, setSortOrder] = useState<SortOrder>(null)
   const [filterStates, setFilterStates] = useState<Record<string, string[]>>(initialFilters || {})
   const [currentPage, setCurrentPage] = useState(1)
+  
+  // 当 initialFilters 变化时同步到 filterStates（用于标签页切换等场景）
+  useEffect(() => {
+    setFilterStates(initialFilters || {})
+  }, [initialFilters])
   const [pageSize, setPageSize] = useState(pagination?.pageSize || 20)
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>(
     rowSelection?.selectedRowKeys || []
@@ -597,45 +603,48 @@ export default function DataTable<T extends Record<string, any>>({
 
     const activeFilters = filterStates[column.key] || []
     
-    // 如果有预定义的 filters，使用它们；否则从数据中动态生成
-    let filterOptions = column.filters || []
+    // 统计数据中每个值的数量
+    const valueCounts = new Map<string, number>()
+    data.forEach(record => {
+      // 如果定义了 filterValueGetter，使用它获取筛选值；否则使用原始字段值
+      const rawValue = column.filterValueGetter ? column.filterValueGetter(record) : record[column.key]
+      if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
+        const trimmedValue = String(rawValue).trim()
+        if (trimmedValue === '') return
+        valueCounts.set(trimmedValue, (valueCounts.get(trimmedValue) || 0) + 1)
+      }
+    })
     
-    if (filterOptions.length === 0 && column.filterable) {
-      // 从完整数据中动态生成筛选选项（去重 + 计数）
-      // 使用 Map 存储：key 为标准化后的值（用于去重），value 为 { displayText, count, originalValue }
-      const valueCounts = new Map<string, { displayText: string; count: number; originalValue: string }>()
-      
-      data.forEach(record => {
-        const rawValue = record[column.key]
-        if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
-          // 标准化处理：去除前后空格
-          const trimmedValue = String(rawValue).trim()
-          if (trimmedValue === '') return
-          
-          // 使用小写作为去重 key（可选，如需区分大小写可去掉 toLowerCase）
-          const normalizedKey = trimmedValue
-          
-          if (valueCounts.has(normalizedKey)) {
-            // 已存在，增加计数
-            const existing = valueCounts.get(normalizedKey)!
-            existing.count++
+    let filterOptions: { text: string; value: string }[] = []
+    
+    if (column.filters && column.filters.length > 0) {
+      // 有预定义的 filters，但只显示数据中实际存在的值
+      // 同时使用 onFilter 函数来匹配数据（如果有的话）
+      filterOptions = column.filters
+        .map(filter => {
+          // 计算匹配该筛选值的数据数量
+          let count = 0
+          if (column.onFilter) {
+            // 使用自定义的 onFilter 函数来计算匹配数量
+            count = data.filter(record => column.onFilter!(filter.value, record)).length
           } else {
-            // 新值，初始化
-            valueCounts.set(normalizedKey, {
-              displayText: trimmedValue,
-              count: 1,
-              originalValue: trimmedValue
-            })
+            // 直接按值匹配
+            count = valueCounts.get(filter.value) || 0
           }
-        }
-      })
-      
-      // 转换为筛选选项数组，按数量降序排列
-      filterOptions = Array.from(valueCounts.values())
-        .sort((a, b) => b.count - a.count) // 按数量降序
-        .map(item => ({ 
-          text: `${item.displayText}（${item.count}）`, 
-          value: item.originalValue 
+          return { ...filter, count }
+        })
+        .filter(filter => filter.count > 0) // 只显示有数据的选项
+        .map(filter => ({
+          text: `${filter.text}（${filter.count}）`,
+          value: filter.value
+        }))
+    } else if (column.filterable) {
+      // 没有预定义 filters，从数据中动态生成筛选选项
+      filterOptions = Array.from(valueCounts.entries())
+        .sort((a, b) => b[1] - a[1]) // 按数量降序
+        .map(([value, count]) => ({ 
+          text: `${value}（${count}）`, 
+          value 
         }))
     }
 
@@ -711,14 +720,8 @@ export default function DataTable<T extends Record<string, any>>({
   const total = isServerSidePagination ? (pagination?.total || 0) : sortedData.length
   const totalPages = pagination ? Math.ceil(total / pageSize) : 1
 
-  if (total === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center flex-1 text-gray-400">
-        <div className="text-6xl mb-4">📦</div>
-        <div className="text-lg">暂无数据</div>
-      </div>
-    )
-  }
+  // 检查是否有活跃的筛选条件
+  const hasActiveFilters = Object.values(filterStates).some(arr => arr.length > 0)
 
   // Close filter dropdown when clicking outside
   const handleClickOutside = () => {
@@ -846,7 +849,33 @@ export default function DataTable<T extends Record<string, any>>({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {displayData.map((item, index) => {
+            {displayData.length === 0 ? (
+              <tr>
+                <td 
+                  colSpan={visibleCols.length + (rowSelection ? 1 : 0)} 
+                  className="text-center py-12"
+                >
+                  <div className="flex flex-col items-center justify-center text-gray-400">
+                    <div className="text-5xl mb-3">📦</div>
+                    <div className="text-base mb-1">暂无数据</div>
+                    {hasActiveFilters && (
+                      <>
+                        <div className="text-sm text-gray-500 mb-3">当前筛选条件下没有匹配的数据</div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setFilterStates({})
+                          }}
+                          className="px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                        >
+                          清除筛选条件
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ) : displayData.map((item, index) => {
               const key = getRowKey(item, index)
               const isSelected = selectedRowKeys.includes(key)
               const rowProps = onRow?.(item, index) || {}

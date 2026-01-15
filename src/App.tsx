@@ -4,8 +4,6 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard' // eslint-disable-line @typescript-eslint/no-unused-vars
 import SystemDashboard from './pages/SystemDashboard'
-import BPView from './pages/BPView'
-import BPHistory from './pages/BPHistory'
 import OrderLabels from './pages/OrderLabels'
 import PureLabels from './pages/PureLabels'
 import LabelSearch from './pages/LabelSearch'
@@ -161,8 +159,6 @@ function AppRoutes() {
         <Route path="/" element={<SystemDashboard />} />
         <Route path="/dashboard" element={<SystemDashboard />} />
         <Route path="/workbench" element={<Workbench />} />
-        <Route path="/bp-view" element={<BPView />} />
-        <Route path="/bp-view/history" element={<BPHistory />} />
         <Route path="/bookings/labels" element={<OrderLabels />} />
         <Route path="/bookings/labels/pure" element={<PureLabels />} />
         <Route path="/bookings/labels/search" element={<LabelSearch />} />
@@ -170,6 +166,7 @@ function AppRoutes() {
         <Route path="/bookings/labels/create-batch" element={<LabelCreateBatch />} />
         <Route path="/bookings/packages" element={<OrderPackages />} />
         <Route path="/bookings/bill" element={<OrderBills />} />
+        <Route path="/bookings/bill/history" element={<OrderBills />} />
         <Route path="/bookings/bill/draft" element={<OrderBills />} />
         <Route path="/bookings/bill/void" element={<OrderBills />} />
         <Route path="/bookings/bill/:id" element={<BillDetails />} />

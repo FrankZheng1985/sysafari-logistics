@@ -42,50 +42,62 @@ export default function OrderBills() {
   const [directVoidSubmitting, setDirectVoidSubmitting] = useState(false)
   const [selectedBillForDirectVoid, setSelectedBillForDirectVoid] = useState<BillOfLading | null>(null)
   
-  // 从 URL 参数读取筛选状态
-  const getInitialFilters = (): Record<string, string[]> => {
-    const searchParams = new URLSearchParams(location.search)
-    const filtersParam = searchParams.get('filters')
-    if (filtersParam) {
-      try {
-        return JSON.parse(decodeURIComponent(filtersParam))
-      } catch {
-        return {}
-      }
-    }
-    return {}
-  }
-  
-  const [tableFilters, setTableFilters] = useState<Record<string, string[]>>(getInitialFilters)
-  
-  // 筛选状态变化时更新 URL
-  const handleFilterChange = (filters: Record<string, string[]>) => {
-    setTableFilters(filters)
-    const searchParams = new URLSearchParams(location.search)
-    
-    // 检查是否有任何筛选条件
-    const hasFilters = Object.values(filters).some(arr => arr.length > 0)
-    
-    if (hasFilters) {
-      searchParams.set('filters', encodeURIComponent(JSON.stringify(filters)))
-    } else {
-      searchParams.delete('filters')
-    }
-    
-    // 使用 replace 避免产生过多历史记录
-    const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`
-    navigate(newUrl, { replace: true })
-  }
-  
   // 根据当前路径确定激活的标签页
   const currentPath = location.pathname
   const activeTabPath = currentPath === '/bookings/bill/draft' 
     ? '/bookings/bill/draft' 
     : currentPath === '/bookings/bill/void' 
       ? '/bookings/bill/void' 
-      : '/bookings/bill'
+      : currentPath === '/bookings/bill/history'
+        ? '/bookings/bill/history'
+        : '/bookings/bill'
   const isDraftTab = activeTabPath === '/bookings/bill/draft'
   const isVoidTab = activeTabPath === '/bookings/bill/void'
+  const isHistoryTab = activeTabPath === '/bookings/bill/history'
+  
+  // 为每个标签页独立管理筛选状态（使用 Map 存储）
+  const [allTabFilters, setAllTabFilters] = useState<Record<string, Record<string, string[]>>>(() => {
+    // 从 URL 参数读取当前标签页的筛选状态
+    const searchParams = new URLSearchParams(location.search)
+    const filtersParam = searchParams.get('filters')
+    const tabParam = searchParams.get('tab')
+    
+    // 只有当 URL 中的 tab 参数与当前标签页匹配时，才使用 URL 中的筛选状态
+    if (filtersParam && tabParam === activeTabPath) {
+      try {
+        return { [activeTabPath]: JSON.parse(decodeURIComponent(filtersParam)) }
+      } catch {
+        return {}
+      }
+    }
+    return {}
+  })
+  
+  // 获取当前标签页的筛选状态
+  const tableFilters = allTabFilters[activeTabPath] || {}
+  
+  // 筛选状态变化时更新
+  const handleFilterChange = (filters: Record<string, string[]>) => {
+    // 更新当前标签页的筛选状态
+    setAllTabFilters(prev => ({
+      ...prev,
+      [activeTabPath]: filters
+    }))
+    
+    const searchParams = new URLSearchParams(location.search)
+    const hasFilters = Object.values(filters).some(arr => arr.length > 0)
+    
+    if (hasFilters) {
+      searchParams.set('filters', encodeURIComponent(JSON.stringify(filters)))
+      searchParams.set('tab', activeTabPath) // 记录筛选状态属于哪个标签页
+    } else {
+      searchParams.delete('filters')
+      searchParams.delete('tab')
+    }
+    
+    const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`
+    navigate(newUrl, { replace: true })
+  }
   
   // 防抖搜索：300ms 延迟
   useEffect(() => {
@@ -102,7 +114,7 @@ export default function OrderBills() {
       setError(null)
       try {
         const params: { type: 'schedule' | 'draft' | 'history' | 'void'; page: number; pageSize: number; search?: string } = {
-          type: isVoidTab ? 'void' : isDraftTab ? 'draft' : 'schedule',
+          type: isVoidTab ? 'void' : isDraftTab ? 'draft' : isHistoryTab ? 'history' : 'schedule',
           page: 1,
           pageSize: 1000,
         }
@@ -125,7 +137,7 @@ export default function OrderBills() {
           console.error('获取数据失败:', response.msg)
           setError(response.msg || '获取数据失败')
           const { scheduleBills, historyBills } = await import('../data/mockOrders')
-          const mockData = isDraftTab ? historyBills : scheduleBills
+          const mockData = isHistoryTab ? historyBills : isDraftTab ? historyBills : scheduleBills
           setBills(mockData)
           setTotal(mockData.length)
         }
@@ -134,7 +146,7 @@ export default function OrderBills() {
         setError(error instanceof Error ? error.message : '加载数据失败')
         try {
           const { scheduleBills, historyBills } = await import('../data/mockOrders')
-          const mockData = isDraftTab ? historyBills : scheduleBills
+          const mockData = isHistoryTab ? historyBills : isDraftTab ? historyBills : scheduleBills
           setBills(mockData)
           setTotal(mockData.length)
         } catch (importError) {
@@ -148,7 +160,7 @@ export default function OrderBills() {
     }
     
     loadBills()
-  }, [isDraftTab, isVoidTab, debouncedSearchValue, refreshKey])
+  }, [isDraftTab, isVoidTab, isHistoryTab, debouncedSearchValue, refreshKey])
   
   // 作废提单
   const handleVoidBill = async (bill: BillOfLading) => {
@@ -291,7 +303,7 @@ export default function OrderBills() {
     return { text: '已到港', color: 'text-green-600', bgColor: 'bg-green-50', dotColor: 'bg-green-500' }
   }
   
-  const pageKey = isDraftTab ? '/bookings/bill/draft' : '/bookings/bill'
+  const pageKey = isDraftTab ? '/bookings/bill/draft' : isHistoryTab ? '/bookings/bill/history' : '/bookings/bill'
   
   // 草稿页面的列定义
   const draftColumns: Column<BillOfLading>[] = [
@@ -880,8 +892,71 @@ export default function OrderBills() {
     },
   ]
 
+  // 历史订单专用的状态计算函数
+  const getHistoryStatus = (bill: BillOfLading): { text: string; color: string; bgColor: string; dotColor: string } => {
+    const deliveryStatus = bill.deliveryStatus || ''
+    if (deliveryStatus === '异常关闭') {
+      return { text: '异常关闭', color: 'text-gray-600', bgColor: 'bg-gray-100', dotColor: 'bg-gray-500' }
+    }
+    if (bill.isVoid) {
+      return { text: '已取消', color: 'text-gray-500', bgColor: 'bg-gray-100', dotColor: 'bg-gray-400' }
+    }
+    const status = bill.status || '已完成'
+    if (status === '已到港') {
+      return { text: '已到港', color: 'text-green-600', bgColor: 'bg-green-50', dotColor: 'bg-green-500' }
+    }
+    if (status === '已归档') {
+      return { text: '已归档', color: 'text-blue-600', bgColor: 'bg-blue-50', dotColor: 'bg-blue-500' }
+    }
+    return { text: '已完成', color: 'text-emerald-600', bgColor: 'bg-emerald-50', dotColor: 'bg-emerald-500' }
+  }
+
+  // 历史订单页面的列定义（基于 billColumns，但状态筛选不同）
+  const historyColumns: Column<BillOfLading>[] = billColumns.map(col => {
+    if (col.key === 'status') {
+      return {
+        ...col,
+        // 使用 filterable + filterValueGetter 动态生成筛选选项（只显示数据中实际存在的状态）
+        filterable: true,
+        filters: undefined,  // 清除预定义的 filters，让 DataTable 动态生成
+        filterValueGetter: (record: BillOfLading) => getHistoryStatus(record).text,
+        onFilter: (value: string, record: BillOfLading) => {
+          const status = getHistoryStatus(record)
+          return status.text === value
+        },
+        render: (_value: unknown, record: BillOfLading) => {
+          const status = getHistoryStatus(record)
+          return (
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bgColor} ${status.color}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${status.dotColor}`}></span>
+              {status.text}
+            </span>
+          )
+        },
+      }
+    }
+    // 历史订单不需要作废操作，只保留详情按钮
+    if (col.key === 'actions') {
+      return {
+        ...col,
+        render: (_value: unknown, record: BillOfLading) => (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/bookings/bill/${record.id}`)
+            }}
+            className="px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 rounded transition-colors"
+          >
+            详情
+          </button>
+        ),
+      }
+    }
+    return col
+  })
+
   // 根据标签页选择列定义
-  const columns = isVoidTab ? billColumns : isDraftTab ? draftColumns : billColumns
+  const columns = isVoidTab ? billColumns : isDraftTab ? draftColumns : isHistoryTab ? historyColumns : billColumns
   
   // 使用列设置 hook
   const {
@@ -926,6 +1001,7 @@ export default function OrderBills() {
         ]}
         tabs={[
           { label: '提单列表', path: '/bookings/bill' },
+          { label: '历史订单', path: '/bookings/bill/history' },
           { label: '草稿箱', path: '/bookings/bill/draft' },
           { label: '作废记录', path: '/bookings/bill/void' },
         ]}
@@ -942,7 +1018,7 @@ export default function OrderBills() {
         summary={
           <div className="flex items-center gap-3 text-sm">
             <span className="font-medium text-gray-700">
-              {isVoidTab ? '作废记录' : isDraftTab ? '草稿列表' : '提单列表'}: 
+              {isVoidTab ? '作废记录' : isDraftTab ? '草稿列表' : isHistoryTab ? '历史订单' : '提单列表'}: 
               <span className="ml-1 text-primary-600">{total}</span>
             </span>
             {billStats && (
@@ -975,17 +1051,36 @@ export default function OrderBills() {
         ) : displayBills.length === 0 ? (
           <EmptyState
             icon={<FileText className="w-12 h-12" />}
-            title={isDraftTab ? '暂无草稿' : isVoidTab ? '暂无作废记录' : '暂无提单数据'}
-            description={isDraftTab ? '创建提单时选择保存为草稿' : ''}
+            title={isDraftTab ? '暂无草稿' : isVoidTab ? '暂无作废记录' : isHistoryTab ? '暂无历史订单' : '暂无提单数据'}
+            description={isDraftTab ? '创建提单时选择保存为草稿' : (Object.values(tableFilters).some(arr => arr.length > 0) ? '当前筛选条件下没有匹配的数据' : '')}
+            action={Object.values(tableFilters).some(arr => arr.length > 0) ? (
+              <button
+                onClick={() => {
+                  // 清除当前标签页的筛选状态
+                  setAllTabFilters(prev => ({
+                    ...prev,
+                    [activeTabPath]: {}
+                  }))
+                  const searchParams = new URLSearchParams(location.search)
+                  searchParams.delete('filters')
+                  searchParams.delete('tab')
+                  const newUrl = `${location.pathname}${searchParams.toString() ? '?' + searchParams.toString() : ''}`
+                  navigate(newUrl, { replace: true })
+                }}
+                className="px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+              >
+                清除筛选条件
+              </button>
+            ) : undefined}
           />
         ) : (
           <DataTable
-            key={isDraftTab ? 'draft' : isVoidTab ? 'void' : 'bill'}
+            key={isDraftTab ? 'draft' : isVoidTab ? 'void' : isHistoryTab ? 'history' : 'bill'}
             columns={columns}
             data={displayBills}
             loading={loading}
             searchValue={searchValue}
-            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'orderNumber', 'companyName'] : ['orderNumber', 'billNumber', 'containerNumber', 'vessel']}
+            searchableColumns={isDraftTab ? ['billId', 'billNumber', 'orderNumber', 'companyName'] : ['orderNumber', 'billNumber', 'containerNumber', 'vessel', 'customerName']}
             visibleColumns={visibleColumns}
             compact={true}
             initialFilters={tableFilters}

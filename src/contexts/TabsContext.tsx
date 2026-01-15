@@ -30,8 +30,6 @@ const routeTitleMap: Record<string, string> = {
   // 首页
   '/': '首页',
   '/dashboard': '系统概览',
-  '/bp-view': 'BP View',
-  '/bp-view/history': 'BP View - 历史',
   // 订单管理
   '/bookings/labels': '订单管理 - 打单',
   '/bookings/labels/pure': '订单管理 - 纯标签',
@@ -40,6 +38,7 @@ const routeTitleMap: Record<string, string> = {
   '/bookings/labels/create-batch': '订单管理 - 批量创建标签',
   '/bookings/packages': '订单管理 - 打包',
   '/bookings/bill': '订单管理 - 提单',
+  '/bookings/bill/history': '订单管理 - 历史订单',
   '/bookings/bill/draft': '订单管理 - 提单草稿',
   '/bookings/bill/void': '订单管理 - 已作废提单',
   '/bookings/declarations': '订单管理 - 报关',
@@ -177,7 +176,6 @@ const moduleNameMap: Record<string, string> = {
   'tools': '工具',
   'help': '帮助中心',
   'system': '系统管理',
-  'bp-view': 'BP View',
   'hs': 'HS Code',
 }
 
