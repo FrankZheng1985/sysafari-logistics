@@ -621,7 +621,7 @@ export async function importData(data, options = {}) {
             bill_type, shipper, consignee, notify_party, description,
             transport_arrangement, container_return, full_container_transport, last_mile_transport, devanning,
             remark, ship_status, status, is_void, create_time,
-            imported_by, imported_by_name, import_time, updated_at
+            imported_by, imported_by_name, import_time, created_at, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
@@ -630,7 +630,7 @@ export async function importData(data, options = {}) {
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, 'pending', 0, COALESCE(?, TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS')),
-            ?, ?, NOW(), NOW()
+            ?, ?, NOW(), NOW(), NOW()
           )
         `).run(
           billId,                                            // 1 id
