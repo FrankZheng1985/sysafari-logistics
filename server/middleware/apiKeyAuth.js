@@ -257,10 +257,79 @@ export async function revokeApiKey(keyId) {
   return true
 }
 
+/**
+ * 权限检查中间件
+ * 检查API Key是否具有指定的权限
+ * @param {string|string[]} requiredPermissions - 需要的权限（单个或数组）
+ */
+export function requirePermission(requiredPermissions) {
+  const permissions = Array.isArray(requiredPermissions) ? requiredPermissions : [requiredPermissions]
+  
+  return (req, res, next) => {
+    // 检查是否为API请求
+    if (!req.user?.isApiRequest) {
+      return next() // 非API请求，跳过权限检查
+    }
+    
+    const userPermissions = req.user.permissions || []
+    
+    // 检查是否有admin权限（admin拥有所有权限）
+    if (userPermissions.includes('admin')) {
+      return next()
+    }
+    
+    // 检查是否有所需权限
+    const hasPermission = permissions.some(p => userPermissions.includes(p))
+    
+    if (!hasPermission) {
+      return res.status(403).json({
+        errCode: 403,
+        msg: `权限不足，需要 ${permissions.join(' 或 ')} 权限`,
+        data: null
+      })
+    }
+    
+    next()
+  }
+}
+
+/**
+ * 只读权限检查中间件
+ * 确保只读API Key不能执行写入操作
+ */
+export function requireWritePermission(req, res, next) {
+  // 检查是否为API请求
+  if (!req.user?.isApiRequest) {
+    return next() // 非API请求，跳过检查
+  }
+  
+  // 只读方法不需要写入权限
+  const readOnlyMethods = ['GET', 'HEAD', 'OPTIONS']
+  if (readOnlyMethods.includes(req.method)) {
+    return next()
+  }
+  
+  // 写入操作需要write或admin权限
+  const userPermissions = req.user.permissions || []
+  const hasWritePermission = userPermissions.some(p => ['write', 'sync', 'admin'].includes(p))
+  
+  if (!hasWritePermission) {
+    return res.status(403).json({
+      errCode: 403,
+      msg: '只读API Key不能执行写入操作',
+      data: null
+    })
+  }
+  
+  next()
+}
+
 export default {
   apiKeyAuth,
   optionalApiKeyAuth,
   generateApiKey,
   createApiKey,
-  revokeApiKey
+  revokeApiKey,
+  requirePermission,
+  requireWritePermission
 }
