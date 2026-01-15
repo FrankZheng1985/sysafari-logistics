@@ -96,33 +96,29 @@ export async function getOrders(req, res) {
       SELECT 
         b.id,
         b.bill_number,
-        b.mbl_number,
-        b.hbl_number,
+        b.order_number,
         b.container_number,
         b.status,
         b.delivery_status,
-        b.transport_mode,
+        b.transport_method,
         b.port_of_loading,
         b.port_of_discharge,
         b.etd,
         b.eta,
-        b.atd,
         b.ata,
         b.pieces,
         b.weight,
         b.volume,
-        b.cbm,
         b.description,
-        b.customer_id,
-        c.name as customer_name,
-        b.shipper_info,
-        b.consignee_info,
+        b.customer_name,
+        b.customer_code,
+        b.shipper,
+        b.consignee,
+        b.vessel,
+        b.voyage,
         b.created_at,
-        b.updated_at,
-        b.created_by,
-        b.assigned_to
+        b.updated_at
       FROM bills b
-      LEFT JOIN customers c ON b.customer_id = c.id
       WHERE ${whereClause}
       ORDER BY b.updated_at DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
@@ -135,27 +131,26 @@ export async function getOrders(req, res) {
     const formattedList = list.map(item => ({
       id: item.id,
       billNumber: item.bill_number,
-      mblNumber: item.mbl_number,
-      hblNumber: item.hbl_number,
+      orderNumber: item.order_number,
       containerNumber: item.container_number,
       status: item.status,
       deliveryStatus: item.delivery_status,
-      transportMode: item.transport_mode,
+      transportMethod: item.transport_method,
       portOfLoading: item.port_of_loading,
       portOfDischarge: item.port_of_discharge,
       etd: item.etd,
       eta: item.eta,
-      atd: item.atd,
       ata: item.ata,
       pieces: item.pieces,
       weight: item.weight,
       volume: item.volume,
-      cbm: item.cbm,
       description: item.description,
-      customerId: item.customer_id,
       customerName: item.customer_name,
-      shipperInfo: item.shipper_info ? JSON.parse(item.shipper_info) : null,
-      consigneeInfo: item.consignee_info ? JSON.parse(item.consignee_info) : null,
+      customerCode: item.customer_code,
+      shipper: item.shipper,
+      consignee: item.consignee,
+      vessel: item.vessel,
+      voyage: item.voyage,
       createdAt: item.created_at,
       updatedAt: item.updated_at
     }))
@@ -191,12 +186,32 @@ export async function getOrderDetail(req, res) {
     
     const order = await db.prepare(`
       SELECT 
-        b.*,
-        c.name as customer_name,
-        u.name as created_by_name
+        b.id,
+        b.bill_number,
+        b.order_number,
+        b.container_number,
+        b.status,
+        b.delivery_status,
+        b.transport_method,
+        b.port_of_loading,
+        b.port_of_discharge,
+        b.etd,
+        b.eta,
+        b.ata,
+        b.pieces,
+        b.weight,
+        b.volume,
+        b.description,
+        b.customer_name,
+        b.customer_code,
+        b.shipper,
+        b.consignee,
+        b.vessel,
+        b.voyage,
+        b.remark,
+        b.created_at,
+        b.updated_at
       FROM bills b
-      LEFT JOIN customers c ON b.customer_id = c.id
-      LEFT JOIN users u ON b.created_by = u.id
       WHERE b.id = $1
     `).get(id)
     
@@ -208,25 +223,10 @@ export async function getOrderDetail(req, res) {
       })
     }
     
-    // 获取费用信息
-    const fees = await db.prepare(`
-      SELECT * FROM bill_fees WHERE bill_id = $1
-    `).all(id)
-    
     res.json({
       errCode: 0,
       msg: 'success',
-      data: {
-        ...formatOrder(order),
-        fees: fees.map(f => ({
-          id: f.id,
-          feeType: f.fee_type,
-          feeName: f.fee_name,
-          amount: f.amount,
-          currency: f.currency,
-          direction: f.direction // receivable/payable
-        }))
-      }
+      data: formatOrder(order)
     })
   } catch (error) {
     console.error('获取订单详情失败:', error)
@@ -354,12 +354,22 @@ export async function getInvoices(req, res) {
     // 查询列表
     const listQuery = `
       SELECT 
-        i.*,
-        c.name as customer_name,
-        s.name as supplier_name
+        i.id,
+        i.invoice_number,
+        i.invoice_type,
+        i.status,
+        i.customer_id,
+        i.customer_name,
+        i.total_amount,
+        i.currency,
+        i.paid_amount,
+        i.due_date,
+        i.invoice_date,
+        i.bill_id,
+        i.bill_number,
+        i.created_at,
+        i.updated_at
       FROM invoices i
-      LEFT JOIN customers c ON i.customer_id = c.id
-      LEFT JOIN suppliers s ON i.supplier_id = s.id
       WHERE ${whereClause}
       ORDER BY i.created_at DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
@@ -379,14 +389,13 @@ export async function getInvoices(req, res) {
           status: item.status,
           customerId: item.customer_id,
           customerName: item.customer_name,
-          supplierId: item.supplier_id,
-          supplierName: item.supplier_name,
-          amount: parseFloat(item.amount || 0),
+          amount: parseFloat(item.total_amount || 0),
           currency: item.currency,
           paidAmount: parseFloat(item.paid_amount || 0),
           dueDate: item.due_date,
-          issueDate: item.issue_date,
-          billIds: item.bill_ids ? JSON.parse(item.bill_ids) : [],
+          invoiceDate: item.invoice_date,
+          billId: item.bill_id,
+          billNumber: item.bill_number,
           createdAt: item.created_at,
           updatedAt: item.updated_at
         })),
@@ -416,12 +425,24 @@ export async function getInvoiceDetail(req, res) {
     
     const invoice = await db.prepare(`
       SELECT 
-        i.*,
-        c.name as customer_name,
-        s.name as supplier_name
+        i.id,
+        i.invoice_number,
+        i.invoice_type,
+        i.status,
+        i.customer_id,
+        i.customer_name,
+        i.total_amount,
+        i.currency,
+        i.paid_amount,
+        i.due_date,
+        i.invoice_date,
+        i.bill_id,
+        i.bill_number,
+        i.items,
+        i.notes,
+        i.created_at,
+        i.updated_at
       FROM invoices i
-      LEFT JOIN customers c ON i.customer_id = c.id
-      LEFT JOIN suppliers s ON i.supplier_id = s.id
       WHERE i.id = $1
     `).get(id)
     
@@ -433,15 +454,15 @@ export async function getInvoiceDetail(req, res) {
       })
     }
     
-    // 获取发票明细
-    const items = await db.prepare(`
-      SELECT * FROM invoice_items WHERE invoice_id = $1
-    `).all(id)
-    
-    // 获取付款记录
-    const payments = await db.prepare(`
-      SELECT * FROM payments WHERE invoice_id = $1
-    `).all(id)
+    // 解析发票明细（存储在 items JSONB 字段中）
+    let items = []
+    if (invoice.items) {
+      try {
+        items = typeof invoice.items === 'string' ? JSON.parse(invoice.items) : invoice.items
+      } catch (e) {
+        items = []
+      }
+    }
     
     res.json({
       errCode: 0,
@@ -451,24 +472,17 @@ export async function getInvoiceDetail(req, res) {
         invoiceNumber: invoice.invoice_number,
         invoiceType: invoice.invoice_type,
         status: invoice.status,
+        customerId: invoice.customer_id,
         customerName: invoice.customer_name,
-        supplierName: invoice.supplier_name,
-        amount: parseFloat(invoice.amount || 0),
+        amount: parseFloat(invoice.total_amount || 0),
         currency: invoice.currency,
         paidAmount: parseFloat(invoice.paid_amount || 0),
-        items: items.map(i => ({
-          id: i.id,
-          description: i.description,
-          quantity: i.quantity,
-          unitPrice: parseFloat(i.unit_price || 0),
-          amount: parseFloat(i.amount || 0)
-        })),
-        payments: payments.map(p => ({
-          id: p.id,
-          amount: parseFloat(p.amount || 0),
-          paymentDate: p.payment_date,
-          paymentMethod: p.payment_method
-        })),
+        dueDate: invoice.due_date,
+        invoiceDate: invoice.invoice_date,
+        billId: invoice.bill_id,
+        billNumber: invoice.bill_number,
+        items: items,
+        notes: invoice.notes,
         createdAt: invoice.created_at,
         updatedAt: invoice.updated_at
       }
@@ -672,14 +686,14 @@ export async function getStats(req, res) {
     // 应收应付统计
     const arStats = await db.prepare(`
       SELECT 
-        COALESCE(SUM(amount - COALESCE(paid_amount, 0)), 0) as total
+        COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as total
       FROM invoices 
       WHERE invoice_type = 'receivable' AND status != 'paid'
     `).get()
     
     const apStats = await db.prepare(`
       SELECT 
-        COALESCE(SUM(amount - COALESCE(paid_amount, 0)), 0) as total
+        COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as total
       FROM invoices 
       WHERE invoice_type = 'payable' AND status != 'paid'
     `).get()
@@ -736,9 +750,9 @@ export async function getFinancialSummary(req, res) {
     const receivables = await db.prepare(`
       SELECT 
         COUNT(*) as count,
-        COALESCE(SUM(amount), 0) as total_amount,
+        COALESCE(SUM(total_amount), 0) as total_amount,
         COALESCE(SUM(paid_amount), 0) as paid_amount,
-        COALESCE(SUM(amount - COALESCE(paid_amount, 0)), 0) as outstanding
+        COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as outstanding
       FROM invoices
       WHERE invoice_type = 'receivable' ${dateFilter}
     `).get(...params)
@@ -747,9 +761,9 @@ export async function getFinancialSummary(req, res) {
     const payables = await db.prepare(`
       SELECT 
         COUNT(*) as count,
-        COALESCE(SUM(amount), 0) as total_amount,
+        COALESCE(SUM(total_amount), 0) as total_amount,
         COALESCE(SUM(paid_amount), 0) as paid_amount,
-        COALESCE(SUM(amount - COALESCE(paid_amount, 0)), 0) as outstanding
+        COALESCE(SUM(total_amount - COALESCE(paid_amount, 0)), 0) as outstanding
       FROM invoices
       WHERE invoice_type = 'payable' ${dateFilter}
     `).get(...params)
@@ -836,8 +850,8 @@ export async function getMonthlyStats(req, res) {
     const revenueStats = await db.prepare(`
       SELECT 
         TO_CHAR(created_at, 'YYYY-MM') as month,
-        COALESCE(SUM(CASE WHEN invoice_type = 'receivable' THEN amount ELSE 0 END), 0) as revenue,
-        COALESCE(SUM(CASE WHEN invoice_type = 'payable' THEN amount ELSE 0 END), 0) as cost
+        COALESCE(SUM(CASE WHEN invoice_type = 'receivable' THEN total_amount ELSE 0 END), 0) as revenue,
+        COALESCE(SUM(CASE WHEN invoice_type = 'payable' THEN total_amount ELSE 0 END), 0) as cost
       FROM invoices
       WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '${parseInt(months) - 1} months'
       GROUP BY TO_CHAR(created_at, 'YYYY-MM')
@@ -879,25 +893,27 @@ function formatOrder(order) {
   return {
     id: order.id,
     billNumber: order.bill_number,
-    mblNumber: order.mbl_number,
-    hblNumber: order.hbl_number,
+    orderNumber: order.order_number,
     containerNumber: order.container_number,
     status: order.status,
     deliveryStatus: order.delivery_status,
-    transportMode: order.transport_mode,
+    transportMethod: order.transport_method,
     portOfLoading: order.port_of_loading,
     portOfDischarge: order.port_of_discharge,
     etd: order.etd,
     eta: order.eta,
-    atd: order.atd,
     ata: order.ata,
     pieces: order.pieces,
     weight: order.weight,
     volume: order.volume,
-    cbm: order.cbm,
     description: order.description,
-    customerId: order.customer_id,
     customerName: order.customer_name,
+    customerCode: order.customer_code,
+    shipper: order.shipper,
+    consignee: order.consignee,
+    vessel: order.vessel,
+    voyage: order.voyage,
+    remark: order.remark,
     createdAt: order.created_at,
     updatedAt: order.updated_at
   }
