@@ -2556,9 +2556,11 @@ export async function parseInvoiceExcel(req, res) {
       const excelAmount = item.amount || 0
       let amountWarning = null
       let amountDiff = null
+      let uninvoicedAmount = null  // 🔥 未开金额（系统金额 - 导入金额）
       
       if (systemAmount !== null && excelAmount > 0) {
         amountDiff = excelAmount - systemAmount
+        uninvoicedAmount = systemAmount - excelAmount  // 🔥 计算未开金额
         if (excelAmount > systemAmount) {
           // Excel金额大于系统金额，需要警告
           amountWarning = `导入金额 ${excelAmount.toFixed(2)} 大于系统录入金额 ${systemAmount.toFixed(2)}，差额 ${amountDiff.toFixed(2)}`
@@ -2574,6 +2576,7 @@ export async function parseInvoiceExcel(req, res) {
         // 🔥 新增字段
         systemFeeId: matchedSystemFee?.id || null,
         systemAmount: systemAmount,
+        uninvoicedAmount: uninvoicedAmount,  // 🔥 未开金额
         isInvoiced: isInvoiced,
         invoiceNumber: matchedSystemFee?.invoiceNumber || null,
         amountDiff: amountDiff,

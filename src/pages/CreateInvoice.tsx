@@ -192,6 +192,7 @@ export default function CreateInvoice() {
       // 🔥 新增字段：后端返回的已开票状态和系统金额
       systemFeeId?: string      // 系统中匹配的费用ID
       systemAmount?: number     // 系统录入的金额
+      uninvoicedAmount?: number // 🔥 未开金额（系统金额 - 导入金额）
       isInvoiced?: boolean      // 是否已开票
       invoiceNumber?: string    // 发票号
       amountDiff?: number       // 金额差异
@@ -3560,6 +3561,7 @@ export default function CreateInvoice() {
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">集装箱号</th>
                     <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">导入金额</th>
                     <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">系统金额</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">未开金额</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">币种</th>
                     <th className="px-2 py-2 text-center text-xs font-medium text-gray-500">状态</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">备注</th>
@@ -3603,6 +3605,19 @@ export default function CreateInvoice() {
                       <td className="px-2 py-2 text-right text-gray-500 text-xs">
                         {item.systemAmount !== null && item.systemAmount !== undefined 
                           ? item.systemAmount.toFixed(2) 
+                          : '-'}
+                      </td>
+                      <td className={`px-2 py-2 text-right text-xs ${
+                        item.uninvoicedAmount !== null && item.uninvoicedAmount !== undefined
+                          ? item.uninvoicedAmount > 0 
+                            ? 'text-amber-600 font-medium' 
+                            : item.uninvoicedAmount < 0 
+                              ? 'text-red-600 font-medium'
+                              : 'text-green-600'
+                          : 'text-gray-400'
+                      }`}>
+                        {item.uninvoicedAmount !== null && item.uninvoicedAmount !== undefined 
+                          ? item.uninvoicedAmount.toFixed(2) 
                           : '-'}
                       </td>
                       <td className="px-2 py-2 text-gray-600">{item.currency || 'EUR'}</td>
@@ -3668,6 +3683,12 @@ export default function CreateInvoice() {
                       €{excelParseResult.data
                         .filter(item => item._selected !== false && !item.isInvoiced && !item.amountWarning)
                         .reduce((sum, item) => sum + (item.systemAmount || 0), 0)
+                        .toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2 text-right text-sm text-amber-600 font-medium">
+                      €{excelParseResult.data
+                        .filter(item => item._selected !== false && !item.isInvoiced && !item.amountWarning)
+                        .reduce((sum, item) => sum + (item.uninvoicedAmount || 0), 0)
                         .toFixed(2)}
                     </td>
                     <td className="px-2 py-2 text-gray-600">EUR</td>
