@@ -262,12 +262,6 @@ export function getRouteTitle(path: string): string {
 // Storage key
 const STORAGE_KEY = 'sysafari_tabs'
 
-// 已弃用的路由（这些路由已被移除或合并，需要自动清理）
-const DEPRECATED_ROUTES = [
-  '/bp-view',
-  '/bp-view/history',
-]
-
 // 首页标签
 const HOME_TAB: Tab = {
   key: '/',
@@ -395,25 +389,6 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       const saved = sessionStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved) as TabsState
-        
-        // 过滤掉已弃用的路由标签页
-        parsed.tabs = parsed.tabs.filter(tab => {
-          const isDeprecated = DEPRECATED_ROUTES.some(route => 
-            tab.key === route || tab.key.startsWith(route + '/')
-          )
-          if (isDeprecated) {
-            console.log(`[TabsContext] 移除已弃用的标签页: ${tab.key}`)
-          }
-          return !isDeprecated
-        })
-        
-        // 如果当前激活的标签页是已弃用的路由，切换到首页
-        if (DEPRECATED_ROUTES.some(route => 
-          parsed.activeKey === route || parsed.activeKey.startsWith(route + '/')
-        )) {
-          parsed.activeKey = '/'
-        }
-        
         // 确保首页标签存在且不可关闭
         const hasHome = parsed.tabs.some(tab => tab.key === '/')
         if (!hasHome) {

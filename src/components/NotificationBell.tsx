@@ -249,7 +249,7 @@ export default function NotificationBell() {
 
       {/* 下拉面板 */}
       {showDropdown && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50">
+        <div className="fixed right-4 top-14 lg:top-16 w-80 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-[100]">
           {/* 头部 */}
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
             <h3 className="text-sm font-medium text-gray-900">通知中心</h3>
