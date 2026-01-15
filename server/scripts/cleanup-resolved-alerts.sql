@@ -45,19 +45,21 @@ WHERE
     SELECT id::text FROM invoices WHERE status = 'paid'
   );
 
--- 3. 清理已完成订单的 "订单超期" 预警（order_overdue）
+-- 3. 清理已完成订单的 "订单超期未完结" 预警（order_overdue）
+-- 订单完成的判断：status 为 '已完成'/'已归档'（单据已完结）
 UPDATE alert_logs 
 SET 
   status = 'handled', 
   handled_by = '系统自动清理', 
   handled_at = NOW(), 
-  handle_remark = '订单已完成，系统自动清理历史预警'
+  handle_remark = '订单已完结，系统自动清理历史预警'
 WHERE 
   status = 'active' 
   AND alert_type = 'order_overdue' 
   AND related_type = 'order'
   AND related_id IN (
-    SELECT id::text FROM bills_of_lading WHERE status = 'completed'
+    SELECT id::text FROM bills_of_lading 
+    WHERE status IN ('已完成', '已归档', 'completed')
   );
 
 -- 4. 清理客户已无逾期的 "客户多笔逾期" 预警（customer_overdue）

@@ -38,19 +38,21 @@ async function cleanupResolvedAlerts() {
   console.log(`   ✅ 已清理 ${paidInvoiceAlerts.changes} 条发票相关预警`)
   totalCleaned += paidInvoiceAlerts.changes
   
-  // 2. 清理已完成订单的预警（订单超期）
+  // 2. 清理已完成订单的预警（订单超期未完结）
+  // 订单完成的判断：status 为 '已完成'/'已归档'（单据已完结）
   console.log('📋 检查已完成订单的预警...')
   const completedOrderAlerts = await db.prepare(`
     UPDATE alert_logs 
     SET status = 'handled', 
         handled_by = '系统自动清理', 
         handled_at = NOW(), 
-        handle_remark = '订单已完成，系统自动清理历史预警'
+        handle_remark = '订单已完结，系统自动清理历史预警'
     WHERE status = 'active'
       AND related_type = 'order'
       AND alert_type = 'order_overdue'
       AND related_id IN (
-        SELECT id::text FROM bills_of_lading WHERE status IN ('已完成', '已归档')
+        SELECT id::text FROM bills_of_lading 
+        WHERE status IN ('已完成', '已归档', 'completed')
       )
   `).run()
   

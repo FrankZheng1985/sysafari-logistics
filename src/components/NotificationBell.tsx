@@ -135,7 +135,7 @@ export default function NotificationBell() {
     } else if (message.related_type === 'alert') {
       navigate('/system/alerts')
     } else if (message.related_type === 'order') {
-      navigate(`/bill-details/${message.related_id}`)
+      navigate(`/bookings/bill/${message.related_id}`)
     } else if (message.related_type === 'invoice') {
       navigate(`/finance/invoices/${message.related_id}`)
     } else {

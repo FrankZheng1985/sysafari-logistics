@@ -290,7 +290,7 @@ export default function AlertDashboard() {
   // 查看关联业务
   const viewRelated = (alert: AlertLog) => {
     if (alert.related_type === 'order' && alert.related_id) {
-      navigate(`/bill-details/${alert.related_id}`)
+      navigate(`/bookings/bill/${alert.related_id}`)
     } else if (alert.related_type === 'invoice' && alert.related_id) {
       navigate(`/finance/invoices/${alert.related_id}`)
     } else if (alert.related_type === 'customer' && alert.related_id) {

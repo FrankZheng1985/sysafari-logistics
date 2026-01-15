@@ -418,11 +418,11 @@ export async function runMigrations() {
       const defaultRules = [
         {
           id: 'rule-order-overdue',
-          rule_name: '订单超期预警',
+          rule_name: '订单送达未完结预警',
           rule_type: 'order_overdue',
-          conditions: JSON.stringify({ days: 30 }),
+          conditions: JSON.stringify({ days: 10 }),
           alert_level: 'warning',
-          description: '订单创建超过30天未完成时发出预警'
+          description: '货物送达客户仓库后超过10天未完结单据时发出预警，便于财务及时出账'
         },
         {
           id: 'rule-payment-due',

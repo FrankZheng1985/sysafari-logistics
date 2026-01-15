@@ -8,19 +8,37 @@ import * as messageModel from '../modules/message/model.js'
 
 /**
  * 检查订单超期预警
- * 订单创建超过指定天数未完成
+ * 货物送达客户仓库后超过指定天数未完结单据
+ * 
+ * 业务背景：防止订单已送达客户仓库，但运营人员没有及时点击完成，
+ * 导致财务无法出账单
+ * 
+ * @param {number} days - 送达后超过多少天未完成触发预警，默认10天
  */
-export async function checkOrderOverdue(days = 30) {
+export async function checkOrderOverdue(days = 10) {
   const db = getDatabase()
   
   try {
-    // 查找超期未完成的订单
+    // 查找已送达但未完结的订单
+    // 条件：
+    // 1. 派送状态为"已派送"或"已送达"（表示货物已送到客户仓库）
+    // 2. 订单状态不是"已完成"或"已归档"（表示单据未完结）
+    // 3. 送达时间超过指定天数（使用卸货完成时间或实际到达时间）
     const overdueOrders = await db.prepare(`
-      SELECT id, bill_number, customer_name, created_at
+      SELECT 
+        id, 
+        bill_number, 
+        customer_name, 
+        delivery_status,
+        cmr_unloading_complete_time,
+        cmr_actual_arrival_time,
+        COALESCE(cmr_unloading_complete_time, cmr_actual_arrival_time)::timestamp as delivered_at
       FROM bills_of_lading
-      WHERE status != 'completed' 
+      WHERE delivery_status IN ('已派送', '已送达')
+        AND status NOT IN ('已完成', '已归档', 'completed')
         AND is_void = 0
-        AND created_at < NOW() - INTERVAL '${days} days'
+        AND COALESCE(cmr_unloading_complete_time, cmr_actual_arrival_time) IS NOT NULL
+        AND COALESCE(cmr_unloading_complete_time, cmr_actual_arrival_time)::timestamp < NOW() - INTERVAL '${days} days'
         AND id NOT IN (
           SELECT related_id FROM alert_logs 
           WHERE alert_type = 'order_overdue' 
@@ -31,13 +49,18 @@ export async function checkOrderOverdue(days = 30) {
     
     const alerts = []
     for (const order of overdueOrders) {
+      const deliveredDate = order.delivered_at ? new Date(order.delivered_at).toLocaleDateString() : '-'
+      const daysSinceDelivery = order.delivered_at 
+        ? Math.floor((Date.now() - new Date(order.delivered_at).getTime()) / (1000 * 60 * 60 * 24))
+        : days
+      
       const alert = {
         ruleId: 'rule-order-overdue',
-        ruleName: '订单超期预警',
+        ruleName: '订单超期未完结',
         alertType: 'order_overdue',
-        alertLevel: 'warning',
-        title: `订单 ${order.bill_number} 超期未完成`,
-        content: `订单 ${order.bill_number} (客户: ${order.customer_name || '-'}) 创建于 ${new Date(order.created_at).toLocaleDateString()}，已超过 ${days} 天未完成。`,
+        alertLevel: daysSinceDelivery > 15 ? 'danger' : 'warning',  // 超过15天升级为危险
+        title: `订单 ${order.bill_number} 送达后未完结`,
+        content: `订单 ${order.bill_number} (客户: ${order.customer_name || '-'}) 已于 ${deliveredDate} 送达客户仓库，距今 ${daysSinceDelivery} 天，请及时完结单据以便财务出账。`,
         relatedType: 'order',
         relatedId: order.id
       }
