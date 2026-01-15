@@ -5203,6 +5203,7 @@ export interface OrderTrendItem {
   orderCount: number
   totalWeight: number
   totalVolume: number
+  totalPieces: number
 }
 
 /**

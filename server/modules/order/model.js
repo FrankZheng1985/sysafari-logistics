@@ -911,7 +911,8 @@ export async function getOrderTrend(dimension = 'month', limit = null) {
         TO_CHAR(create_time::date, 'MM') as month,
         COUNT(*) as order_count,
         COALESCE(SUM(weight), 0) as total_weight,
-        COALESCE(SUM(volume), 0) as total_volume
+        COALESCE(SUM(volume), 0) as total_volume,
+        COALESCE(SUM(pieces), 0) as total_pieces
       FROM bills_of_lading
       WHERE is_void = 0
         AND create_time IS NOT NULL
@@ -928,7 +929,8 @@ export async function getOrderTrend(dimension = 'month', limit = null) {
         TO_CHAR(customs_release_time::timestamp, 'MM') as month,
         COUNT(*) as order_count,
         COALESCE(SUM(weight), 0) as total_weight,
-        COALESCE(SUM(volume), 0) as total_volume
+        COALESCE(SUM(volume), 0) as total_volume,
+        COALESCE(SUM(pieces), 0) as total_pieces
       FROM bills_of_lading
       WHERE is_void = 0
         AND customs_release_time IS NOT NULL
@@ -945,7 +947,8 @@ export async function getOrderTrend(dimension = 'month', limit = null) {
         '00' as month,
         COUNT(*) as order_count,
         COALESCE(SUM(weight), 0) as total_weight,
-        COALESCE(SUM(volume), 0) as total_volume
+        COALESCE(SUM(volume), 0) as total_volume,
+        COALESCE(SUM(pieces), 0) as total_pieces
       FROM bills_of_lading
       WHERE is_void = 0
         AND create_time IS NOT NULL
@@ -962,7 +965,8 @@ export async function getOrderTrend(dimension = 'month', limit = null) {
         '00' as month,
         COUNT(*) as order_count,
         COALESCE(SUM(weight), 0) as total_weight,
-        COALESCE(SUM(volume), 0) as total_volume
+        COALESCE(SUM(volume), 0) as total_volume,
+        COALESCE(SUM(pieces), 0) as total_pieces
       FROM bills_of_lading
       WHERE is_void = 0
         AND customs_release_time IS NOT NULL
@@ -988,7 +992,8 @@ export async function getOrderTrend(dimension = 'month', limit = null) {
       : `${row.year}年`,
     orderCount: Number(row.order_count || 0),
     totalWeight: Number(row.total_weight || 0),
-    totalVolume: Number(row.total_volume || 0)
+    totalVolume: Number(row.total_volume || 0),
+    totalPieces: Number(row.total_pieces || 0)
   }))
   
   let createdData = formatData(createdRows)

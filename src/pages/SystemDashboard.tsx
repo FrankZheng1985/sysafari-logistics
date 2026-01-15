@@ -636,19 +636,31 @@ export default function SystemDashboard() {
                 const totalOrders = currentData.reduce((sum, d) => sum + d.orderCount, 0)
                 const totalWeight = currentData.reduce((sum, d) => sum + d.totalWeight, 0)
                 const totalVolume = currentData.reduce((sum, d) => sum + d.totalVolume, 0)
+                const totalPieces = currentData.reduce((sum, d) => sum + (d.totalPieces || 0), 0)
                 
                 return (
-                  <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4 pt-4 border-t border-gray-100">
                     <div className={`rounded-lg p-3 text-center ${trendDateType === 'created' ? 'bg-blue-50' : 'bg-green-50'}`}>
-                      <div className={`text-xl font-bold ${trendDateType === 'created' ? 'text-blue-700' : 'text-green-700'}`}>
+                      <div className={`text-lg sm:text-xl font-bold ${trendDateType === 'created' ? 'text-blue-700' : 'text-green-700'}`}>
                         {totalOrders.toLocaleString()}
                       </div>
                       <div className="text-xs text-gray-500">
                         {trendDimension === 'month' ? '近12月订单' : '近5年订单'}
                       </div>
                     </div>
+                    <div className="bg-cyan-50 rounded-lg p-3 text-center">
+                      <div className="text-lg sm:text-xl font-bold text-cyan-700">
+                        {totalPieces >= 1000000 
+                          ? `${(totalPieces / 1000000).toFixed(1)}M` 
+                          : totalPieces >= 1000 
+                            ? `${(totalPieces / 1000).toFixed(1)}K`
+                            : totalPieces.toLocaleString()
+                        }
+                      </div>
+                      <div className="text-xs text-gray-500">累计件数 (pcs)</div>
+                    </div>
                     <div className="bg-orange-50 rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold text-orange-700">
+                      <div className="text-lg sm:text-xl font-bold text-orange-700">
                         {totalWeight >= 1000000 
                           ? `${(totalWeight / 1000000).toFixed(1)}M` 
                           : totalWeight >= 1000 
@@ -659,7 +671,7 @@ export default function SystemDashboard() {
                       <div className="text-xs text-gray-500">累计重量 (kg)</div>
                     </div>
                     <div className="bg-purple-50 rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold text-purple-700">
+                      <div className="text-lg sm:text-xl font-bold text-purple-700">
                         {totalVolume >= 10000 
                           ? `${(totalVolume / 1000).toFixed(1)}K` 
                           : totalVolume.toFixed(1)
