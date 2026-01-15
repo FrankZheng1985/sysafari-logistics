@@ -164,7 +164,9 @@ async function main() {
   }
 }
 
-main().catch(err => {
+main().then(() => {
+  process.exit(0)
+}).catch(err => {
   console.error('执行失败:', err)
   closeDatabase()
   process.exit(1)

@@ -77,7 +77,9 @@ async function migrate() {
   }
 }
 
-migrate().catch(err => {
+migrate().then(() => {
+  process.exit(0)
+}).catch(err => {
   console.error('执行失败:', err)
   process.exit(1)
 })
