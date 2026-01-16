@@ -2047,6 +2047,85 @@ export async function reprocessSingleImage(imagePath, options = {}) {
   }
 }
 
+/**
+ * 根据提单号获取货物明细列表
+ * 用于查验管理查看关联的货物数据
+ */
+export async function getCargoItemsByBillNumber(billNumber) {
+  const db = getDatabase()
+  
+  // 先找到该提单号对应的导入批次
+  const imports = await db.prepare(`
+    SELECT id, import_no, container_no, customer_name, total_items, status, created_at
+    FROM cargo_imports 
+    WHERE bill_number = $1
+    ORDER BY created_at DESC
+  `).all(billNumber)
+  
+  if (!imports || imports.length === 0) {
+    return { list: [], total: 0, imports: [] }
+  }
+  
+  // 获取所有导入批次的货物明细
+  const importIds = imports.map(i => i.id)
+  const placeholders = importIds.map((_, i) => `$${i + 1}`).join(',')
+  
+  const rows = await db.prepare(`
+    SELECT * FROM cargo_items 
+    WHERE import_id IN (${placeholders})
+    ORDER BY import_id, item_no ASC
+  `).all(...importIds)
+  
+  const list = (rows || []).map(row => ({
+    id: row.id,
+    importId: row.import_id,
+    itemNo: row.item_no,
+    productName: row.product_name,
+    productNameEn: row.product_name_en,
+    customerHsCode: row.customer_hs_code,
+    matchedHsCode: row.matched_hs_code,
+    matchConfidence: parseFloat(row.match_confidence) || 0,
+    matchSource: row.match_source,
+    quantity: parseFloat(row.quantity) || 0,
+    unitCode: row.unit_code,
+    unitName: row.unit_name,
+    unitPrice: parseFloat(row.unit_price) || 0,
+    totalValue: parseFloat(row.total_value) || 0,
+    grossWeight: parseFloat(row.gross_weight) || 0,
+    netWeight: parseFloat(row.net_weight) || 0,
+    originCountry: row.origin_country,
+    material: row.material,
+    productImage: row.product_image || null,
+    customerOrderNo: row.customer_order_no || null,
+    dutyRate: parseFloat(row.duty_rate) || 0,
+    vatRate: parseFloat(row.vat_rate) || 19,
+    antiDumpingRate: parseFloat(row.anti_dumping_rate) || 0,
+    countervailingRate: parseFloat(row.countervailing_rate) || 0,
+    dutyAmount: parseFloat(row.duty_amount) || 0,
+    vatAmount: parseFloat(row.vat_amount) || 0,
+    otherTaxAmount: parseFloat(row.other_tax_amount) || 0,
+    totalTax: parseFloat(row.total_tax) || 0,
+    matchStatus: row.match_status,
+    reviewNote: row.review_note,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at
+  }))
+  
+  return {
+    list,
+    total: list.length,
+    imports: imports.map(i => ({
+      id: i.id,
+      importNo: i.import_no,
+      containerNo: i.container_no,
+      customerName: i.customer_name,
+      totalItems: i.total_items,
+      status: i.status,
+      createdAt: i.created_at
+    }))
+  }
+}
+
 export default {
   generateImportNo,
   parseCSVContent,
@@ -2062,6 +2141,7 @@ export default {
   getImportList,
   getImportById,
   getCargoItems,
+  getCargoItemsByBillNumber,
   deleteImportBatch,
   updateImportStatus,
   updateImportStats,

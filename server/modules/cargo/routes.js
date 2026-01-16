@@ -53,6 +53,9 @@ router.get('/documents/imports/:id', controller.getImportById)
 // 获取货物明细
 router.get('/documents/imports/:id/items', controller.getImportItems)
 
+// 根据提单号获取货物明细（用于查验管理）
+router.get('/documents/cargo-items/by-bill/:billNumber', controller.getCargoItemsByBill)
+
 // Multer 错误处理中间件
 const handleMulterError = (err, req, res, next) => {
   if (err) {
@@ -293,6 +296,9 @@ router.get('/inspection-products/check', controller.checkInspectionProductCtrl)
 
 // 创建查验产品
 router.post('/inspection-products', controller.createInspectionProductCtrl)
+
+// 获取查验产品详情（包含历史记录和统计）
+router.get('/inspection-products/:id/detail', controller.getInspectionProductDetailCtrl)
 
 // 更新查验产品
 router.put('/inspection-products/:id', controller.updateInspectionProductCtrl)

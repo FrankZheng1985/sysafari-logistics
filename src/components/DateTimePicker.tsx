@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronsLeft, ChevronRight, ChevronsRight, X, Clock } from 'lucide-react'
 
 interface DateTimePickerProps {
@@ -29,6 +30,28 @@ export default function DateTimePicker({
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popupRef = useRef<HTMLDivElement>(null)
+  
+  // 弹出框位置
+  const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0, openUpward: false })
+
+  // 计算弹出框位置
+  const calculatePosition = useCallback(() => {
+    if (!triggerRef.current) return
+    
+    const rect = triggerRef.current.getBoundingClientRect()
+    const popupHeight = 400 // 预估弹出框高度
+    const viewportHeight = window.innerHeight
+    
+    // 判断是否需要向上弹出（当下方空间不足时）
+    const spaceBelow = viewportHeight - rect.bottom
+    const openUpward = spaceBelow < popupHeight && rect.top > popupHeight
+    
+    setPopupPosition({
+      top: openUpward ? rect.top - popupHeight : rect.bottom + 4,
+      left: rect.left,
+      openUpward
+    })
+  }, [])
 
   // 解析初始值
   useEffect(() => {
@@ -114,6 +137,19 @@ export default function DateTimePicker({
       return () => document.removeEventListener('keydown', handleEsc)
     }
   }, [isOpen])
+
+  // 打开时计算位置，窗口大小变化时重新计算
+  useEffect(() => {
+    if (isOpen) {
+      calculatePosition()
+      window.addEventListener('resize', calculatePosition)
+      window.addEventListener('scroll', calculatePosition, true)
+      return () => {
+        window.removeEventListener('resize', calculatePosition)
+        window.removeEventListener('scroll', calculatePosition, true)
+      }
+    }
+  }, [isOpen, calculatePosition])
 
   // 获取月份的日期
   const getMonthDates = () => {
@@ -254,11 +290,15 @@ export default function DateTimePicker({
         <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
       </button>
 
-      {/* 日期时间选择器弹窗 */}
-      {isOpen && (
+      {/* 日期时间选择器弹窗 - 使用 Portal 渲染到 body 外避免被父容器截断 */}
+      {isOpen && createPortal(
         <div 
           ref={popupRef}
-          className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-[9999] w-72"
+          className="fixed bg-white border border-gray-300 rounded-lg shadow-lg z-[9999] w-72"
+          style={{
+            top: popupPosition.top,
+            left: popupPosition.left
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* 弹窗头部 */}
@@ -430,7 +470,8 @@ export default function DateTimePicker({
               确定
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

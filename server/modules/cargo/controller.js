@@ -97,6 +97,23 @@ export async function getImportItems(req, res) {
 }
 
 /**
+ * 根据提单号获取货物明细（用于查验管理）
+ */
+export async function getCargoItemsByBill(req, res) {
+  try {
+    const { billNumber } = req.params
+    if (!billNumber) {
+      return badRequest(res, '缺少提单号参数')
+    }
+    const result = await importer.getCargoItemsByBillNumber(billNumber)
+    return success(res, result)
+  } catch (error) {
+    console.error('根据提单号获取货物明细失败:', error)
+    return serverError(res, '获取货物明细失败')
+  }
+}
+
+/**
  * 上传导入文件
  */
 export async function createImport(req, res) {
@@ -2081,6 +2098,25 @@ export async function deleteInspectionProductCtrl(req, res) {
   }
 }
 
+/**
+ * 获取查验产品详情（包含历史查验记录和统计）
+ */
+export async function getInspectionProductDetailCtrl(req, res) {
+  console.log('[Controller] 获取查验产品详情, ID:', req.params.id)
+  try {
+    const { id } = req.params
+    const result = await sensitiveProducts.getInspectionProductDetail(parseInt(id))
+    if (!result) {
+      return notFound(res, '查验产品不存在')
+    }
+    console.log('[Controller] 查验产品详情结果: 历史记录数:', result.historyRecords?.length)
+    return success(res, result)
+  } catch (error) {
+    console.error('获取查验产品详情失败:', error)
+    return serverError(res, '获取查验产品详情失败')
+  }
+}
+
 // ==================== 综合产品风险检测 ====================
 
 /**
@@ -2491,6 +2527,7 @@ export default {
   
   // 查验产品库
   getInspectionProductsCtrl,
+  getInspectionProductDetailCtrl,
   checkInspectionProductCtrl,
   createInspectionProductCtrl,
   updateInspectionProductCtrl,

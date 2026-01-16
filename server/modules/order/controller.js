@@ -11,6 +11,8 @@ import * as financeModel from '../finance/model.js'
 import { recognizeTransportDocument, checkOcrConfig } from '../ocr/tencentOcrService.js'
 import { parseTransportDocument, detectTransportType } from '../ocr/documentParser.js'
 import { triggerOrderStatusWebhook } from '../open-api/webhookService.js'
+import * as sensitiveProductAlert from '../cargo/sensitiveProductAlert.js'
+import * as sensitiveProducts from '../cargo/sensitiveProducts.js'
 
 // ==================== 提单文件解析 ====================
 
@@ -768,7 +770,7 @@ export async function updateCustomsStatus(req, res) {
 export async function updateInspection(req, res) {
   try {
     const { id } = req.params
-    const { inspection, ...rest } = req.body
+    const { inspection, inspectionDetail, ...rest } = req.body
     
     if (!inspection) {
       return badRequest(res, '查验状态为必填项')
@@ -780,7 +782,7 @@ export async function updateInspection(req, res) {
     }
     
     const oldStatus = existing.inspection
-    const updated = await model.updateBillInspection(id, { inspection, ...rest })
+    const updated = await model.updateBillInspection(id, { inspection, inspectionDetail, ...rest })
     
     if (!updated) {
       return serverError(res, '更新失败')
@@ -797,6 +799,51 @@ export async function updateInspection(req, res) {
       operatorId: req.user?.id,
       module: 'inspection'
     })
+    
+    // 当保存查验货物信息时，检查是否需要添加到查验产品库
+    if (inspectionDetail) {
+      try {
+        let items = []
+        if (typeof inspectionDetail === 'string') {
+          items = JSON.parse(inspectionDetail)
+        } else if (Array.isArray(inspectionDetail)) {
+          items = inspectionDetail
+        } else if (inspectionDetail.items) {
+          items = inspectionDetail.items
+        }
+        
+        if (items && items.length > 0) {
+          // 检查哪些产品不在敏感产品库中
+          const checkResult = await sensitiveProductAlert.checkInspectionItemsAgainstSensitiveProducts(items)
+          
+          // 如果有新产品，自动添加到查验产品库（因为已经被查验，说明需要关注）
+          if (checkResult.hasNewProducts && checkResult.newItems.length > 0) {
+            console.log(`[查验产品自动添加] 发现 ${checkResult.newItems.length} 个新产品，自动添加到查验产品库`)
+            
+            for (const item of checkResult.newItems) {
+              try {
+                await sensitiveProducts.createInspectionProduct({
+                  productName: item.productName,
+                  hsCode: item.hsCode || '',
+                  dutyRate: 0,
+                  inspectionRate: 100, // 因为是查验发现的，设置100%查验率
+                  riskLevel: 'high', // 默认高风险
+                  riskNotes: `来源：查验发现，提单号 ${existing.billNumber}${item.material ? '，材质：' + item.material : ''}`,
+                  createdBy: req.user?.id || null
+                })
+                console.log(`[查验产品自动添加] 成功添加: ${item.productName} (${item.hsCode})`)
+              } catch (addError) {
+                // 如果添加失败（比如已存在），忽略错误继续
+                console.warn(`[查验产品自动添加] 添加失败（可能已存在）: ${item.productName}`, addError.message)
+              }
+            }
+          }
+        }
+      } catch (checkError) {
+        // 检查敏感产品失败不影响主流程
+        console.error('[查验产品检查] 检查失败:', checkError)
+      }
+    }
     
     const updatedBill = await model.getBillById(id)
     return success(res, updatedBill, '更新成功')

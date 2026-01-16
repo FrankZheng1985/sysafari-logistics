@@ -984,6 +984,86 @@ export async function getBillById(id: string): Promise<ApiResponse<BillOfLading>
   }
 }
 
+// 货物明细项接口
+export interface CargoItem {
+  id: number
+  importId: number
+  itemNo: number
+  productName: string
+  productNameEn?: string
+  customerHsCode?: string
+  matchedHsCode?: string
+  matchConfidence: number
+  matchSource?: string
+  quantity: number
+  unitCode?: string
+  unitName?: string
+  unitPrice: number
+  totalValue: number
+  grossWeight: number
+  netWeight: number
+  originCountry?: string
+  material?: string
+  productImage?: string | null
+  customerOrderNo?: string | null
+  dutyRate: number
+  vatRate: number
+  antiDumpingRate: number
+  countervailingRate: number
+  dutyAmount: number
+  vatAmount: number
+  otherTaxAmount: number
+  totalTax: number
+  matchStatus?: string
+  reviewNote?: string
+  reviewedBy?: string
+  reviewedAt?: string
+}
+
+// 货物导入批次接口
+export interface CargoImportBatch {
+  id: number
+  importNo: string
+  containerNo: string
+  customerName: string
+  totalItems: number
+  status: string
+  createdAt: string
+}
+
+// 根据提单号获取货物明细的响应
+export interface CargoItemsByBillResponse {
+  list: CargoItem[]
+  total: number
+  imports: CargoImportBatch[]
+}
+
+/**
+ * 根据提单号获取货物明细（用于查验管理）
+ * @param billNumber 提单号
+ * @returns 货物明细列表
+ * 
+ * 接口地址: GET /api/cargo/documents/cargo-items/by-bill/:billNumber
+ */
+export async function getCargoItemsByBillNumber(billNumber: string): Promise<ApiResponse<CargoItemsByBillResponse>> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/cargo/documents/cargo-items/by-bill/${encodeURIComponent(billNumber)}`)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    return await response.json()
+  } catch (error) {
+    console.error('根据提单号获取货物明细失败:', error)
+    return {
+      errCode: 500,
+      msg: '获取货物明细失败',
+      data: { list: [], total: 0, imports: [] }
+    }
+  }
+}
+
 // 操作日志接口
 export interface OperationLog {
   id: number

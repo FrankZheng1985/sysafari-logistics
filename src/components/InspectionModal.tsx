@@ -90,9 +90,14 @@ export default function InspectionModal({
       }
     }
     
-    // 根据当前状态设置初始步骤
+    // 根据当前状态和已有数据设置初始步骤
     if (currentStatus === '待查验') {
-      setStep('items')
+      // 如果已有货物数据，进入第二步；否则进入第一步
+      if (inspectionDetail?.items && inspectionDetail.items.length > 0) {
+        setStep('schedule')
+      } else {
+        setStep('items')
+      }
     } else if (currentStatus === '查验中') {
       setStep('result')
     } else if (currentStatus === '已查验') {
@@ -145,19 +150,19 @@ export default function InspectionModal({
     }
   }
 
-  // 获取下一步操作
+  // 获取下一步操作 - 每个步骤都独立确认保存
   const getNextAction = () => {
     switch (step) {
-      case 'items': return { label: '下一步', nextStep: 'schedule' as const }
-      case 'schedule': return { label: '开始查验', nextStep: null, status: '查验中' }
-      case 'result': return { label: '提交结果', nextStep: null, status: result === 'second_inspection' ? '待查验' : '已查验' }
-      case 'release': return { label: '查验放行', nextStep: null, status: '查验放行' }
-      case 'confirm': return { label: '确认放行', nextStep: null, status: '已放行' }
+      case 'items': return { label: '保存货物', status: '待查验' }  // 第一步：保存货物信息
+      case 'schedule': return { label: '开始查验', status: '查验中' }  // 第二步：开始查验
+      case 'result': return { label: '提交结果', status: result === 'second_inspection' ? '待查验' : '已查验' }
+      case 'release': return { label: '查验放行', status: '查验放行' }
+      case 'confirm': return { label: '确认放行', status: '已放行' }
       default: return null
     }
   }
 
-  // 处理提交
+  // 处理提交 - 每个步骤都独立保存
   const handleSubmit = async () => {
     const action = getNextAction()
     if (!action) return
@@ -186,18 +191,13 @@ export default function InspectionModal({
       return
     }
 
-    // 如果是下一步，直接切换
-    if (action.nextStep) {
-      setStep(action.nextStep)
-      return
-    }
-
-    // 提交到服务器
+    // 每个步骤都独立提交到服务器
     setLoading(true)
     try {
       const detail: InspectionDetail = {
+        // 保存当前和之前步骤的所有数据
         items: items.filter(item => item.hsCode.trim() && item.productName.trim()),
-        estimatedTime,
+        estimatedTime: step === 'schedule' ? estimatedTime : inspectionDetail?.estimatedTime,
         actualStartTime: step === 'schedule' ? new Date().toISOString() : inspectionDetail?.actualStartTime,
         actualEndTime: step === 'result' ? new Date().toISOString() : inspectionDetail?.actualEndTime,
         result: step === 'result' ? result : inspectionDetail?.result,
@@ -207,7 +207,7 @@ export default function InspectionModal({
       }
 
       await onSubmit({
-        status: action.status!,
+        status: action.status,
         detail,
       })
       onClose()
@@ -528,7 +528,7 @@ export default function InspectionModal({
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer - 每个步骤独立确认，无上一步 */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
           <button
             onClick={onClose}
@@ -537,29 +537,13 @@ export default function InspectionModal({
             取消
           </button>
           
-          <div className="flex items-center gap-2">
-            {step !== 'items' && (
-              <button
-                onClick={() => {
-                  const steps: Array<'items' | 'schedule' | 'result' | 'release' | 'confirm'> = ['items', 'schedule', 'result', 'release', 'confirm']
-                  const currentIndex = steps.indexOf(step)
-                  if (currentIndex > 0) {
-                    setStep(steps[currentIndex - 1])
-                  }
-                }}
-                className="px-2 py-1 text-xs text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
-              >
-                上一步
-              </button>
-            )}
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="px-2 py-1 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? '处理中...' : getNextAction()?.label}
-            </button>
-          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="px-3 py-1.5 text-xs text-white bg-primary-600 rounded hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? '处理中...' : getNextAction()?.label}
+          </button>
         </div>
       </div>
     </div>

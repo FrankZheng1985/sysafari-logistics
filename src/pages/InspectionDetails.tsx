@@ -144,6 +144,40 @@ export default function InspectionDetails() {
 
   const columns: Column<BillOfLading>[] = [
     {
+      key: 'orderNumber',
+      label: '订单号',
+      width: 100,
+      sorter: true,
+      filterable: true,
+      render: (_value, record: BillOfLading) => (
+        <div className="flex items-center gap-1">
+          {record.orderNumber ? (
+            <>
+              <span
+                className="text-blue-600 hover:underline cursor-pointer text-xs font-medium"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  // 跳转到订单详情
+                  navigate(`/orders/${record.orderNumber}`)
+                }}
+              >
+                {record.orderNumber}
+              </span>
+              <button
+                onClick={(e) => copyToClipboard(record.orderNumber || '', e)}
+                className="text-gray-400 hover:text-gray-600"
+                title="复制订单号"
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+            </>
+          ) : (
+            <span className="text-xs text-gray-400">-</span>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'billNumber',
       label: '提单号',
       sorter: true,

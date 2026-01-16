@@ -16,10 +16,13 @@ import {
   downloadBillFile, 
   deleteBillFile,
   updateBillInspection,
+  getCargoItemsByBillNumber,
   type BillOfLading,
   type OperationLog,
   type BillFile,
-  type InspectionDetailData
+  type InspectionDetailData,
+  type CargoItem,
+  type CargoImportBatch
 } from '../utils/api'
 
 export default function InspectionBillDetails() {
@@ -41,6 +44,11 @@ export default function InspectionBillDetails() {
   
   // 查验模态框
   const [inspectionModalVisible, setInspectionModalVisible] = useState(false)
+  
+  // 导入的货物数据
+  const [cargoItems, setCargoItems] = useState<CargoItem[]>([])
+  const [cargoImports, setCargoImports] = useState<CargoImportBatch[]>([])
+  const [loadingCargo, setLoadingCargo] = useState(false)
   
   // 加载提单详情
   useEffect(() => {
@@ -95,12 +103,37 @@ export default function InspectionBillDetails() {
       console.error('加载文件列表失败:', err)
     }
   }
+  
+  // 加载导入的货物数据
+  const loadCargoItems = async () => {
+    if (!billDetail?.billNumber) return
+    setLoadingCargo(true)
+    try {
+      const response = await getCargoItemsByBillNumber(billDetail.billNumber)
+      if (response.errCode === 200 && response.data) {
+        setCargoItems(response.data.list || [])
+        setCargoImports(response.data.imports || [])
+      }
+    } catch (err) {
+      console.error('加载货物数据失败:', err)
+    } finally {
+      setLoadingCargo(false)
+    }
+  }
 
   useEffect(() => {
     loadOperationLogs()
     loadBillFiles()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+  
+  // 当提单详情加载完成后，加载货物数据
+  useEffect(() => {
+    if (billDetail?.billNumber) {
+      loadCargoItems()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billDetail?.billNumber])
   
   // 文件上传处理
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -354,6 +387,19 @@ export default function InspectionBillDetails() {
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
+                  <label className="block text-[10px] text-gray-500 mb-0.5">订单号</label>
+                  {billDetail.orderNumber ? (
+                    <p 
+                      className="text-xs font-medium text-blue-600 hover:underline cursor-pointer"
+                      onClick={() => navigate(`/orders/${billDetail.orderNumber}`)}
+                    >
+                      {billDetail.orderNumber}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400">-</p>
+                  )}
+                </div>
+                <div>
                   <label className="block text-[10px] text-gray-500 mb-0.5">提单号</label>
                   <p className="text-xs font-medium text-gray-900 font-mono">{billDetail.billNumber}</p>
                 </div>
@@ -483,6 +529,103 @@ export default function InspectionBillDetails() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+            
+            {/* 单证导入货物数据 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-3 h-3 text-green-600" />
+                  导入货物数据 ({cargoItems.length})
+                </h3>
+                {cargoImports.length > 0 && (
+                  <span className="text-[10px] text-gray-500">
+                    来自 {cargoImports.length} 个导入批次
+                  </span>
+                )}
+              </div>
+              {loadingCargo ? (
+                <div className="flex items-center justify-center py-6 text-gray-400 text-xs">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  加载中...
+                </div>
+              ) : cargoItems.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 text-xs">
+                  暂无导入货物数据
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 w-8">#</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-600">品名</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 w-24">HS Code</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-600 w-16">材质</th>
+                        <th className="text-center py-2 px-2 font-medium text-gray-600 w-14">数量</th>
+                        <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">单价</th>
+                        <th className="text-right py-2 px-2 font-medium text-gray-600 w-20">总金额</th>
+                        <th className="text-right py-2 px-2 font-medium text-gray-600 w-16">毛重(kg)</th>
+                        <th className="text-left py-2 px-2 font-medium text-gray-600 w-14">原产国</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cargoItems.map((item, index) => (
+                        <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-2 px-2 text-center text-gray-500">{index + 1}</td>
+                          <td className="py-2 px-2">
+                            <div className="max-w-[200px]">
+                              <p className="text-gray-900 truncate" title={item.productName}>
+                                {item.productName}
+                              </p>
+                              {item.productNameEn && (
+                                <p className="text-[10px] text-gray-400 truncate" title={item.productNameEn}>
+                                  {item.productNameEn}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <span className="font-mono text-primary-600">
+                              {item.matchedHsCode || item.customerHsCode || '-'}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-gray-600">{item.material || '-'}</td>
+                          <td className="py-2 px-2 text-center text-gray-900">
+                            {item.quantity} {item.unitName || ''}
+                          </td>
+                          <td className="py-2 px-2 text-right text-gray-900">
+                            €{item.unitPrice.toFixed(2)}
+                          </td>
+                          <td className="py-2 px-2 text-right text-gray-900 font-medium">
+                            €{item.totalValue.toFixed(2)}
+                          </td>
+                          <td className="py-2 px-2 text-right text-gray-600">
+                            {item.grossWeight.toFixed(2)}
+                          </td>
+                          <td className="py-2 px-2 text-gray-600">{item.originCountry || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-300 bg-gray-100 font-medium">
+                        <td colSpan={4} className="py-2 px-2 text-right text-gray-700">合计</td>
+                        <td className="py-2 px-2 text-center text-gray-900">
+                          {cargoItems.reduce((sum, item) => sum + item.quantity, 0)}
+                        </td>
+                        <td className="py-2 px-2 text-right text-gray-500">-</td>
+                        <td className="py-2 px-2 text-right text-primary-600 font-semibold">
+                          €{cargoItems.reduce((sum, item) => sum + item.totalValue, 0).toFixed(2)}
+                        </td>
+                        <td className="py-2 px-2 text-right text-gray-900">
+                          {cargoItems.reduce((sum, item) => sum + item.grossWeight, 0).toFixed(2)}
+                        </td>
+                        <td className="py-2 px-2"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               )}
             </div>

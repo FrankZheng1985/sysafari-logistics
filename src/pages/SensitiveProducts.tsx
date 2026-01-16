@@ -13,6 +13,7 @@ import { PageContainer, ContentCard } from '../components/ui'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useToast } from '../components/Toast'
+import InspectionProductDetailModal from '../components/InspectionProductDetailModal'
 
 const API_BASE = getApiBaseUrl()
 
@@ -92,6 +93,11 @@ export default function SensitiveProducts() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<SensitiveProduct | InspectionProduct | null>(null)
   const [modalType, setModalType] = useState<'sensitive' | 'inspection'>('sensitive')
+  
+  // 详情弹窗
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [detailItem, setDetailItem] = useState<any>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
   
   // 统计数据
   const [stats, setStats] = useState<any>(null)
@@ -243,6 +249,27 @@ export default function SensitiveProducts() {
     setModalType(type)
     setEditingItem(item)
     setModalOpen(true)
+  }
+  
+  // 打开详情弹窗
+  const openDetailModal = async (id: number) => {
+    setDetailModalOpen(true)
+    setDetailLoading(true)
+    try {
+      const response = await fetch(`${API_BASE}/api/cargo/inspection-products/${id}/detail`)
+      const data = await response.json()
+      if (data.errCode === 200) {
+        setDetailItem(data.data)
+      } else {
+        showToast(data.msg || '获取详情失败', 'error')
+        setDetailModalOpen(false)
+      }
+    } catch (error) {
+      showToast('获取详情失败', 'error')
+      setDetailModalOpen(false)
+    } finally {
+      setDetailLoading(false)
+    }
   }
 
   const tabs = [
@@ -560,6 +587,13 @@ export default function SensitiveProducts() {
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-1">
                           <button
+                            onClick={() => openDetailModal(item.id)}
+                            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-primary-600"
+                            title="查看详情"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => openEditModal(item, 'inspection')}
                             className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-blue-600"
                             title="编辑"
@@ -630,6 +664,18 @@ export default function SensitiveProducts() {
               loadInspectionProducts()
             }
             loadStats()
+          }}
+        />
+      )}
+      
+      {/* 详情弹窗 */}
+      {detailModalOpen && (
+        <InspectionProductDetailModal
+          item={detailItem}
+          loading={detailLoading}
+          onClose={() => {
+            setDetailModalOpen(false)
+            setDetailItem(null)
           }}
         />
       )}
