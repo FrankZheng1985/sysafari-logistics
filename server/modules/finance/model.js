@@ -1274,7 +1274,8 @@ export async function getFees(params = {}) {
       startDate,
       endDate,
       page,
-      pageSize
+      pageSize,
+      excludeInvoiced  // 🔥 传递 excludeInvoiced 参数，避免已开票费用重复显示
     })
   }
   
@@ -1456,7 +1457,7 @@ export async function getFees(params = {}) {
  */
 async function getFeesSimple(params = {}) {
   const db = getDatabase()
-  const { billId, category, feeName, feeType, startDate, endDate, page = 1, pageSize = 20, includePending = false } = params
+  const { billId, category, feeName, feeType, startDate, endDate, page = 1, pageSize = 20, includePending = false, excludeInvoiced } = params
   
   let whereClause = 'WHERE f.bill_id = ?'
   const queryParams = [billId]
@@ -1464,6 +1465,12 @@ async function getFeesSimple(params = {}) {
   // 默认过滤掉待审批的费用（追加费用需要审批通过后才计入）
   if (!includePending) {
     whereClause += " AND (f.approval_status IS NULL OR f.approval_status != 'pending')"
+  }
+  
+  // 🔥 排除已开票的费用（用于创建发票时，避免重复开票）
+  if (excludeInvoiced === 'true' || excludeInvoiced === true) {
+    whereClause += " AND (f.invoice_status IS NULL OR f.invoice_status != 'invoiced')"
+    console.log(`[getFeesSimple] 启用已开票费用过滤, billId=${billId}`)
   }
   
   if (feeType) {
