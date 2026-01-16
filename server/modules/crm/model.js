@@ -1611,6 +1611,8 @@ export async function getSharedTaxNumbers(params = {}) {
       verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
       status: row.status,
       remark: row.remark,
+      supplierId: row.supplier_id,
+      supplierCode: row.supplier_code,
       createdBy: row.created_by,
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -1642,6 +1644,8 @@ export async function getSharedTaxNumberById(id) {
     verificationData: row.verification_data ? JSON.parse(row.verification_data) : null,
     status: row.status,
     remark: row.remark,
+    supplierId: row.supplier_id,
+    supplierCode: row.supplier_code,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -1649,7 +1653,17 @@ export async function getSharedTaxNumberById(id) {
 }
 
 /**
- * 创建共享税号
+ * 生成供应商编码（IA-XXX格式）
+ */
+function generateSupplierCodeFromShortName(shortName) {
+  if (!shortName) return null
+  // 提取简称的大写字母部分，去除空格和特殊字符
+  const code = shortName.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return `IA-${code}`
+}
+
+/**
+ * 创建共享税号（同时自动创建关联供应商）
  */
 export async function createSharedTaxNumber(data) {
   const db = getDatabase()
@@ -1663,11 +1677,50 @@ export async function createSharedTaxNumber(data) {
     throw new Error('该税号已存在于共享库中')
   }
   
+  let supplierId = null
+  let supplierCode = null
+  
+  // 如果有公司简称，查找或创建关联供应商
+  if (data.companyShortName) {
+    supplierCode = generateSupplierCodeFromShortName(data.companyShortName)
+    
+    // 检查供应商是否已存在
+    const existingSupplier = await db.prepare(`
+      SELECT id, supplier_code, supplier_name FROM suppliers WHERE supplier_code = ?
+    `).get(supplierCode)
+    
+    if (existingSupplier) {
+      // 供应商已存在，直接使用
+      supplierId = existingSupplier.id
+    } else {
+      // 新添加时自动创建供应商
+      const { v4: uuidv4 } = await import('uuid')
+      supplierId = uuidv4()
+      
+      await db.prepare(`
+        INSERT INTO suppliers (
+          id, supplier_code, supplier_name, short_name, supplier_type,
+          country, address, tax_number, status, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'tax_agent', ?, ?, ?, 'active', ?, NOW(), NOW())
+      `).run(
+        supplierId,
+        supplierCode,
+        data.companyName || data.companyShortName,
+        data.companyShortName,
+        data.country || null,
+        data.companyAddress || null,
+        data.taxNumber,
+        data.createdBy || null
+      )
+    }
+  }
+  
   const result = await db.prepare(`
     INSERT INTO shared_tax_numbers (
       tax_type, tax_number, country, company_short_name, company_name, company_address,
-      is_verified, verified_at, verification_data, status, remark, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_verified, verified_at, verification_data, status, remark, created_by,
+      supplier_id, supplier_code
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
   `).get(
     data.taxType,
@@ -1681,14 +1734,16 @@ export async function createSharedTaxNumber(data) {
     data.verificationData ? JSON.stringify(data.verificationData) : null,
     data.status || 'active',
     data.remark || null,
-    data.createdBy || null
+    data.createdBy || null,
+    supplierId,
+    supplierCode
   )
   
-  return { id: result.id }
+  return { id: result.id, supplierId, supplierCode }
 }
 
 /**
- * 更新共享税号
+ * 更新共享税号（同时同步更新关联供应商）
  */
 export async function updateSharedTaxNumber(id, data) {
   const db = getDatabase()
@@ -1704,6 +1759,49 @@ export async function updateSharedTaxNumber(id, data) {
     }
   }
   
+  // 获取当前记录
+  const current = await db.prepare('SELECT * FROM shared_tax_numbers WHERE id = ?').get(id)
+  
+  let supplierId = current?.supplier_id
+  let supplierCode = current?.supplier_code
+  
+  // 如果公司简称变更，需要查找对应供应商
+  if (data.companyShortName && data.companyShortName !== current?.company_short_name) {
+    const newSupplierCode = generateSupplierCodeFromShortName(data.companyShortName)
+    
+    // 检查新供应商编码是否已存在
+    const existingSupplier = await db.prepare(`
+      SELECT id, supplier_code, supplier_name FROM suppliers WHERE supplier_code = ?
+    `).get(newSupplierCode)
+    
+    if (existingSupplier) {
+      supplierId = existingSupplier.id
+      supplierCode = newSupplierCode
+    } else {
+      // 不自动创建供应商，提示管理员先创建
+      throw new Error(`未找到匹配的供应商 [${newSupplierCode}]，请先在"供应商管理"中创建编码为 ${newSupplierCode} 的供应商，再修改共享税号。`)
+    }
+  }
+  
+  // 如果有关联供应商，同步更新供应商信息
+  if (supplierId) {
+    await db.prepare(`
+      UPDATE suppliers SET
+        supplier_name = COALESCE(?, supplier_name),
+        short_name = COALESCE(?, short_name),
+        country = COALESCE(?, country),
+        address = COALESCE(?, address),
+        updated_at = NOW()
+      WHERE id = ?
+    `).run(
+      data.companyName,
+      data.companyShortName,
+      data.country,
+      data.companyAddress,
+      supplierId
+    )
+  }
+  
   await db.prepare(`
     UPDATE shared_tax_numbers SET
       tax_type = COALESCE(?, tax_type),
@@ -1717,6 +1815,8 @@ export async function updateSharedTaxNumber(id, data) {
       verification_data = COALESCE(?, verification_data),
       status = COALESCE(?, status),
       remark = COALESCE(?, remark),
+      supplier_id = COALESCE(?, supplier_id),
+      supplier_code = COALESCE(?, supplier_code),
       updated_at = NOW()
     WHERE id = ?
   `).run(
@@ -1731,10 +1831,12 @@ export async function updateSharedTaxNumber(id, data) {
     data.verificationData ? JSON.stringify(data.verificationData) : null,
     data.status,
     data.remark,
+    supplierId,
+    supplierCode,
     id
   )
   
-  return { id }
+  return { id, supplierId, supplierCode }
 }
 
 /**
@@ -1744,6 +1846,429 @@ export async function deleteSharedTaxNumber(id) {
   const db = getDatabase()
   await db.prepare('DELETE FROM shared_tax_numbers WHERE id = ?').run(id)
   return { success: true }
+}
+
+// ==================== 共享税号使用统计 ====================
+
+/**
+ * 记录共享税号使用
+ * @param {Object} data - 使用记录数据
+ * @param {number} data.sharedTaxId - 共享税号ID
+ * @param {string} data.billId - 提单ID
+ * @param {string} data.billNumber - 提单号
+ * @param {string} data.containerNumber - 集装箱号
+ * @param {string} data.transportType - 运输类型 (sea/air/rail/truck)
+ * @param {number} data.quantity - 数量（空运为公斤，其他为柜数）
+ * @param {string} data.customerId - 客户ID
+ * @param {string} data.customerName - 客户名称
+ * @param {string} data.createdBy - 创建人
+ */
+export async function recordSharedTaxUsage(data) {
+  const db = getDatabase()
+  
+  // 确定使用月份
+  const usageMonth = data.usageMonth || new Date().toISOString().slice(0, 7) // YYYY-MM
+  
+  // 确定单位：空运用公斤，其他用柜
+  const unit = data.transportType === 'air' ? 'kg' : 'container'
+  
+  // 检查是否已存在该提单的使用记录
+  const existing = await db.prepare(`
+    SELECT id FROM shared_tax_usage WHERE bill_id = ?
+  `).get(data.billId)
+  
+  if (existing) {
+    // 更新现有记录
+    await db.prepare(`
+      UPDATE shared_tax_usage SET
+        shared_tax_id = ?,
+        bill_number = ?,
+        container_number = ?,
+        usage_month = ?,
+        transport_type = ?,
+        quantity = ?,
+        unit = ?,
+        customer_id = ?,
+        customer_name = ?,
+        updated_at = NOW()
+      WHERE bill_id = ?
+    `).run(
+      data.sharedTaxId,
+      data.billNumber || null,
+      data.containerNumber || null,
+      usageMonth,
+      data.transportType || 'sea',
+      data.quantity || 1,
+      unit,
+      data.customerId || null,
+      data.customerName || null,
+      data.billId
+    )
+    return { id: existing.id, updated: true }
+  }
+  
+  // 创建新记录
+  const result = await db.prepare(`
+    INSERT INTO shared_tax_usage (
+      shared_tax_id, bill_id, bill_number, container_number,
+      usage_month, transport_type, quantity, unit,
+      customer_id, customer_name, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING id
+  `).get(
+    data.sharedTaxId,
+    data.billId,
+    data.billNumber || null,
+    data.containerNumber || null,
+    usageMonth,
+    data.transportType || 'sea',
+    data.quantity || 1,
+    unit,
+    data.customerId || null,
+    data.customerName || null,
+    data.createdBy || null
+  )
+  
+  // 同时更新提单表的共享税号ID
+  await db.prepare(`
+    UPDATE bills_of_lading SET shared_tax_id = ?, updated_at = NOW() WHERE id = ?
+  `).run(data.sharedTaxId, data.billId)
+  
+  return { id: result?.id, created: true }
+}
+
+/**
+ * 删除共享税号使用记录
+ */
+export async function deleteSharedTaxUsage(billId) {
+  const db = getDatabase()
+  await db.prepare('DELETE FROM shared_tax_usage WHERE bill_id = ?').run(billId)
+  // 同时清除提单表的共享税号ID
+  await db.prepare('UPDATE bills_of_lading SET shared_tax_id = NULL WHERE id = ?').run(billId)
+  return { success: true }
+}
+
+/**
+ * 获取共享税号使用记录列表
+ */
+export async function getSharedTaxUsageList(params = {}) {
+  const db = getDatabase()
+  const { sharedTaxId, month, transportType, page = 1, pageSize = 50 } = params
+  
+  let query = `
+    SELECT stu.*, stn.company_name as tax_company_name, stn.tax_number, stn.tax_type
+    FROM shared_tax_usage stu
+    LEFT JOIN shared_tax_numbers stn ON stu.shared_tax_id = stn.id
+    WHERE 1=1
+  `
+  const queryParams = []
+  
+  if (sharedTaxId) {
+    query += ' AND stu.shared_tax_id = ?'
+    queryParams.push(sharedTaxId)
+  }
+  
+  if (month) {
+    query += ' AND stu.usage_month = ?'
+    queryParams.push(month)
+  }
+  
+  if (transportType) {
+    query += ' AND stu.transport_type = ?'
+    queryParams.push(transportType)
+  }
+  
+  // 获取总数
+  const countQuery = query.replace('SELECT stu.*, stn.company_name as tax_company_name, stn.tax_number, stn.tax_type', 'SELECT COUNT(*) as total')
+  const countResult = await db.prepare(countQuery).get(...queryParams)
+  const total = countResult?.total || 0
+  
+  // 分页
+  query += ' ORDER BY stu.created_at DESC LIMIT ? OFFSET ?'
+  queryParams.push(pageSize, (page - 1) * pageSize)
+  
+  const rows = await db.prepare(query).all(...queryParams)
+  
+  return {
+    list: rows.map(row => ({
+      id: row.id,
+      sharedTaxId: row.shared_tax_id,
+      taxCompanyName: row.tax_company_name,
+      taxNumber: row.tax_number,
+      taxType: row.tax_type,
+      billId: row.bill_id,
+      billNumber: row.bill_number,
+      containerNumber: row.container_number,
+      usageMonth: row.usage_month,
+      transportType: row.transport_type,
+      quantity: row.quantity,
+      unit: row.unit,
+      customerId: row.customer_id,
+      customerName: row.customer_name,
+      createdAt: row.created_at
+    })),
+    total,
+    page,
+    pageSize
+  }
+}
+
+/**
+ * 获取共享税号月度使用统计
+ * @param {Object} params
+ * @param {number} params.sharedTaxId - 可选，指定共享税号ID
+ * @param {string} params.month - 可选，指定月份 YYYY-MM
+ * @param {string} params.year - 可选，指定年份 YYYY
+ */
+export async function getSharedTaxUsageStats(params = {}) {
+  const db = getDatabase()
+  const { sharedTaxId, month, year } = params
+  
+  let query = `
+    SELECT 
+      stn.id as shared_tax_id,
+      stn.company_name,
+      stn.company_short_name,
+      stn.tax_number,
+      stn.tax_type,
+      stu.usage_month,
+      stu.transport_type,
+      COUNT(*) as usage_count,
+      SUM(CASE WHEN stu.transport_type = 'air' THEN stu.quantity ELSE 0 END) as air_kg,
+      SUM(CASE WHEN stu.transport_type != 'air' THEN stu.quantity ELSE 0 END) as container_count
+    FROM shared_tax_numbers stn
+    LEFT JOIN shared_tax_usage stu ON stn.id = stu.shared_tax_id
+    WHERE stn.status = 'active'
+  `
+  const queryParams = []
+  
+  if (sharedTaxId) {
+    query += ' AND stn.id = ?'
+    queryParams.push(sharedTaxId)
+  }
+  
+  if (month) {
+    query += ' AND stu.usage_month = ?'
+    queryParams.push(month)
+  } else if (year) {
+    query += ' AND stu.usage_month LIKE ?'
+    queryParams.push(`${year}-%`)
+  }
+  
+  query += ' GROUP BY stn.id, stn.company_name, stn.company_short_name, stn.tax_number, stn.tax_type, stu.usage_month, stu.transport_type'
+  query += ' ORDER BY stn.company_name, stu.usage_month DESC'
+  
+  const rows = await db.prepare(query).all(...queryParams)
+  
+  return rows.map(row => ({
+    sharedTaxId: row.shared_tax_id,
+    companyName: row.company_name,
+    companyShortName: row.company_short_name,
+    taxNumber: row.tax_number,
+    taxType: row.tax_type,
+    usageMonth: row.usage_month,
+    transportType: row.transport_type,
+    usageCount: row.usage_count || 0,
+    airKg: parseFloat(row.air_kg) || 0,
+    containerCount: parseFloat(row.container_count) || 0
+  }))
+}
+
+/**
+ * 获取共享税号汇总统计（按公司/供应商汇总）
+ * 基于应付费用数据，按清关完成月份统计
+ * 统计有应付费用给该供应商的提单：
+ * - 海运/铁路/卡航：按柜数统计（container_count，默认1）
+ * - 空运：按公斤统计（gross_weight）
+ */
+export async function getSharedTaxUsageSummary(params = {}) {
+  const db = getDatabase()
+  const { month, year } = params
+  
+  // 先获取所有有效的共享税号供应商
+  const suppliers = await db.prepare(`
+    SELECT 
+      supplier_code,
+      supplier_id,
+      COALESCE(company_name, company_short_name) as company_name,
+      company_short_name,
+      STRING_AGG(DISTINCT tax_type || ':' || tax_number, '|') as tax_numbers
+    FROM shared_tax_numbers
+    WHERE status = 'active' AND supplier_id IS NOT NULL
+    GROUP BY supplier_code, supplier_id, COALESCE(company_name, company_short_name), company_short_name
+  `).all()
+  
+  const results = []
+  
+  for (const supplier of suppliers) {
+    // 查询该供应商在指定月份的应付费用关联的提单
+    // 每条提单记录 = 1个集装箱（海运/铁路/卡航）或按weight计算（空运）
+    let billQuery = `
+      SELECT DISTINCT 
+        b.id,
+        COALESCE(b.transport_method, '海运') as transport_method,
+        COALESCE(b.weight, 0) as weight
+      FROM fees f
+      INNER JOIN bills_of_lading b ON f.bill_id = b.id
+      WHERE f.fee_type = 'payable' 
+        AND f.supplier_id = ?
+        AND (b.is_void = 0 OR b.is_void IS NULL)
+    `
+    const billParams = [supplier.supplier_id]
+    
+    // 按清关完成月份筛选
+    if (month) {
+      billQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY-MM') = ?`
+      billParams.push(month)
+    } else if (year) {
+      billQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY') = ?`
+      billParams.push(year)
+    }
+    
+    const bills = await db.prepare(billQuery).all(...billParams)
+    
+    // 统计各运输类型
+    // 海运/铁路/卡航：每条提单 = 1个集装箱
+    // 空运：按 weight 字段累计公斤数
+    let totalBills = bills.length
+    let totalAirKg = 0
+    let totalSeaContainers = 0
+    let totalRailContainers = 0
+    let totalTruckContainers = 0
+    
+    for (const bill of bills) {
+      const method = bill.transport_method
+      if (method === '空运') {
+        totalAirKg += parseFloat(bill.weight) || 0
+      } else if (method === '海运') {
+        totalSeaContainers += 1  // 每条提单 = 1个集装箱
+      } else if (method === '铁路' || method === '铁运') {
+        totalRailContainers += 1
+      } else if (method === '卡航') {
+        totalTruckContainers += 1
+      } else {
+        // 默认算作海运
+        totalSeaContainers += 1
+      }
+    }
+    
+    // 查询该供应商在指定月份的应付金额
+    let amountQuery = `
+      SELECT COALESCE(SUM(f.amount), 0) as total_amount
+      FROM fees f
+      INNER JOIN bills_of_lading b ON f.bill_id = b.id
+      WHERE f.fee_type = 'payable' 
+        AND f.supplier_id = ?
+        AND (b.is_void = 0 OR b.is_void IS NULL)
+    `
+    const amountParams = [supplier.supplier_id]
+    
+    if (month) {
+      amountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY-MM') = ?`
+      amountParams.push(month)
+    } else if (year) {
+      amountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY') = ?`
+      amountParams.push(year)
+    }
+    
+    const amountResult = await db.prepare(amountQuery).get(...amountParams)
+    const totalPayableAmount = parseFloat(amountResult?.total_amount) || 0
+    
+    // 解析税号列表
+    const taxNumbers = []
+    if (supplier.tax_numbers) {
+      supplier.tax_numbers.split('|').forEach(item => {
+        const [type, number] = item.split(':')
+        if (type && number) {
+          taxNumbers.push({ type, number })
+        }
+      })
+    }
+    
+    results.push({
+      companyName: supplier.company_name,
+      companyShortName: supplier.company_short_name,
+      supplierCode: supplier.supplier_code,
+      supplierId: supplier.supplier_id,
+      taxNumbers,
+      totalBills,
+      totalAirKg,
+      totalSeaContainers,
+      totalRailContainers,
+      totalTruckContainers,
+      totalPayableAmount
+    })
+  }
+  
+  // 按应付金额降序排序
+  results.sort((a, b) => b.totalPayableAmount - a.totalPayableAmount)
+  
+  return results
+}
+
+/**
+ * 获取单个共享税号的详细统计
+ */
+export async function getSharedTaxDetailStats(sharedTaxId, params = {}) {
+  const db = getDatabase()
+  const { year } = params
+  const targetYear = year || new Date().getFullYear().toString()
+  
+  // 获取税号基本信息
+  const taxInfo = await db.prepare('SELECT * FROM shared_tax_numbers WHERE id = ?').get(sharedTaxId)
+  if (!taxInfo) return null
+  
+  // 获取月度统计
+  const monthlyQuery = `
+    SELECT 
+      usage_month,
+      transport_type,
+      COUNT(*) as count,
+      SUM(quantity) as total_quantity
+    FROM shared_tax_usage
+    WHERE shared_tax_id = ? AND usage_month LIKE ?
+    GROUP BY usage_month, transport_type
+    ORDER BY usage_month DESC
+  `
+  const monthlyStats = await db.prepare(monthlyQuery).all(sharedTaxId, `${targetYear}-%`)
+  
+  // 汇总各月数据
+  const monthlyData = {}
+  monthlyStats.forEach(row => {
+    if (!monthlyData[row.usage_month]) {
+      monthlyData[row.usage_month] = {
+        month: row.usage_month,
+        airKg: 0,
+        seaContainers: 0,
+        railContainers: 0,
+        truckContainers: 0,
+        totalBills: 0
+      }
+    }
+    monthlyData[row.usage_month].totalBills += row.count
+    if (row.transport_type === 'air') {
+      monthlyData[row.usage_month].airKg += parseFloat(row.total_quantity) || 0
+    } else if (row.transport_type === 'sea') {
+      monthlyData[row.usage_month].seaContainers += parseFloat(row.total_quantity) || 0
+    } else if (row.transport_type === 'rail') {
+      monthlyData[row.usage_month].railContainers += parseFloat(row.total_quantity) || 0
+    } else if (row.transport_type === 'truck') {
+      monthlyData[row.usage_month].truckContainers += parseFloat(row.total_quantity) || 0
+    }
+  })
+  
+  return {
+    taxInfo: {
+      id: taxInfo.id,
+      taxType: taxInfo.tax_type,
+      taxNumber: taxInfo.tax_number,
+      companyName: taxInfo.company_name,
+      companyShortName: taxInfo.company_short_name,
+      country: taxInfo.country
+    },
+    year: targetYear,
+    monthlyStats: Object.values(monthlyData).sort((a, b) => b.month.localeCompare(a.month))
+  }
 }
 
 // ==================== 销售机会管理 ====================
@@ -4159,3 +4684,87 @@ export async function getLastMileRateForQuotation(params) {
   }
 }
 
+// ==================== 共享税号供应商关联修复 ====================
+
+/**
+ * 同步共享税号与供应商关联
+ * 将共享税号关联到已存在的供应商
+ */
+export async function syncSharedTaxSuppliers() {
+  const db = getDatabase()
+  const results = []
+  
+  // 定义映射关系：公司简称 -> 供应商编码
+  const supplierMappings = {
+    'DBWIH': 'IA-DBWIH',
+    'kurz DBWIH': 'IA-DBWIH',
+    'DWGK': 'IA-DWGK',
+    'Feldsberg': 'IA-FELDSBERG',
+    'Feld': 'IA-FELDSBERG',
+    'KIWI': 'IA-KIWISTAV',
+    'Kiwistav': 'IA-KIWISTAV',
+    'KIWISTAV': 'IA-KIWISTAV',
+    'Kralovec AI': 'IA-KRALOVECAI',
+  }
+  
+  // 获取所有共享税号
+  const taxNumbers = await db.prepare(`
+    SELECT id, company_short_name, company_name, tax_number, supplier_id, supplier_code
+    FROM shared_tax_numbers
+  `).all()
+  
+  for (const tax of taxNumbers) {
+    const shortName = tax.company_short_name || tax.company_name
+    
+    // 查找匹配的供应商编码
+    let targetSupplierCode = supplierMappings[shortName]
+    
+    if (!targetSupplierCode) {
+      // 模糊匹配
+      for (const [key, code] of Object.entries(supplierMappings)) {
+        if (shortName?.toLowerCase().includes(key.toLowerCase()) || 
+            key.toLowerCase().includes(shortName?.toLowerCase() || '')) {
+          targetSupplierCode = code
+          break
+        }
+      }
+    }
+    
+    if (!targetSupplierCode) {
+      // 根据简称生成
+      targetSupplierCode = `IA-${shortName?.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'UNKNOWN'}`
+    }
+    
+    // 查找供应商
+    const supplier = await db.prepare(`
+      SELECT id, supplier_code, supplier_name FROM suppliers WHERE supplier_code = ?
+    `).get(targetSupplierCode)
+    
+    if (supplier) {
+      // 更新共享税号关联
+      await db.prepare(`
+        UPDATE shared_tax_numbers 
+        SET supplier_id = ?, supplier_code = ?, updated_at = NOW()
+        WHERE id = ?
+      `).run(supplier.id, supplier.supplier_code, tax.id)
+      
+      results.push({
+        taxNumber: tax.tax_number,
+        companyShortName: shortName,
+        supplierCode: supplier.supplier_code,
+        supplierName: supplier.supplier_name,
+        status: 'linked'
+      })
+    } else {
+      results.push({
+        taxNumber: tax.tax_number,
+        companyShortName: shortName,
+        supplierCode: targetSupplierCode,
+        supplierName: null,
+        status: 'not_found'
+      })
+    }
+  }
+  
+  return results
+}

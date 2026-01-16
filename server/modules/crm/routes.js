@@ -319,6 +319,29 @@ router.put('/shared-tax-numbers/:id', controller.updateSharedTaxNumber)
 // 删除共享税号
 router.delete('/shared-tax-numbers/:id', controller.deleteSharedTaxNumber)
 
+// ==================== 共享税号使用统计路由 ====================
+
+// 记录共享税号使用
+router.post('/shared-tax-usage', controller.recordSharedTaxUsage)
+
+// 删除共享税号使用记录
+router.delete('/shared-tax-usage/:billId', controller.deleteSharedTaxUsage)
+
+// 获取共享税号使用记录列表
+router.get('/shared-tax-usage', controller.getSharedTaxUsageList)
+
+// 获取共享税号月度统计
+router.get('/shared-tax-usage/stats', controller.getSharedTaxUsageStats)
+
+// 获取共享税号汇总统计（按公司汇总）
+router.get('/shared-tax-usage/summary', controller.getSharedTaxUsageSummary)
+
+// 同步共享税号与供应商关联
+router.post('/shared-tax-numbers/sync-suppliers', controller.syncSharedTaxSuppliers)
+
+// 获取单个共享税号的详细统计
+router.get('/shared-tax-numbers/:id/stats', controller.getSharedTaxDetailStats)
+
 // ==================== 客户门户账户管理路由 ====================
 
 // 获取客户门户账户列表

@@ -1019,7 +1019,8 @@ export async function createSharedTaxNumber(req, res) {
     return success(res, result, '共享税号创建成功')
   } catch (error) {
     console.error('创建共享税号失败:', error)
-    if (error.message && error.message.includes('已存在')) {
+    // 处理业务逻辑错误：税号已存在、未找到匹配供应商等
+    if (error.message && (error.message.includes('已存在') || error.message.includes('未找到匹配的供应商'))) {
       return badRequest(res, error.message)
     }
     return serverError(res, '创建共享税号失败')
@@ -1037,7 +1038,8 @@ export async function updateSharedTaxNumber(req, res) {
     return success(res, result, '共享税号更新成功')
   } catch (error) {
     console.error('更新共享税号失败:', error)
-    if (error.message && error.message.includes('已存在')) {
+    // 处理业务逻辑错误：税号已存在、未找到匹配供应商等
+    if (error.message && (error.message.includes('已存在') || error.message.includes('未找到匹配的供应商'))) {
       return badRequest(res, error.message)
     }
     return serverError(res, '更新共享税号失败')
@@ -1056,6 +1058,210 @@ export async function deleteSharedTaxNumber(req, res) {
   } catch (error) {
     console.error('删除共享税号失败:', error)
     return serverError(res, '删除共享税号失败')
+  }
+}
+
+// ==================== 共享税号使用统计 ====================
+
+/**
+ * 记录共享税号使用
+ */
+export async function recordSharedTaxUsage(req, res) {
+  try {
+    const {
+      sharedTaxId,
+      billId,
+      billNumber,
+      containerNumber,
+      transportType,
+      quantity,
+      customerId,
+      customerName,
+      usageMonth
+    } = req.body
+    
+    if (!sharedTaxId || !billId) {
+      return badRequest(res, '共享税号ID和提单ID必填')
+    }
+    
+    const result = await model.recordSharedTaxUsage({
+      sharedTaxId: parseInt(sharedTaxId),
+      billId,
+      billNumber,
+      containerNumber,
+      transportType: transportType || 'sea',
+      quantity: parseFloat(quantity) || 1,
+      customerId,
+      customerName,
+      usageMonth,
+      createdBy: req.user?.name || req.user?.username
+    })
+    
+    return success(res, result, result.updated ? '使用记录已更新' : '使用记录已创建')
+  } catch (error) {
+    console.error('记录共享税号使用失败:', error)
+    return serverError(res, '记录共享税号使用失败')
+  }
+}
+
+/**
+ * 删除共享税号使用记录
+ */
+export async function deleteSharedTaxUsage(req, res) {
+  try {
+    const { billId } = req.params
+    
+    await model.deleteSharedTaxUsage(billId)
+    return success(res, null, '使用记录删除成功')
+  } catch (error) {
+    console.error('删除共享税号使用记录失败:', error)
+    return serverError(res, '删除共享税号使用记录失败')
+  }
+}
+
+/**
+ * 获取共享税号使用记录列表
+ */
+export async function getSharedTaxUsageList(req, res) {
+  try {
+    const { sharedTaxId, month, transportType, page, pageSize } = req.query
+    
+    const result = await model.getSharedTaxUsageList({
+      sharedTaxId: sharedTaxId ? parseInt(sharedTaxId) : undefined,
+      month,
+      transportType,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 50
+    })
+    
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取共享税号使用记录失败:', error)
+    return serverError(res, '获取共享税号使用记录失败')
+  }
+}
+
+/**
+ * 获取共享税号月度使用统计
+ */
+export async function getSharedTaxUsageStats(req, res) {
+  try {
+    const { sharedTaxId, month, year } = req.query
+    
+    const result = await model.getSharedTaxUsageStats({
+      sharedTaxId: sharedTaxId ? parseInt(sharedTaxId) : undefined,
+      month,
+      year
+    })
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取共享税号月度统计失败:', error)
+    return serverError(res, '获取共享税号月度统计失败')
+  }
+}
+
+/**
+ * 获取共享税号汇总统计（按公司汇总）
+ */
+export async function getSharedTaxUsageSummary(req, res) {
+  try {
+    const { month, year } = req.query
+    
+    const result = await model.getSharedTaxUsageSummary({ month, year })
+    return success(res, result)
+  } catch (error) {
+    console.error('获取共享税号汇总统计失败:', error)
+    return serverError(res, '获取共享税号汇总统计失败')
+  }
+}
+
+/**
+ * 同步共享税号与供应商关联
+ */
+export async function syncSharedTaxSuppliers(req, res) {
+  try {
+    const db = (await import('../../config/database.js')).getDatabase()
+    const results = []
+    
+    // 定义映射：公司简称 -> 供应商编码
+    const supplierMappings = {
+      'DBWIH': 'IA-DBWIH', 'kurz DBWIH': 'IA-DBWIH',
+      'DWGK': 'IA-DWGK',
+      'Feldsberg': 'IA-FELDSBERG', 'Feld': 'IA-FELDSBERG',
+      'KIWI': 'IA-KIWISTAV', 'Kiwistav': 'IA-KIWISTAV', 'KIWISTAV': 'IA-KIWISTAV',
+      'Kralovec AI': 'IA-KRALOVECAI',
+    }
+    
+    // 获取所有共享税号
+    const taxNumbers = await db.prepare(`
+      SELECT id, company_short_name, company_name, tax_number, supplier_id, supplier_code
+      FROM shared_tax_numbers
+    `).all()
+    
+    for (const tax of taxNumbers) {
+      const shortName = tax.company_short_name || tax.company_name
+      
+      // 查找匹配的供应商编码
+      let targetCode = supplierMappings[shortName]
+      if (!targetCode) {
+        for (const [key, code] of Object.entries(supplierMappings)) {
+          if (shortName?.toLowerCase().includes(key.toLowerCase())) {
+            targetCode = code
+            break
+          }
+        }
+      }
+      if (!targetCode) {
+        targetCode = `IA-${shortName?.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'UNKNOWN'}`
+      }
+      
+      // 查找供应商
+      const supplier = await db.prepare(`
+        SELECT id, supplier_code, supplier_name FROM suppliers WHERE supplier_code = ?
+      `).get(targetCode)
+      
+      if (supplier) {
+        await db.prepare(`
+          UPDATE shared_tax_numbers 
+          SET supplier_id = ?, supplier_code = ?, updated_at = NOW()
+          WHERE id = ?
+        `).run(supplier.id, supplier.supplier_code, tax.id)
+        
+        results.push({ taxNumber: tax.tax_number, supplierCode: supplier.supplier_code, status: 'linked' })
+      } else {
+        results.push({ taxNumber: tax.tax_number, supplierCode: targetCode, status: 'not_found' })
+      }
+    }
+    
+    return success(res, { message: '同步完成', results })
+  } catch (error) {
+    console.error('同步共享税号供应商失败:', error)
+    return serverError(res, '同步失败: ' + error.message)
+  }
+}
+
+/**
+ * 获取单个共享税号的详细统计
+ */
+export async function getSharedTaxDetailStats(req, res) {
+  try {
+    const { id } = req.params
+    const { year } = req.query
+    
+    const result = await model.getSharedTaxDetailStats(parseInt(id), { year })
+    if (!result) {
+      return notFound(res, '共享税号不存在')
+    }
+    
+    return success(res, result)
+  } catch (error) {
+    console.error('获取共享税号详细统计失败:', error)
+    return serverError(res, '获取共享税号详细统计失败')
   }
 }
 

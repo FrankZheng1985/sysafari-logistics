@@ -1,6 +1,11 @@
 /**
  * 货物导入服务
  * 处理Excel/CSV文件解析和数据导入
+ * 
+ * 图片存储策略：
+ * - 优先上传到腾讯云 COS（推荐，节省服务器空间）
+ * - COS 未配置时 fallback 到本地存储
+ * - COS 目录结构: {env}/cargo-images/{containerNo}/{filename}
  */
 
 import { getDatabase, generateId } from '../../config/database.js'
@@ -12,16 +17,130 @@ import ExcelJS from 'exceljs'
 import AdmZip from 'adm-zip'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
+import * as cosService from '../../utils/cosService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// 图片上传目录
+// 图片上传目录（本地 fallback）
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/cargo-images')
 
-// 确保上传目录存在
+// 确保上传目录存在（用于临时处理和 fallback）
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+}
+
+/**
+ * 检查 COS 是否可用
+ */
+function isCosAvailable() {
+  const config = cosService.checkCosConfig()
+  return config.configured
+}
+
+/**
+ * 获取环境前缀（与 cosService 保持一致）
+ */
+function getEnvPrefix() {
+  if (process.env.COS_PATH_PREFIX) {
+    return process.env.COS_PATH_PREFIX
+  }
+  const isProduction = process.env.NODE_ENV === 'production'
+  return isProduction ? 'prod' : 'dev'
+}
+
+/**
+ * 上传货物图片到 COS
+ * @param {Buffer} imageBuffer - 图片数据
+ * @param {string} fileName - 文件名
+ * @param {string} containerNo - 集装箱号（用于目录分类）
+ * @returns {Promise<{success: boolean, url?: string, error?: string}>}
+ */
+async function uploadCargoImageToCos(imageBuffer, fileName, containerNo = 'unknown') {
+  try {
+    if (!isCosAvailable()) {
+      return { success: false, error: 'COS未配置' }
+    }
+    
+    const envPrefix = getEnvPrefix()
+    // 清理集装箱号中的特殊字符
+    const safeContainerNo = (containerNo || 'unknown').replace(/[^a-zA-Z0-9_\-]/g, '_')
+    const cosKey = `${envPrefix}/cargo-images/${safeContainerNo}/${fileName}`
+    
+    // 确定 MIME 类型
+    const ext = path.extname(fileName).toLowerCase()
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    }
+    const contentType = mimeTypes[ext] || 'image/jpeg'
+    
+    const result = await cosService.uploadDocument({
+      body: imageBuffer,
+      fileName: fileName,
+      customKey: cosKey,
+      contentType: contentType
+    })
+    
+    if (result.success) {
+      console.log(`  ✓ 图片已上传到COS: ${cosKey}`)
+      return { success: true, url: result.url, key: cosKey }
+    } else {
+      return { success: false, error: '上传失败' }
+    }
+  } catch (err) {
+    console.warn(`  ✗ COS上传失败: ${err.message}`)
+    return { success: false, error: err.message }
+  }
+}
+
+/**
+ * 保存货物图片（优先COS，fallback本地）
+ * @param {Buffer} imageBuffer - 原始图片数据
+ * @param {string} fileName - 文件名
+ * @param {string} containerNo - 集装箱号
+ * @returns {Promise<string>} 图片访问路径
+ */
+async function saveCargoImage(imageBuffer, fileName, containerNo = 'unknown') {
+  // 先进行图片增强处理
+  const tempPath = path.join(UPLOAD_DIR, `temp_${Date.now()}_${fileName}`)
+  
+  try {
+    // 图片增强处理
+    const enhanceResult = await enhanceImage(imageBuffer, tempPath)
+    const actualPath = enhanceResult && enhanceResult.outputPath ? enhanceResult.outputPath : tempPath
+    const actualFileName = path.basename(actualPath)
+    const processedBuffer = fs.readFileSync(actualPath)
+    
+    // 尝试上传到 COS
+    if (isCosAvailable()) {
+      const cosResult = await uploadCargoImageToCos(processedBuffer, actualFileName, containerNo)
+      
+      if (cosResult.success) {
+        // 删除临时文件
+        if (fs.existsSync(actualPath)) fs.unlinkSync(actualPath)
+        if (actualPath !== tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+        return cosResult.url
+      }
+    }
+    
+    // COS 不可用或上传失败，保存到本地
+    const localPath = path.join(UPLOAD_DIR, actualFileName)
+    if (actualPath !== localPath) {
+      fs.renameSync(actualPath, localPath)
+    }
+    console.log(`  → 图片已保存到本地: ${actualFileName}`)
+    return `/uploads/cargo-images/${actualFileName}`
+    
+  } catch (err) {
+    console.warn(`保存图片失败: ${err.message}`)
+    // 清理临时文件
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+    throw err
+  }
 }
 
 // 图片增强配置
@@ -623,9 +742,10 @@ const IMAGE_COLUMN_NAMES = ['产品图片*', '产品图片', '图片']
  * 提取Excel中的DISPIMG格式图片（WPS/Excel 365动态图片）
  * @param {string} filePath - Excel文件路径
  * @param {string} batchId - 批次ID用于命名图片
- * @returns {Promise<Object>} 图片ID到文件路径的映射
+ * @param {string} containerNo - 集装箱号（用于COS目录分类）
+ * @returns {Promise<Object>} 图片ID到文件路径/URL的映射
  */
-async function extractDispImgImages(filePath, batchId) {
+async function extractDispImgImages(filePath, batchId, containerNo = 'unknown') {
   const imageIdToPath = {}
   
   try {
@@ -670,7 +790,10 @@ async function extractDispImgImages(filePath, batchId) {
       console.log(`找到 ${Object.keys(imageIdToRId).length} 个图片ID映射`)
     }
     
-    // 提取并保存图片
+    // 提取并保存图片（优先上传到COS）
+    const useCos = isCosAvailable()
+    console.log(`图片存储模式: ${useCos ? 'COS云存储' : '本地存储'}`)
+    
     for (const [imageId, rId] of Object.entries(imageIdToRId)) {
       const imageTarget = rIdToImage[rId]
       if (!imageTarget) continue
@@ -684,15 +807,11 @@ async function extractDispImgImages(filePath, batchId) {
           const imageBuffer = zip.readFile(imageEntry)
           const ext = path.extname(imagePath) || '.png'
           const fileName = `${batchId}_${imageId}${ext}`
-          const savePath = path.join(UPLOAD_DIR, fileName)
           
-          // 使用图片增强处理（放大+锐化+提升清晰度+压缩）
-          const result = await enhanceImage(imageBuffer, savePath)
-          // 获取实际保存的文件名（可能PNG被转为JPG）
-          const actualPath = result && result.outputPath ? result.outputPath : savePath
-          const actualFileName = path.basename(actualPath)
-          imageIdToPath[imageId] = `/uploads/cargo-images/${actualFileName}`
-          console.log(`保存图片(已增强): ${imageId} -> ${actualFileName}`)
+          // 使用统一的图片保存函数（自动选择COS或本地）
+          const imageUrl = await saveCargoImage(imageBuffer, fileName, containerNo)
+          imageIdToPath[imageId] = imageUrl
+          console.log(`保存图片: ${imageId} -> ${imageUrl.substring(0, 60)}...`)
         } catch (saveErr) {
           console.warn(`保存图片 ${imageId} 失败:`, saveErr.message)
         }
@@ -886,7 +1005,8 @@ export async function parseExcelFile(filePath) {
     const batchId = Date.now().toString(36)
     
     // ========== 方法1: 提取DISPIMG格式图片（WPS/Excel 365） ==========
-    const dispImgMap = await extractDispImgImages(filePath, batchId)
+    // 传入集装箱号用于COS目录分类
+    const dispImgMap = await extractDispImgImages(filePath, batchId, globalContainerNo)
     const hasDispImg = Object.keys(dispImgMap).length > 0
     console.log(`DISPIMG图片数量: ${Object.keys(dispImgMap).length}`)
     
@@ -905,7 +1025,10 @@ export async function parseExcelFile(filePath) {
     const mediaCount = mediaArray.length
     console.log(`Workbook media 数量: ${mediaCount}`)
     
-    // 处理传统嵌入式图片
+    // 处理传统嵌入式图片（优先上传到COS）
+    const useCos = isCosAvailable()
+    console.log(`嵌入式图片存储模式: ${useCos ? 'COS云存储' : '本地存储'}`)
+    
     if (images.length > 0 && mediaCount > 0) {
       for (let idx = 0; idx < images.length; idx++) {
         const image = images[idx]
@@ -933,20 +1056,15 @@ export async function parseExcelFile(filePath) {
                 // 确定图片扩展名
                 const ext = imageData.extension || 'png'
                 const fileName = `${batchId}_row${imageRow}_${Date.now()}.${ext}`
-                const imageFilePath = path.join(UPLOAD_DIR, fileName)
                 
-                // 使用图片增强处理（放大+锐化+提升清晰度+压缩）
-                const result = await enhanceImage(imageData.buffer, imageFilePath)
+                // 使用统一的图片保存函数（自动选择COS或本地）
+                const imageUrl = await saveCargoImage(imageData.buffer, fileName, globalContainerNo)
                 
-                // 获取实际保存的文件名（可能PNG被转为JPG）
-                const actualPath = result && result.outputPath ? result.outputPath : imageFilePath
-                const actualFileName = path.basename(actualPath)
-                
-                // 存储图片路径（可能一行有多个图片，这里取第一个）
+                // 存储图片路径/URL（可能一行有多个图片，这里取第一个）
                 if (!rowImages[imageRow]) {
-                  rowImages[imageRow] = `/uploads/cargo-images/${actualFileName}`
+                  rowImages[imageRow] = imageUrl
                 }
-                console.log(`保存嵌入式图片(已增强): 行${imageRow} -> ${actualFileName}`)
+                console.log(`保存嵌入式图片: 行${imageRow} -> ${imageUrl.substring(0, 60)}...`)
               } catch (saveErr) {
                 console.warn(`保存嵌入式图片到行${imageRow}失败:`, saveErr.message)
               }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useTabs } from '../contexts/TabsContext'
 import { useAuth } from '../contexts/AuthContext'
-import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Edit2, Copy, Lock } from 'lucide-react'
+import { ArrowLeft, FileText, Package, Download, ClipboardCheck, Truck, Ban, RotateCcw, Settings, CheckCircle, Ship, Anchor, GripVertical, ChevronUp, ChevronDown, ShieldCheck, Activity, Upload, Trash2, File, Image, FileArchive, Loader2, UserCircle, ExternalLink, DollarSign, Receipt, Plus, Repeat, Clock, Calendar, X, Tag, Edit, Edit2, Copy, Lock, Building2 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { copyToClipboard } from '../components/Toast'
 import { formatDate, formatDateTime } from '../utils/dateFormat'
@@ -14,6 +14,7 @@ import FeeModal from '../components/FeeModal'
 import OrderFeePanel from '../components/OrderFeePanel'
 import OrderDocuments from '../components/OrderDocuments'
 import CreateBillModal from '../components/CreateBillModal'
+import SharedTaxSelector from '../components/SharedTaxSelector'
 import { getBillById as getBillByIdFromAPI, downloadFile, updateBillInspection, updateBillDeliveryStatus, updateBillDelivery, voidBill, restoreBill, getBillOperationLogs, updateBillShipStatus, updateBillDocSwapStatus, updateBillCustomsStatus, getDestinationPortsList, getBillFiles, uploadBillFile, downloadBillFile, deleteBillFile, getFees, getDocSwapAgents, deleteFee, getApiBaseUrl, getAuthHeaders, type OperationLog, type DestinationPortItem, type BillFile, type CMRDetailData, type Supplier } from '../utils/api'
 import { getBillById as getBillByIdFromMock } from '../data/mockOrders'
 
@@ -1024,6 +1025,34 @@ export default function BillDetails() {
                 <div>
                   <span className="text-xs text-gray-500">服务产品:</span>
                   <span className="ml-2 font-medium text-xs">{billDetail.serviceType || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-gray-500 mb-1 block">共享税号:</span>
+                  <SharedTaxSelector
+                    billId={billDetail.id}
+                    billNumber={billDetail.billNumber}
+                    containerNumber={billDetail.containerNumber}
+                    transportType={
+                      billDetail.transportMethod === 'sea' || billDetail.transportMethod === '海运' ? 'sea' :
+                      billDetail.transportMethod === 'air' || billDetail.transportMethod === '空运' ? 'air' :
+                      billDetail.transportMethod === 'rail' || billDetail.transportMethod === '铁路' ? 'rail' :
+                      billDetail.transportMethod === 'truck' || billDetail.transportMethod === '卡车' ? 'truck' :
+                      'sea'
+                    }
+                    quantity={
+                      (billDetail.transportMethod === 'air' || billDetail.transportMethod === '空运') 
+                        ? (billDetail.weight || 1) 
+                        : 1
+                    }
+                    customerId={billDetail.customerId}
+                    customerName={billDetail.customerName}
+                    currentSharedTaxId={billDetail.sharedTaxId}
+                    onChange={(taxId, companyName) => {
+                      // 更新本地状态
+                      setBillDetail((prev: any) => ({ ...prev, sharedTaxId: taxId }))
+                    }}
+                    size="sm"
+                  />
                 </div>
                 <div>
                   <span className="text-xs text-gray-500">货柜金额:</span>

@@ -2885,6 +2885,73 @@ export async function runMigrations() {
     await client.query(`UPDATE invoices SET is_deleted = FALSE WHERE is_deleted IS NULL`)
     console.log('  ✅ 发票软删除字段就绪')
 
+    // ==================== 共享税号使用统计表 ====================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shared_tax_usage (
+        id SERIAL PRIMARY KEY,
+        shared_tax_id INTEGER NOT NULL,
+        bill_id TEXT NOT NULL,
+        bill_number TEXT,
+        container_number TEXT,
+        usage_month TEXT NOT NULL,
+        transport_type TEXT NOT NULL DEFAULT 'sea',
+        quantity NUMERIC DEFAULT 1,
+        unit TEXT DEFAULT 'container',
+        customer_id TEXT,
+        customer_name TEXT,
+        remark TEXT,
+        created_by TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shared_tax_usage_tax_id ON shared_tax_usage(shared_tax_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shared_tax_usage_bill_id ON shared_tax_usage(bill_id)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shared_tax_usage_month ON shared_tax_usage(usage_month)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shared_tax_usage_transport ON shared_tax_usage(transport_type)`)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shared_tax_usage_customer ON shared_tax_usage(customer_id)`)
+    // 创建唯一索引（如果不存在）
+    try {
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_shared_tax_usage_unique ON shared_tax_usage(bill_id)`)
+    } catch (e) {
+      // 忽略已存在的索引错误
+    }
+    console.log('  ✅ shared_tax_usage 表就绪')
+
+    // 为提单表添加共享税号关联字段
+    const sharedTaxFields = [
+      { name: 'shared_tax_id', type: 'INTEGER', comment: '共享税号ID' }
+    ]
+    for (const field of sharedTaxFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'bills_of_lading' AND column_name = $1
+      `, [field.name])
+      if (colCheck.rows.length === 0) {
+        await client.query(`ALTER TABLE bills_of_lading ADD COLUMN ${field.name} ${field.type}`)
+        console.log(`    + bills_of_lading.${field.name} 字段已添加 (${field.comment})`)
+      }
+    }
+    console.log('  ✅ 提单共享税号关联字段就绪')
+
+    // 为共享税号表添加供应商关联字段
+    const sharedTaxSupplierFields = [
+      { name: 'supplier_id', type: 'TEXT', comment: '关联供应商ID' },
+      { name: 'supplier_code', type: 'TEXT', comment: '关联供应商编码' }
+    ]
+    for (const field of sharedTaxSupplierFields) {
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'shared_tax_numbers' AND column_name = $1
+      `, [field.name])
+      if (colCheck.rows.length === 0) {
+        await client.query(`ALTER TABLE shared_tax_numbers ADD COLUMN ${field.name} ${field.type}`)
+        console.log(`    + shared_tax_numbers.${field.name} 字段已添加 (${field.comment})`)
+      }
+    }
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_shared_tax_supplier ON shared_tax_numbers(supplier_id)`)
+    console.log('  ✅ 共享税号供应商关联字段就绪')
+
     // ==================== 通用序列修复 ====================
     // 自动检测并修复所有表的序列值（防止主键冲突）
     try {

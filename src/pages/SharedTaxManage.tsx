@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { 
   Plus, Search, Edit, Trash2, Building2, CheckCircle, XCircle, 
-  RefreshCw, FileText, AlertCircle, X, ChevronDown
+  RefreshCw, FileText, AlertCircle, X, ChevronDown, BarChart3,
+  Ship, Plane, Train, Truck, Calendar
 } from 'lucide-react'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
@@ -19,7 +20,23 @@ interface SharedTaxNumber {
   verifiedAt?: string
   status: string
   remark?: string
+  supplierId?: string
+  supplierCode?: string
   createdAt?: string
+}
+
+interface UsageSummary {
+  companyName: string
+  companyShortName: string
+  supplierCode?: string
+  supplierId?: string
+  taxNumbers: Array<{ type: string; number: string }>
+  totalBills: number
+  totalAirKg: number
+  totalSeaContainers: number
+  totalRailContainers: number
+  totalTruckContainers: number
+  totalPayableAmount: number
 }
 
 type ValidationStatus = 'none' | 'valid' | 'invalid'
@@ -208,6 +225,16 @@ export default function SharedTaxManage() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingTax, setEditingTax] = useState<SharedTaxNumber | null>(null)
   
+  // 使用统计相关
+  const [showStats, setShowStats] = useState(false)
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [usageSummary, setUsageSummary] = useState<UsageSummary[]>([])
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    // 默认当前月份
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  
   // 表单数据（多选模式）
   const [formData, setFormData] = useState<TaxFormData>({
     companyShortName: '',
@@ -286,6 +313,48 @@ export default function SharedTaxManage() {
   useEffect(() => {
     loadTaxNumbers()
   }, [searchText, filterType])
+
+  // 加载使用统计
+  const loadUsageStats = async () => {
+    setStatsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (selectedMonth) params.append('month', selectedMonth)
+      
+      const response = await fetch(`${API_BASE_URL}/api/shared-tax-usage/summary?${params}`, {
+        headers: getAuthHeaders()
+      })
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        setUsageSummary(data.data || [])
+      }
+    } catch (error) {
+      console.error('加载使用统计失败:', error)
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
+  // 当显示统计面板或月份变化时加载统计数据
+  useEffect(() => {
+    if (showStats) {
+      loadUsageStats()
+    }
+  }, [showStats, selectedMonth])
+
+  // 生成月份选项（最近12个月）
+  const getMonthOptions = () => {
+    const options = []
+    const now = new Date()
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const label = `${date.getFullYear()}年${date.getMonth() + 1}月`
+      options.push({ value, label })
+    }
+    return options
+  }
 
   // 从税号中提取国家
   const getCountryFromTaxNumber = (taxNumber: string): string | null => {
@@ -637,13 +706,26 @@ export default function SharedTaxManage() {
               <p className="text-sm text-gray-500">公司级税号管理，可分享给客户使用</p>
             </div>
           </div>
-          <button
-            onClick={handleAdd}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            <Plus className="w-4 h-4" />
-            添加税号
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowStats(!showStats)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                showStats 
+                  ? 'bg-blue-50 border-blue-300 text-blue-700' 
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              使用统计
+            </button>
+            <button
+              onClick={handleAdd}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            >
+              <Plus className="w-4 h-4" />
+              添加税号
+            </button>
+          </div>
         </div>
 
         {/* 搜索和筛选 */}
@@ -678,6 +760,189 @@ export default function SharedTaxManage() {
           </button>
         </div>
 
+        {/* 使用统计面板 */}
+        {showStats && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-blue-600" />
+                <h2 className="font-semibold text-gray-900">月度应付统计</h2>
+                <span className="text-xs text-gray-500">（按清关完成月份）</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-400" />
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {getMonthOptions().map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={loadUsageStats}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-white rounded"
+                  title="刷新统计"
+                >
+                  <RefreshCw className={`w-4 h-4 ${statsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+            
+            {statsLoading ? (
+              <div className="text-center py-8 text-gray-400">加载统计中...</div>
+            ) : usageSummary.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                该月份暂无使用记录
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-blue-200">
+                      <th className="text-left py-2 px-3 font-medium text-gray-600">供应商编码</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-600">公司名称</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <Ship className="w-4 h-4 text-blue-500" />
+                          海运(柜)
+                        </div>
+                      </th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <Plane className="w-4 h-4 text-sky-500" />
+                          空运(KG)
+                        </div>
+                      </th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <Train className="w-4 h-4 text-orange-500" />
+                          铁路(柜)
+                        </div>
+                      </th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <Truck className="w-4 h-4 text-green-500" />
+                          卡航(柜)
+                        </div>
+                      </th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600">提单数</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-600">应付金额(€)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usageSummary.map((item, index) => (
+                      <tr key={item.supplierCode || index} className="border-b border-blue-100 hover:bg-blue-50/50">
+                        <td className="py-2.5 px-3">
+                          {item.supplierCode ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-amber-100 text-amber-700">
+                              {item.supplierCode}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-medium text-gray-900">{item.companyShortName || item.companyName}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {item.taxNumbers?.map((tax, idx) => (
+                              <span 
+                                key={idx}
+                                className={`text-[10px] px-1 py-0.5 rounded ${
+                                  tax.type === 'vat' ? 'bg-blue-50 text-blue-600' :
+                                  tax.type === 'eori' ? 'bg-purple-50 text-purple-600' :
+                                  'bg-gray-50 text-gray-600'
+                                }`}
+                              >
+                                {tax.type.toUpperCase()}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {item.totalSeaContainers > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                              {item.totalSeaContainers}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {item.totalAirKg > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[50px] px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">
+                              {item.totalAirKg.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {item.totalRailContainers > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">
+                              {item.totalRailContainers}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {item.totalTruckContainers > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">
+                              {item.totalTruckContainers}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="inline-flex items-center justify-center min-w-[32px] px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">
+                            {item.totalBills}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {item.totalPayableAmount > 0 ? (
+                            <span className="font-medium text-red-600">
+                              {item.totalPayableAmount.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-blue-300 bg-blue-100/50 font-medium">
+                      <td colSpan={2} className="py-2.5 px-3 text-right text-gray-700">合计</td>
+                      <td className="py-2.5 px-3 text-center text-blue-700">
+                        {usageSummary.reduce((sum, item) => sum + item.totalSeaContainers, 0) || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-sky-700">
+                        {usageSummary.reduce((sum, item) => sum + item.totalAirKg, 0).toLocaleString() || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-orange-700">
+                        {usageSummary.reduce((sum, item) => sum + item.totalRailContainers, 0) || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-green-700">
+                        {usageSummary.reduce((sum, item) => sum + item.totalTruckContainers, 0) || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-gray-700">
+                        {usageSummary.reduce((sum, item) => sum + item.totalBills, 0)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-red-600">
+                        {usageSummary.reduce((sum, item) => sum + item.totalPayableAmount, 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 税号卡片列表 */}
         <div className="space-y-4">
           {loading ? (
@@ -707,7 +972,14 @@ export default function SharedTaxManage() {
                   {/* 公司信息头部 */}
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h3 className="font-medium text-gray-900">{companyName}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900">{companyName}</h3>
+                        {firstTax.supplierCode && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-mono bg-amber-100 text-amber-700 rounded">
+                            {firstTax.supplierCode}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-500">{firstTax.country || '未知国家'}</p>
                     </div>
                     <div className="flex items-center gap-1">
