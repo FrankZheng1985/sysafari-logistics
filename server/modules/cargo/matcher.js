@@ -884,12 +884,12 @@ export async function updateCargoItemDetail(itemId, data) {
 }
 
 /**
- * 获取导入批次的匹配统计
+ * 获取导入批次的匹配统计（整票货物统计，不区分匹配状态）
  */
 export async function getMatchingStats(importId) {
   const db = getDatabase()
   
-  // 基本统计
+  // 整票统计：统计整个批次的所有商品，不区分匹配状态
   const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total,
@@ -898,35 +898,42 @@ export async function getMatchingStats(importId) {
       SUM(CASE WHEN origin_country IS NULL OR origin_country = '' THEN 1 ELSE 0 END) as missingOrigin,
       SUM(CASE WHEN material IS NULL OR material = '' THEN 1 ELSE 0 END) as missingMaterial,
       SUM(COALESCE(total_value, 0)) as totalValue,
-      SUM(COALESCE(total_value, 0) * COALESCE(duty_rate, 0) / 100) as totalTax
+      SUM(COALESCE(duty_amount, 0)) as totalDuty,
+      SUM(COALESCE(vat_amount, 0)) as totalVat,
+      SUM(COALESCE(other_tax_amount, 0)) as totalOtherTax,
+      SUM(COALESCE(total_tax, 0)) as totalTax
     FROM cargo_items 
     WHERE import_id = ?
   `).get(importId)
   
-  // 唯一品名数量
+  // 唯一品名数量（整票）
   const productNameCount = await db.prepare(`
     SELECT COUNT(DISTINCT product_name) as count
     FROM cargo_items 
     WHERE import_id = ? AND product_name IS NOT NULL AND product_name != ''
   `).get(importId)
   
-  // 唯一HS Code数量
+  // 唯一HS Code数量（整票，包括客户HS和匹配后的HS）
   const hsCodeCount = await db.prepare(`
-    SELECT COUNT(DISTINCT matched_hs_code) as count
+    SELECT COUNT(DISTINCT COALESCE(matched_hs_code, customer_hs_code)) as count
     FROM cargo_items 
-    WHERE import_id = ? AND matched_hs_code IS NOT NULL AND matched_hs_code != ''
+    WHERE import_id = ? 
+      AND (matched_hs_code IS NOT NULL AND matched_hs_code != '' 
+           OR customer_hs_code IS NOT NULL AND customer_hs_code != '')
   `).get(importId)
   
   return {
     total: parseInt(stats?.total) || 0,
     matched: parseInt(stats?.matched) || 0,
     unmatched: parseInt(stats?.unmatched) || 0,
-    missingOrigin: parseInt(stats?.missingOrigin) || 0,
-    missingMaterial: parseInt(stats?.missingMaterial) || 0,
+    missingOrigin: parseInt(stats?.missingorigin) || 0,
+    missingMaterial: parseInt(stats?.missingmaterial) || 0,
     uniqueProductNames: parseInt(productNameCount?.count) || 0,
     uniqueHsCodes: parseInt(hsCodeCount?.count) || 0,
-    totalValue: parseFloat(stats?.totalValue) || 0,
-    totalTax: parseFloat(stats?.totalTax) || 0
+    totalValue: parseFloat(stats?.totalvalue) || 0,
+    totalDuty: parseFloat(stats?.totalduty) || 0,
+    totalVat: parseFloat(stats?.totalvat) || 0,
+    totalTax: parseFloat(stats?.totaltax) || 0
   }
 }
 

@@ -122,13 +122,15 @@ export default function DocumentMatching() {
   const [checkingPrice, setCheckingPrice] = useState(false)
   const [anomalyCount, setAnomalyCount] = useState(0)
 
-  // 批次统计
+  // 批次统计（整票货物统计）
   const [batchStats, setBatchStats] = useState<{
     uniqueProductNames: number
     uniqueHsCodes: number
     totalValue: number
+    totalDuty: number
+    totalVat: number
     totalTax: number
-  }>({ uniqueProductNames: 0, uniqueHsCodes: 0, totalValue: 0, totalTax: 0 })
+  }>({ uniqueProductNames: 0, uniqueHsCodes: 0, totalValue: 0, totalDuty: 0, totalVat: 0, totalTax: 0 })
 
   // 实时查询HS编码
   const [queryHsCode, setQueryHsCode] = useState('')
@@ -362,6 +364,8 @@ export default function DocumentMatching() {
           uniqueProductNames: data.data?.uniqueProductNames || 0,
           uniqueHsCodes: data.data?.uniqueHsCodes || 0,
           totalValue: data.data?.totalValue || 0,
+          totalDuty: data.data?.totalDuty || 0,
+          totalVat: data.data?.totalVat || 0,
           totalTax: data.data?.totalTax || 0
         })
       }
