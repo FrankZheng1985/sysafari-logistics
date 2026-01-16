@@ -633,8 +633,12 @@ export default function FeeModal({
         const groups: FeeCategoryGroup[] = parentCategories.map(parent => {
           // 找到该父级下的所有子分类
           const children = childCategories.filter(child => child.parentId === parent.id)
+          // 如果没有子分类，把父级本身作为子分类（让一级分类也能被选择）
+          if (children.length === 0) {
+            return { parent, children: [parent] }
+          }
           return { parent, children }
-        }).filter(group => group.children.length > 0) // 只保留有子分类的组
+        }) // 保留所有分类（包括没有子分类的一级分类）
         
         if (categories.length > 0) {
           setFeeCategories(categories)

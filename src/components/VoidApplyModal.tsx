@@ -172,13 +172,12 @@ function extractKeyMilestones(logs: OperationLog[]): { key: string; label: strin
   return Array.from(milestones.values()).sort((a, b) => a.order - b.order)
 }
 
-const FEE_CATEGORIES = [
+// 默认费用类别（API 加载前的占位）
+const DEFAULT_FEE_CATEGORIES = [
   { value: 'freight', label: '运费' },
   { value: 'customs', label: '关税' },
   { value: 'warehouse', label: '仓储费' },
-  { value: 'insurance', label: '保险费' },
   { value: 'handling', label: '操作费' },
-  { value: 'documentation', label: '文件费' },
   { value: 'other', label: '其他费用' },
 ]
 
@@ -201,6 +200,9 @@ export default function VoidApplyModal({
   // 操作日志
   const [operationLogs, setOperationLogs] = useState<OperationLog[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  
+  // 费用类别（从 API 加载）
+  const [feeCategories, setFeeCategories] = useState(DEFAULT_FEE_CATEGORIES)
 
   // 新增费用表单
   const [newFeeForm, setNewFeeForm] = useState({
@@ -210,6 +212,25 @@ export default function VoidApplyModal({
     currency: 'EUR'
   })
 
+  // 加载费用类别
+  const loadFeeCategories = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/service-fee-categories?status=active`)
+      const data = await response.json()
+      const list = data.data?.list || (Array.isArray(data.data) ? data.data : [])
+      if (data.errCode === 200 && list.length > 0) {
+        // 转换为下拉选项格式
+        const categories = list.map((item: any) => ({
+          value: item.code || item.name,
+          label: item.name
+        }))
+        setFeeCategories(categories)
+      }
+    } catch (err) {
+      console.error('加载费用类别失败:', err)
+    }
+  }
+
   // 重置状态
   useEffect(() => {
     if (visible) {
@@ -218,6 +239,7 @@ export default function VoidApplyModal({
       setSelectedFeeIds([])
       setNewFees([])
       loadOperationLogs()
+      loadFeeCategories()
       setError('')
       loadExistingFees()
     }
@@ -354,7 +376,7 @@ export default function VoidApplyModal({
   if (!visible) return null
 
   const getCategoryLabel = (value: string) => {
-    return FEE_CATEGORIES.find(c => c.value === value)?.label || value
+    return feeCategories.find(c => c.value === value)?.label || value
   }
 
   return (
@@ -611,7 +633,7 @@ export default function VoidApplyModal({
                         onChange={(e) => setNewFeeForm(prev => ({ ...prev, category: e.target.value }))}
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
                       >
-                        {FEE_CATEGORIES.map(cat => (
+                        {feeCategories.map(cat => (
                           <option key={cat.value} value={cat.value}>{cat.label}</option>
                         ))}
                       </select>
