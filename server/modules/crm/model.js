@@ -2159,17 +2159,18 @@ export async function getSharedTaxUsageSummary(params = {}) {
   const db = getDatabase()
   const { month, year } = params
   
-  // 先获取所有有效的共享税号供应商
+  // 直接从 suppliers 表获取所有 IA- 开头的清关代理供应商
+  // 这样可以统计所有清关代理的费用，包括没有在 shared_tax_numbers 表中记录的
   const suppliers = await db.prepare(`
     SELECT 
-      supplier_code,
-      supplier_id,
-      COALESCE(company_name, company_short_name) as company_name,
-      company_short_name,
-      STRING_AGG(DISTINCT tax_type || ':' || tax_number, '|') as tax_numbers
-    FROM shared_tax_numbers
-    WHERE status = 'active' AND supplier_id IS NOT NULL
-    GROUP BY supplier_code, supplier_id, COALESCE(company_name, company_short_name), company_short_name
+      s.id as supplier_id,
+      s.supplier_code,
+      s.supplier_name,
+      s.short_name
+    FROM suppliers s
+    WHERE s.supplier_code LIKE 'IA-%'
+      AND s.status = 'active'
+    ORDER BY s.supplier_code
   `).all()
   
   const results = []
@@ -2248,20 +2249,21 @@ export async function getSharedTaxUsageSummary(params = {}) {
     const amountResult = await db.prepare(amountQuery).get(...amountParams)
     const totalPayableAmount = parseFloat(amountResult?.total_amount) || 0
     
-    // 解析税号列表
-    const taxNumbers = []
-    if (supplier.tax_numbers) {
-      supplier.tax_numbers.split('|').forEach(item => {
-        const [type, number] = item.split(':')
-        if (type && number) {
-          taxNumbers.push({ type, number })
-        }
-      })
-    }
+    // 从 shared_tax_numbers 表获取关联的税号信息
+    const taxNumbersResult = await db.prepare(`
+      SELECT DISTINCT tax_type, tax_number
+      FROM shared_tax_numbers
+      WHERE supplier_id = ? AND status = 'active'
+    `).all(supplier.supplier_id)
+    
+    const taxNumbers = taxNumbersResult.map(row => ({
+      type: row.tax_type,
+      number: row.tax_number
+    }))
     
     results.push({
-      companyName: supplier.company_name,
-      companyShortName: supplier.company_short_name,
+      companyName: supplier.supplier_name,
+      companyShortName: supplier.short_name,
       supplierCode: supplier.supplier_code,
       supplierId: supplier.supplier_id,
       taxNumbers,
