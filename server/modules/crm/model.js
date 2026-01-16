@@ -1663,6 +1663,83 @@ function generateSupplierCodeFromShortName(shortName) {
 }
 
 /**
+ * 预定义的供应商别名映射
+ */
+const SUPPLIER_ALIASES = {
+  'kiwi': 'IA-KIWISTAV',
+  'feld': 'IA-FELDSBERG',
+  'feldsberg': 'IA-FELDSBERG',
+  'kralovec': 'IA-KRALOVECAI',
+  'kurz': 'IA-DBWIH',
+  'dbwih': 'IA-DBWIH',
+  'dwgk': 'IA-DWGK',
+}
+
+/**
+ * 智能匹配供应商（五级匹配）
+ * 1. 精确匹配 supplier_code (IA-XXX)
+ * 2. 精确匹配 short_name (不区分大小写)
+ * 3. 模糊匹配 supplier_name / short_name
+ * 4. 核心词匹配 (DBWIH-Test --> DBWIH --> IA-DBWIH)
+ * 5. 预定义别名映射 (KIWI --> IA-KIWISTAV)
+ */
+async function findMatchingSupplier(db, companyShortName) {
+  if (!companyShortName) return null
+  
+  const shortName = companyShortName.trim()
+  const shortNameLower = shortName.toLowerCase()
+  const generatedCode = generateSupplierCodeFromShortName(shortName)
+  
+  // 1. 精确匹配供应商编码 IA-XXX
+  let supplier = await db.prepare(`
+    SELECT id, supplier_code, supplier_name FROM suppliers 
+    WHERE supplier_code = ? AND status = 'active'
+  `).get(generatedCode)
+  if (supplier) return supplier
+  
+  // 2. 精确匹配 short_name（不区分大小写）
+  supplier = await db.prepare(`
+    SELECT id, supplier_code, supplier_name FROM suppliers 
+    WHERE LOWER(short_name) = ? AND status = 'active'
+  `).get(shortNameLower)
+  if (supplier) return supplier
+  
+  // 3. 模糊匹配 supplier_name 或 short_name
+  supplier = await db.prepare(`
+    SELECT id, supplier_code, supplier_name FROM suppliers 
+    WHERE (LOWER(supplier_name) LIKE ? OR LOWER(short_name) LIKE ?)
+      AND status = 'active'
+    LIMIT 1
+  `).get(`%${shortNameLower}%`, `%${shortNameLower}%`)
+  if (supplier) return supplier
+  
+  // 4. 核心词匹配：提取第一个单词作为核心词
+  const coreWord = shortName.split(/[-_\s]/)[0]
+  if (coreWord && coreWord.length >= 3) {
+    const coreCode = generateSupplierCodeFromShortName(coreWord)
+    supplier = await db.prepare(`
+      SELECT id, supplier_code, supplier_name FROM suppliers 
+      WHERE (supplier_code = ? OR supplier_code LIKE ?)
+        AND status = 'active'
+      LIMIT 1
+    `).get(coreCode, `${coreCode}%`)
+    if (supplier) return supplier
+  }
+  
+  // 5. 预定义别名映射
+  const aliasCode = SUPPLIER_ALIASES[shortNameLower] || SUPPLIER_ALIASES[coreWord?.toLowerCase()]
+  if (aliasCode) {
+    supplier = await db.prepare(`
+      SELECT id, supplier_code, supplier_name FROM suppliers 
+      WHERE supplier_code = ? AND status = 'active'
+    `).get(aliasCode)
+    if (supplier) return supplier
+  }
+  
+  return null // 未找到
+}
+
+/**
  * 创建共享税号（同时自动创建关联供应商）
  */
 export async function createSharedTaxNumber(data) {
@@ -1765,21 +1842,18 @@ export async function updateSharedTaxNumber(id, data) {
   let supplierId = current?.supplier_id
   let supplierCode = current?.supplier_code
   
-  // 如果公司简称变更，需要查找对应供应商
+  // 如果公司简称变更，使用智能匹配查找对应供应商
   if (data.companyShortName && data.companyShortName !== current?.company_short_name) {
-    const newSupplierCode = generateSupplierCodeFromShortName(data.companyShortName)
+    // 使用五级智能匹配查找供应商
+    const matchedSupplier = await findMatchingSupplier(db, data.companyShortName)
     
-    // 检查新供应商编码是否已存在
-    const existingSupplier = await db.prepare(`
-      SELECT id, supplier_code, supplier_name FROM suppliers WHERE supplier_code = ?
-    `).get(newSupplierCode)
-    
-    if (existingSupplier) {
-      supplierId = existingSupplier.id
-      supplierCode = newSupplierCode
+    if (matchedSupplier) {
+      supplierId = matchedSupplier.id
+      supplierCode = matchedSupplier.supplier_code
     } else {
-      // 不自动创建供应商，提示管理员先创建
-      throw new Error(`未找到匹配的供应商 [${newSupplierCode}]，请先在"供应商管理"中创建编码为 ${newSupplierCode} 的供应商，再修改共享税号。`)
+      // 匹配不上，提示管理员先创建
+      const expectedCode = generateSupplierCodeFromShortName(data.companyShortName)
+      throw new Error(`未找到匹配的供应商 [${expectedCode}]，请先在"供应商管理"中创建编码为 ${expectedCode} 的供应商，再修改共享税号。`)
     }
   }
   
