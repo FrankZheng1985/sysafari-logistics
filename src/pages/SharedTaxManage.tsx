@@ -33,11 +33,13 @@ interface UsageSummary {
   taxNumbers: Array<{ type: string; number: string }>
   totalBills: number
   totalAirKg: number
-  totalAirBills: number  // 空运提单数（独立统计）
+  totalAirBills: number
   totalSeaContainers: number
   totalRailContainers: number
   totalTruckContainers: number
-  totalPayableAmount: number
+  containerPayableAmount: number  // 柜子类应付金额
+  airPayableAmount: number        // 空运应付金额
+  totalPayableAmount: number      // 总应付金额
 }
 
 type ValidationStatus = 'none' | 'valid' | 'invalid'
@@ -824,19 +826,14 @@ export default function SharedTaxManage() {
                         </div>
                       </th>
                       <th className="text-center py-2 px-3 font-medium text-gray-600">提单数</th>
-                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
-                          <Plane className="w-4 h-4 text-sky-500" />
-                          空运(单)
-                        </div>
-                      </th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-600 whitespace-nowrap">柜子金额(€)</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <Plane className="w-4 h-4 text-sky-500" />
                           空运(KG)
                         </div>
                       </th>
-                      <th className="text-right py-2 px-3 font-medium text-gray-600">应付金额(€)</th>
+                      <th className="text-right py-2 px-3 font-medium text-gray-600 whitespace-nowrap">空运金额(€)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -900,10 +897,10 @@ export default function SharedTaxManage() {
                             {item.totalBills}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-center">
-                          {item.totalAirBills > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">
-                              {item.totalAirBills}
+                        <td className="py-2.5 px-3 text-right">
+                          {(item.containerPayableAmount || 0) > 0 ? (
+                            <span className="font-medium text-red-600">
+                              {(item.containerPayableAmount || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           ) : (
                             <span className="text-gray-300">-</span>
@@ -919,9 +916,9 @@ export default function SharedTaxManage() {
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          {item.totalPayableAmount > 0 ? (
-                            <span className="font-medium text-red-600">
-                              {item.totalPayableAmount.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {(item.airPayableAmount || 0) > 0 ? (
+                            <span className="font-medium text-sky-600">
+                              {(item.airPayableAmount || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           ) : (
                             <span className="text-gray-300">-</span>
@@ -945,14 +942,14 @@ export default function SharedTaxManage() {
                       <td className="py-2.5 px-3 text-center text-gray-700">
                         {usageSummary.reduce((sum, item) => sum + item.totalBills, 0)}
                       </td>
-                      <td className="py-2.5 px-3 text-center text-sky-700">
-                        {usageSummary.reduce((sum, item) => sum + (item.totalAirBills || 0), 0) || '-'}
+                      <td className="py-2.5 px-3 text-right text-red-600">
+                        {usageSummary.reduce((sum, item) => sum + (item.containerPayableAmount || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="py-2.5 px-3 text-center text-sky-700">
                         {usageSummary.reduce((sum, item) => sum + item.totalAirKg, 0).toLocaleString() || '-'}
                       </td>
-                      <td className="py-2.5 px-3 text-right text-red-600">
-                        {usageSummary.reduce((sum, item) => sum + item.totalPayableAmount, 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td className="py-2.5 px-3 text-right text-sky-600">
+                        {usageSummary.reduce((sum, item) => sum + (item.airPayableAmount || 0), 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   </tfoot>

@@ -2232,27 +2232,55 @@ export async function getSharedTaxUsageSummary(params = {}) {
     // 提单数 = 柜子类运输的总数（海运+铁路+卡航），不包括空运
     const totalBills = totalSeaContainers + totalRailContainers + totalTruckContainers
     
-    // 查询该供应商在指定月份的应付金额
-    let amountQuery = `
+    // 查询该供应商在指定月份的应付金额（分别统计柜子类和空运）
+    // 柜子类（海运/铁路/卡航）应付金额
+    let containerAmountQuery = `
       SELECT COALESCE(SUM(f.amount), 0) as total_amount
       FROM fees f
       INNER JOIN bills_of_lading b ON f.bill_id = b.id
       WHERE f.fee_type = 'payable' 
         AND f.supplier_id = ?
         AND (b.is_void = 0 OR b.is_void IS NULL)
+        AND (COALESCE(b.transport_method, '海运') != '空运')
     `
-    const amountParams = [supplier.supplier_id]
+    const containerAmountParams = [supplier.supplier_id]
     
     if (month) {
-      amountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY-MM') = ?`
-      amountParams.push(month)
+      containerAmountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY-MM') = ?`
+      containerAmountParams.push(month)
     } else if (year) {
-      amountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY') = ?`
-      amountParams.push(year)
+      containerAmountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY') = ?`
+      containerAmountParams.push(year)
     }
     
-    const amountResult = await db.prepare(amountQuery).get(...amountParams)
-    const totalPayableAmount = parseFloat(amountResult?.total_amount) || 0
+    const containerAmountResult = await db.prepare(containerAmountQuery).get(...containerAmountParams)
+    const containerPayableAmount = parseFloat(containerAmountResult?.total_amount) || 0
+    
+    // 空运应付金额
+    let airAmountQuery = `
+      SELECT COALESCE(SUM(f.amount), 0) as total_amount
+      FROM fees f
+      INNER JOIN bills_of_lading b ON f.bill_id = b.id
+      WHERE f.fee_type = 'payable' 
+        AND f.supplier_id = ?
+        AND (b.is_void = 0 OR b.is_void IS NULL)
+        AND b.transport_method = '空运'
+    `
+    const airAmountParams = [supplier.supplier_id]
+    
+    if (month) {
+      airAmountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY-MM') = ?`
+      airAmountParams.push(month)
+    } else if (year) {
+      airAmountQuery += ` AND b.customs_release_time IS NOT NULL AND b.customs_release_time != '' AND TO_CHAR(b.customs_release_time::timestamp, 'YYYY') = ?`
+      airAmountParams.push(year)
+    }
+    
+    const airAmountResult = await db.prepare(airAmountQuery).get(...airAmountParams)
+    const airPayableAmount = parseFloat(airAmountResult?.total_amount) || 0
+    
+    // 总应付金额
+    const totalPayableAmount = containerPayableAmount + airPayableAmount
     
     // 从 shared_tax_numbers 表获取关联的税号信息
     const taxNumbersResult = await db.prepare(`
@@ -2274,11 +2302,13 @@ export async function getSharedTaxUsageSummary(params = {}) {
       taxNumbers,
       totalBills,
       totalAirKg,
-      totalAirBills,  // 空运提单数（独立统计）
+      totalAirBills,
       totalSeaContainers,
       totalRailContainers,
       totalTruckContainers,
-      totalPayableAmount
+      containerPayableAmount,  // 柜子类应付金额
+      airPayableAmount,        // 空运应付金额
+      totalPayableAmount       // 总应付金额
     })
   }
   
