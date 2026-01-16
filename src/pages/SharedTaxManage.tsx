@@ -718,13 +718,13 @@ export default function SharedTaxManage() {
               <BarChart3 className="w-4 h-4" />
               使用统计
             </button>
-            <button
-              onClick={handleAdd}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-            >
-              <Plus className="w-4 h-4" />
-              添加税号
-            </button>
+          <button
+            onClick={handleAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          >
+            <Plus className="w-4 h-4" />
+            添加税号
+          </button>
           </div>
         </div>
 
@@ -973,7 +973,7 @@ export default function SharedTaxManage() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-gray-900">{companyName}</h3>
+                      <h3 className="font-medium text-gray-900">{companyName}</h3>
                         {firstTax.supplierCode && (
                           <span className="px-1.5 py-0.5 text-[10px] font-mono bg-amber-100 text-amber-700 rounded">
                             {firstTax.supplierCode}
