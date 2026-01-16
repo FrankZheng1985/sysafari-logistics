@@ -1474,8 +1474,9 @@ export async function checkPriceAnomaly(req, res) {
   try {
     const { importId } = req.params
 
-    // 获取导入批次的商品
-    const items = await importer.getCargoItems(parseInt(importId))
+    // 获取导入批次的商品（返回分页对象，需要取 list 属性）
+    const result = await importer.getCargoItems(parseInt(importId), { pageSize: 10000 })
+    const items = result?.list || []
     if (!items || items.length === 0) {
       return badRequest(res, '未找到商品数据')
     }
