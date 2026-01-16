@@ -758,20 +758,35 @@ export async function getMatchedItems(importId, params = {}) {
  * 转换货物明细行数据
  */
 function convertCargoItemRow(row) {
+  const quantity = parseFloat(row.quantity) || 0
+  const grossWeight = parseFloat(row.gross_weight) || 0
+  const netWeight = parseFloat(row.net_weight) || 0
+  // 单件毛重 = 总毛重 / 数量
+  const unitGrossWeight = quantity > 0 ? grossWeight / quantity : 0
+  // 单件净重 = 总净重 / 数量
+  const unitNetWeight = quantity > 0 ? netWeight / quantity : 0
+  
   return {
     id: row.id,
     importId: row.import_id,
     itemNo: row.item_no,
     productName: row.product_name,
     productNameEn: row.product_name_en,
+    productImage: row.product_image || null,
     customerHsCode: row.customer_hs_code,
     matchedHsCode: row.matched_hs_code,
     matchConfidence: parseFloat(row.match_confidence) || 0,
     matchSource: row.match_source,
-    quantity: parseFloat(row.quantity) || 0,
+    quantity: quantity,
     unitName: row.unit_name,
     unitPrice: parseFloat(row.unit_price) || 0,
     totalValue: parseFloat(row.total_value) || 0,
+    grossWeight: grossWeight,
+    netWeight: netWeight,
+    unitGrossWeight: unitGrossWeight,
+    unitNetWeight: unitNetWeight,
+    palletCount: parseFloat(row.pallet_count) || 0,
+    cartonCount: parseFloat(row.carton_count) || 0,
     originCountry: row.origin_country,
     material: row.material,
     materialEn: row.material_en,
@@ -890,6 +905,7 @@ export async function getMatchingStats(importId) {
   const db = getDatabase()
   
   // 整票统计：统计整个批次的所有商品，不区分匹配状态
+  // 税金计算：货值 × 关税率 / 100
   const stats = await db.prepare(`
     SELECT 
       COUNT(*) as total,
@@ -898,10 +914,14 @@ export async function getMatchingStats(importId) {
       SUM(CASE WHEN origin_country IS NULL OR origin_country = '' THEN 1 ELSE 0 END) as missingOrigin,
       SUM(CASE WHEN material IS NULL OR material = '' THEN 1 ELSE 0 END) as missingMaterial,
       SUM(COALESCE(total_value, 0)) as totalValue,
-      SUM(COALESCE(duty_amount, 0)) as totalDuty,
-      SUM(COALESCE(vat_amount, 0)) as totalVat,
-      SUM(COALESCE(other_tax_amount, 0)) as totalOtherTax,
-      SUM(COALESCE(total_tax, 0)) as totalTax
+      SUM(COALESCE(total_value, 0) * COALESCE(duty_rate, 0) / 100) as totalDuty,
+      SUM(COALESCE(total_value, 0) * COALESCE(vat_rate, 19) / 100) as totalVat,
+      SUM(COALESCE(total_value, 0) * COALESCE(duty_rate, 0) / 100) as totalTax,
+      SUM(COALESCE(quantity, 0)) as totalQuantity,
+      SUM(COALESCE(carton_count, 0)) as totalCartons,
+      SUM(COALESCE(pallet_count, 0)) as totalPallets,
+      SUM(COALESCE(gross_weight, 0)) as totalGrossWeight,
+      SUM(COALESCE(net_weight, 0)) as totalNetWeight
     FROM cargo_items 
     WHERE import_id = ?
   `).get(importId)
@@ -922,7 +942,8 @@ export async function getMatchingStats(importId) {
            OR customer_hs_code IS NOT NULL AND customer_hs_code != '')
   `).get(importId)
   
-  return {
+  // PostgreSQL 返回小写字段名
+  const result = {
     total: parseInt(stats?.total) || 0,
     matched: parseInt(stats?.matched) || 0,
     unmatched: parseInt(stats?.unmatched) || 0,
@@ -933,8 +954,15 @@ export async function getMatchingStats(importId) {
     totalValue: parseFloat(stats?.totalvalue) || 0,
     totalDuty: parseFloat(stats?.totalduty) || 0,
     totalVat: parseFloat(stats?.totalvat) || 0,
-    totalTax: parseFloat(stats?.totaltax) || 0
+    totalTax: parseFloat(stats?.totaltax) || 0,
+    totalQuantity: parseInt(stats?.totalquantity) || 0,
+    totalCartons: parseInt(stats?.totalcartons) || 0,
+    totalPallets: parseInt(stats?.totalpallets) || 0,
+    totalGrossWeight: parseFloat(stats?.totalgrossweight) || 0,
+    totalNetWeight: parseFloat(stats?.totalnetweight) || 0
   }
+  
+  return result
 }
 
 export default {

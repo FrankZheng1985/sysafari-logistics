@@ -365,11 +365,14 @@ export async function getMatchingStats(req, res) {
       return badRequest(res, '缺少importId参数')
     }
 
+    console.log('[getMatchingStats] 开始查询, importId:', importId)
     const stats = await matcher.getMatchingStats(parseInt(importId))
+    console.log('[getMatchingStats] 查询成功:', stats)
     return success(res, stats)
   } catch (error) {
-    console.error('获取匹配统计失败:', error)
-    return serverError(res, '获取匹配统计失败')
+    console.error('获取匹配统计失败:', error.message)
+    console.error('错误堆栈:', error.stack)
+    return serverError(res, '获取匹配统计失败: ' + error.message)
   }
 }
 
@@ -794,12 +797,21 @@ export async function updateBatchOrigin(req, res) {
 }
 
 /**
- * 更新单个商品的材质和用途
+ * 更新单个商品的详情信息（材质、用途、单价、商品名称等）
  */
 export async function updateItemDetail(req, res) {
   try {
     const { itemId } = req.params
-    const { material, materialEn, usageScenario } = req.body
+    const { 
+      material, 
+      materialEn, 
+      usageScenario,
+      productName,
+      productNameEn,
+      unitPrice,
+      grossWeight,
+      netWeight
+    } = req.body
     
     if (!itemId) {
       return badRequest(res, '请提供商品ID')
@@ -808,33 +820,139 @@ export async function updateItemDetail(req, res) {
     const { getDatabase } = await import('../../config/database.js')
     const db = getDatabase()
     
-    // 更新商品材质和用途
+    // 构建动态更新语句
+    const updates = []
+    const values = []
+    
+    if (material !== undefined) {
+      updates.push('material = ?')
+      values.push(material || null)
+    }
+    if (materialEn !== undefined) {
+      updates.push('material_en = ?')
+      values.push(materialEn || null)
+    }
+    if (usageScenario !== undefined) {
+      updates.push('usage_scenario = ?')
+      values.push(usageScenario || null)
+    }
+    if (productName !== undefined) {
+      updates.push('product_name = ?')
+      values.push(productName || null)
+    }
+    if (productNameEn !== undefined) {
+      updates.push('product_name_en = ?')
+      values.push(productNameEn || null)
+    }
+    if (unitPrice !== undefined) {
+      updates.push('unit_price = ?')
+      values.push(parseFloat(unitPrice) || 0)
+      
+      // 获取数量以更新 total_value
+      const item = db.prepare('SELECT quantity FROM cargo_items WHERE id = ?').get(parseInt(itemId))
+      if (item) {
+        const newTotalValue = (parseFloat(unitPrice) || 0) * (parseFloat(item.quantity) || 0)
+        updates.push('total_value = ?')
+        values.push(newTotalValue)
+      }
+    }
+    if (grossWeight !== undefined) {
+      updates.push('gross_weight = ?')
+      values.push(parseFloat(grossWeight) || 0)
+    }
+    if (netWeight !== undefined) {
+      updates.push('net_weight = ?')
+      values.push(parseFloat(netWeight) || 0)
+    }
+    
+    if (updates.length === 0) {
+      return badRequest(res, '没有需要更新的字段')
+    }
+    
+    updates.push('updated_at = CURRENT_TIMESTAMP')
+    values.push(parseInt(itemId))
+    
     const updateStmt = db.prepare(`
       UPDATE cargo_items 
-      SET material = ?, material_en = ?, usage_scenario = ?, updated_at = CURRENT_TIMESTAMP
+      SET ${updates.join(', ')}
       WHERE id = ?
     `)
     
-    const result = updateStmt.run(
-      material || null, 
-      materialEn || null, 
-      usageScenario || null, 
-      parseInt(itemId)
-    )
+    const result = updateStmt.run(...values)
     
     if (result.changes === 0) {
       return notFound(res, '商品不存在')
     }
     
+    // 获取更新后的商品数据
+    const updatedItem = db.prepare('SELECT * FROM cargo_items WHERE id = ?').get(parseInt(itemId))
+    
     return success(res, {
       itemId: parseInt(itemId),
-      material,
-      materialEn,
-      usageScenario
-    }, '商品材质和用途已更新')
+      productName: updatedItem?.product_name,
+      material: updatedItem?.material,
+      materialEn: updatedItem?.material_en,
+      usageScenario: updatedItem?.usage_scenario,
+      unitPrice: parseFloat(updatedItem?.unit_price) || 0,
+      totalValue: parseFloat(updatedItem?.total_value) || 0,
+      grossWeight: parseFloat(updatedItem?.gross_weight) || 0,
+      netWeight: parseFloat(updatedItem?.net_weight) || 0
+    }, '商品信息已更新')
   } catch (error) {
-    console.error('更新商品材质用途失败:', error)
-    return serverError(res, error.message || '更新商品材质用途失败')
+    console.error('更新商品信息失败:', error)
+    return serverError(res, error.message || '更新商品信息失败')
+  }
+}
+
+/**
+ * 删除单个货物明细
+ */
+export async function deleteCargoItem(req, res) {
+  try {
+    const { itemId } = req.params
+    
+    if (!itemId) {
+      return badRequest(res, '请提供商品ID')
+    }
+    
+    const { getDatabase } = await import('../../config/database.js')
+    const db = getDatabase()
+    
+    // 先获取商品信息以便更新导入批次统计
+    const item = db.prepare('SELECT * FROM cargo_items WHERE id = ?').get(parseInt(itemId))
+    
+    if (!item) {
+      return notFound(res, '商品不存在')
+    }
+    
+    // 删除商品
+    db.prepare('DELETE FROM cargo_items WHERE id = ?').run(parseInt(itemId))
+    
+    // 更新导入批次的统计数据
+    if (item.import_id) {
+      const stats = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN match_status IN ('approved', 'auto_approved') THEN 1 ELSE 0 END) as matched,
+          SUM(CASE WHEN match_status = 'review' OR match_status = 'pending' THEN 1 ELSE 0 END) as pending
+        FROM cargo_items 
+        WHERE import_id = ?
+      `).get(item.import_id)
+      
+      db.prepare(`
+        UPDATE cargo_imports 
+        SET total_items = ?, matched_items = ?, pending_items = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(stats.total || 0, stats.matched || 0, stats.pending || 0, item.import_id)
+    }
+    
+    return success(res, { 
+      itemId: parseInt(itemId),
+      importId: item.import_id
+    }, '商品已删除')
+  } catch (error) {
+    console.error('删除商品失败:', error)
+    return serverError(res, error.message || '删除商品失败')
   }
 }
 
@@ -2466,6 +2584,7 @@ export default {
   updateItemOrigin,
   updateBatchOrigin,
   updateItemDetail,
+  deleteCargoItem,
   recalculateTax,
   getTariffByOrigin,
 

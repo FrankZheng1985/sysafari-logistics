@@ -115,6 +115,9 @@ router.put('/documents/matching/batch-origin', controller.updateBatchOrigin)
 // 更新单个商品的材质和用途
 router.put('/documents/matching/item/:itemId/detail', controller.updateItemDetail)
 
+// 删除单个货物明细
+router.delete('/documents/matching/item/:itemId', controller.deleteCargoItem)
+
 // 获取HS推荐
 router.post('/documents/matching/recommend', controller.getRecommendations)
 

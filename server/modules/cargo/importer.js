@@ -536,10 +536,18 @@ const FIELD_MAPPING = {
   '原产国': 'originCountry',
   '进口国': 'importCountry',
   
-  // 数量信息
+  // 数量信息 - 箱数
   '商品箱数CTNS*': 'cartonCount',
   '商品箱数 CTNS*': 'cartonCount',
+  '商品箱数CTNS': 'cartonCount',
+  '商品箱数 CTNS': 'cartonCount',
+  '箱数CTNS*': 'cartonCount',
+  '箱数CTNS': 'cartonCount',
+  '箱数 CTNS': 'cartonCount',
   '商品箱数': 'cartonCount',
+  '箱数': 'cartonCount',
+  'CTNS': 'cartonCount',
+  'ctns': 'cartonCount',
   '商品件数PCS*': 'quantity',
   '商品件数 PCS*': 'quantity',
   '商品件数': 'quantity',
@@ -1428,7 +1436,7 @@ export async function insertCargoItems(importId, items) {
       
       for (const item of batch) {
         const placeholders = []
-        for (let j = 0; j < 20; j++) {
+        for (let j = 0; j < 21; j++) {
           placeholders.push(`$${paramIndex++}`)
         }
         values.push(`(${placeholders.join(', ')})`)
@@ -1451,6 +1459,7 @@ export async function insertCargoItems(importId, items) {
           item.productImage || null,
           item.customerOrderNo || null,
           item.palletCount || null,
+          item.cartonCount || null,
           item.referenceNo || null,
           'pending',
           now
@@ -1463,7 +1472,7 @@ export async function insertCargoItems(importId, items) {
           import_id, item_no, product_name, product_name_en, customer_hs_code,
           quantity, unit_code, unit_name, unit_price, total_value,
           gross_weight, net_weight, origin_country, material,
-          product_image, customer_order_no, pallet_count, reference_no,
+          product_image, customer_order_no, pallet_count, carton_count, reference_no,
           match_status, created_at
         ) VALUES ${values.join(', ')}
       `

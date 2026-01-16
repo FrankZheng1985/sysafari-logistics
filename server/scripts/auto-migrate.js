@@ -851,6 +851,15 @@ export async function runMigrations() {
     } catch (e) {
       // 字段可能已存在
     }
+    // 添加托盘数和箱数字段
+    try {
+      await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS pallet_count NUMERIC DEFAULT 0`)
+      await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS carton_count NUMERIC DEFAULT 0`)
+      await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS customer_order_no TEXT`)
+      await client.query(`ALTER TABLE cargo_items ADD COLUMN IF NOT EXISTS reference_no TEXT`)
+    } catch (e) {
+      // 字段可能已存在
+    }
     console.log('  ✅ cargo_items 表就绪')
 
     // ==================== 19. 创建 hs_match_history HS匹配历史表 ====================

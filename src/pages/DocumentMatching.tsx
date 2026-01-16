@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   FileCheck, CheckCircle, XCircle, RefreshCw, Search,
   ChevronDown, AlertTriangle, Edit2, Check, X,
-  Save, MapPin, Package, FileText, Globe, Zap
+  Save, MapPin, Package, FileText, Globe, Zap, Trash2
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getAuthHeaders, lookupTaricRealtime, getTaricCountryCodes } from '../utils/api'
@@ -27,13 +27,21 @@ interface ReviewItem {
   itemNo: number
   productName: string
   productNameEn: string
+  productImage: string | null
   customerHsCode: string
   matchedHsCode: string
   matchConfidence: number
   matchSource: string
   quantity: number
   unitName: string
+  unitPrice: number
   totalValue: number
+  grossWeight: number
+  netWeight: number
+  unitGrossWeight: number
+  unitNetWeight: number
+  palletCount: number
+  cartonCount: number
   originCountry: string
   material: string
   materialEn: string
@@ -88,11 +96,13 @@ export default function DocumentMatching() {
   const [matching, setMatching] = useState(false)
   const [editingItem, setEditingItem] = useState<number | null>(null)
   const [editHsCode, setEditHsCode] = useState('')
+  const [validatingHs, setValidatingHs] = useState(false)
+  const [hsValidationError, setHsValidationError] = useState<string | null>(null)
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [showRecommendations, setShowRecommendations] = useState(false)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const pageSize = 20
+  const pageSize = 9999 // 显示全部内容，不分页
 
   // 批次筛选：未匹配批次 / 已匹配批次
   const [batchFilter, setBatchFilter] = useState<'unmatched' | 'matched'>('unmatched')
@@ -113,9 +123,16 @@ export default function DocumentMatching() {
   const [detailForm, setDetailForm] = useState({
     material: '',
     materialEn: '',
-    usageScenario: ''
+    usageScenario: '',
+    productName: '',
+    unitPrice: 0,
+    grossWeight: 0,
+    netWeight: 0
   })
   const [savingDetail, setSavingDetail] = useState(false)
+  
+  // 删除商品
+  const [deletingItemId, setDeletingItemId] = useState<number | null>(null)
 
   // 价格异常检测
   const [priceAnomalies, setPriceAnomalies] = useState<Map<number, PriceAnomalyItem>>(new Map())
@@ -130,7 +147,15 @@ export default function DocumentMatching() {
     totalDuty: number
     totalVat: number
     totalTax: number
-  }>({ uniqueProductNames: 0, uniqueHsCodes: 0, totalValue: 0, totalDuty: 0, totalVat: 0, totalTax: 0 })
+    totalQuantity: number
+    totalCartons: number
+    totalPallets: number
+    totalGrossWeight: number
+    totalNetWeight: number
+  }>({ 
+    uniqueProductNames: 0, uniqueHsCodes: 0, totalValue: 0, totalDuty: 0, totalVat: 0, totalTax: 0,
+    totalQuantity: 0, totalCartons: 0, totalPallets: 0, totalGrossWeight: 0, totalNetWeight: 0
+  })
 
   // 实时查询HS编码
   const [queryHsCode, setQueryHsCode] = useState('')
@@ -366,7 +391,12 @@ export default function DocumentMatching() {
           totalValue: data.data?.totalValue || 0,
           totalDuty: data.data?.totalDuty || 0,
           totalVat: data.data?.totalVat || 0,
-          totalTax: data.data?.totalTax || 0
+          totalTax: data.data?.totalTax || 0,
+          totalQuantity: data.data?.totalQuantity || 0,
+          totalCartons: data.data?.totalCartons || 0,
+          totalPallets: data.data?.totalPallets || 0,
+          totalGrossWeight: data.data?.totalGrossWeight || 0,
+          totalNetWeight: data.data?.totalNetWeight || 0
         })
       }
     } catch (error) {
@@ -434,6 +464,7 @@ export default function DocumentMatching() {
   const handleEditHs = async (item: ReviewItem) => {
     setEditingItem(item.id)
     setEditHsCode(item.matchedHsCode || item.customerHsCode || '')
+    setHsValidationError(null) // 清除之前的错误
     
     // 加载推荐（传递原产国参数以获取正确的关税税率）
     try {
@@ -458,34 +489,79 @@ export default function DocumentMatching() {
   }
 
   const handleSaveHs = async (itemId: number) => {
-    if (!editHsCode.trim()) {
-      alert('请输入HS编码')
+    const hsCode = editHsCode.trim()
+    if (!hsCode) {
+      setHsValidationError('请输入HS编码')
       return
     }
     
+    // 清除之前的错误
+    setHsValidationError(null)
+    setValidatingHs(true)
+    
     try {
+      // 第一步：验证 HS 编码有效性
+      const validateRes = await fetch(`${API_BASE}/api/taric/validate/${hsCode}`, {
+        headers: { ...getAuthHeaders() }
+      })
+      const validateData = await validateRes.json()
+      
+      if (validateData.errCode !== 200) {
+        setHsValidationError(validateData.msg || 'HS编码验证失败')
+        setValidatingHs(false)
+        return
+      }
+      
+      const validation = validateData.data
+      
+      // 检查编码是否有效
+      if (!validation.isValid) {
+        setHsValidationError(`HS编码 ${hsCode} 在 EU TARIC 系统中不存在`)
+        setValidatingHs(false)
+        return
+      }
+      
+      // 检查编码是否可申报（10位可申报编码）
+      if (!validation.isDeclarable) {
+        const levelNames: Record<string, string> = {
+          'chapter': '章节',
+          'heading': '品目',
+          'subheading': '子目',
+          'cn': 'CN编码',
+          'taric': 'TARIC编码'
+        }
+        const levelName = levelNames[validation.level] || validation.level
+        setHsValidationError(`HS编码 ${hsCode} 是${levelName}级分类编码，包含 ${validation.childCount || 0} 个子编码，请选择具体的10位可申报编码`)
+        setValidatingHs(false)
+        return
+      }
+      
+      // 验证通过，保存 HS 编码
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           itemIds: [itemId],
           action: 'approve',
-          hsCode: editHsCode.trim()
+          hsCode: hsCode
         })
       })
       const data = await res.json()
       if (data.errCode === 200) {
         setEditingItem(null)
         setShowRecommendations(false)
+        setHsValidationError(null)
         loadReviewItems()
         loadBatchStats()
         loadBatches()
       } else {
-        alert(data.msg || '保存失败')
+        setHsValidationError(data.msg || '保存失败')
       }
     } catch (error) {
       console.error('保存失败:', error)
-      alert('保存失败')
+      setHsValidationError('网络错误，保存失败')
+    } finally {
+      setValidatingHs(false)
     }
   }
 
@@ -549,11 +625,45 @@ export default function DocumentMatching() {
     setDetailForm({
       material: item.material || '',
       materialEn: item.materialEn || '',
-      usageScenario: item.usageScenario || ''
+      usageScenario: item.usageScenario || '',
+      productName: item.productName || '',
+      unitPrice: item.unitPrice || 0,
+      grossWeight: item.grossWeight || 0,
+      netWeight: item.netWeight || 0
     })
   }
 
-  // 保存商品材质/用途
+  // 删除单个商品
+  const handleDeleteItem = async (item: ReviewItem) => {
+    if (!confirm(`确定要删除商品「${item.productName}」吗？此操作不可恢复。`)) {
+      return
+    }
+    
+    setDeletingItemId(item.id)
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/item/${item.id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        alert('商品已删除')
+        loadReviewItems()
+        loadMatchedItems()
+        loadBatchStats()
+        loadBatches()
+      } else {
+        alert(data.msg || '删除失败')
+      }
+    } catch (error) {
+      console.error('删除失败:', error)
+      alert('删除失败')
+    } finally {
+      setDeletingItemId(null)
+    }
+  }
+
+  // 保存商品详情（材质/用途/单价/商品名称等）
   const handleSaveDetail = async () => {
     if (!editingDetail) return
     
@@ -562,12 +672,22 @@ export default function DocumentMatching() {
       const res = await fetch(`${API_BASE}/api/cargo/documents/matching/item/${editingDetail.id}/detail`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(detailForm)
+        body: JSON.stringify({
+          material: detailForm.material,
+          materialEn: detailForm.materialEn,
+          usageScenario: detailForm.usageScenario,
+          productName: detailForm.productName,
+          unitPrice: detailForm.unitPrice,
+          grossWeight: detailForm.grossWeight,
+          netWeight: detailForm.netWeight
+        })
       })
       const data = await res.json()
       if (data.errCode === 200) {
         setEditingDetail(null)
         loadReviewItems()
+        loadMatchedItems()
+        loadBatchStats()
         alert(data.errMsg || '保存成功')
       } else {
         alert(data.msg || '保存失败')
@@ -919,30 +1039,38 @@ export default function DocumentMatching() {
               </div>
               
               {/* 右侧：批次统计 */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-blue-50 rounded-lg px-3 py-2 text-center">
-                  <div className="text-xs text-blue-600 mb-1">品名数量</div>
-                  <div className="text-lg font-bold text-blue-700">
-                    {batchStats.uniqueProductNames}
-                  </div>
+              <div className="grid grid-cols-4 lg:grid-cols-8 gap-2">
+                <div className="bg-blue-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-blue-600">品名数</div>
+                  <div className="text-sm font-bold text-blue-700">{batchStats.uniqueProductNames}</div>
                 </div>
-                <div className="bg-purple-50 rounded-lg px-3 py-2 text-center">
-                  <div className="text-xs text-purple-600 mb-1">HS Code数</div>
-                  <div className="text-lg font-bold text-purple-700">
-                    {batchStats.uniqueHsCodes}
-                  </div>
+                <div className="bg-purple-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-purple-600">HS码数</div>
+                  <div className="text-sm font-bold text-purple-700">{batchStats.uniqueHsCodes}</div>
                 </div>
-                <div className="bg-amber-50 rounded-lg px-3 py-2 text-center">
-                  <div className="text-xs text-amber-600 mb-1">总税金</div>
-                  <div className="text-lg font-bold text-amber-700">
-                    €{batchStats.totalTax.toFixed(2)}
-                  </div>
+                <div className="bg-cyan-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-cyan-600">托盘数</div>
+                  <div className="text-sm font-bold text-cyan-700">{batchStats.totalPallets}</div>
                 </div>
-                <div className="bg-green-50 rounded-lg px-3 py-2 text-center">
-                  <div className="text-xs text-green-600 mb-1">总货值</div>
-                  <div className="text-lg font-bold text-green-700">
-                    €{batchStats.totalValue.toFixed(2)}
-                  </div>
+                <div className="bg-indigo-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-indigo-600">箱数</div>
+                  <div className="text-sm font-bold text-indigo-700">{batchStats.totalCartons}</div>
+                </div>
+                <div className="bg-teal-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-teal-600">件数</div>
+                  <div className="text-sm font-bold text-teal-700">{batchStats.totalQuantity}</div>
+                </div>
+                <div className="bg-orange-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-orange-600">毛重(kg)</div>
+                  <div className="text-sm font-bold text-orange-700">{batchStats.totalGrossWeight.toFixed(1)}</div>
+                </div>
+                <div className="bg-amber-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-amber-600">总税金</div>
+                  <div className="text-sm font-bold text-amber-700">€{batchStats.totalTax.toFixed(2)}</div>
+                </div>
+                <div className="bg-green-50 rounded-lg px-2 py-1.5 text-center">
+                  <div className="text-[10px] text-green-600">总货值</div>
+                  <div className="text-sm font-bold text-green-700">€{batchStats.totalValue.toFixed(2)}</div>
                 </div>
               </div>
             </div>
@@ -1058,7 +1186,7 @@ export default function DocumentMatching() {
             <table className="w-full text-xs">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left">
+                  <th className="px-2 py-2 text-left">
                     <input
                       type="checkbox"
                       checked={selectedItems.length === items.length && items.length > 0}
@@ -1067,50 +1195,97 @@ export default function DocumentMatching() {
                       title="全选"
                     />
                   </th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">行号</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">商品名称</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">原产地</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">材质</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">客户HS</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">匹配HS</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">置信度</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">来源</th>
-                  <th className="px-3 py-2 text-right font-medium text-gray-500">税率</th>
-                  <th className="px-3 py-2 text-right font-medium text-gray-500">税金</th>
-                  <th className="px-3 py-2 text-right font-medium text-gray-500">货值</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">操作</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">行号</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">图片</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">商品名称</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">托盘</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">箱数</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">件数</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">原产地</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">材质</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">客户HS</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">匹配HS</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">置信度</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">单价(€)</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">单件毛重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">总毛重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">单件净重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">总净重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500">关税率</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">反倾销税</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500">税金</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500">货值</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={22} className="px-4 py-8 text-center text-gray-400">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                       加载中...
                     </td>
                   </tr>
                 ) : items.length === 0 && matchedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={22} className="px-4 py-8 text-center text-gray-400">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
                       没有待审核项目
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={22} className="px-4 py-8 text-center text-gray-400">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
                       所有商品已审核完成，请查看下方已匹配列表
                     </td>
                   </tr>
                 ) : (
-                  items.map(item => {
-                    const anomaly = priceAnomalies.get(item.id)
-                    const hasAnomaly = anomaly?.hasAnomaly || false
-                    const missingMaterial = !item.material
-                    return (
+                  (() => {
+                    // 计算托盘合并信息
+                    const palletGroups: { [key: number]: { startIndex: number; count: number; cartonCount: number } } = {}
+                    let currentPallet: number | null = null
+                    let groupStart = 0
+                    
+                    items.forEach((item, index) => {
+                      const pallet = item.palletCount || 0
+                      if (pallet !== currentPallet) {
+                        if (currentPallet !== null && currentPallet > 0) {
+                          // 结束上一组
+                          for (let i = groupStart; i < index; i++) {
+                            palletGroups[i] = { 
+                              startIndex: groupStart, 
+                              count: index - groupStart,
+                              cartonCount: items[groupStart].cartonCount || 0
+                            }
+                          }
+                        }
+                        currentPallet = pallet
+                        groupStart = index
+                      }
+                    })
+                    // 处理最后一组
+                    if (currentPallet !== null && currentPallet > 0) {
+                      for (let i = groupStart; i < items.length; i++) {
+                        palletGroups[i] = { 
+                          startIndex: groupStart, 
+                          count: items.length - groupStart,
+                          cartonCount: items[groupStart].cartonCount || 0
+                        }
+                      }
+                    }
+                    
+                    return items.map((item, index) => {
+                      const anomaly = priceAnomalies.get(item.id)
+                      const hasAnomaly = anomaly?.hasAnomaly || false
+                      const missingMaterial = !item.material
+                      const palletGroup = palletGroups[index]
+                      const isFirstInPalletGroup = palletGroup && palletGroup.startIndex === index
+                      const shouldRenderPalletCell = !palletGroup || isFirstInPalletGroup
+                      
+                      return (
                     <tr key={item.id} className={`border-b hover:bg-gray-50 ${hasAnomaly ? 'bg-red-50' : ''}`}>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         <input
                           type="checkbox"
                           checked={selectedItems.includes(item.id)}
@@ -1119,9 +1294,25 @@ export default function DocumentMatching() {
                           title={`选择项目 ${item.itemNo}`}
                         />
                       </td>
-                      <td className="px-3 py-2 text-gray-500">{item.itemNo}</td>
-                      <td className="px-3 py-2">
-                        <div className="max-w-[200px]">
+                      <td className="px-2 py-2 text-gray-500">{item.itemNo}</td>
+                      {/* 图片 */}
+                      <td className="px-2 py-2 text-center">
+                        {item.productImage ? (
+                          <img 
+                            src={item.productImage.startsWith('http') ? item.productImage : `${API_BASE}${item.productImage}`}
+                            alt={item.productName}
+                            className="w-10 h-10 object-cover rounded border border-gray-200 cursor-pointer hover:opacity-80"
+                            onClick={() => window.open(item.productImage!.startsWith('http') ? item.productImage! : `${API_BASE}${item.productImage}`, '_blank')}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                            <Package className="w-4 h-4 text-gray-300" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="max-w-[160px]">
                           <div className="flex items-center gap-1">
                             <span className="font-medium truncate" title={item.productName}>{item.productName}</span>
                             {hasAnomaly && (
@@ -1149,14 +1340,41 @@ export default function DocumentMatching() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      {/* 托盘数 - 合并单元格 */}
+                      {shouldRenderPalletCell && (
+                        <td 
+                          className="px-2 py-2 text-center whitespace-nowrap bg-blue-50/30" 
+                          rowSpan={palletGroup?.count || 1}
+                        >
+                          <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-xs font-medium">
+                            {item.palletCount || '-'}
+                          </span>
+                        </td>
+                      )}
+                      {/* 箱数 - 合并单元格 */}
+                      {shouldRenderPalletCell && (
+                        <td 
+                          className="px-2 py-2 text-center whitespace-nowrap bg-indigo-50/30" 
+                          rowSpan={palletGroup?.count || 1}
+                        >
+                          <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-medium">
+                            {item.cartonCount || '-'}
+                          </span>
+                        </td>
+                      )}
+                      {/* 件数 */}
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
+                        <span className="text-gray-700 font-medium">{item.quantity || 0}</span>
+                        <span className="text-gray-400 text-[10px] ml-0.5">{item.unitName || '件'}</span>
+                      </td>
+                      <td className="px-2 py-2 text-center">
                         <span className={`inline-flex items-center justify-center min-w-[32px] px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           item.originCountry === 'CN' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                         }`}>
                           {item.originCountry || '-'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-center">
                         {item.material ? (
                           <span className="text-gray-600 text-[10px] truncate max-w-[60px] inline-block" title={item.material}>
                             {item.material.length > 8 ? item.material.slice(0, 8) + '...' : item.material}
@@ -1168,52 +1386,115 @@ export default function DocumentMatching() {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 font-mono">{item.customerHsCode || '-'}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2 font-mono text-[10px]">{item.customerHsCode || '-'}</td>
+                      <td className="px-2 py-2">
                         {editingItem === item.id ? (
-                          <input
-                            type="text"
-                            value={editHsCode}
-                            onChange={(e) => setEditHsCode(e.target.value)}
-                            className="w-24 px-2 py-1 border border-primary-300 rounded text-xs font-mono"
-                            placeholder="输入HS编码"
-                          />
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={editHsCode}
+                              onChange={(e) => {
+                                setEditHsCode(e.target.value)
+                                setHsValidationError(null) // 清除错误提示
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !validatingHs) {
+                                  e.preventDefault()
+                                  handleSaveHs(item.id)
+                                }
+                              }}
+                              disabled={validatingHs}
+                              className={`w-[115px] px-2 py-1 border rounded text-xs font-mono ${
+                                hsValidationError 
+                                  ? 'border-red-400 bg-red-50' 
+                                  : 'border-primary-300'
+                              } ${validatingHs ? 'opacity-50' : ''}`}
+                              placeholder="输入HS编码"
+                              autoFocus
+                            />
+                            {hsValidationError && (
+                              <div className="absolute left-0 top-full mt-1 z-10 w-[280px] p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600 shadow-lg">
+                                <div className="flex items-start gap-1">
+                                  <XCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                  <span>{hsValidationError}</span>
+                                </div>
+                              </div>
+                            )}
+                            {validatingHs && (
+                              <div className="absolute left-0 top-full mt-1 z-10 w-[140px] p-1.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-600 shadow-lg flex items-center gap-1">
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                <span>验证中...</span>
+                              </div>
+                            )}
+                          </div>
                         ) : (
-                          <span className="font-mono">{item.matchedHsCode || '-'}</span>
+                          <span className="font-mono text-[10px]">{item.matchedHsCode || '-'}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-center">
                         {getConfidenceBadge(item.matchConfidence)}
                       </td>
-                      <td className="px-3 py-2 text-gray-500">{getSourceLabel(item.matchSource)}</td>
-                      <td className="px-3 py-2 text-right">
+                      {/* 单价 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-700">€{(item.unitPrice || 0).toFixed(2)}</span>
+                      </td>
+                      {/* 单件毛重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-600">{(item.unitGrossWeight || 0).toFixed(3)}</span>
+                      </td>
+                      {/* 总毛重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-700">{(item.grossWeight || 0).toFixed(2)}</span>
+                      </td>
+                      {/* 单件净重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-600">{(item.unitNetWeight || 0).toFixed(3)}</span>
+                      </td>
+                      {/* 总净重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-700">{(item.netWeight || 0).toFixed(2)}</span>
+                      </td>
+                      <td className="px-2 py-2 text-right">
                         <span className={item.dutyRate > 0 ? 'text-amber-600 font-medium' : 'text-gray-500'}>
                           {item.dutyRate || 0}%
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      {/* 反倾销税 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className={item.antiDumpingRate > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}>
+                          {item.antiDumpingRate > 0 ? `${item.antiDumpingRate}%` : '-'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
                         <span className={item.dutyRate > 0 ? 'text-green-600 font-medium' : 'text-gray-500'}>
                           €{((item.totalValue || 0) * (item.dutyRate || 0) / 100).toFixed(2)}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right">€{item.totalValue.toFixed(2)}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-center gap-1">
+                      <td className="px-2 py-2 text-right whitespace-nowrap">€{(item.totalValue || 0).toFixed(2)}</td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-center gap-0.5">
                           {editingItem === item.id ? (
                             <>
                               <button
                                 onClick={() => handleSaveHs(item.id)}
-                                className="p-1 hover:bg-green-100 rounded text-green-600"
-                                title="保存"
+                                disabled={validatingHs}
+                                className={`p-1 rounded ${validatingHs ? 'text-gray-400' : 'hover:bg-green-100 text-green-600'}`}
+                                title={validatingHs ? '验证中...' : '保存 (Enter)'}
                               >
-                                <Check className="w-4 h-4" />
+                                {validatingHs ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Check className="w-4 h-4" />
+                                )}
                               </button>
                               <button
                                 onClick={() => {
                                   setEditingItem(null)
                                   setShowRecommendations(false)
+                                  setHsValidationError(null)
                                 }}
-                                className="p-1 hover:bg-gray-100 rounded text-gray-500"
+                                disabled={validatingHs}
+                                className={`p-1 rounded ${validatingHs ? 'text-gray-300' : 'hover:bg-gray-100 text-gray-500'}`}
                                 title="取消"
                               >
                                 <X className="w-4 h-4" />
@@ -1221,11 +1502,11 @@ export default function DocumentMatching() {
                             </>
                           ) : (
                             <>
-                              {/* 编辑材质/用途按钮 */}
+                              {/* 编辑详情按钮 */}
                               <button
                                 onClick={() => handleEditDetail(item)}
                                 className={`p-1 hover:bg-amber-100 rounded ${missingMaterial ? 'text-amber-500' : 'text-gray-400'} hover:text-amber-600`}
-                                title="编辑材质/用途"
+                                title="编辑商品详情"
                               >
                                 <Package className="w-4 h-4" />
                               </button>
@@ -1237,14 +1518,38 @@ export default function DocumentMatching() {
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
+                              {/* 删除按钮 */}
+                              <button
+                                onClick={() => handleDeleteItem(item)}
+                                disabled={deletingItemId === item.id}
+                                className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-600 disabled:opacity-50"
+                                title="删除商品"
+                              >
+                                {deletingItemId === item.id ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
                             </>
                           )}
                         </div>
                       </td>
                     </tr>
-                  )})
+                      )})
+                  })()
                 )}
               </tbody>
+              {/* 表格底部统计 */}
+              {items.length > 0 && (
+                <tfoot>
+                  <tr className="bg-gray-50 border-t-2 border-gray-300">
+                    <td colSpan={22} className="px-4 py-2 text-center text-sm text-gray-600">
+                      共 <span className="font-semibold text-gray-800">{items.length}</span> 条待审核商品
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
 
@@ -1291,57 +1596,148 @@ export default function DocumentMatching() {
             <table className="w-full text-xs">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">行号</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">商品名称</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">原产地</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">材质</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">客户HS</th>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">匹配HS</th>
-                  <th className="px-3 py-2 text-center font-medium text-gray-500">状态</th>
-                  <th className="px-3 py-2 text-right font-medium text-gray-500">关税率</th>
-                  <th className="px-3 py-2 text-right font-medium text-gray-500">税金金额</th>
-                  <th className="px-3 py-2 text-right font-medium text-gray-500">货值</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">行号</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">图片</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">商品名称</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">托盘</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">箱数</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">件数</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">原产地</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">材质</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">客户HS</th>
+                  <th className="px-2 py-2 text-left font-medium text-gray-500">匹配HS</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">状态</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">单价(€)</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">单件毛重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">总毛重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">单件净重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">总净重</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500">关税率</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500 whitespace-nowrap">反倾销税</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500">税金</th>
+                  <th className="px-2 py-2 text-right font-medium text-gray-500">货值</th>
+                  <th className="px-2 py-2 text-center font-medium text-gray-500">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingMatched ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={21} className="px-4 py-8 text-center text-gray-400">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                       加载中...
                     </td>
                   </tr>
                 ) : (
-                  matchedItems.map(item => (
+                  (() => {
+                    // 计算托盘合并信息 - 已匹配列表
+                    const matchedPalletGroups: { [key: number]: { startIndex: number; count: number; cartonCount: number } } = {}
+                    let currentMatchedPallet: number | null = null
+                    let matchedGroupStart = 0
+                    
+                    matchedItems.forEach((item, index) => {
+                      const pallet = item.palletCount || 0
+                      if (pallet !== currentMatchedPallet) {
+                        if (currentMatchedPallet !== null && currentMatchedPallet > 0) {
+                          for (let i = matchedGroupStart; i < index; i++) {
+                            matchedPalletGroups[i] = { 
+                              startIndex: matchedGroupStart, 
+                              count: index - matchedGroupStart,
+                              cartonCount: matchedItems[matchedGroupStart].cartonCount || 0
+                            }
+                          }
+                        }
+                        currentMatchedPallet = pallet
+                        matchedGroupStart = index
+                      }
+                    })
+                    if (currentMatchedPallet !== null && currentMatchedPallet > 0) {
+                      for (let i = matchedGroupStart; i < matchedItems.length; i++) {
+                        matchedPalletGroups[i] = { 
+                          startIndex: matchedGroupStart, 
+                          count: matchedItems.length - matchedGroupStart,
+                          cartonCount: matchedItems[matchedGroupStart].cartonCount || 0
+                        }
+                      }
+                    }
+                    
+                    return matchedItems.map((item, index) => {
+                      const palletGroup = matchedPalletGroups[index]
+                      const isFirstInPalletGroup = palletGroup && palletGroup.startIndex === index
+                      const shouldRenderPalletCell = !palletGroup || isFirstInPalletGroup
+                      
+                      return (
                     <tr key={item.id} className="border-b hover:bg-gray-50">
-                      <td className="px-3 py-2 text-gray-500">{item.itemNo}</td>
-                      <td className="px-3 py-2">
-                        <div className="max-w-[200px]">
+                      <td className="px-2 py-2 text-gray-500">{item.itemNo}</td>
+                      {/* 图片 */}
+                      <td className="px-2 py-2 text-center">
+                        {item.productImage ? (
+                          <img 
+                            src={item.productImage.startsWith('http') ? item.productImage : `${API_BASE}${item.productImage}`}
+                            alt={item.productName}
+                            className="w-10 h-10 object-cover rounded border border-gray-200 cursor-pointer hover:opacity-80"
+                            onClick={() => window.open(item.productImage!.startsWith('http') ? item.productImage! : `${API_BASE}${item.productImage}`, '_blank')}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                            <Package className="w-4 h-4 text-gray-300" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="max-w-[160px]">
                           <span className="font-medium truncate" title={item.productName}>{item.productName}</span>
                           {item.productNameEn && (
                             <div className="text-gray-400 text-[10px] truncate">{item.productNameEn}</div>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      {/* 托盘数 - 合并单元格 */}
+                      {shouldRenderPalletCell && (
+                        <td 
+                          className="px-2 py-2 text-center whitespace-nowrap bg-blue-50/30" 
+                          rowSpan={palletGroup?.count || 1}
+                        >
+                          <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-xs font-medium">
+                            {item.palletCount || '-'}
+                          </span>
+                        </td>
+                      )}
+                      {/* 箱数 - 合并单元格 */}
+                      {shouldRenderPalletCell && (
+                        <td 
+                          className="px-2 py-2 text-center whitespace-nowrap bg-indigo-50/30" 
+                          rowSpan={palletGroup?.count || 1}
+                        >
+                          <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-xs font-medium">
+                            {item.cartonCount || '-'}
+                          </span>
+                        </td>
+                      )}
+                      {/* 件数 */}
+                      <td className="px-2 py-2 text-center whitespace-nowrap">
+                        <span className="text-gray-700 font-medium">{item.quantity || 0}</span>
+                        <span className="text-gray-400 text-[10px] ml-0.5">{item.unitName || '件'}</span>
+                      </td>
+                      <td className="px-2 py-2 text-center">
                         <span className={`inline-flex items-center justify-center min-w-[32px] px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           item.originCountry === 'CN' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                         }`}>
                           {item.originCountry || '-'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-center">
                         <span className="text-gray-600 text-[10px] truncate max-w-[60px] inline-block" title={item.material || ''}>
                           {item.material ? (item.material.length > 8 ? item.material.slice(0, 8) + '...' : item.material) : '-'}
                         </span>
                       </td>
-                      <td className="px-3 py-2">
-                        <span className="font-mono text-gray-500">{item.customerHsCode || '-'}</span>
+                      <td className="px-2 py-2">
+                        <span className="font-mono text-gray-500 text-[10px]">{item.customerHsCode || '-'}</span>
                       </td>
-                      <td className="px-3 py-2">
-                        <span className="font-mono text-green-600 font-medium">{item.matchedHsCode}</span>
+                      <td className="px-2 py-2">
+                        <span className="font-mono text-green-600 font-medium text-[10px]">{item.matchedHsCode}</span>
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-center">
                         <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded text-[10px] font-medium ${
                           item.matchStatus === 'auto_approved' 
                             ? 'bg-blue-100 text-blue-700' 
@@ -1350,21 +1746,83 @@ export default function DocumentMatching() {
                           {item.matchStatus === 'auto_approved' ? '自动匹配' : '人工审核'}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      {/* 单价 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-700">€{(item.unitPrice || 0).toFixed(2)}</span>
+                      </td>
+                      {/* 单件毛重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-600">{(item.unitGrossWeight || 0).toFixed(3)}</span>
+                      </td>
+                      {/* 总毛重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-700">{(item.grossWeight || 0).toFixed(2)}</span>
+                      </td>
+                      {/* 单件净重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-600">{(item.unitNetWeight || 0).toFixed(3)}</span>
+                      </td>
+                      {/* 总净重 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className="text-gray-700">{(item.netWeight || 0).toFixed(2)}</span>
+                      </td>
+                      <td className="px-2 py-2 text-right">
                         <span className={item.dutyRate > 0 ? 'text-amber-600 font-medium' : 'text-gray-500'}>
                           {item.dutyRate}%
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      {/* 反倾销税 */}
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                        <span className={item.antiDumpingRate > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}>
+                          {item.antiDumpingRate > 0 ? `${item.antiDumpingRate}%` : '-'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap">
                         <span className={item.dutyRate > 0 ? 'text-green-600 font-medium' : 'text-gray-500'}>
                           €{((item.totalValue || 0) * (item.dutyRate || 0) / 100).toFixed(2)}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right font-medium">€{item.totalValue?.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right whitespace-nowrap font-medium">€{(item.totalValue || 0).toFixed(2)}</td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-center gap-0.5">
+                          {/* 编辑详情按钮 */}
+                          <button
+                            onClick={() => handleEditDetail(item)}
+                            className="p-1 hover:bg-amber-100 rounded text-gray-400 hover:text-amber-600"
+                            title="编辑商品详情"
+                          >
+                            <Package className="w-4 h-4" />
+                          </button>
+                          {/* 删除按钮 */}
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            disabled={deletingItemId === item.id}
+                            className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-600 disabled:opacity-50"
+                            title="删除商品"
+                          >
+                            {deletingItemId === item.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  ))
+                      )})
+                  })()
                 )}
               </tbody>
+              {/* 表格底部统计 */}
+              {matchedItems.length > 0 && (
+                <tfoot>
+                  <tr className="bg-green-50 border-t-2 border-green-300">
+                    <td colSpan={21} className="px-4 py-2 text-center text-sm text-green-700">
+                      共 <span className="font-semibold text-green-800">{matchedItems.length}</span> 条已匹配商品
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
 
@@ -1509,15 +1967,15 @@ export default function DocumentMatching() {
         </div>
       )}
 
-      {/* 编辑商品材质/用途弹窗 */}
+      {/* 编辑商品详情弹窗 */}
       {editingDetail && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
-                <h3 className="text-lg font-medium text-gray-900">编辑材质和用途</h3>
+                <h3 className="text-lg font-medium text-gray-900">编辑商品详情</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  行号 {editingDetail.itemNo}: {editingDetail.productName}
+                  行号 {editingDetail.itemNo} · 数量: {editingDetail.quantity} {editingDetail.unitName}
                 </p>
               </div>
               <button
@@ -1529,7 +1987,22 @@ export default function DocumentMatching() {
               </button>
             </div>
             
-            <div className="px-6 py-4 space-y-4">
+            <div className="px-6 py-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+              {/* 商品名称 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <FileText className="w-4 h-4 inline mr-1" />
+                  商品名称
+                </label>
+                <input
+                  type="text"
+                  value={detailForm.productName}
+                  onChange={(e) => setDetailForm({ ...detailForm, productName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="输入商品名称"
+                />
+              </div>
+
               {/* 材质 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1559,10 +2032,66 @@ export default function DocumentMatching() {
                 </div>
               </div>
 
+              {/* 单价 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  单价 (€)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={detailForm.unitPrice || ''}
+                  onChange={(e) => setDetailForm({ ...detailForm, unitPrice: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  货值: €{((detailForm.unitPrice || 0) * (editingDetail.quantity || 0)).toFixed(2)}
+                </p>
+              </div>
+
+              {/* 毛重和净重 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    总毛重 (kg)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    value={detailForm.grossWeight || ''}
+                    onChange={(e) => setDetailForm({ ...detailForm, grossWeight: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="0.000"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    单件毛重: {editingDetail.quantity > 0 ? ((detailForm.grossWeight || 0) / editingDetail.quantity).toFixed(3) : '0.000'} kg
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    总净重 (kg)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    value={detailForm.netWeight || ''}
+                    onChange={(e) => setDetailForm({ ...detailForm, netWeight: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="0.000"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    单件净重: {editingDetail.quantity > 0 ? ((detailForm.netWeight || 0) / editingDetail.quantity).toFixed(3) : '0.000'} kg
+                  </p>
+                </div>
+              </div>
+
               {/* 用途 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  <FileText className="w-4 h-4 inline mr-1" />
                   用途/使用场景
                 </label>
                 <input
@@ -1574,8 +2103,8 @@ export default function DocumentMatching() {
                 />
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
-                <strong>提示：</strong>材质和用途信息有助于更准确地匹配HS编码
+              <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
+                <strong>提示：</strong>修改单价会自动重新计算货值；材质和用途信息有助于更准确地匹配HS编码
               </div>
             </div>
             
