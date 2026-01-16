@@ -13,7 +13,6 @@ import { PageContainer, ContentCard } from '../components/ui'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 import { useToast } from '../components/Toast'
-import InspectionProductDetailModal from '../components/InspectionProductDetailModal'
 
 const API_BASE = getApiBaseUrl()
 
@@ -256,7 +255,9 @@ export default function SensitiveProducts() {
     setDetailModalOpen(true)
     setDetailLoading(true)
     try {
-      const response = await fetch(`${API_BASE}/api/cargo/inspection-products/${id}/detail`)
+      const response = await fetch(`${API_BASE}/api/cargo/inspection-products/${id}/detail`, {
+        headers: getAuthHeaders()
+      })
       const data = await response.json()
       if (data.errCode === 200) {
         setDetailItem(data.data)
@@ -975,3 +976,275 @@ function ProductModal({ type, item, categories, onClose, onSuccess }: ProductMod
   )
 }
 
+// 查验产品详情弹窗组件
+interface InspectionProductDetailModalProps {
+  item: any
+  loading: boolean
+  onClose: () => void
+}
+
+function InspectionProductDetailModal({ item, loading, onClose }: InspectionProductDetailModalProps) {
+  // 查验类型名称映射
+  const inspectionTypeMap: Record<string, string> = {
+    none: '未查验',
+    document: '单证查验',
+    physical: '实物查验',
+    scan: '扫描查验',
+    full: '全面查验'
+  }
+  
+  // 查验结果名称映射
+  const inspectionResultMap: Record<string, { label: string; color: string }> = {
+    passed: { label: '通过', color: 'bg-green-100 text-green-700' },
+    released: { label: '放行', color: 'bg-green-100 text-green-700' },
+    failed: { label: '不通过', color: 'bg-red-100 text-red-700' },
+    pending: { label: '待处理', color: 'bg-amber-100 text-amber-700' }
+  }
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col mx-4">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold text-gray-900">查验产品详情</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <span className="ml-2 text-gray-500">加载中...</span>
+            </div>
+          ) : item ? (
+            <>
+              {/* 基本信息 */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm font-medium text-gray-500">中文品名</span>
+                  <span className="text-sm font-medium text-gray-500">英文品名</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <p className="text-base font-semibold text-gray-900">{item.product_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-base text-gray-700">
+                      {item.tariffInfo?.goodsDescriptionEn || '-'}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-500">HS编码</span>
+                    <p className="text-sm font-mono text-primary-600">{item.hs_code}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-500">风险等级</span>
+                    <p>
+                      <span className={`inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded text-xs ${
+                        RISK_LEVEL_CONFIG[item.risk_level as keyof typeof RISK_LEVEL_CONFIG]?.color || 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {RISK_LEVEL_CONFIG[item.risk_level as keyof typeof RISK_LEVEL_CONFIG]?.label || item.risk_level}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 税率信息 */}
+              {item.tariffInfo && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    税率信息
+                  </h3>
+                  <div className="grid grid-cols-3 lg:grid-cols-5 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">最惠国税率</span>
+                      <p className="text-gray-900 font-medium">{item.tariffInfo.mfnRate || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">协定税率</span>
+                      <p className="text-gray-900 font-medium">{item.tariffInfo.conventionalRate || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">暂定税率</span>
+                      <p className="text-gray-900 font-medium">{item.tariffInfo.tempRate || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">反倾销税率</span>
+                      <p className="text-orange-600 font-medium">{item.tariffInfo.provisionalDutyRate || '0%'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">增值税率</span>
+                      <p className="text-gray-900 font-medium">{item.tariffInfo.vatRate || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* 查验统计 */}
+              <div className="bg-amber-50 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  查验统计
+                </h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-white rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">总出货次数</span>
+                    <span className="text-xl font-bold text-gray-900">{item.stats?.totalCount || 0}</span>
+                  </div>
+                  <div className="text-center p-3 bg-white rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">被查验次数</span>
+                    <span className="text-xl font-bold text-amber-600">{item.stats?.inspectedCount || 0}</span>
+                  </div>
+                  <div className="text-center p-3 bg-white rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">计算查验率</span>
+                    <span className="text-xl font-bold text-red-600">
+                      {item.stats?.calculatedInspectionRate !== null 
+                        ? `${item.stats.calculatedInspectionRate}%` 
+                        : '-'}
+                    </span>
+                  </div>
+                  <div className="text-center p-3 bg-white rounded-lg">
+                    <span className="text-xs text-gray-500 block mb-1">设定查验率</span>
+                    <span className="text-xl font-bold text-primary-600">
+                      {item.inspection_rate ? `${item.inspection_rate}%` : '-'}
+                    </span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+                  <div className="text-center p-2 bg-white rounded">
+                    <span className="text-xs text-gray-500 block">实物查验</span>
+                    <span className="text-sm font-medium text-gray-900">{item.stats?.physicalCount || 0} 次</span>
+                  </div>
+                  <div className="text-center p-2 bg-white rounded">
+                    <span className="text-xs text-gray-500 block">通过次数</span>
+                    <span className="text-sm font-medium text-green-600">{item.stats?.passedCount || 0} 次</span>
+                  </div>
+                  <div className="text-center p-2 bg-white rounded">
+                    <span className="text-xs text-gray-500 block">平均延误</span>
+                    <span className="text-sm font-medium text-gray-900">{item.stats?.avgDelayDays || 0} 天</span>
+                  </div>
+                  <div className="text-center p-2 bg-white rounded">
+                    <span className="text-xs text-gray-500 block">罚款总额</span>
+                    <span className="text-sm font-medium text-red-600">€{(item.stats?.totalPenalty || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 原产国统计 */}
+              {item.countryStats && item.countryStats.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">按原产国统计</h3>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {item.countryStats.map((cs: any, idx: number) => (
+                      <div key={idx} className="bg-white rounded p-2 text-center">
+                        <span className="text-xs text-gray-500 block">{cs.country}</span>
+                        <span className="text-sm font-medium text-gray-900">{cs.total} 票</span>
+                        <span className="text-xs text-amber-600 block">查验率 {cs.rate}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* 历史记录 */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                  历史查验记录 ({item.historyRecords?.length || 0})
+                </h3>
+                {item.historyRecords && item.historyRecords.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">提单号</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">集装箱号</th>
+                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">查验类型</th>
+                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">结果</th>
+                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-500">延误天数</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">查验日期</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {item.historyRecords.slice(0, 20).map((record: any) => (
+                          <tr key={record.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 whitespace-nowrap text-primary-600 font-mono text-xs">
+                              {record.billNo || '-'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-gray-600 text-xs">
+                              {record.containerNo || '-'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-center">
+                              <span className="text-xs text-gray-600">
+                                {inspectionTypeMap[record.inspectionType] || record.inspectionType}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-center">
+                              <span className={`inline-flex items-center justify-center min-w-[48px] px-1.5 py-0.5 rounded text-xs ${
+                                inspectionResultMap[record.inspectionResult]?.color || 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {inspectionResultMap[record.inspectionResult]?.label || record.inspectionResult}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-center text-xs">
+                              {record.delayDays > 0 ? (
+                                <span className="text-amber-600">{record.delayDays} 天</span>
+                              ) : '-'}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-gray-500 text-xs">
+                              {record.inspectionDate || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {item.historyRecords.length > 20 && (
+                      <p className="text-center text-xs text-gray-500 mt-2">
+                        仅显示最近 20 条记录，共 {item.historyRecords.length} 条
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    暂无历史查验记录
+                  </div>
+                )}
+              </div>
+              
+              {/* 备注 */}
+              {item.risk_notes && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">备注</h3>
+                  <p className="text-sm text-gray-600">{item.risk_notes}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12 text-gray-400">
+              未找到产品信息
+            </div>
+          )}
+        </div>
+        
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-gray-50 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
