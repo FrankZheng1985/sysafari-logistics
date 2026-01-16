@@ -80,7 +80,7 @@ export async function getDocuments(params = {}) {
   // 使用 LEFT JOIN 获取订单的 order_seq 以生成订单号
   let query = `SELECT d.*, b.order_seq, b.created_at as bill_created_at 
     FROM documents d 
-    LEFT JOIN bills b ON d.bill_id = b.id 
+    LEFT JOIN bills_of_lading b ON d.bill_id = b.id 
     WHERE 1=1`
   const queryParams = []
   

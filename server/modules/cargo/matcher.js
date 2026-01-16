@@ -897,8 +897,8 @@ export async function getMatchingStats(importId) {
       SUM(CASE WHEN match_status IN ('review', 'no_match', 'pending') THEN 1 ELSE 0 END) as unmatched,
       SUM(CASE WHEN origin_country IS NULL OR origin_country = '' THEN 1 ELSE 0 END) as missingOrigin,
       SUM(CASE WHEN material IS NULL OR material = '' THEN 1 ELSE 0 END) as missingMaterial,
-      SUM(COALESCE(total_value_usd, 0)) as totalValue,
-      SUM(COALESCE(total_value_usd, 0) * COALESCE(duty_rate, 0) / 100) as totalTax
+      SUM(COALESCE(total_value, 0)) as totalValue,
+      SUM(COALESCE(total_value, 0) * COALESCE(duty_rate, 0) / 100) as totalTax
     FROM cargo_items 
     WHERE import_id = ?
   `).get(importId)
