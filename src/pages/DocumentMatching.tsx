@@ -892,7 +892,7 @@ export default function DocumentMatching() {
                 <div className="bg-purple-50 rounded-lg px-3 py-2 text-center">
                   <div className="text-xs text-purple-600 mb-1">HS Code数</div>
                   <div className="text-lg font-bold text-purple-700">
-                    {new Set([...items.map(i => i.hsCode), ...matchedItems.map(i => i.hsCode)].filter(Boolean)).size}
+                    {new Set([...items.map(i => i.matchedHsCode), ...matchedItems.map(i => i.matchedHsCode)].filter(Boolean)).size}
                   </div>
                 </div>
                 <div className="bg-amber-50 rounded-lg px-3 py-2 text-center">
