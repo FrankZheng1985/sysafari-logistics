@@ -1217,13 +1217,14 @@ export default function DocumentMatching() {
                   <th className="px-3 py-2 text-left font-medium text-gray-500">匹配HS</th>
                   <th className="px-3 py-2 text-center font-medium text-gray-500">状态</th>
                   <th className="px-3 py-2 text-right font-medium text-gray-500">关税率</th>
+                  <th className="px-3 py-2 text-right font-medium text-gray-500">税金金额</th>
                   <th className="px-3 py-2 text-right font-medium text-gray-500">货值</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingMatched ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                       加载中...
                     </td>
@@ -1270,6 +1271,11 @@ export default function DocumentMatching() {
                       <td className="px-3 py-2 text-right">
                         <span className={item.dutyRate > 0 ? 'text-amber-600 font-medium' : 'text-gray-500'}>
                           {item.dutyRate}%
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={item.dutyRate > 0 ? 'text-green-600 font-medium' : 'text-gray-500'}>
+                          €{((item.totalValue || 0) * (item.dutyRate || 0) / 100).toFixed(2)}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right font-medium">€{item.totalValue?.toFixed(2)}</td>
