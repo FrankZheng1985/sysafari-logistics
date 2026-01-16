@@ -30,6 +30,10 @@ interface MatchRecord {
   totalDeclaredValue: number
   totalDeclaredQty: number
   totalDeclaredWeight: number
+  // 单件重量相关字段
+  avgPieceWeight: number
+  minPieceWeight: number
+  maxPieceWeight: number
   dutyRate: number
   vatRate: number
   antiDumpingRate: number
@@ -52,6 +56,8 @@ interface DeclarationHistory {
   id: number
   importId: number
   importNo: string
+  containerNo: string
+  customerName: string
   cargoItemId: number
   declaredQty: number
   declaredWeight: number
@@ -302,9 +308,9 @@ export default function HSMatchRecords() {
 
       {/* 搜索栏 */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <div className="relative">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
@@ -315,30 +321,32 @@ export default function HSMatchRecords() {
                 className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
+            <div className="w-36">
+              <input
+                type="text"
+                value={hsCodeFilter}
+                onChange={(e) => setHsCodeFilter(e.target.value)}
+                placeholder="HS编码筛选"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
           </div>
-          <div className="w-48">
-            <input
-              type="text"
-              value={hsCodeFilter}
-              onChange={(e) => setHsCodeFilter(e.target.value)}
-              placeholder="HS编码筛选"
-              className="w-full px-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSearch}
+              className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 flex items-center gap-2"
+            >
+              <Search className="w-4 h-4" />
+              搜索
+            </button>
+            <button
+              onClick={loadRecords}
+              className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              刷新
+            </button>
           </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 flex items-center gap-2"
-          >
-            <Search className="w-4 h-4" />
-            搜索
-          </button>
-          <button
-            onClick={loadRecords}
-            className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50 flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            刷新
-          </button>
         </div>
       </div>
 
@@ -355,6 +363,8 @@ export default function HSMatchRecords() {
                 <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">平均单价</th>
                 <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">平均公斤价</th>
                 <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">累计货值</th>
+                <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">平均单件重</th>
+                <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">单件重量区间</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">关税率</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">状态</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">最近匹配</th>
@@ -364,14 +374,14 @@ export default function HSMatchRecords() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                     加载中...
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
+                  <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
                     <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     暂无匹配记录
                     <p className="text-xs mt-1">客户确认税费后，匹配数据会自动保存到此处</p>
@@ -418,6 +428,16 @@ export default function HSMatchRecords() {
                     </td>
                     <td className="px-3 py-2 text-right text-gray-900">
                       €{record.totalDeclaredValue.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-900">
+                      {record.avgPieceWeight > 0 ? `${record.avgPieceWeight.toFixed(2)}kg` : '-'}
+                    </td>
+                    <td className="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
+                      {record.minPieceWeight > 0 || record.maxPieceWeight > 0 ? (
+                        <span className="text-xs">
+                          {record.minPieceWeight.toFixed(2)}~{record.maxPieceWeight.toFixed(2)}kg
+                        </span>
+                      ) : '-'}
                     </td>
                     <td className="px-3 py-2 text-center">
                       <span className={record.dutyRate > 0 ? 'text-amber-600' : 'text-gray-500'}>
@@ -593,6 +613,33 @@ export default function HSMatchRecords() {
                     </div>
                   </div>
 
+                  {/* 单件重量统计 */}
+                  <div className="bg-green-50 rounded-lg p-4 mb-6">
+                    <h4 className="text-sm font-medium text-gray-700 mb-3">单件重量统计</h4>
+                    <div className="grid grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-xs text-gray-500">平均单件重量</p>
+                        <p className="text-lg font-semibold text-gray-900">{selectedRecord.avgPieceWeight?.toFixed(3) || 0} kg</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">最小单件重量</p>
+                        <p className="text-lg font-semibold text-green-600">{selectedRecord.minPieceWeight?.toFixed(3) || 0} kg</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">最大单件重量</p>
+                        <p className="text-lg font-semibold text-amber-600">{selectedRecord.maxPieceWeight?.toFixed(3) || 0} kg</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">重量区间</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {selectedRecord.minPieceWeight > 0 || selectedRecord.maxPieceWeight > 0 
+                            ? `${selectedRecord.minPieceWeight?.toFixed(2)}~${selectedRecord.maxPieceWeight?.toFixed(2)}kg`
+                            : '-'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 税率信息 */}
                   <div className="bg-blue-50 rounded-lg p-4 mb-6">
                     <h4 className="text-sm font-medium text-gray-700 mb-3">税率信息</h4>
@@ -616,42 +663,48 @@ export default function HSMatchRecords() {
                     </div>
                   </div>
 
-                  {/* 申报历史 */}
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">申报历史</h4>
-                    {selectedRecord.history && selectedRecord.history.length > 0 ? (
-                      <table className="w-full text-xs">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-2 py-1.5 text-left font-medium text-gray-500">批次号</th>
-                            <th className="px-2 py-1.5 text-right font-medium text-gray-500">数量</th>
-                            <th className="px-2 py-1.5 text-right font-medium text-gray-500">重量</th>
-                            <th className="px-2 py-1.5 text-right font-medium text-gray-500">货值</th>
-                            <th className="px-2 py-1.5 text-right font-medium text-gray-500">单价</th>
-                            <th className="px-2 py-1.5 text-right font-medium text-gray-500">总税费</th>
-                            <th className="px-2 py-1.5 text-left font-medium text-gray-500">申报时间</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedRecord.history.map((h) => (
-                            <tr key={h.id} className="border-b">
-                              <td className="px-2 py-1.5 text-primary-600">{h.importNo || '-'}</td>
-                              <td className="px-2 py-1.5 text-right">{h.declaredQty}</td>
-                              <td className="px-2 py-1.5 text-right">{h.declaredWeight.toFixed(2)} kg</td>
-                              <td className="px-2 py-1.5 text-right">€{h.declaredValue.toFixed(2)}</td>
-                              <td className="px-2 py-1.5 text-right">€{h.unitPrice.toFixed(2)}</td>
-                              <td className="px-2 py-1.5 text-right text-amber-600">€{h.totalTax.toFixed(2)}</td>
-                              <td className="px-2 py-1.5 text-gray-500">
-                                {h.declaredAt ? formatDate(h.declaredAt) : '-'}
-                              </td>
+                    {/* 申报历史 */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">申报历史</h4>
+                      {selectedRecord.history && selectedRecord.history.length > 0 ? (
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-2 py-1.5 text-left font-medium text-gray-500">集装箱号</th>
+                              <th className="px-2 py-1.5 text-left font-medium text-gray-500">客户</th>
+                              <th className="px-2 py-1.5 text-right font-medium text-gray-500">数量</th>
+                              <th className="px-2 py-1.5 text-right font-medium text-gray-500">重量</th>
+                              <th className="px-2 py-1.5 text-right font-medium text-gray-500">货值</th>
+                              <th className="px-2 py-1.5 text-right font-medium text-gray-500">单价</th>
+                              <th className="px-2 py-1.5 text-right font-medium text-gray-500">总税费</th>
+                              <th className="px-2 py-1.5 text-left font-medium text-gray-500">申报时间</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <p className="text-center text-gray-400 py-4">暂无申报历史</p>
-                    )}
-                  </div>
+                          </thead>
+                          <tbody>
+                            {selectedRecord.history.map((h) => (
+                              <tr key={h.id} className="border-b">
+                                <td className="px-2 py-1.5">
+                                  <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-mono">
+                                    {h.containerNo || '-'}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1.5 text-gray-700">{h.customerName || '-'}</td>
+                                <td className="px-2 py-1.5 text-right">{h.declaredQty}</td>
+                                <td className="px-2 py-1.5 text-right">{h.declaredWeight.toFixed(2)} kg</td>
+                                <td className="px-2 py-1.5 text-right">€{h.declaredValue.toFixed(2)}</td>
+                                <td className="px-2 py-1.5 text-right">€{h.unitPrice.toFixed(2)}</td>
+                                <td className="px-2 py-1.5 text-right text-amber-600">€{h.totalTax.toFixed(2)}</td>
+                                <td className="px-2 py-1.5 text-gray-500">
+                                  {h.declaredAt ? formatDate(h.declaredAt) : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p className="text-center text-gray-400 py-4">暂无申报历史</p>
+                      )}
+                    </div>
                 </>
               )}
             </div>

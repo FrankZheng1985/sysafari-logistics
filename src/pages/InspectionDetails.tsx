@@ -409,6 +409,7 @@ export default function InspectionDetails() {
           setInspectionModalVisible(false)
           setSelectedBill(null)
         }}
+        billId={selectedBill?.id?.toString() || ''}
         billNumber={selectedBill?.billNumber || ''}
         currentStatus={selectedBill?.inspection || '待查验'}
         inspectionDetail={selectedBill?.inspectionDetail ? {

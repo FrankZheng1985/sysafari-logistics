@@ -1044,6 +1044,7 @@ export async function markCustomerConfirmed(importId, confirmedBy) {
         taxDetails.items.map(item => ({
           ...item,
           importNo: taxDetails.importNo,
+          containerNo: taxDetails.containerNo,
           customerName: taxDetails.customerName
         }))
       )

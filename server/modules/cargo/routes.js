@@ -310,6 +310,19 @@ router.post('/product-risk/batch/:importId', controller.batchCheckImportRiskCtrl
 // 获取产品库统计信息
 router.get('/product-risk/stats', controller.getProductLibraryStatsCtrl)
 
+// ==================== 敏感产品预警 ====================
+// 检查查验货物是否在敏感产品库中（用于查验时预警）
+router.post('/sensitive-alert/check', controller.checkInspectionItemsCtrl)
+
+// 创建敏感产品添加审批
+router.post('/sensitive-alert/approval', controller.createSensitiveProductApprovalCtrl)
+
+// 获取敏感产品添加审批列表
+router.get('/sensitive-alert/approvals', controller.getSensitiveProductApprovalsCtrl)
+
+// 处理敏感产品添加审批（通过/驳回）
+router.post('/sensitive-alert/approval/:id/process', controller.processSensitiveProductApprovalCtrl)
+
 // ==================== AI图片分析 ====================
 // AI分析产品图片
 router.post('/ai/analyze-image', controller.analyzeProductImageCtrl)

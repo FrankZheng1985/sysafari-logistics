@@ -5,6 +5,45 @@
 import { getDatabase } from '../../config/database.js'
 
 /**
+ * 同步更新 hs_match_history 表（匹配引擎学习库）
+ * 当匹配记录库新增或更新时，同步更新学习库，让引擎能学习新的品名+材质+HS编码组合
+ */
+async function syncToMatchHistory(data) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  // 检查是否已存在（基于商品名+材质）
+  const existing = await db.prepare(`
+    SELECT id, matched_hs_code FROM hs_match_history 
+    WHERE product_name = $1 AND material IS NOT DISTINCT FROM $2
+  `).get(data.productName, data.material || null)
+  
+  if (existing) {
+    // 更新现有记录
+    await db.prepare(`
+      UPDATE hs_match_history SET
+        matched_hs_code = ?,
+        product_name_en = COALESCE(?, product_name_en),
+        match_count = match_count + 1,
+        last_matched_at = ?
+      WHERE id = ?
+    `).run(data.hsCode, data.productNameEn, now, existing.id)
+    
+    if (existing.matched_hs_code !== data.hsCode) {
+      console.log(`[同步到匹配引擎] 更新: ${data.productName} (${data.material || '无材质'}) HS编码: ${existing.matched_hs_code} -> ${data.hsCode}`)
+    }
+  } else {
+    // 插入新记录
+    await db.prepare(`
+      INSERT INTO hs_match_history (product_name, product_name_en, material, matched_hs_code, match_count, last_matched_at, created_at)
+      VALUES (?, ?, ?, ?, 1, ?, ?)
+    `).run(data.productName, data.productNameEn, data.material || null, data.hsCode, now, now)
+    
+    console.log(`[同步到匹配引擎] 新增: ${data.productName} (${data.material || '无材质'}) -> HS编码: ${data.hsCode}`)
+  }
+}
+
+/**
  * 保存或更新匹配记录
  * 如果相同品名+材质的记录已存在，则更新；否则创建新记录
  */
@@ -35,6 +74,16 @@ export async function saveMatchRecord(data) {
     const newMinPrice = unitPrice > 0 ? Math.min(existing.min_unit_price || unitPrice, unitPrice) : existing.min_unit_price
     const newMaxPrice = Math.max(existing.max_unit_price || 0, unitPrice)
 
+    // 计算单件重量相关字段
+    const newAvgPieceWeight = newTotalQty > 0 ? newTotalWeight / newTotalQty : 0
+    const currentPieceWeight = (data.quantity > 0 && data.weight > 0) ? data.weight / data.quantity : 0
+    const newMinPieceWeight = currentPieceWeight > 0 
+      ? Math.min(parseFloat(existing.min_piece_weight) || currentPieceWeight, currentPieceWeight) 
+      : parseFloat(existing.min_piece_weight) || 0
+    const newMaxPieceWeight = currentPieceWeight > 0
+      ? Math.max(parseFloat(existing.max_piece_weight) || 0, currentPieceWeight)
+      : parseFloat(existing.max_piece_weight) || 0
+
     await db.prepare(`
       UPDATE hs_match_records SET
         hs_code = ?,
@@ -49,6 +98,9 @@ export async function saveMatchRecord(data) {
         total_declared_value = ?,
         total_declared_qty = ?,
         total_declared_weight = ?,
+        avg_piece_weight = ?,
+        min_piece_weight = ?,
+        max_piece_weight = ?,
         duty_rate = COALESCE(?, duty_rate),
         vat_rate = COALESCE(?, vat_rate),
         anti_dumping_rate = COALESCE(?, anti_dumping_rate),
@@ -72,6 +124,9 @@ export async function saveMatchRecord(data) {
       newTotalValue,
       newTotalQty,
       newTotalWeight,
+      newAvgPieceWeight,
+      newMinPieceWeight,
+      newMaxPieceWeight,
       data.dutyRate,
       data.vatRate,
       data.antiDumpingRate,
@@ -84,11 +139,16 @@ export async function saveMatchRecord(data) {
       existing.id
     )
 
+    // 同步到匹配引擎学习库
+    await syncToMatchHistory(data)
+
     return { id: existing.id, isNew: false }
   } else {
     // 创建新记录（默认已核实）
     const unitPrice = data.unitPrice || 0
     const kgPrice = data.weight > 0 ? (data.declaredValue || 0) / data.weight : 0
+    // 计算单件重量
+    const pieceWeight = (data.quantity > 0 && data.weight > 0) ? data.weight / data.quantity : 0
 
     const result = await db.prepare(`
       INSERT INTO hs_match_records (
@@ -96,12 +156,13 @@ export async function saveMatchRecord(data) {
         origin_country, origin_country_code,
         avg_unit_price, avg_kg_price, min_unit_price, max_unit_price,
         total_declared_value, total_declared_qty, total_declared_weight,
+        avg_piece_weight, min_piece_weight, max_piece_weight,
         duty_rate, vat_rate, anti_dumping_rate, countervailing_rate,
         match_count, first_match_time, last_match_time,
         customer_id, customer_name,
         is_verified, verified_at,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.productName,
       data.productNameEn || null,
@@ -117,6 +178,9 @@ export async function saveMatchRecord(data) {
       data.declaredValue || 0,
       data.quantity || 0,
       data.weight || 0,
+      pieceWeight,          // avg_piece_weight
+      pieceWeight > 0 ? pieceWeight : 0,  // min_piece_weight
+      pieceWeight,          // max_piece_weight
       data.dutyRate || 0,
       data.vatRate || 19,
       data.antiDumpingRate || 0,
@@ -131,6 +195,9 @@ export async function saveMatchRecord(data) {
       now,
       now
     )
+
+    // 同步到匹配引擎学习库
+    await syncToMatchHistory(data)
 
     return { id: result.lastInsertRowid, isNew: true }
   }
@@ -147,17 +214,19 @@ export async function addMatchHistory(matchRecordId, data) {
 
   const result = await db.prepare(`
     INSERT INTO hs_declaration_history (
-      match_record_id, import_id, import_no, cargo_item_id,
+      match_record_id, import_id, import_no, cargo_item_id, container_no, customer_name,
       declared_qty, declared_weight, declared_value,
       unit_price, kg_price,
       duty_amount, vat_amount, other_tax_amount, total_tax,
       declared_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     matchRecordId,
     data.importId || null,
     data.importNo || null,
     data.cargoItemId || null,
+    data.containerNo || null,
+    data.customerName || null,
     data.quantity || 0,
     data.weight || 0,
     data.declaredValue || 0,
@@ -277,6 +346,10 @@ export async function getMatchRecordsList(options = {}) {
       totalDeclaredValue: parseFloat(row.total_declared_value) || 0,
       totalDeclaredQty: row.total_declared_qty || 0,
       totalDeclaredWeight: parseFloat(row.total_declared_weight) || 0,
+      // 单件重量相关字段
+      avgPieceWeight: parseFloat(row.avg_piece_weight) || 0,
+      minPieceWeight: parseFloat(row.min_piece_weight) || 0,
+      maxPieceWeight: parseFloat(row.max_piece_weight) || 0,
       dutyRate: parseFloat(row.duty_rate) || 0,
       vatRate: parseFloat(row.vat_rate) || 19,
       antiDumpingRate: parseFloat(row.anti_dumping_rate) || 0,
@@ -332,6 +405,10 @@ export async function getMatchRecordDetail(id) {
     totalDeclaredValue: parseFloat(record.total_declared_value) || 0,
     totalDeclaredQty: record.total_declared_qty || 0,
     totalDeclaredWeight: parseFloat(record.total_declared_weight) || 0,
+    // 单件重量相关字段
+    avgPieceWeight: parseFloat(record.avg_piece_weight) || 0,
+    minPieceWeight: parseFloat(record.min_piece_weight) || 0,
+    maxPieceWeight: parseFloat(record.max_piece_weight) || 0,
     dutyRate: parseFloat(record.duty_rate) || 0,
     vatRate: parseFloat(record.vat_rate) || 19,
     antiDumpingRate: parseFloat(record.anti_dumping_rate) || 0,
@@ -356,6 +433,8 @@ export async function getMatchRecordDetail(id) {
       id: h.id,
       importId: h.import_id,
       importNo: h.import_no,
+      containerNo: h.container_no,
+      customerName: h.customer_name,
       cargoItemId: h.cargo_item_id,
       declaredQty: h.declared_qty,
       declaredWeight: parseFloat(h.declared_weight) || 0,
@@ -484,6 +563,7 @@ export async function batchSaveFromTaxCalc(importId, items) {
       await addMatchHistory(recordResult.id, {
         importId: importId,
         importNo: item.importNo,
+        containerNo: item.containerNo,
         cargoItemId: item.id,
         quantity: item.quantity || 0,
         weight: item.grossWeight || 0,

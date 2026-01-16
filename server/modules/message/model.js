@@ -239,8 +239,8 @@ export function canApprove(userRole, approvalType) {
     return true
   }
   
-  // 操作经理可以审批订单、供应商、客户询价
-  if (['manager', 'czjl'].includes(userRole) && ['order', 'supplier', 'inquiry', 'contract'].includes(approvalType)) {
+  // 操作经理可以审批订单、供应商、客户询价、敏感产品添加
+  if (['manager', 'czjl'].includes(userRole) && ['order', 'supplier', 'inquiry', 'contract', 'sensitive_product_add'].includes(approvalType)) {
     return true
   }
   

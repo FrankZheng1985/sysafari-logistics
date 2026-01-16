@@ -647,6 +647,7 @@ export default function InspectionBillDetails() {
         <InspectionModal
           visible={inspectionModalVisible}
           onClose={() => setInspectionModalVisible(false)}
+          billId={id || ''}
           billNumber={billDetail.billNumber}
           currentStatus={billDetail.inspection}
           inspectionDetail={inspectionDetail}

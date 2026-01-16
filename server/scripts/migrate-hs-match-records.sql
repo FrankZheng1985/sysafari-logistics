@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS hs_match_records (
     total_declared_qty INTEGER DEFAULT 0,          -- 累计申报数量
     total_declared_weight NUMERIC DEFAULT 0,       -- 累计申报重量（kg）
     
+    -- 单件重量统计（新增）
+    avg_piece_weight NUMERIC DEFAULT 0,            -- 平均单件重量（kg/件）
+    min_piece_weight NUMERIC DEFAULT 0,            -- 最小单件重量
+    max_piece_weight NUMERIC DEFAULT 0,            -- 最大单件重量
+    
     -- 税率信息（匹配时的税率快照）
     duty_rate NUMERIC DEFAULT 0,                   -- 关税率
     vat_rate NUMERIC DEFAULT 19,                   -- 增值税率

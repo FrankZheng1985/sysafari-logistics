@@ -6701,4 +6701,116 @@ export async function cleanupAddressCache(days: number = 90): Promise<ApiRespons
   })
 }
 
+// ==================== 敏感产品预警 API ====================
+
+export interface SensitiveAlertItem {
+  hsCode: string
+  productName: string
+  material?: string
+  quantity?: number
+  unit?: string
+}
+
+export interface SensitiveAlertCheckResult {
+  hasNewProducts: boolean
+  newItems: SensitiveAlertItem[]
+  existingItems: Array<SensitiveAlertItem & {
+    matchedProduct: {
+      id: number
+      product_name: string
+      hs_code: string
+      product_type?: string
+      risk_level: string
+      source?: string
+    }
+    source: string
+  }>
+  summary: {
+    total: number
+    existingCount: number
+    newCount: number
+  }
+}
+
+export interface SensitiveProductApproval {
+  id: string
+  approval_type: string
+  business_id: string
+  title: string
+  content: {
+    billId: string
+    billNumber: string
+    items: SensitiveAlertItem[]
+    reason: string
+  }
+  applicant_id: number
+  applicant_name: string
+  approver_id?: number
+  approver_name?: string
+  status: 'pending' | 'approved' | 'rejected'
+  remark?: string
+  created_at: string
+  processed_at?: string
+}
+
+/**
+ * 检查查验货物是否在敏感产品库中
+ * 用于查验时预警提示
+ */
+export async function checkInspectionItemsForSensitive(items: SensitiveAlertItem[]): Promise<ApiResponse<SensitiveAlertCheckResult>> {
+  return fetchApi('/api/cargo/sensitive-alert/check', {
+    method: 'POST',
+    body: JSON.stringify({ items })
+  })
+}
+
+/**
+ * 创建敏感产品添加审批
+ */
+export async function createSensitiveProductApproval(data: {
+  billId: string
+  billNumber: string
+  items: SensitiveAlertItem[]
+}): Promise<ApiResponse<{ approvalId: string; success: boolean }>> {
+  return fetchApi('/api/cargo/sensitive-alert/approval', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+/**
+ * 获取敏感产品添加审批列表
+ */
+export async function getSensitiveProductApprovals(params?: {
+  status?: string
+  page?: number
+  pageSize?: number
+}): Promise<ApiResponse<{
+  list: SensitiveProductApproval[]
+  total: number
+  page: number
+  pageSize: number
+}>> {
+  const queryParams = new URLSearchParams()
+  if (params?.status) queryParams.append('status', params.status)
+  if (params?.page) queryParams.append('page', params.page.toString())
+  if (params?.pageSize) queryParams.append('pageSize', params.pageSize.toString())
+  
+  return fetchApi(`/api/cargo/sensitive-alert/approvals?${queryParams.toString()}`)
+}
+
+/**
+ * 处理敏感产品添加审批（通过/驳回）
+ */
+export async function processSensitiveProductApproval(
+  approvalId: string,
+  approved: boolean,
+  comment?: string
+): Promise<ApiResponse<{ success: boolean; approved: boolean; itemsAdded: number }>> {
+  return fetchApi(`/api/cargo/sensitive-alert/approval/${approvalId}/process`, {
+    method: 'POST',
+    body: JSON.stringify({ approved, comment })
+  })
+}
+
 

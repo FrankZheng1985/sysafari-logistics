@@ -13,6 +13,7 @@ import * as hsOptimizer from './hsOptimizer.js'
 import * as declarationValue from './declarationValue.js'
 import * as inspectionRisk from './inspectionRisk.js'
 import * as sensitiveProducts from './sensitiveProducts.js'
+import * as sensitiveProductAlert from './sensitiveProductAlert.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -2126,6 +2127,105 @@ export async function getProductLibraryStatsCtrl(req, res) {
   }
 }
 
+// ==================== 敏感产品预警 ====================
+
+/**
+ * 检查查验货物是否在敏感产品库中
+ * 用于查验时预警提示
+ */
+export async function checkInspectionItemsCtrl(req, res) {
+  try {
+    const { items } = req.body
+    if (!items || !Array.isArray(items)) {
+      return badRequest(res, '请提供查验货物列表')
+    }
+    const result = await sensitiveProductAlert.checkInspectionItemsAgainstSensitiveProducts(items)
+    return success(res, result)
+  } catch (error) {
+    console.error('检查敏感产品预警失败:', error)
+    return serverError(res, '检查敏感产品预警失败')
+  }
+}
+
+/**
+ * 创建敏感产品添加审批
+ */
+export async function createSensitiveProductApprovalCtrl(req, res) {
+  try {
+    const { billId, billNumber, items } = req.body
+    
+    if (!billId || !billNumber || !items || items.length === 0) {
+      return badRequest(res, '请提供完整的申请信息')
+    }
+    
+    const result = await sensitiveProductAlert.createSensitiveProductAddApproval({
+      billId,
+      billNumber,
+      items,
+      applicantId: req.user?.id,
+      applicantName: req.user?.name || req.user?.username || '系统',
+      applicantRole: req.user?.role
+    })
+    
+    return success(res, result, '审批已提交，等待审批')
+  } catch (error) {
+    console.error('创建敏感产品添加审批失败:', error)
+    return serverError(res, '创建敏感产品添加审批失败')
+  }
+}
+
+/**
+ * 处理敏感产品添加审批
+ */
+export async function processSensitiveProductApprovalCtrl(req, res) {
+  try {
+    const { id } = req.params
+    const { approved, comment } = req.body
+    
+    if (typeof approved !== 'boolean') {
+      return badRequest(res, '请提供审批结果')
+    }
+    
+    const result = await sensitiveProductAlert.processSensitiveProductAddApproval(
+      id,
+      {
+        id: req.user?.id,
+        name: req.user?.name || req.user?.username || '系统',
+        role: req.user?.role
+      },
+      approved,
+      comment
+    )
+    
+    return success(res, result, approved ? '审批通过，产品已添加到敏感产品库' : '审批已驳回')
+  } catch (error) {
+    console.error('处理敏感产品添加审批失败:', error)
+    return serverError(res, error.message || '处理敏感产品添加审批失败')
+  }
+}
+
+/**
+ * 获取敏感产品添加审批列表
+ */
+export async function getSensitiveProductApprovalsCtrl(req, res) {
+  try {
+    const { status, page, pageSize } = req.query
+    const result = await sensitiveProductAlert.getSensitiveProductApprovals({
+      status,
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 20
+    })
+    return successWithPagination(res, result.list, {
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize
+    })
+  } catch (error) {
+    console.error('获取敏感产品添加审批列表失败:', error)
+    return serverError(res, '获取敏感产品添加审批列表失败')
+  }
+}
+
 // ==================== AI图片分析 ====================
 
 /**
@@ -2400,6 +2500,12 @@ export default {
   checkProductRiskCtrl,
   batchCheckImportRiskCtrl,
   getProductLibraryStatsCtrl,
+  
+  // 敏感产品预警
+  checkInspectionItemsCtrl,
+  createSensitiveProductApprovalCtrl,
+  processSensitiveProductApprovalCtrl,
+  getSensitiveProductApprovalsCtrl,
   
   // AI图片分析
   analyzeProductImageCtrl,

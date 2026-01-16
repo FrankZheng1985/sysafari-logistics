@@ -1,0 +1,1016 @@
+{
+  "generatedAt": "2026-01-16T01:12:30.105Z",
+  "options": {
+    "limit": 300,
+    "save": false,
+    "country": "CN",
+    "chapter": null
+  },
+  "summary": {
+    "total": 300,
+    "valid": 293,
+    "declarable": 176,
+    "parentCodes": 117,
+    "invalid": 7,
+    "errors": 0,
+    "validRate": "97.67%",
+    "declarableRate": "58.67%"
+  },
+  "parentCodesList": [
+    {
+      "code": "0714300000",
+      "hsCode": "07143000",
+      "hsCode10": "0714300000",
+      "description": "Yams (Dioscorea spp.)",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "0714400000",
+      "hsCode": "07144000",
+      "hsCode10": "0714400000",
+      "description": "Taro (Colocasia spp.)",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "0714500000",
+      "hsCode": "07145000",
+      "hsCode10": "0714500000",
+      "description": "Yautia (Xanthosoma spp.)",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "0714902000",
+      "hsCode": "07149020",
+      "hsCode10": "0714902000",
+      "description": "Arrowroot, salep and similar roots and tubers with",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "0902000000",
+      "hsCode": "09020000",
+      "hsCode10": "0902000000",
+      "description": "Tea, whether or not flavoured",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "1006000000",
+      "hsCode": "10060000",
+      "hsCode10": "1006000000",
+      "description": "Rice",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "1404900000",
+      "hsCode": "14049000",
+      "hsCode10": "1404900000",
+      "description": "Other",
+      "country": "4003",
+      "childCodes": []
+    },
+    {
+      "code": "1602398500",
+      "hsCode": "16023985",
+      "hsCode10": "1602398500",
+      "description": "Other",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "1902110000",
+      "hsCode": "19021100",
+      "hsCode10": "1902110000",
+      "description": "Uncooked pasta, not stuffed or otherwise prepared",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "1902190000",
+      "hsCode": "19021900",
+      "hsCode10": "1902190000",
+      "description": "Other",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "1902200000",
+      "hsCode": "19022000",
+      "hsCode10": "1902200000",
+      "description": "Stuffed pasta, whether or not cooked or otherwise ",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "1902300000",
+      "hsCode": "19023000",
+      "hsCode10": "1902300000",
+      "description": "Other pasta",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2008110000",
+      "hsCode": "20081100",
+      "hsCode10": "2008110000",
+      "description": "Nuts, groundnuts and other seeds, whether or not m",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2008305500",
+      "hsCode": "20083055",
+      "hsCode10": "2008305500",
+      "description": "Mandarins (including tangerines and satsumas); cle",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2008307500",
+      "hsCode": "20083075",
+      "hsCode10": "2008307500",
+      "description": "Mandarins (including tangerines and satsumas); cle",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2103909000",
+      "hsCode": "21039090",
+      "hsCode10": "2103909000",
+      "description": "Other",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2106902000",
+      "hsCode": "21069020",
+      "hsCode10": "2106902000",
+      "description": "Compound alcoholic preparations, other than those ",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2106903000",
+      "hsCode": "21069030",
+      "hsCode10": "2106903000",
+      "description": "Flavoured or coloured sugar syrups",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2106905100",
+      "hsCode": "21069051",
+      "hsCode10": "2106905100",
+      "description": "Other",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2106905500",
+      "hsCode": "21069055",
+      "hsCode10": "2106905500",
+      "description": "Glucose syrup and maltodextrine syrup",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2106905900",
+      "hsCode": "21069059",
+      "hsCode10": "2106905900",
+      "description": "Other",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2515000000",
+      "hsCode": "25150000",
+      "hsCode10": "2515000000",
+      "description": "Marble, travertine, ecaussine and other calcareous",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2516000000",
+      "hsCode": "25160000",
+      "hsCode10": "2516000000",
+      "description": "Granite, porphyry, basalt, sandstone and other mon",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2710201100",
+      "hsCode": "27102011",
+      "hsCode10": "2710201100",
+      "description": "Gas oils",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2710201600",
+      "hsCode": "27102016",
+      "hsCode10": "2710201600",
+      "description": "With a sulphur content exceeding 0,001|% by weight",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2804690000",
+      "hsCode": "28046900",
+      "hsCode10": "2804690000",
+      "description": "Other",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2818101100",
+      "hsCode": "28181011",
+      "hsCode10": "2818101100",
+      "description": "With an aluminium oxide content of 98,5|% by weigh",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2833250000",
+      "hsCode": "28332500",
+      "hsCode10": "2833250000",
+      "description": "Copper sulphate",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905110000",
+      "hsCode": "29051100",
+      "hsCode10": "2905110000",
+      "description": "Methanol",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905110000",
+      "hsCode": "2905110000",
+      "hsCode10": "2905110000",
+      "description": "Methanol",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905120000",
+      "hsCode": "29051200",
+      "hsCode10": "2905120000",
+      "description": "Propan-1-ol and propan-2-ol",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905120000",
+      "hsCode": "2905120000",
+      "hsCode10": "2905120000",
+      "description": "Propan-1-ol propan-2-ol",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905140000",
+      "hsCode": "2905140000",
+      "hsCode10": "2905140000",
+      "description": "Other butanols",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905160000",
+      "hsCode": "2905160000",
+      "hsCode10": "2905160000",
+      "description": "Octanol and isomers",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905190000",
+      "hsCode": "2905190000",
+      "hsCode10": "2905190000",
+      "description": "Other saturated monohydric alcohols",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905220000",
+      "hsCode": "2905220000",
+      "hsCode10": "2905220000",
+      "description": "Acyclic terpene alcohols",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905290000",
+      "hsCode": "2905290000",
+      "hsCode10": "2905290000",
+      "description": "Other unsaturated monohydric alcohols",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905310000",
+      "hsCode": "2905310000",
+      "hsCode10": "2905310000",
+      "description": "Ethylene glycol",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905390000",
+      "hsCode": "2905390000",
+      "hsCode10": "2905390000",
+      "description": "Other diols",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905440000",
+      "hsCode": "2905440000",
+      "hsCode10": "2905440000",
+      "description": "D-glucitol sorbitol",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905490000",
+      "hsCode": "2905490000",
+      "hsCode10": "2905490000",
+      "description": "Other polyhydric alcohols",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2905590000",
+      "hsCode": "2905590000",
+      "hsCode10": "2905590000",
+      "description": "Other halogenated derivatives",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2915210000",
+      "hsCode": "29152100",
+      "hsCode10": "2915210000",
+      "description": "Acetic acid",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2917110000",
+      "hsCode": "29171100",
+      "hsCode10": "2917110000",
+      "description": "Oxalic acid",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2917120000",
+      "hsCode": "29171200",
+      "hsCode10": "2917120000",
+      "description": "Adipic acid",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2918110000",
+      "hsCode": "29181100",
+      "hsCode10": "2918110000",
+      "description": "Lactic acid",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2918140000",
+      "hsCode": "29181400",
+      "hsCode10": "2918140000",
+      "description": "Citric acid",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2918150000",
+      "hsCode": "29181500",
+      "hsCode10": "2918150000",
+      "description": "Citric acid salts and esters",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2921420000",
+      "hsCode": "29214200",
+      "hsCode10": "2921420000",
+      "description": "Aniline derivatives",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "2941200000",
+      "hsCode": "29412000",
+      "hsCode10": "2941200000",
+      "description": "Streptomycins",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3102100000",
+      "hsCode": "31021000",
+      "hsCode10": "3102100000",
+      "description": "Urea",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3102300000",
+      "hsCode": "31023000",
+      "hsCode10": "3102300000",
+      "description": "Ammonium nitrate",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3105200000",
+      "hsCode": "31052000",
+      "hsCode10": "3105200000",
+      "description": "Mineral or chemical fertilizers with NPK",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3204110000",
+      "hsCode": "32041100",
+      "hsCode10": "3204110000",
+      "description": "Disperse dyes",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3204120000",
+      "hsCode": "32041200",
+      "hsCode10": "3204120000",
+      "description": "Acid dyes",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3204140000",
+      "hsCode": "32041400",
+      "hsCode10": "3204140000",
+      "description": "Direct dyes",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3204150000",
+      "hsCode": "32041500",
+      "hsCode10": "3204150000",
+      "description": "Vat dyes",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3204170000",
+      "hsCode": "32041700",
+      "hsCode10": "3204170000",
+      "description": "Pigments",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3206110000",
+      "hsCode": "32061100",
+      "hsCode10": "3206110000",
+      "description": "Titanium dioxide pigments",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3801100000",
+      "hsCode": "3801100000",
+      "hsCode10": "3801100000",
+      "description": "Artificial graphite",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3801100015",
+      "hsCode": "38011000",
+      "hsCode10": "3801100015",
+      "description": "Artificial graphite",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3801200000",
+      "hsCode": "3801200000",
+      "hsCode10": "3801200000",
+      "description": "Colloidal graphite",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3801900000",
+      "hsCode": "3801900000",
+      "hsCode10": "3801900000",
+      "description": "Other graphite products",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3802100000",
+      "hsCode": "3802100000",
+      "hsCode10": "3802100000",
+      "description": "Activated carbon",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3802900000",
+      "hsCode": "3802900000",
+      "hsCode10": "3802900000",
+      "description": "Other activated natural mineral products",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3806100000",
+      "hsCode": "3806100000",
+      "hsCode10": "3806100000",
+      "description": "Rosin",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808911000",
+      "hsCode": "38089110",
+      "hsCode10": "3808911000",
+      "description": "Insecticides",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808911000",
+      "hsCode": "3808911000",
+      "hsCode10": "3808911000",
+      "description": "Insecticides",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808919000",
+      "hsCode": "3808919000",
+      "hsCode10": "3808919000",
+      "description": "Other insecticides",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808920000",
+      "hsCode": "38089200",
+      "hsCode10": "3808920000",
+      "description": "Fungicides",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808930000",
+      "hsCode": "38089300",
+      "hsCode10": "3808930000",
+      "description": "Herbicides",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808939000",
+      "hsCode": "3808939000",
+      "hsCode10": "3808939000",
+      "description": "Other herbicides",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808949000",
+      "hsCode": "3808949000",
+      "hsCode10": "3808949000",
+      "description": "Other disinfectants",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3808990000",
+      "hsCode": "3808990000",
+      "hsCode10": "3808990000",
+      "description": "Other plant-protection products",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3809100000",
+      "hsCode": "3809100000",
+      "hsCode10": "3809100000",
+      "description": "Finishing agents for textiles",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3809910000",
+      "hsCode": "3809910000",
+      "hsCode10": "3809910000",
+      "description": "Other products for textile industry",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3810900000",
+      "hsCode": "3810900000",
+      "hsCode10": "3810900000",
+      "description": "Other fluxes and preparations",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3811110000",
+      "hsCode": "3811110000",
+      "hsCode10": "3811110000",
+      "description": "Anti-knock preparations",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3811190000",
+      "hsCode": "3811190000",
+      "hsCode10": "3811190000",
+      "description": "Other anti-knock preparations",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3811210000",
+      "hsCode": "3811210000",
+      "hsCode10": "3811210000",
+      "description": "Additives containing petroleum",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3811290000",
+      "hsCode": "3811290000",
+      "hsCode10": "3811290000",
+      "description": "Other lubricating oil additives",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3811900000",
+      "hsCode": "3811900000",
+      "hsCode10": "3811900000",
+      "description": "Other fuel additives",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3812100000",
+      "hsCode": "3812100000",
+      "hsCode10": "3812100000",
+      "description": "Rubber accelerators",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3812200000",
+      "hsCode": "3812200000",
+      "hsCode10": "3812200000",
+      "description": "Compound plasticizers for rubber plastic",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3812390000",
+      "hsCode": "3812390000",
+      "hsCode10": "3812390000",
+      "description": "Other fire retardants",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3813000000",
+      "hsCode": "3813000000",
+      "hsCode10": "3813000000",
+      "description": "Preparations for fire-extinguishers",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3814000000",
+      "hsCode": "3814000000",
+      "hsCode10": "3814000000",
+      "description": "Organic composite solvents",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3815120000",
+      "hsCode": "38151200",
+      "hsCode10": "3815120000",
+      "description": "Supported catalysts with precious metal",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3815120000",
+      "hsCode": "3815120000",
+      "hsCode10": "3815120000",
+      "description": "Catalysts with precious metal",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3815190000",
+      "hsCode": "3815190000",
+      "hsCode10": "3815190000",
+      "description": "Other supported catalysts",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3815900000",
+      "hsCode": "3815900000",
+      "hsCode10": "3815900000",
+      "description": "Other reaction initiators catalysts",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3816000000",
+      "hsCode": "3816000000",
+      "hsCode10": "3816000000",
+      "description": "Refractory cements",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3817000000",
+      "hsCode": "3817000000",
+      "hsCode10": "3817000000",
+      "description": "Mixed alkylbenzenes",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3818000000",
+      "hsCode": "3818000000",
+      "hsCode10": "3818000000",
+      "description": "Chemical elements for electronics",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3819000000",
+      "hsCode": "3819000000",
+      "hsCode10": "3819000000",
+      "description": "Hydraulic brake fluids",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3820000000",
+      "hsCode": "3820000000",
+      "hsCode10": "3820000000",
+      "description": "Anti-freezing preparations",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3822000000",
+      "hsCode": "3822000000",
+      "hsCode10": "3822000000",
+      "description": "Diagnostic reagents",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3823110000",
+      "hsCode": "3823110000",
+      "hsCode10": "3823110000",
+      "description": "Stearic acid",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3823120000",
+      "hsCode": "3823120000",
+      "hsCode10": "3823120000",
+      "description": "Oleic acid",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3823130000",
+      "hsCode": "3823130000",
+      "hsCode10": "3823130000",
+      "description": "Tall oil fatty acids",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3823190000",
+      "hsCode": "3823190000",
+      "hsCode10": "3823190000",
+      "description": "Other industrial fatty acids",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3823700000",
+      "hsCode": "3823700000",
+      "hsCode10": "3823700000",
+      "description": "Industrial fatty alcohols",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3824100000",
+      "hsCode": "3824100000",
+      "hsCode10": "3824100000",
+      "description": "Foundry core binders",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3824500000",
+      "hsCode": "3824500000",
+      "hsCode10": "3824500000",
+      "description": "Non-refractory mortars",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3824600000",
+      "hsCode": "3824600000",
+      "hsCode10": "3824600000",
+      "description": "Sorbitol",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3824820000",
+      "hsCode": "3824820000",
+      "hsCode10": "3824820000",
+      "description": "Containing polychlorinated biphenyls",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3824990000",
+      "hsCode": "3824990000",
+      "hsCode10": "3824990000",
+      "description": "Other chemical products",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3826001000",
+      "hsCode": "38260010",
+      "hsCode10": "3826001000",
+      "description": "Fatty-acid mono-alkyl esters, containing by weight",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3901100000",
+      "hsCode": "39011000",
+      "hsCode10": "3901100000",
+      "description": "Polyethylene, density < 0.94",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3901200000",
+      "hsCode": "39012000",
+      "hsCode10": "3901200000",
+      "description": "Polyethylene, density >= 0.94",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3902100000",
+      "hsCode": "39021000",
+      "hsCode10": "3902100000",
+      "description": "Polypropylene",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3903190000",
+      "hsCode": "39031900",
+      "hsCode10": "3903190000",
+      "description": "Other polystyrene",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3904100000",
+      "hsCode": "39041000",
+      "hsCode10": "3904100000",
+      "description": "Poly(vinyl chloride), not mixed",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3904210000",
+      "hsCode": "39042100",
+      "hsCode10": "3904210000",
+      "description": "Non-plasticised PVC",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3904220000",
+      "hsCode": "39042200",
+      "hsCode10": "3904220000",
+      "description": "Plasticised PVC",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3907610000",
+      "hsCode": "39076100",
+      "hsCode10": "3907610000",
+      "description": "Poly(ethylene terephthalate)",
+      "country": "CN",
+      "childCodes": []
+    },
+    {
+      "code": "3907610000",
+      "hsCode": "39076100",
+      "hsCode10": "3907610000",
+      "description": "Poly(ethylene terephthalate) (PET)",
+      "country": "CN",
+      "childCodes": []
+    }
+  ],
+  "invalidCodes": [
+    {
+      "code": "2818101000",
+      "hsCode": "28181010",
+      "hsCode10": "2818101000",
+      "description": "Artificial corundum, white",
+      "country": "CN",
+      "error": "TARIC 系统中未找到此编码"
+    },
+    {
+      "code": "2818109000",
+      "hsCode": "28181090",
+      "hsCode10": "2818109000",
+      "description": "Other artificial corundum",
+      "country": "CN",
+      "error": "TARIC 系统中未找到此编码"
+    },
+    {
+      "code": "2842908020",
+      "hsCode": "28429080",
+      "hsCode10": "2842908020",
+      "description": "Other",
+      "country": "CN",
+      "error": "TARIC 系统中未找到此编码"
+    },
+    {
+      "code": "2930907000",
+      "hsCode": "29309070",
+      "hsCode10": "2930907000",
+      "description": "Methionine",
+      "country": "CN",
+      "error": "TARIC 系统中未找到此编码"
+    },
+    {
+      "code": "3808931000",
+      "hsCode": "3808931000",
+      "hsCode10": "3808931000",
+      "description": "Herbicides",
+      "country": "CN",
+      "error": "TARIC 系统中未找到此编码"
+    },
+    {
+      "code": "3824997100",
+      "hsCode": "38249971",
+      "hsCode10": "3824997100",
+      "description": "Chemical preparations for electronics industry",
+      "country": "CN",
+      "error": "TARIC 系统中未找到此编码"
+    },
+    {
+      "code": "3907201100",
+      "hsCode": "39072011",
+      "hsCode10": "3907201100",
+      "description": "Polyethylene glycol",
+      "country": "CN",
+      "error": "TARIC 系统中未找到此编码"
+    }
+  ],
+  "errorCodes": []
+}

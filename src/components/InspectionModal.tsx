@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Package, ClipboardCheck, CheckCircle } from 'lucide-react'
 import DateTimePicker from './DateTimePicker'
 import { formatDateTime } from '../utils/dateFormat'
+import SensitiveProductAlert from './SensitiveProductAlert'
 
 // 查验货物项
 export interface InspectionItem {
   id: string
   hsCode: string
   productName: string
+  material?: string  // 材质
   quantity?: number
   unit?: string
 }
@@ -27,6 +29,7 @@ export interface InspectionDetail {
 interface InspectionModalProps {
   visible: boolean
   onClose: () => void
+  billId: string  // 提单ID，用于敏感产品预警
   billNumber: string
   currentStatus: string
   inspectionDetail?: InspectionDetail
@@ -42,6 +45,7 @@ const generateId = () => `item_${Date.now()}_${Math.random().toString(36).substr
 export default function InspectionModal({
   visible,
   onClose,
+  billId,
   billNumber,
   currentStatus,
   inspectionDetail,
@@ -292,7 +296,7 @@ export default function InspectionModal({
                     <div className="flex-shrink-0 w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-[10px] text-gray-600">
                       {index + 1}
                     </div>
-                    <div className="flex-1 grid grid-cols-2 gap-2">
+                    <div className="flex-1 grid grid-cols-3 gap-2">
                       <div>
                         <label className="block text-[10px] text-gray-500 mb-0.5">HS Code</label>
                         <input
@@ -313,6 +317,16 @@ export default function InspectionModal({
                           className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                         />
                       </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">材质</label>
+                        <input
+                          type="text"
+                          value={item.material || ''}
+                          onChange={(e) => updateItem(item.id, 'material', e.target.value)}
+                          placeholder="材质（可选）"
+                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
+                        />
+                      </div>
                     </div>
                     {items.length > 1 && (
                       <button
@@ -327,6 +341,14 @@ export default function InspectionModal({
                   </div>
                 ))}
               </div>
+              
+              {/* 敏感产品预警 */}
+              <SensitiveProductAlert
+                items={items.filter(item => item.hsCode?.trim() || item.productName?.trim())}
+                billId={billId}
+                billNumber={billNumber}
+                className="mt-3"
+              />
             </div>
           )}
 

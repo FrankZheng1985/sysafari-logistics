@@ -1613,7 +1613,7 @@ export default function TariffRateManage() {
               }}
               placeholder="HS编码"
               title="输入 HS 编码进行精确搜索"
-              className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs w-24 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              className="px-2.5 py-1.5 border border-gray-300 rounded-md text-xs w-[150px] bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
             />
             {/* 商品描述搜索 */}
             <div className="relative flex-1 max-w-[200px]">
