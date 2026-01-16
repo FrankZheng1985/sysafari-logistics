@@ -740,6 +740,13 @@ export default function CreateInvoice() {
         
         let items: InvoiceItem[]
         
+        // 🔥 辅助函数：计算可开票金额（系统金额 - 已开票金额）
+        const getAvailableAmount = (fee: Fee) => {
+          const systemAmount = Number(fee.amount) || 0
+          const invoicedAmount = Number((fee as any).invoicedAmount) || 0
+          return Math.max(0, systemAmount - invoicedAmount)
+        }
+        
         if (mergeSameFees) {
           // 合并相同费用项：按费用名称分组汇总
           const feeMap = new Map<string, {
@@ -753,7 +760,8 @@ export default function CreateInvoice() {
           
           uniqueFees.forEach((fee: Fee) => {
             const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
-            const amount = Number(fee.amount) || 0
+            // 🔥 使用可开票金额而不是系统金额
+            const amount = getAvailableAmount(fee)
             const existing = feeMap.get(feeName)
             
             if (existing) {
@@ -794,21 +802,25 @@ export default function CreateInvoice() {
           })
         } else {
           // 不合并：每个费用项单独显示
-          items = uniqueFees.map((fee: Fee, index: number) => ({
-            id: (index + 1).toString(),
-            description: fee.feeName || feeCategoryMap[fee.category] || '费用',
-            quantity: 1,
-            unitPrice: Number(fee.amount) || 0,
-            currency: fee.currency || 'EUR',
-            amount: Number(fee.amount) || 0,
-            taxRate: 0,
-            taxAmount: 0,
-            discountPercent: 0,
-            discountAmount: 0,
-            finalAmount: Number(fee.amount) || 0,
-            feeId: fee.id,
-            isFromOrder: true
-          }))
+          // 🔥 使用可开票金额而不是系统金额
+          items = uniqueFees.map((fee: Fee, index: number) => {
+            const availableAmount = getAvailableAmount(fee)
+            return {
+              id: (index + 1).toString(),
+              description: fee.feeName || feeCategoryMap[fee.category] || '费用',
+              quantity: 1,
+              unitPrice: availableAmount,
+              currency: fee.currency || 'EUR',
+              amount: availableAmount,
+              taxRate: 0,
+              taxAmount: 0,
+              discountPercent: 0,
+              discountAmount: 0,
+              finalAmount: availableAmount,
+              feeId: fee.id,
+              isFromOrder: true
+            }
+          })
         }
         
         setFormData(prev => ({ ...prev, items }))
@@ -953,6 +965,13 @@ export default function CreateInvoice() {
     
     let items: InvoiceItem[]
     
+    // 🔥 辅助函数：计算可开票金额（系统金额 - 已开票金额）
+    const getAvailableAmount = (fee: SupplierFee) => {
+      const systemAmount = Number(fee.amount) || 0
+      const invoicedAmount = Number((fee as any).invoicedAmount) || 0
+      return Math.max(0, systemAmount - invoicedAmount)
+    }
+    
     if (mergeSameFees) {
       // 合并相同费用项：按费用名称分组汇总
       const feeMap = new Map<string, {
@@ -969,7 +988,8 @@ export default function CreateInvoice() {
       
       selectedFeesList.forEach(fee => {
         const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
-        const amount = Number(fee.amount) || 0
+        // 🔥 使用可开票金额而不是系统金额
+        const amount = getAvailableAmount(fee)
         const existing = feeMap.get(feeName)
         
         if (existing) {
@@ -1027,24 +1047,28 @@ export default function CreateInvoice() {
       })
     } else {
       // 不合并：每个费用项单独显示
-      items = selectedFeesList.map((fee, index) => ({
-        id: (index + 1).toString(),
-        description: `${fee.billNumber} - ${fee.feeName || feeCategoryMap[fee.category] || '费用'}`,
-        containerNumber: fee.containerNumber || '',  // 保存集装箱号
-        quantity: 1,
-        unitPrice: Number(fee.amount) || 0,
-        currency: fee.currency || 'EUR',
-        amount: Number(fee.amount) || 0,
-        taxRate: 0,
-        taxAmount: 0,
-        discountPercent: 0,
-        discountAmount: 0,
-        finalAmount: Number(fee.amount) || 0,
-        feeId: fee.id,
-        billId: fee.billId,
-        billNumber: fee.billNumber,
-        isFromOrder: true
-      }))
+      // 🔥 使用可开票金额而不是系统金额
+      items = selectedFeesList.map((fee, index) => {
+        const availableAmount = getAvailableAmount(fee)
+        return {
+          id: (index + 1).toString(),
+          description: `${fee.billNumber} - ${fee.feeName || feeCategoryMap[fee.category] || '费用'}`,
+          containerNumber: fee.containerNumber || '',  // 保存集装箱号
+          quantity: 1,
+          unitPrice: availableAmount,
+          currency: fee.currency || 'EUR',
+          amount: availableAmount,
+          taxRate: 0,
+          taxAmount: 0,
+          discountPercent: 0,
+          discountAmount: 0,
+          finalAmount: availableAmount,
+          feeId: fee.id,
+          billId: fee.billId,
+          billNumber: fee.billNumber,
+          isFromOrder: true
+        }
+      })
     }
     
     setFormData(prev => ({ ...prev, items }))
@@ -1551,6 +1575,13 @@ export default function CreateInvoice() {
       
       let items: InvoiceItem[]
       
+      // 🔥 辅助函数：计算可开票金额（系统金额 - 已开票金额）
+      const getAvailableAmount = (fee: Fee) => {
+        const systemAmount = typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : Number(fee.amount) || 0
+        const invoicedAmount = Number((fee as any).invoicedAmount) || 0
+        return Math.max(0, systemAmount - invoicedAmount)
+      }
+      
       if (mergeSameFees) {
         // 合并相同费用项：按费用名称分组汇总
         const feeMap = new Map<string, {
@@ -1566,7 +1597,8 @@ export default function CreateInvoice() {
         
         uniqueFees.forEach(fee => {
           const feeName = fee.feeName || feeCategoryMap[fee.category] || '费用'
-          const amount = typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0
+          // 🔥 使用可开票金额而不是系统金额
+          const amount = getAvailableAmount(fee)
           const existing = feeMap.get(feeName)
           
           if (existing) {
@@ -1618,23 +1650,27 @@ export default function CreateInvoice() {
         })
       } else {
         // 不合并：每个费用项单独显示
-        items = uniqueFees.map((fee, index) => ({
-          id: (index + 1).toString(),
-          description: fee.feeName || feeCategoryMap[fee.category] || '费用',
-          quantity: 1,
-          unitPrice: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
-          currency: fee.currency || 'EUR',
-          amount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
-          taxRate: typeof (fee as any).taxRate === 'string' ? parseFloat((fee as any).taxRate) || 0 : (fee as any).taxRate || 0,
-          taxAmount: 0,
-          discountPercent: 0,
-          discountAmount: 0,
-          finalAmount: typeof fee.amount === 'string' ? parseFloat(fee.amount) || 0 : fee.amount || 0,
-          feeId: fee.id,
-          billId: fee.billId,
-          billNumber: fee.billNumber,
-          isFromOrder: true
-        }))
+        // 🔥 使用可开票金额而不是系统金额
+        items = uniqueFees.map((fee, index) => {
+          const availableAmount = getAvailableAmount(fee)
+          return {
+            id: (index + 1).toString(),
+            description: fee.feeName || feeCategoryMap[fee.category] || '费用',
+            quantity: 1,
+            unitPrice: availableAmount,
+            currency: fee.currency || 'EUR',
+            amount: availableAmount,
+            taxRate: typeof (fee as any).taxRate === 'string' ? parseFloat((fee as any).taxRate) || 0 : (fee as any).taxRate || 0,
+            taxAmount: 0,
+            discountPercent: 0,
+            discountAmount: 0,
+            finalAmount: availableAmount,
+            feeId: fee.id,
+            billId: fee.billId,
+            billNumber: fee.billNumber,
+            isFromOrder: true
+          }
+        })
       }
       
       if (items.length > 0) {
@@ -2672,9 +2708,26 @@ export default function CreateInvoice() {
                             <div className="flex-1 min-w-0">
                               <span className="text-sm text-gray-900">{fee.feeName || feeCategoryMap[fee.category] || '费用'}</span>
                               {fee.description && <p className="text-xs text-gray-500 truncate">{fee.description}</p>}
+                              {/* 🔥 显示部分开票提示 */}
+                              {(fee as any).invoiceStatus === 'partial_invoiced' && (
+                                <p className="text-xs text-blue-600">部分开票</p>
+                              )}
                             </div>
                             <div className="text-right whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{Number(fee.amount).toFixed(2)}</div>
+                              {/* 🔥 显示可开票金额而不是系统金额 */}
+                              {(() => {
+                                const systemAmount = Number(fee.amount) || 0
+                                const invoicedAmount = Number((fee as any).invoicedAmount) || 0
+                                const availableAmount = Math.max(0, systemAmount - invoicedAmount)
+                                return (
+                                  <>
+                                    <div className="text-sm font-medium text-gray-900">{availableAmount.toFixed(2)}</div>
+                                    {invoicedAmount > 0 && (
+                                      <div className="text-[10px] text-blue-500">已开 {invoicedAmount.toFixed(2)}</div>
+                                    )}
+                                  </>
+                                )
+                              })()}
                               <div className="text-xs text-gray-500">{fee.currency}</div>
                             </div>
                           </div>
