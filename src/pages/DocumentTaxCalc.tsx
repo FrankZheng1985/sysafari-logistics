@@ -1350,50 +1350,87 @@ export default function DocumentTaxCalc() {
             )}
           </div>
           
-          {/* 清关类型选择 */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-2">清关方式</h3>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="clearanceType"
-                      value="40"
-                      checked={!isDeferred}
-                      onChange={() => handleClearanceTypeChange('40')}
-                      disabled={changingType}
-                      className="w-4 h-4 text-primary-600"
-                    />
-                    <span className="text-sm">
-                      <span className="font-medium">40号普通清关</span>
-                      <span className="text-gray-500 ml-1">（关税+增值税在进口国缴纳）</span>
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="clearanceType"
-                      value="42"
-                      checked={isDeferred}
-                      onChange={() => handleClearanceTypeChange('42')}
-                      disabled={changingType}
-                      className="w-4 h-4 text-primary-600"
-                    />
-                    <span className="text-sm">
-                      <span className="font-medium">42号递延清关</span>
-                      <span className="text-gray-500 ml-1">（增值税递延到目的地国家缴纳）</span>
-                    </span>
-                  </label>
+          {/* 清关类型选择 + 客户确认状态 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* 清关方式 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">清关方式</h3>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="clearanceType"
+                        value="40"
+                        checked={!isDeferred}
+                        onChange={() => handleClearanceTypeChange('40')}
+                        disabled={changingType}
+                        className="w-4 h-4 text-primary-600"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium">40号普通清关</span>
+                        <span className="text-gray-500 ml-1">（关税+增值税在进口国缴纳）</span>
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="clearanceType"
+                        value="42"
+                        checked={isDeferred}
+                        onChange={() => handleClearanceTypeChange('42')}
+                        disabled={changingType}
+                        className="w-4 h-4 text-primary-600"
+                      />
+                      <span className="text-sm">
+                        <span className="font-medium">42号递延清关</span>
+                        <span className="text-gray-500 ml-1">（增值税递延到目的地国家缴纳）</span>
+                      </span>
+                    </label>
+                  </div>
                 </div>
+                {isDeferred && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded text-blue-700 text-xs">
+                    <AlertTriangle className="w-4 h-4" />
+                    递延清关：增值税 {formatCurrency(taxDetails.summary.deferredVat || 0)} 将在目的地国家缴纳
+                  </div>
+                )}
               </div>
-              {isDeferred && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded text-blue-700 text-xs">
-                  <AlertTriangle className="w-4 h-4" />
-                  递延清关：增值税 {formatCurrency(taxDetails.summary.deferredVat || 0)} 将在目的地国家缴纳
+            </div>
+
+            {/* 客户确认状态 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between h-full">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900 mb-1">客户确认状态</h3>
+                  {taxDetails.batch.customerConfirmed ? (
+                    <div className="flex items-center gap-2 text-green-600">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm">客户已确认</span>
+                      <span className="text-xs text-gray-500">
+                        ({taxDetails.batch.customerConfirmedAt ? formatDateTime(taxDetails.batch.customerConfirmedAt) : '-'})
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-amber-600 text-sm">待客户确认</div>
+                  )}
                 </div>
-              )}
+                {!taxDetails.batch.customerConfirmed && (
+                  <button
+                    onClick={handleMarkConfirmed}
+                    disabled={confirming}
+                    className="px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {confirming ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4" />
+                    )}
+                    标记客户已确认
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1513,40 +1550,6 @@ export default function DocumentTaxCalc() {
               }}
             />
           )}
-
-          {/* 客户确认状态 */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-1">客户确认状态</h3>
-                {taxDetails.batch.customerConfirmed ? (
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">客户已确认</span>
-                    <span className="text-xs text-gray-500">
-                      ({taxDetails.batch.customerConfirmedAt ? formatDateTime(taxDetails.batch.customerConfirmedAt) : '-'})
-                    </span>
-                  </div>
-                ) : (
-                  <div className="text-amber-600 text-sm">待客户确认</div>
-                )}
-              </div>
-              {!taxDetails.batch.customerConfirmed && (
-                <button
-                  onClick={handleMarkConfirmed}
-                  disabled={confirming}
-                  className="px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
-                >
-                  {confirming ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-4 h-4" />
-                  )}
-                  标记客户已确认
-                </button>
-              )}
-            </div>
-          </div>
 
           {/* 按HS编码汇总 */}
           {taxDetails.byHsCode.length > 0 && (
