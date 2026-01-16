@@ -2203,9 +2203,10 @@ export async function getSharedTaxUsageSummary(params = {}) {
     const bills = await db.prepare(billQuery).all(...billParams)
     
     // 统计各运输类型
-    // 海运/铁路/卡航：每条提单 = 1个集装箱，计入"提单数"
-    // 空运：按 weight 字段累计公斤数，不计入"提单数"（空运按公斤单独计算）
+    // 海运/铁路/卡航：每条提单 = 1个集装箱
+    // 空运：按 weight 字段累计公斤数，同时统计空运提单数
     let totalAirKg = 0
+    let totalAirBills = 0  // 空运提单数（独立统计）
     let totalSeaContainers = 0
     let totalRailContainers = 0
     let totalTruckContainers = 0
@@ -2213,8 +2214,9 @@ export async function getSharedTaxUsageSummary(params = {}) {
     for (const bill of bills) {
       const method = bill.transport_method
       if (method === '空运') {
-        // 空运按公斤统计，不计入柜数
+        // 空运按公斤统计，同时记录提单数
         totalAirKg += parseFloat(bill.weight) || 0
+        totalAirBills += 1
       } else if (method === '海运') {
         totalSeaContainers += 1  // 每条提单 = 1个集装箱
       } else if (method === '铁路' || method === '铁运') {
@@ -2272,6 +2274,7 @@ export async function getSharedTaxUsageSummary(params = {}) {
       taxNumbers,
       totalBills,
       totalAirKg,
+      totalAirBills,  // 空运提单数（独立统计）
       totalSeaContainers,
       totalRailContainers,
       totalTruckContainers,

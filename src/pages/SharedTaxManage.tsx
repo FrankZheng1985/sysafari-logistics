@@ -33,6 +33,7 @@ interface UsageSummary {
   taxNumbers: Array<{ type: string; number: string }>
   totalBills: number
   totalAirKg: number
+  totalAirBills: number  // 空运提单数（独立统计）
   totalSeaContainers: number
   totalRailContainers: number
   totalTruckContainers: number
@@ -871,10 +872,15 @@ export default function SharedTaxManage() {
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          {item.totalAirKg > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[50px] px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">
-                              {item.totalAirKg.toLocaleString()}
-                            </span>
+                          {item.totalAirKg > 0 || item.totalAirBills > 0 ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="inline-flex items-center justify-center min-w-[50px] px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">
+                                {item.totalAirKg.toLocaleString()}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {item.totalAirBills}单
+                              </span>
+                            </div>
                           ) : (
                             <span className="text-gray-300">-</span>
                           )}
@@ -921,7 +927,12 @@ export default function SharedTaxManage() {
                         {usageSummary.reduce((sum, item) => sum + item.totalSeaContainers, 0) || '-'}
                       </td>
                       <td className="py-2.5 px-3 text-center text-sky-700">
-                        {usageSummary.reduce((sum, item) => sum + item.totalAirKg, 0).toLocaleString() || '-'}
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span>{usageSummary.reduce((sum, item) => sum + item.totalAirKg, 0).toLocaleString() || '-'}</span>
+                          <span className="text-xs text-gray-500">
+                            {usageSummary.reduce((sum, item) => sum + (item.totalAirBills || 0), 0)}单
+                          </span>
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 text-center text-orange-700">
                         {usageSummary.reduce((sum, item) => sum + item.totalRailContainers, 0) || '-'}
