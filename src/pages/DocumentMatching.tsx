@@ -122,6 +122,14 @@ export default function DocumentMatching() {
   const [checkingPrice, setCheckingPrice] = useState(false)
   const [anomalyCount, setAnomalyCount] = useState(0)
 
+  // 批次统计
+  const [batchStats, setBatchStats] = useState<{
+    uniqueProductNames: number
+    uniqueHsCodes: number
+    totalValue: number
+    totalTax: number
+  }>({ uniqueProductNames: 0, uniqueHsCodes: 0, totalValue: 0, totalTax: 0 })
+
   // 实时查询HS编码
   const [queryHsCode, setQueryHsCode] = useState('')
   const [queryOriginCountry, setQueryOriginCountry] = useState('')
@@ -181,6 +189,7 @@ export default function DocumentMatching() {
     if (selectedBatch) {
       loadReviewItems()
       loadMatchedItems()
+      loadBatchStats()
       checkPriceAnomalies()
     }
   }, [selectedBatch, page])
@@ -340,6 +349,27 @@ export default function DocumentMatching() {
     }
   }
 
+  // 加载批次统计
+  const loadBatchStats = async () => {
+    if (!selectedBatch) return
+    try {
+      const res = await fetch(`${API_BASE}/api/cargo/documents/matching/stats?importId=${selectedBatch.id}`, {
+        headers: getAuthHeaders()
+      })
+      const data = await res.json()
+      if (data.errCode === 200) {
+        setBatchStats({
+          uniqueProductNames: data.data?.uniqueProductNames || 0,
+          uniqueHsCodes: data.data?.uniqueHsCodes || 0,
+          totalValue: data.data?.totalValue || 0,
+          totalTax: data.data?.totalTax || 0
+        })
+      }
+    } catch (error) {
+      console.error('加载批次统计失败:', error)
+    }
+  }
+
   const handleRunMatch = async () => {
     if (!selectedBatch) return
     setMatching(true)
@@ -354,6 +384,7 @@ export default function DocumentMatching() {
         alert(`匹配完成！自动通过: ${data.data?.matched || 0}, 待审核: ${data.data?.review || 0}`)
         loadBatches()
         loadReviewItems()
+        loadBatchStats()
       } else {
         alert(data.msg || '匹配失败')
       }
@@ -385,6 +416,7 @@ export default function DocumentMatching() {
         alert(`${action === 'approve' ? '批准' : '拒绝'}成功`)
         setSelectedItems([])
         loadReviewItems()
+        loadBatchStats()
         loadBatches()
       } else {
         alert(data.msg || '操作失败')
@@ -442,6 +474,7 @@ export default function DocumentMatching() {
         setEditingItem(null)
         setShowRecommendations(false)
         loadReviewItems()
+        loadBatchStats()
         loadBatches()
       } else {
         alert(data.msg || '保存失败')
@@ -886,25 +919,25 @@ export default function DocumentMatching() {
                 <div className="bg-blue-50 rounded-lg px-3 py-2 text-center">
                   <div className="text-xs text-blue-600 mb-1">品名数量</div>
                   <div className="text-lg font-bold text-blue-700">
-                    {new Set([...items.map(i => i.productName), ...matchedItems.map(i => i.productName)]).size}
+                    {batchStats.uniqueProductNames}
                   </div>
                 </div>
                 <div className="bg-purple-50 rounded-lg px-3 py-2 text-center">
                   <div className="text-xs text-purple-600 mb-1">HS Code数</div>
                   <div className="text-lg font-bold text-purple-700">
-                    {new Set([...items.map(i => i.matchedHsCode), ...matchedItems.map(i => i.matchedHsCode)].filter(Boolean)).size}
+                    {batchStats.uniqueHsCodes}
                   </div>
                 </div>
                 <div className="bg-amber-50 rounded-lg px-3 py-2 text-center">
                   <div className="text-xs text-amber-600 mb-1">总税金</div>
                   <div className="text-lg font-bold text-amber-700">
-                    €{([...items, ...matchedItems].reduce((sum, item) => sum + (item.totalValue || 0) * (item.dutyRate || 0) / 100, 0)).toFixed(2)}
+                    €{batchStats.totalTax.toFixed(2)}
                   </div>
                 </div>
                 <div className="bg-green-50 rounded-lg px-3 py-2 text-center">
                   <div className="text-xs text-green-600 mb-1">总货值</div>
                   <div className="text-lg font-bold text-green-700">
-                    €{([...items, ...matchedItems].reduce((sum, item) => sum + (item.totalValue || 0), 0)).toFixed(2)}
+                    €{batchStats.totalValue.toFixed(2)}
                   </div>
                 </div>
               </div>
