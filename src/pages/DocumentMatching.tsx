@@ -769,30 +769,33 @@ export default function DocumentMatching() {
         </div>
       )}
 
-      {/* HS编码实时查询 */}
+      {/* HS编码实时查询和统计 */}
       {selectedBatch && (
         <div className="bg-white rounded-lg border border-gray-200">
           <div className="px-4 py-3 border-b border-gray-200">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Globe className="w-4 h-4 text-white" />
-              </div>
-              <h3 className="text-sm font-medium text-gray-900">HS编码实时查询</h3>
-              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">EU TARIC</span>
-            </div>
-            
-            <div className="flex items-end gap-3">
-              <div className="flex-1 max-w-xs">
-                <label className="block text-xs text-gray-600 mb-1">HS 编码 (8-10位)</label>
-                <input
-                  type="text"
-                  value={queryHsCode}
-                  onChange={(e) => setQueryHsCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="如: 6109100010"
-                  className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  onKeyDown={(e) => e.key === 'Enter' && handleQueryHs()}
-                />
-              </div>
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              {/* 左侧：HS编码实时查询 */}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+                    <Globe className="w-4 h-4 text-white" />
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-900">HS编码实时查询</h3>
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">EU TARIC</span>
+                </div>
+                
+                <div className="flex items-end gap-3">
+                  <div className="w-48">
+                    <label className="block text-xs text-gray-600 mb-1">HS 编码 (8-10位)</label>
+                    <input
+                      type="text"
+                      value={queryHsCode}
+                      onChange={(e) => setQueryHsCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="如: 6109100010"
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      onKeyDown={(e) => e.key === 'Enter' && handleQueryHs()}
+                    />
+                  </div>
               <div className="w-48 relative">
                 <label className="block text-xs text-gray-600 mb-1">原产国 (可选)</label>
                 <div className="relative">
@@ -875,6 +878,36 @@ export default function DocumentMatching() {
                   清空
                 </button>
               )}
+            </div>
+              </div>
+              
+              {/* 右侧：批次统计 */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-blue-50 rounded-lg px-3 py-2 text-center">
+                  <div className="text-xs text-blue-600 mb-1">品名数量</div>
+                  <div className="text-lg font-bold text-blue-700">
+                    {new Set([...items.map(i => i.productName), ...matchedItems.map(i => i.productName)]).size}
+                  </div>
+                </div>
+                <div className="bg-purple-50 rounded-lg px-3 py-2 text-center">
+                  <div className="text-xs text-purple-600 mb-1">HS Code数</div>
+                  <div className="text-lg font-bold text-purple-700">
+                    {new Set([...items.map(i => i.hsCode), ...matchedItems.map(i => i.hsCode)].filter(Boolean)).size}
+                  </div>
+                </div>
+                <div className="bg-amber-50 rounded-lg px-3 py-2 text-center">
+                  <div className="text-xs text-amber-600 mb-1">总税金</div>
+                  <div className="text-lg font-bold text-amber-700">
+                    €{([...items, ...matchedItems].reduce((sum, item) => sum + (item.totalValue || 0) * (item.dutyRate || 0) / 100, 0)).toFixed(2)}
+                  </div>
+                </div>
+                <div className="bg-green-50 rounded-lg px-3 py-2 text-center">
+                  <div className="text-xs text-green-600 mb-1">总货值</div>
+                  <div className="text-lg font-bold text-green-700">
+                    €{([...items, ...matchedItems].reduce((sum, item) => sum + (item.totalValue || 0), 0)).toFixed(2)}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 错误提示 */}
