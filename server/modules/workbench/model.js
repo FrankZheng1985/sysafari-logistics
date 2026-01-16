@@ -83,7 +83,7 @@ export async function getPendingTasks(userId, role) {
       case 'doc_clerk':
         // 待更新状态的订单 - 使用实际的状态值
         const pendingOrders = await db.prepare(
-          `SELECT COUNT(*) as count FROM bills 
+          `SELECT COUNT(*) as count FROM bills_of_lading 
            WHERE status IN ('pending', 'in_progress', '船未到港', '待处理')`
         ).get()
         if (parseInt(pendingOrders?.count) > 0) {
@@ -101,7 +101,7 @@ export async function getPendingTasks(userId, role) {
       case 'doc_officer':
         // 单证员 - 检查订单中需要处理的单证
         const pendingDocs = await db.prepare(
-          `SELECT COUNT(*) as count FROM bills 
+          `SELECT COUNT(*) as count FROM bills_of_lading 
            WHERE status NOT IN ('已完成', 'completed', 'archived', 'cancelled')`
         ).get()
         if (parseInt(pendingDocs?.count) > 0) {
@@ -196,7 +196,7 @@ export async function getStagnantOrders(userId, role) {
          c.name as customer_name,
          b.ata,
          b.status
-       FROM bills b
+       FROM bills_of_lading b
        LEFT JOIN customers c ON b.customer_id = c.id
        WHERE b.ata IS NOT NULL 
          AND b.ata < CURRENT_DATE - INTERVAL '14 days'
@@ -335,14 +335,14 @@ export async function getCompanyOverview() {
     // ========== 订单统计 ==========
     // 本月订单数
     const monthlyOrdersResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills 
+      `SELECT COUNT(*) as count FROM bills_of_lading 
        WHERE created_at >= date_trunc('month', CURRENT_DATE)`
     ).get()
     const monthlyOrders = parseInt(monthlyOrdersResult?.count) || 0
     
     // 上月订单数
     const lastMonthOrdersResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills 
+      `SELECT COUNT(*) as count FROM bills_of_lading 
        WHERE created_at >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
        AND created_at < date_trunc('month', CURRENT_DATE)`
     ).get()
@@ -350,14 +350,14 @@ export async function getCompanyOverview() {
     
     // 本周订单数
     const weeklyOrdersResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills 
+      `SELECT COUNT(*) as count FROM bills_of_lading 
        WHERE created_at >= date_trunc('week', CURRENT_DATE)`
     ).get()
     const weeklyOrders = parseInt(weeklyOrdersResult?.count) || 0
     
     // 今日订单数
     const todayOrdersResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills 
+      `SELECT COUNT(*) as count FROM bills_of_lading 
        WHERE created_at >= CURRENT_DATE`
     ).get()
     const todayOrders = parseInt(todayOrdersResult?.count) || 0
@@ -427,7 +427,7 @@ export async function getCompanyOverview() {
       `SELECT 
          COUNT(*) FILTER (WHERE status IN ('已完成', 'completed', 'archived')) as completed,
          COUNT(*) as total
-       FROM bills 
+       FROM bills_of_lading 
        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'`
     ).get()
     const completed = parseInt(completedOrdersResult?.completed) || 0
@@ -485,23 +485,23 @@ export async function getOrderStats(userId, role) {
          COUNT(*) FILTER (WHERE status IN ('pending', '待处理', '船未到港')) as pending,
          COUNT(*) FILTER (WHERE status IN ('in_progress', '进行中')) as in_progress,
          COUNT(*) FILTER (WHERE status IN ('completed', '已完成', 'archived')) as completed
-       FROM bills`
+       FROM bills_of_lading`
     ).get()
     
     // ========== 时间维度统计 ==========
     // 今日新增
     const todayResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills WHERE created_at >= CURRENT_DATE`
+      `SELECT COUNT(*) as count FROM bills_of_lading WHERE created_at >= CURRENT_DATE`
     ).get()
     
     // 本周新增
     const weekResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills WHERE created_at >= date_trunc('week', CURRENT_DATE)`
+      `SELECT COUNT(*) as count FROM bills_of_lading WHERE created_at >= date_trunc('week', CURRENT_DATE)`
     ).get()
     
     // 本月新增
     const monthResult = await db.prepare(
-      `SELECT COUNT(*) as count FROM bills WHERE created_at >= date_trunc('month', CURRENT_DATE)`
+      `SELECT COUNT(*) as count FROM bills_of_lading WHERE created_at >= date_trunc('month', CURRENT_DATE)`
     ).get()
     
     // ========== 运输方式统计 ==========
@@ -568,7 +568,7 @@ export async function getTmsStats(userId, role) {
          COUNT(*) FILTER (WHERE delivery_status = '派送中') as delivering,
          COUNT(*) FILTER (WHERE delivery_status IN ('已送达', '已完成')) as delivered,
          COUNT(*) FILTER (WHERE delivery_status IN ('订单异常', '异常关闭')) as exception
-       FROM bills`
+       FROM bills_of_lading`
     ).get()
     
     // 今日待派送
@@ -750,7 +750,7 @@ export async function getInspectionStats(userId, role) {
          COUNT(*) FILTER (
            WHERE inspection IS NOT NULL AND inspection != '-' AND inspection != ''
          ) as total
-       FROM bills`
+       FROM bills_of_lading`
     ).get()
     
     let pending = parseInt(statsResult?.pending) || 0
@@ -764,7 +764,7 @@ export async function getInspectionStats(userId, role) {
         `SELECT 
            COUNT(*) FILTER (WHERE customs_status LIKE '%查验%') as inspected,
            COUNT(*) FILTER (WHERE customs_status LIKE '%查验%' AND status IN ('已完成', 'completed', 'archived')) as released_count
-         FROM bills`
+         FROM bills_of_lading`
       ).get()
       
       total = parseInt(fallbackResult?.inspected) || 0
@@ -821,7 +821,7 @@ export async function getDocumentStats(userId, role) {
            COUNT(*) FILTER (WHERE status IN ('pending', '待处理', '船未到港')) as pending,
            COUNT(*) FILTER (WHERE status IN ('已完成', 'completed', 'archived')) as done,
            COUNT(*) as total
-         FROM bills`
+         FROM bills_of_lading`
       ).get()
       
       pendingMatch = parseInt(fallbackResult?.pending) || 0

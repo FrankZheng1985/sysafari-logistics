@@ -189,20 +189,24 @@ export default function CreateInvoice() {
       matchedContainerNumber?: string
       isMatched?: boolean
       _selected?: boolean
-      // 🔥 新增字段：后端返回的已开票状态和系统金额
+      // 🔥 新增字段：后端返回的已开票状态和系统金额（支持部分开票）
       systemFeeId?: string      // 系统中匹配的费用ID
       systemAmount?: number     // 系统录入的金额
-      uninvoicedAmount?: number // 🔥 未开金额（系统金额 - 导入金额）
-      isInvoiced?: boolean      // 是否已开票
+      invoicedAmount?: number   // 🔥 已开票金额
+      availableAmount?: number  // 🔥 可开票金额（系统金额 - 已开票金额）
+      uninvoicedAmount?: number // 未开金额（系统金额 - 导入金额）
+      isInvoiced?: boolean      // 是否已完全开票
+      isPartialInvoiced?: boolean // 🔥 是否部分开票
       invoiceNumber?: string    // 发票号
       amountDiff?: number       // 金额差异
       amountWarning?: string    // 金额警告信息
     }>
     matchedCount?: number
     unmatchedCount?: number
-    invoicedCount?: number      // 🔥 已开票数量
-    amountWarningCount?: number // 🔥 金额异常数量
-    extractedDueDate?: string   // 从Excel提取的到期日期
+    invoicedCount?: number        // 🔥 已完全开票数量
+    partialInvoicedCount?: number // 🔥 部分开票数量
+    amountWarningCount?: number   // 🔥 金额异常数量
+    extractedDueDate?: string     // 从Excel提取的到期日期
     error?: string
   } | null>(null)
   const [showExcelPreview, setShowExcelPreview] = useState(false)
@@ -1175,17 +1179,17 @@ export default function CreateInvoice() {
       return
     }
     
-    // 🔥 只导入选中的项目，并排除已开票和金额超出的费用（使用后端返回的状态）
+    // 🔥 只导入选中的项目，并排除已完全开票和金额超出的费用（支持部分开票）
     const selectedItems = excelParseResult.data.filter(item => {
       if (item._selected === false) return false
       
-      // 使用后端返回的已开票状态
+      // 🔥 只排除已完全开票的费用，部分开票的可以继续开票
       if (item.isInvoiced === true) {
-        console.log(`[applyExcelToInvoice] 跳过已开票费用: ${item.feeName} - ${item.containerNumber}`)
+        console.log(`[applyExcelToInvoice] 跳过已完全开票费用: ${item.feeName} - ${item.containerNumber}`)
         return false
       }
       
-      // 检查金额是否超出系统录入
+      // 检查金额是否超出可开票金额
       if (item.amountWarning) {
         console.log(`[applyExcelToInvoice] 跳过金额异常费用: ${item.feeName} - ${item.amountWarning}`)
         return false
@@ -1195,7 +1199,7 @@ export default function CreateInvoice() {
     })
     
     if (selectedItems.length === 0) {
-      alert('请至少选择一条费用记录（已开票或金额超出系统录入的费用不可导入）')
+      alert('请至少选择一条费用记录（已完全开票或金额超出可开票金额的费用不可导入）')
       return
     }
     
@@ -3486,8 +3490,9 @@ export default function CreateInvoice() {
             {/* 订单匹配统计 */}
             <div className="px-6 py-3 bg-gray-50 border-b flex items-center gap-4 flex-wrap">
               {(() => {
-                // 🔥 使用后端返回的统计数据
-                const invoicedCount = excelParseResult.data?.filter(item => item.isInvoiced).length || 0
+                // 🔥 使用后端返回的统计数据（支持部分开票）
+                const fullyInvoicedCount = excelParseResult.data?.filter(item => item.isInvoiced).length || 0
+                const partialInvoicedCount = excelParseResult.data?.filter(item => item.isPartialInvoiced).length || 0
                 const amountWarningCount = excelParseResult.data?.filter(item => item.amountWarning && !item.isInvoiced).length || 0
                 const canInvoiceCount = excelParseResult.data?.filter(item => 
                   item.isMatched && !item.isInvoiced && !item.amountWarning
@@ -3501,11 +3506,19 @@ export default function CreateInvoice() {
                         可开票: <span className="font-medium text-green-600">{canInvoiceCount}</span> 条
                       </span>
                     </div>
-                    {invoicedCount > 0 && (
+                    {partialInvoicedCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-blue-500" />
+                        <span className="text-sm text-gray-700">
+                          部分开票: <span className="font-medium text-blue-600">{partialInvoicedCount}</span> 条
+                        </span>
+                      </div>
+                    )}
+                    {fullyInvoicedCount > 0 && (
                       <div className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-gray-400" />
                         <span className="text-sm text-gray-700">
-                          已开票: <span className="font-medium text-gray-500">{invoicedCount}</span> 条
+                          已开票: <span className="font-medium text-gray-500">{fullyInvoicedCount}</span> 条
                         </span>
                       </div>
                     )}
@@ -3561,7 +3574,7 @@ export default function CreateInvoice() {
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">集装箱号</th>
                     <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">导入金额</th>
                     <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">系统金额</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">未开金额</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500">可开金额</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">币种</th>
                     <th className="px-2 py-2 text-center text-xs font-medium text-gray-500">状态</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500">备注</th>
@@ -3569,17 +3582,19 @@ export default function CreateInvoice() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {excelParseResult.data.map((item, index) => {
-                    // 🔥 使用后端返回的 isInvoiced 字段
-                    const isInvoiced = item.isInvoiced === true
+                    // 🔥 使用后端返回的状态（支持部分开票）
+                    const isFullyInvoiced = item.isInvoiced === true  // 完全开票
+                    const isPartialInvoiced = item.isPartialInvoiced === true  // 部分开票
                     const hasAmountWarning = !!item.amountWarning
-                    const isDisabled = isInvoiced || hasAmountWarning
+                    // 🔥 只有完全开票或金额超出才禁用，部分开票的可以继续选择
+                    const isDisabled = isFullyInvoiced || hasAmountWarning
                     
                     return (
                     <tr 
                       key={index} 
-                      className={`hover:bg-gray-50 ${item._selected === false || isDisabled ? 'opacity-60' : ''} ${isInvoiced ? 'bg-gray-100' : hasAmountWarning ? 'bg-red-50' : ''}`}
+                      className={`hover:bg-gray-50 ${item._selected === false || isDisabled ? 'opacity-60' : ''} ${isFullyInvoiced ? 'bg-gray-100' : isPartialInvoiced ? 'bg-blue-50' : hasAmountWarning ? 'bg-red-50' : ''}`}
                       onClick={() => !isDisabled && toggleExcelItemSelection(index)}
-                      title={isInvoiced ? '此费用已开票，不可重复开票' : hasAmountWarning ? item.amountWarning : ''}
+                      title={isFullyInvoiced ? '此费用已完全开票，不可重复开票' : isPartialInvoiced ? `部分开票，可开票金额: ${item.availableAmount?.toFixed(2) || 0}` : hasAmountWarning ? item.amountWarning : ''}
                     >
                       <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -3592,7 +3607,7 @@ export default function CreateInvoice() {
                           className={`w-4 h-4 rounded border-gray-300 ${isDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-orange-600'}`}
                         />
                       </td>
-                      <td className={`px-2 py-2 ${isInvoiced ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.feeName || '-'}</td>
+                      <td className={`px-2 py-2 ${isFullyInvoiced ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.feeName || '-'}</td>
                       <td className="px-2 py-2 text-gray-600 font-mono text-xs">
                         {item.containerNumber || item.billNumber || '-'}
                       </td>
@@ -3607,28 +3622,38 @@ export default function CreateInvoice() {
                           ? item.systemAmount.toFixed(2) 
                           : '-'}
                       </td>
+                      {/* 🔥 显示可开票金额（系统金额 - 已开票金额） */}
                       <td className={`px-2 py-2 text-right text-xs ${
-                        item.uninvoicedAmount !== null && item.uninvoicedAmount !== undefined
-                          ? item.uninvoicedAmount > 0 
-                            ? 'text-amber-600 font-medium' 
-                            : item.uninvoicedAmount < 0 
-                              ? 'text-red-600 font-medium'
-                              : 'text-green-600'
+                        item.availableAmount !== null && item.availableAmount !== undefined
+                          ? item.availableAmount > 0 
+                            ? 'text-green-600 font-medium' 
+                            : 'text-gray-400'
                           : 'text-gray-400'
                       }`}>
-                        {item.uninvoicedAmount !== null && item.uninvoicedAmount !== undefined 
-                          ? item.uninvoicedAmount.toFixed(2) 
-                          : '-'}
+                        {item.availableAmount !== null && item.availableAmount !== undefined 
+                          ? item.availableAmount.toFixed(2) 
+                          : item.systemAmount?.toFixed(2) || '-'}
+                        {/* 显示已开票金额 */}
+                        {isPartialInvoiced && item.invoicedAmount && item.invoicedAmount > 0 && (
+                          <div className="text-xs text-blue-500">已开: {item.invoicedAmount.toFixed(2)}</div>
+                        )}
                       </td>
                       <td className="px-2 py-2 text-gray-600">{item.currency || 'EUR'}</td>
                       <td className="px-2 py-2 text-center">
                         {(() => {
-                          // 🔥 使用后端返回的状态
-                          if (isInvoiced) {
+                          // 🔥 使用后端返回的状态（区分完全开票和部分开票）
+                          if (isFullyInvoiced) {
                             return (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">
                                 <Check className="w-3 h-3" />
                                 已开票
+                              </span>
+                            )
+                          } else if (isPartialInvoiced) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full" title={`已开票 ${item.invoicedAmount?.toFixed(2)}，可继续开票 ${item.availableAmount?.toFixed(2)}`}>
+                                <AlertCircle className="w-3 h-3" />
+                                部分开票
                               </span>
                             )
                           } else if (hasAmountWarning) {
@@ -3672,7 +3697,7 @@ export default function CreateInvoice() {
                       €{excelParseResult.data
                         .filter(item => {
                           if (item._selected === false) return false
-                          // 🔥 排除已开票和金额异常的
+                          // 🔥 排除已完全开票和金额异常的（部分开票可以继续选择）
                           const isDisabled = item.isInvoiced === true || !!item.amountWarning
                           return !isDisabled
                         })
@@ -3685,10 +3710,10 @@ export default function CreateInvoice() {
                         .reduce((sum, item) => sum + (item.systemAmount || 0), 0)
                         .toFixed(2)}
                     </td>
-                    <td className="px-2 py-2 text-right text-sm text-amber-600 font-medium">
+                    <td className="px-2 py-2 text-right text-sm text-green-600 font-medium">
                       €{excelParseResult.data
                         .filter(item => item._selected !== false && !item.isInvoiced && !item.amountWarning)
-                        .reduce((sum, item) => sum + (item.uninvoicedAmount || 0), 0)
+                        .reduce((sum, item) => sum + (item.availableAmount ?? item.systemAmount ?? 0), 0)
                         .toFixed(2)}
                     </td>
                     <td className="px-2 py-2 text-gray-600">EUR</td>

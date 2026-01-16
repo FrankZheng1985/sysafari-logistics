@@ -602,7 +602,7 @@ export async function getInspectionProductDetail(id) {
           id, bill_number, container_number, inspection, inspection_detail,
           inspection_estimated_time, inspection_start_time, inspection_end_time,
           inspection_result, inspection_release_time, created_at
-        FROM bills 
+        FROM bills_of_lading 
         WHERE inspection IS NOT NULL 
           AND inspection != '-'
           AND inspection_detail IS NOT NULL
@@ -761,7 +761,7 @@ export async function getInspectionProductDetail(id) {
           COUNT(CASE WHEN inspection IN ('待查验', '查验中', '已查验', '查验放行', '已放行') THEN 1 END) as inspected,
           COUNT(CASE WHEN inspection IN ('查验放行', '已放行') THEN 1 END) as released,
           COUNT(CASE WHEN inspection IN ('待查验', '查验中') THEN 1 END) as pending
-        FROM bills 
+        FROM bills_of_lading 
         WHERE inspection IS NOT NULL 
           AND inspection != '-'
           AND inspection_detail IS NOT NULL

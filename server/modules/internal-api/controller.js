@@ -86,7 +86,7 @@ export async function getOrders(req, res) {
     
     // 查询总数
     const countQuery = `
-      SELECT COUNT(*) as total FROM bills b WHERE ${whereClause}
+      SELECT COUNT(*) as total FROM bills_of_lading b WHERE ${whereClause}
     `
     const countResult = await db.prepare(countQuery).get(...params)
     const total = countResult?.total || 0
@@ -118,7 +118,7 @@ export async function getOrders(req, res) {
         b.voyage,
         b.created_at,
         b.updated_at
-      FROM bills b
+      FROM bills_of_lading b
       WHERE ${whereClause}
       ORDER BY b.updated_at DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
@@ -211,7 +211,7 @@ export async function getOrderDetail(req, res) {
         b.remark,
         b.created_at,
         b.updated_at
-      FROM bills b
+      FROM bills_of_lading b
       WHERE b.id = $1
     `).get(id)
     
@@ -673,13 +673,13 @@ export async function getStats(req, res) {
         COUNT(*) as total,
         COUNT(CASE WHEN status IN ('completed', 'delivered') THEN 1 END) as completed,
         COUNT(CASE WHEN status NOT IN ('completed', 'delivered', 'cancelled', 'closed') THEN 1 END) as active
-      FROM bills
+      FROM bills_of_lading
     `).get()
     
     // 本月订单
     const monthlyOrders = await db.prepare(`
       SELECT COUNT(*) as count
-      FROM bills
+      FROM bills_of_lading
       WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
     `).get()
     

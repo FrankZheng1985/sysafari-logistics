@@ -311,27 +311,84 @@ export async function createInvoice(data) {
     data.createdBy || null
   )
   
-  // 更新关联费用的开票状态
+  // 更新关联费用的开票状态（支持部分开票）
   if (feeIds.length > 0) {
     const uniqueFeeIds = [...new Set(feeIds)]
     console.log(`[createInvoice] 准备更新 ${uniqueFeeIds.length} 条费用记录的开票状态, feeIds:`, uniqueFeeIds)
+    
+    // 🔥 构建费用ID到开票金额的映射
+    const feeAmountMap = new Map()
+    try {
+      const parsedItems = typeof data.items === 'string' ? JSON.parse(data.items) : data.items
+      if (Array.isArray(parsedItems)) {
+        parsedItems.forEach(item => {
+          if (item.feeId) {
+            // feeId 可能是逗号分隔的多个ID（合并费用时）
+            const ids = item.feeId.split(',').map(id => id.trim()).filter(id => id)
+            // 如果是合并费用，金额需要平分或按比例分配
+            // 这里简化处理：使用 finalAmount 或 unitPrice * quantity
+            const itemAmount = parseFloat(item.finalAmount) || (parseFloat(item.unitPrice || 0) * parseFloat(item.quantity || 1))
+            if (ids.length === 1) {
+              // 单个费用
+              feeAmountMap.set(ids[0], (feeAmountMap.get(ids[0]) || 0) + itemAmount)
+            } else {
+              // 合并费用：需要根据各费用原始金额按比例分配
+              // 这里暂时平均分配
+              const perFeeAmount = itemAmount / ids.length
+              ids.forEach(id => {
+                feeAmountMap.set(id, (feeAmountMap.get(id) || 0) + perFeeAmount)
+              })
+            }
+          }
+        })
+      }
+    } catch (e) {
+      console.error('[createInvoice] 解析 items 构建金额映射失败:', e)
+    }
+    console.log(`[createInvoice] 费用金额映射:`, Object.fromEntries(feeAmountMap))
+    
     let updatedCount = 0
     for (const feeId of uniqueFeeIds) {
       try {
+        // 获取当前费用信息
+        const fee = await db.prepare(`SELECT amount, invoiced_amount FROM fees WHERE id = ?`).get(feeId)
+        if (!fee) {
+          console.warn(`[createInvoice] 费用 ${feeId} 未找到`)
+          continue
+        }
+        
+        const feeAmount = parseFloat(fee.amount) || 0
+        const currentInvoicedAmount = parseFloat(fee.invoiced_amount) || 0
+        const invoicingAmount = feeAmountMap.get(feeId) || feeAmount // 本次开票金额，如果没有映射则用全额
+        const newInvoicedAmount = currentInvoicedAmount + invoicingAmount
+        
+        // 🔥 只有当累计开票金额 >= 费用金额时，才标记为已完全开票
+        const newInvoiceStatus = newInvoicedAmount >= feeAmount ? 'invoiced' : 'partial_invoiced'
+        
         const updateResult = await db.prepare(`
           UPDATE fees SET 
-            invoice_status = 'invoiced',
-            invoice_number = ?,
+            invoiced_amount = ?,
+            invoice_status = ?,
+            invoice_number = CASE 
+              WHEN invoice_number IS NULL OR invoice_number = '' THEN ?
+              ELSE invoice_number || ',' || ?
+            END,
             invoice_date = ?,
             updated_at = NOW()
           WHERE id = ?
-        `).run(invoiceNumber, data.invoiceDate || new Date().toISOString().split('T')[0], feeId)
+        `).run(
+          newInvoicedAmount,
+          newInvoiceStatus,
+          invoiceNumber, invoiceNumber,
+          data.invoiceDate || new Date().toISOString().split('T')[0],
+          feeId
+        )
         
         if (updateResult.changes > 0) {
           updatedCount++
-          console.log(`[createInvoice] 成功更新费用 ${feeId} 的开票状态`)
+          console.log(`[createInvoice] 成功更新费用 ${feeId}: 本次开票 ${invoicingAmount}, 累计 ${newInvoicedAmount}/${feeAmount}, 状态 ${newInvoiceStatus}`)
         } else {
-          console.warn(`[createInvoice] 费用 ${feeId} 未找到或未更新`)
+          console.warn(`[createInvoice] 费用 ${feeId} 未更新`)
         }
       } catch (e) {
         console.error(`[createInvoice] 更新费用 ${feeId} 开票状态失败:`, e)
@@ -2205,6 +2262,7 @@ export function convertFeeToCamelCase(row) {
     isSupplementary: row.is_supplementary === 1,
     approvalStatus: row.approval_status || 'approved',
     invoiceStatus: row.invoice_status,
+    invoicedAmount: row.invoiced_amount || 0,  // 🔥 已开票金额（支持部分开票）
     invoiceNumber: row.invoice_number,
     invoiceDate: row.invoice_date,
     approvalSubmittedAt: row.approval_submitted_at,
@@ -3309,17 +3367,59 @@ export async function createSupplementInvoice(data) {
     supplementSeq
   )
   
-  // 如果有关联的费用ID，更新费用记录的发票状态
+  // 如果有关联的费用ID，更新费用记录的发票状态（支持部分开票）
   if (Array.isArray(data.feeIds) && data.feeIds.length > 0) {
+    // 🔥 构建费用ID到开票金额的映射
+    const feeAmountMap = new Map()
+    try {
+      const parsedItems = typeof data.items === 'string' ? JSON.parse(data.items) : data.items
+      if (Array.isArray(parsedItems)) {
+        parsedItems.forEach(item => {
+          if (item.feeId) {
+            const ids = item.feeId.split(',').map(id => id.trim()).filter(id => id)
+            const itemAmount = parseFloat(item.finalAmount) || (parseFloat(item.unitPrice || 0) * parseFloat(item.quantity || 1))
+            if (ids.length === 1) {
+              feeAmountMap.set(ids[0], (feeAmountMap.get(ids[0]) || 0) + itemAmount)
+            } else {
+              const perFeeAmount = itemAmount / ids.length
+              ids.forEach(id => {
+                feeAmountMap.set(id, (feeAmountMap.get(id) || 0) + perFeeAmount)
+              })
+            }
+          }
+        })
+      }
+    } catch (e) {
+      console.error('[createSupplementaryInvoice] 解析 items 构建金额映射失败:', e)
+    }
+    
     for (const feeId of data.feeIds) {
-      await db.prepare(`
-        UPDATE fees SET 
-          invoice_status = 'invoiced',
-          invoice_number = ?,
-          invoice_date = ?,
-          updated_at = ?
-        WHERE id = ?
-      `).run(invoiceNumber, invoiceDate, now, feeId)
+      try {
+        // 获取当前费用信息
+        const fee = await db.prepare(`SELECT amount, invoiced_amount FROM fees WHERE id = ?`).get(feeId)
+        if (!fee) continue
+        
+        const feeAmount = parseFloat(fee.amount) || 0
+        const currentInvoicedAmount = parseFloat(fee.invoiced_amount) || 0
+        const invoicingAmount = feeAmountMap.get(feeId) || feeAmount
+        const newInvoicedAmount = currentInvoicedAmount + invoicingAmount
+        const newInvoiceStatus = newInvoicedAmount >= feeAmount ? 'invoiced' : 'partial_invoiced'
+        
+        await db.prepare(`
+          UPDATE fees SET 
+            invoiced_amount = ?,
+            invoice_status = ?,
+            invoice_number = CASE 
+              WHEN invoice_number IS NULL OR invoice_number = '' THEN ?
+              ELSE invoice_number || ',' || ?
+            END,
+            invoice_date = ?,
+            updated_at = ?
+          WHERE id = ?
+        `).run(newInvoicedAmount, newInvoiceStatus, invoiceNumber, invoiceNumber, invoiceDate, now, feeId)
+      } catch (e) {
+        console.error(`[createSupplementaryInvoice] 更新费用 ${feeId} 开票状态失败:`, e)
+      }
     }
   }
   

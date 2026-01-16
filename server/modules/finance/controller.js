@@ -2488,6 +2488,7 @@ export async function parseInvoiceExcel(req, res) {
         const billIds = matchedBills.map(b => b.id)
         
         // 查询这些订单下的所有应付费用（payable = 供应商费用）
+        // 🔥 包含 invoiced_amount 字段，支持部分开票
         const feesQuery = `
           SELECT 
             f.id,
@@ -2496,6 +2497,7 @@ export async function parseInvoiceExcel(req, res) {
             f.currency,
             f.invoice_status as "invoiceStatus",
             f.invoice_number as "invoiceNumber",
+            COALESCE(f.invoiced_amount, 0) as "invoicedAmount",
             f.bill_id as "billId",
             b.container_number as "containerNumber",
             b.bill_number as "billNumber"
@@ -2548,22 +2550,33 @@ export async function parseInvoiceExcel(req, res) {
         })
       }
       
-      // 🔥 检查是否已开票
-      const isInvoiced = matchedSystemFee?.invoiceStatus === 'invoiced'
-      
-      // 🔥 检查金额差异
+      // 🔥 检查金额和开票情况（支持部分开票）
       const systemAmount = matchedSystemFee?.amount ? parseFloat(matchedSystemFee.amount) : null
+      const invoicedAmount = matchedSystemFee?.invoicedAmount ? parseFloat(matchedSystemFee.invoicedAmount) : 0
       const excelAmount = item.amount || 0
+      
+      // 🔥 计算可开票金额 = 系统金额 - 已开票金额
+      let availableAmount = null  // 可开票金额
+      let uninvoicedAmount = null  // 未开金额（系统金额 - Excel导入金额）
       let amountWarning = null
       let amountDiff = null
-      let uninvoicedAmount = null  // 🔥 未开金额（系统金额 - 导入金额）
       
-      if (systemAmount !== null && excelAmount > 0) {
-        amountDiff = excelAmount - systemAmount
-        uninvoicedAmount = systemAmount - excelAmount  // 🔥 计算未开金额
-        if (excelAmount > systemAmount) {
-          // Excel金额大于系统金额，需要警告
-          amountWarning = `导入金额 ${excelAmount.toFixed(2)} 大于系统录入金额 ${systemAmount.toFixed(2)}，差额 ${amountDiff.toFixed(2)}`
+      // 🔥 判断是否已完全开票（已开票金额 >= 系统金额）
+      const isFullyInvoiced = systemAmount !== null && invoicedAmount >= systemAmount
+      
+      if (systemAmount !== null) {
+        availableAmount = systemAmount - invoicedAmount  // 可开票金额
+        
+        if (excelAmount > 0) {
+          amountDiff = excelAmount - systemAmount
+          uninvoicedAmount = systemAmount - excelAmount  // 未开金额（相对于系统金额）
+          
+          // 🔥 检查Excel金额是否超过可开票金额
+          if (excelAmount > availableAmount && availableAmount > 0) {
+            amountWarning = `导入金额 ${excelAmount.toFixed(2)} 大于可开票金额 ${availableAmount.toFixed(2)}（系统金额 ${systemAmount.toFixed(2)}，已开票 ${invoicedAmount.toFixed(2)}）`
+          } else if (excelAmount > systemAmount) {
+            amountWarning = `导入金额 ${excelAmount.toFixed(2)} 大于系统录入金额 ${systemAmount.toFixed(2)}，差额 ${amountDiff.toFixed(2)}`
+          }
         }
       }
       
@@ -2573,16 +2586,19 @@ export async function parseInvoiceExcel(req, res) {
         matchedBillNumber: matched?.billNumber || null,
         matchedContainerNumber: matched?.containerNumber || null,
         isMatched: !!matched,
-        // 🔥 新增字段
+        // 🔥 新增字段（支持部分开票）
         systemFeeId: matchedSystemFee?.id || null,
         systemAmount: systemAmount,
-        uninvoicedAmount: uninvoicedAmount,  // 🔥 未开金额
-        isInvoiced: isInvoiced,
+        invoicedAmount: invoicedAmount,      // 已开票金额
+        availableAmount: availableAmount,    // 可开票金额
+        uninvoicedAmount: uninvoicedAmount,  // 未开金额
+        isInvoiced: isFullyInvoiced,         // 🔥 是否已完全开票
+        isPartialInvoiced: invoicedAmount > 0 && !isFullyInvoiced,  // 是否部分开票
         invoiceNumber: matchedSystemFee?.invoiceNumber || null,
         amountDiff: amountDiff,
         amountWarning: amountWarning,
-        // 如果已开票或金额超出，默认不选中
-        _selected: !isInvoiced && !amountWarning
+        // 🔥 如果已完全开票或金额超出可开票金额，默认不选中
+        _selected: !isFullyInvoiced && !amountWarning
       }
     })
     
@@ -2590,10 +2606,11 @@ export async function parseInvoiceExcel(req, res) {
     const matchedCount = itemsWithBill.filter(i => i.isMatched).length
     const unmatchedCount = itemsWithBill.filter(i => !i.isMatched).length
     const invoicedCount = itemsWithBill.filter(i => i.isInvoiced).length
+    const partialInvoicedCount = itemsWithBill.filter(i => i.isPartialInvoiced).length
     const amountWarningCount = itemsWithBill.filter(i => i.amountWarning).length
     
     console.log(`📊 匹配结果: ${matchedCount}/${items.length} 条费用已关联订单, ${unmatchedCount} 条未匹配`)
-    console.log(`📊 已开票: ${invoicedCount} 条, 金额异常: ${amountWarningCount} 条`)
+    console.log(`📊 已完全开票: ${invoicedCount} 条, 部分开票: ${partialInvoicedCount} 条, 金额异常: ${amountWarningCount} 条`)
     
     // 计算合计
     const totalAmount = items.reduce((sum, item) => sum + item.amount, 0)
@@ -2617,10 +2634,11 @@ export async function parseInvoiceExcel(req, res) {
       matchedBills,
       matchedCount,
       unmatchedCount,
-      invoicedCount,        // 🔥 已开票数量
-      amountWarningCount,   // 🔥 金额异常数量
-      extractedDueDate,     // 从Excel提取的到期日期
-      invoiceNumbers        // 从Excel提取的发票号列表
+      invoicedCount,          // 🔥 已完全开票数量
+      partialInvoicedCount,   // 🔥 部分开票数量
+      amountWarningCount,     // 🔥 金额异常数量
+      extractedDueDate,       // 从Excel提取的到期日期
+      invoiceNumbers          // 从Excel提取的发票号列表
     })
     
   } catch (error) {
