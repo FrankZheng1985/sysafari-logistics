@@ -813,12 +813,6 @@ export default function SharedTaxManage() {
                       </th>
                       <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
-                          <Plane className="w-4 h-4 text-sky-500" />
-                          空运(KG)
-                        </div>
-                      </th>
-                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
                           <Train className="w-4 h-4 text-orange-500" />
                           铁路(柜)
                         </div>
@@ -830,6 +824,18 @@ export default function SharedTaxManage() {
                         </div>
                       </th>
                       <th className="text-center py-2 px-3 font-medium text-gray-600">提单数</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <Plane className="w-4 h-4 text-sky-500" />
+                          空运(单)
+                        </div>
+                      </th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <Plane className="w-4 h-4 text-sky-500" />
+                          空运(KG)
+                        </div>
+                      </th>
                       <th className="text-right py-2 px-3 font-medium text-gray-600">应付金额(€)</th>
                     </tr>
                   </thead>
@@ -872,20 +878,6 @@ export default function SharedTaxManage() {
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          {item.totalAirKg > 0 || item.totalAirBills > 0 ? (
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="inline-flex items-center justify-center min-w-[50px] px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">
-                                {item.totalAirKg.toLocaleString()}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {item.totalAirBills}单
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-gray-300">-</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
                           {item.totalRailContainers > 0 ? (
                             <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">
                               {item.totalRailContainers}
@@ -908,6 +900,24 @@ export default function SharedTaxManage() {
                             {item.totalBills}
                           </span>
                         </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {item.totalAirBills > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[40px] px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">
+                              {item.totalAirBills}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {item.totalAirKg > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[50px] px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">
+                              {item.totalAirKg.toLocaleString()}
+                            </span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3 text-right">
                           {item.totalPayableAmount > 0 ? (
                             <span className="font-medium text-red-600">
@@ -926,14 +936,6 @@ export default function SharedTaxManage() {
                       <td className="py-2.5 px-3 text-center text-blue-700">
                         {usageSummary.reduce((sum, item) => sum + item.totalSeaContainers, 0) || '-'}
                       </td>
-                      <td className="py-2.5 px-3 text-center text-sky-700">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span>{usageSummary.reduce((sum, item) => sum + item.totalAirKg, 0).toLocaleString() || '-'}</span>
-                          <span className="text-xs text-gray-500">
-                            {usageSummary.reduce((sum, item) => sum + (item.totalAirBills || 0), 0)}单
-                          </span>
-                        </div>
-                      </td>
                       <td className="py-2.5 px-3 text-center text-orange-700">
                         {usageSummary.reduce((sum, item) => sum + item.totalRailContainers, 0) || '-'}
                       </td>
@@ -942,6 +944,12 @@ export default function SharedTaxManage() {
                       </td>
                       <td className="py-2.5 px-3 text-center text-gray-700">
                         {usageSummary.reduce((sum, item) => sum + item.totalBills, 0)}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-sky-700">
+                        {usageSummary.reduce((sum, item) => sum + (item.totalAirBills || 0), 0) || '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-sky-700">
+                        {usageSummary.reduce((sum, item) => sum + item.totalAirKg, 0).toLocaleString() || '-'}
                       </td>
                       <td className="py-2.5 px-3 text-right text-red-600">
                         {usageSummary.reduce((sum, item) => sum + item.totalPayableAmount, 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
