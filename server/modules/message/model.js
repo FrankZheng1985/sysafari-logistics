@@ -239,8 +239,13 @@ export function canApprove(userRole, approvalType) {
     return true
   }
   
-  // 操作经理可以审批订单、供应商、客户询价、敏感产品添加
-  if (['manager', 'czjl'].includes(userRole) && ['order', 'supplier', 'inquiry', 'contract', 'sensitive_product_add'].includes(approvalType)) {
+  // 操作经理可以审批订单、供应商、客户询价
+  if (['manager', 'czjl'].includes(userRole) && ['order', 'supplier', 'inquiry', 'contract'].includes(approvalType)) {
+    return true
+  }
+  
+  // 单证员可以审批敏感产品添加
+  if (['do', 'doc_officer'].includes(userRole) && approvalType === 'sensitive_product_add') {
     return true
   }
   
@@ -252,7 +257,7 @@ export function canApprove(userRole, approvalType) {
  * @returns {string[]} 有审批权限的角色
  */
 export function getApproverRoles() {
-  return ['admin', 'boss', 'finance_manager', 'finance', 'czjl', 'manager']
+  return ['admin', 'boss', 'finance_manager', 'finance', 'czjl', 'manager', 'do', 'doc_officer']
 }
 
 /**

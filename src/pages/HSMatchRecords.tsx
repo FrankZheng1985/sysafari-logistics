@@ -2,11 +2,12 @@
  * HS匹配记录管理页面
  * 查看已匹配的商品信息、申报历史和价格统计
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Search, RefreshCw, FileText, CheckCircle, Trash2, Eye,
-  Package, TrendingUp, History, X, Edit2, Save, FileCheck, Database
+  Package, TrendingUp, History, X, Edit2, Save, FileCheck, Database,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
@@ -85,6 +86,10 @@ export default function HSMatchRecords() {
   const [keyword, setKeyword] = useState('')
   const [hsCodeFilter, setHsCodeFilter] = useState('')
   
+  // 排序状态
+  const [sortField, setSortField] = useState<string | null>(null)
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  
   // 全局统计数据（不受分页影响）
   const [stats, setStats] = useState({
     totalRecords: 0,
@@ -157,6 +162,74 @@ export default function HSMatchRecords() {
   const handleSearch = () => {
     setPage(1)
     loadRecords()
+  }
+
+  // 处理列排序点击
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      // 如果点击同一列，切换排序方向
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // 如果点击不同列，设置新的排序字段，默认降序
+      setSortField(field)
+      setSortDirection('desc')
+    }
+  }
+
+  // 排序后的记录
+  const sortedRecords = useMemo(() => {
+    if (!sortField) return records
+
+    return [...records].sort((a, b) => {
+      let aValue: number = 0
+      let bValue: number = 0
+
+      switch (sortField) {
+        case 'avgUnitPrice':
+          aValue = a.avgUnitPrice || 0
+          bValue = b.avgUnitPrice || 0
+          break
+        case 'avgKgPrice':
+          aValue = a.avgKgPrice || 0
+          bValue = b.avgKgPrice || 0
+          break
+        case 'totalDeclaredValue':
+          aValue = a.totalDeclaredValue || 0
+          bValue = b.totalDeclaredValue || 0
+          break
+        case 'avgPieceWeight':
+          aValue = a.avgPieceWeight || 0
+          bValue = b.avgPieceWeight || 0
+          break
+        case 'pieceWeightRange':
+          // 按最小重量排序
+          aValue = a.minPieceWeight || 0
+          bValue = b.minPieceWeight || 0
+          break
+        case 'dutyRate':
+          aValue = a.dutyRate || 0
+          bValue = b.dutyRate || 0
+          break
+        default:
+          return 0
+      }
+
+      if (sortDirection === 'asc') {
+        return aValue - bValue
+      } else {
+        return bValue - aValue
+      }
+    })
+  }, [records, sortField, sortDirection])
+
+  // 渲染排序图标
+  const renderSortIcon = (field: string) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 ml-1 text-gray-400" />
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-3 h-3 ml-1 text-primary-600" />
+      : <ArrowDown className="w-3 h-3 ml-1 text-primary-600" />
   }
 
   const loadDetail = async (id: number) => {
@@ -360,12 +433,60 @@ export default function HSMatchRecords() {
                 <th className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">HS编码</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">材质</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">匹配次数</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">平均单价</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">平均公斤价</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">累计货值</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap">平均单件重</th>
-                <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">单件重量区间</th>
-                <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">关税率</th>
+                <th 
+                  className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('avgUnitPrice')}
+                >
+                  <div className="flex items-center justify-end">
+                    平均单价
+                    {renderSortIcon('avgUnitPrice')}
+                  </div>
+                </th>
+                <th 
+                  className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('avgKgPrice')}
+                >
+                  <div className="flex items-center justify-end">
+                    平均公斤价
+                    {renderSortIcon('avgKgPrice')}
+                  </div>
+                </th>
+                <th 
+                  className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('totalDeclaredValue')}
+                >
+                  <div className="flex items-center justify-end">
+                    累计货值
+                    {renderSortIcon('totalDeclaredValue')}
+                  </div>
+                </th>
+                <th 
+                  className="px-3 py-2 text-right font-medium text-gray-500 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('avgPieceWeight')}
+                >
+                  <div className="flex items-center justify-end">
+                    平均单件重
+                    {renderSortIcon('avgPieceWeight')}
+                  </div>
+                </th>
+                <th 
+                  className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('pieceWeightRange')}
+                >
+                  <div className="flex items-center justify-center">
+                    单件重量区间
+                    {renderSortIcon('pieceWeightRange')}
+                  </div>
+                </th>
+                <th 
+                  className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none"
+                  onClick={() => handleSort('dutyRate')}
+                >
+                  <div className="flex items-center justify-center">
+                    关税率
+                    {renderSortIcon('dutyRate')}
+                  </div>
+                </th>
                 <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">状态</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">最近匹配</th>
                 <th className="px-3 py-2 text-center font-medium text-gray-500 whitespace-nowrap">操作</th>
@@ -379,7 +500,7 @@ export default function HSMatchRecords() {
                     加载中...
                   </td>
                 </tr>
-              ) : records.length === 0 ? (
+              ) : sortedRecords.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
                     <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300" />
@@ -388,7 +509,7 @@ export default function HSMatchRecords() {
                   </td>
                 </tr>
               ) : (
-                records.map((record) => (
+                sortedRecords.map((record) => (
                   <tr key={record.id} className="border-b hover:bg-gray-50">
                     <td className="px-3 py-2">
                       <div className="max-w-[180px]">

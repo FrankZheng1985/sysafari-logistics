@@ -175,23 +175,44 @@ export async function createSensitiveProductAddApproval(data) {
     now
   )
 
-  // 发送消息通知给有审批权限的人（admin, boss, czjl, manager）
-  const approvers = await db.prepare(`
+  // 发送消息通知给单证员审批（do, doc_officer）
+  const documentOfficers = await db.prepare(`
     SELECT id, name, role FROM users 
-    WHERE role IN ('admin', 'boss', 'czjl', 'manager') 
+    WHERE role IN ('do', 'doc_officer') 
     AND status = 'active'
   `).all()
 
-  for (const approver of (approvers || [])) {
+  for (const officer of (documentOfficers || [])) {
     await messageModel.createMessage({
       type: 'approval',
-      title: '敏感产品库新增审批',
-      content: `${applicantName} 申请将查验货物添加到敏感产品库，提单号：${billNumber}，共 ${items.length} 个产品`,
+      title: '敏感产品库新增审批待处理',
+      content: `${applicantName} 申请将查验货物添加到敏感产品库，提单号：${billNumber}，共 ${items.length} 个产品，请审批。`,
       senderId: applicantId,
       senderName: applicantName,
-      receiverId: approver.id,
-      receiverName: approver.name,
+      receiverId: officer.id,
+      receiverName: officer.name,
       relatedType: 'approval',
+      relatedId: approvalId
+    })
+  }
+
+  // 同时通知 admin、boss、czjl（仅通知，无需审批）
+  const managers = await db.prepare(`
+    SELECT id, name, role FROM users 
+    WHERE role IN ('admin', 'boss', 'czjl') 
+    AND status = 'active'
+  `).all()
+
+  for (const manager of (managers || [])) {
+    await messageModel.createMessage({
+      type: 'system',
+      title: '敏感产品库新增申请通知',
+      content: `${applicantName} 申请将查验货物添加到敏感产品库，提单号：${billNumber}，共 ${items.length} 个产品（已通知单证员审批）`,
+      senderId: applicantId,
+      senderName: applicantName,
+      receiverId: manager.id,
+      receiverName: manager.name,
+      relatedType: 'sensitive_product',
       relatedId: approvalId
     })
   }
@@ -279,11 +300,11 @@ export async function processSensitiveProductAddApproval(approvalId, approverDat
     relatedId: approvalId
   })
 
-  // 如果审批通过，额外通知运营经理和老板
+  // 如果审批通过，通知 admin、boss、czjl
   if (approved) {
     const managers = await db.prepare(`
       SELECT id, name, role FROM users 
-      WHERE role IN ('boss', 'czjl', 'manager') 
+      WHERE role IN ('admin', 'boss', 'czjl') 
       AND status = 'active'
       AND id != $1
     `).all(approverData.id)
@@ -292,7 +313,7 @@ export async function processSensitiveProductAddApproval(approvalId, approverDat
       await messageModel.createMessage({
         type: 'system',
         title: '敏感产品库已更新',
-        content: `${approval.applicant_name} 申请的敏感产品已添加到产品库，共 ${items.length} 个产品（来源：提单 ${content.billNumber} 查验）`,
+        content: `${approval.applicant_name} 申请的敏感产品已添加到产品库（审批人：${approverData.name}），共 ${items.length} 个产品（来源：提单 ${content.billNumber} 查验）`,
         senderId: approverData.id,
         senderName: approverData.name,
         receiverId: manager.id,
