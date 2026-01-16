@@ -282,7 +282,66 @@ function formatInvoiceDate(dateStr) {
   }
 }
 
-// 费用名称中英文映射
+// 从数据库加载的费用名称英文映射缓存
+let feeNameEnCache = null
+let feeNameEnCacheTime = 0
+const CACHE_TTL = 5 * 60 * 1000 // 缓存5分钟
+
+/**
+ * 从 service_fee_categories 表加载费用名称英文映射（同步版本，使用缓存）
+ */
+function getFeeNameEnFromCache(chineseName) {
+  if (!feeNameEnCache || !chineseName) return null
+  
+  // 直接匹配
+  if (feeNameEnCache[chineseName]) {
+    return feeNameEnCache[chineseName]
+  }
+  
+  // 部分匹配
+  for (const [cn, en] of Object.entries(feeNameEnCache)) {
+    if (chineseName.includes(cn) || (cn.includes(chineseName) && chineseName.length >= 2)) {
+      return en
+    }
+  }
+  
+  return null
+}
+
+/**
+ * 预加载费用名称英文映射缓存
+ * 应在生成发票前调用
+ */
+export async function preloadFeeNameEnCache() {
+  const now = Date.now()
+  if (feeNameEnCache && (now - feeNameEnCacheTime) < CACHE_TTL) {
+    return // 缓存仍有效
+  }
+  
+  try {
+    const db = getDatabase()
+    const result = await db.pool.query(`
+      SELECT name, name_en 
+      FROM service_fee_categories 
+      WHERE name_en IS NOT NULL AND name_en != '' AND status = 'active'
+    `)
+    
+    const mapping = {}
+    for (const row of result.rows) {
+      if (row.name && row.name_en) {
+        mapping[row.name] = row.name_en
+      }
+    }
+    
+    feeNameEnCache = mapping
+    feeNameEnCacheTime = now
+    console.log(`[preloadFeeNameEnCache] 预加载了 ${Object.keys(mapping).length} 个费用名称英文映射`)
+  } catch (error) {
+    console.error('[preloadFeeNameEnCache] 预加载失败:', error.message)
+  }
+}
+
+// 费用名称中英文映射表（硬编码备用）
 const FEE_NAME_MAP = {
   // 基础费用
   '堆场费': 'Terminal Handling Charge',
@@ -365,7 +424,7 @@ const FEE_NAME_MAP = {
 }
 
 // 获取费用的英文名称
-// 优先级：1. descriptionEn 字段  2. FEE_NAME_MAP 映射  3. 原名
+// 优先级：1. descriptionEn 字段  2. service_fee_categories 表  3. FEE_NAME_MAP 映射  4. 原名
 function getFeeNameEnglish(chineseName, descriptionEn = null) {
   // 如果已有英文名称字段，优先使用
   if (descriptionEn && descriptionEn.trim()) {
@@ -374,12 +433,18 @@ function getFeeNameEnglish(chineseName, descriptionEn = null) {
   
   if (!chineseName) return 'Other Charges'
   
-  // 1. 尝试直接匹配映射表
+  // 1. 优先从 service_fee_categories 数据库缓存查询
+  const dbNameEn = getFeeNameEnFromCache(chineseName)
+  if (dbNameEn) {
+    return dbNameEn
+  }
+  
+  // 2. 尝试硬编码映射表直接匹配
   if (FEE_NAME_MAP[chineseName]) {
     return FEE_NAME_MAP[chineseName]
   }
   
-  // 2. 尝试双向部分匹配
+  // 3. 尝试硬编码映射表部分匹配
   for (const [cn, en] of Object.entries(FEE_NAME_MAP)) {
     // 费用名包含映射 key（如 "港杂费" 包含 "港杂"）
     if (chineseName.includes(cn)) {
@@ -391,7 +456,7 @@ function getFeeNameEnglish(chineseName, descriptionEn = null) {
     }
   }
   
-  // 3. 如果已经是英文，直接返回
+  // 4. 如果已经是英文，直接返回
   if (/^[a-zA-Z\s\/]+$/.test(chineseName)) {
     return chineseName
   }

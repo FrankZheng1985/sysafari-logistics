@@ -6,7 +6,7 @@
 
 import puppeteer from 'puppeteer'
 import ExcelJS from 'exceljs'
-import { generateInvoiceHTML, COMPANY_INFO, getLogoBase64, getStampBase64, getInvoiceTemplateFromDB, getInvoiceTemplateById, convertTemplateToCompanyInfo } from './invoiceTemplate.js'
+import { generateInvoiceHTML, COMPANY_INFO, getLogoBase64, getStampBase64, getInvoiceTemplateFromDB, getInvoiceTemplateById, convertTemplateToCompanyInfo, preloadFeeNameEnCache } from './invoiceTemplate.js'
 import { getDatabase } from '../../config/database.js'
 import * as cosStorage from './cosStorage.js'
 import { generateId } from '../../utils/id.js'
@@ -105,6 +105,9 @@ export function summarizeFees(fees) {
  * 生成PDF发票
  */
 export async function generatePDF(invoiceData) {
+  // 预加载费用名称英文映射缓存
+  await preloadFeeNameEnCache()
+  
   console.log('[generatePDF] 开始生成 HTML...')
   const html = generateInvoiceHTML(invoiceData)
   console.log(`[generatePDF] HTML 生成完成, 长度: ${html?.length || 0}`)
@@ -149,7 +152,49 @@ export async function generatePDF(invoiceData) {
   }
 }
 
-// 费用名称中英文映射
+// 从数据库加载的费用名称英文映射缓存
+let feeNameEnCache = null
+let feeNameEnCacheTime = 0
+const CACHE_TTL = 5 * 60 * 1000 // 缓存5分钟
+
+/**
+ * 从 service_fee_categories 表加载费用名称英文映射
+ * 使用缓存避免频繁查询数据库
+ */
+async function loadFeeNameEnFromDB() {
+  const now = Date.now()
+  // 如果缓存有效，直接返回
+  if (feeNameEnCache && (now - feeNameEnCacheTime) < CACHE_TTL) {
+    return feeNameEnCache
+  }
+  
+  try {
+    const db = getDatabase()
+    const result = await db.pool.query(`
+      SELECT name, name_en 
+      FROM service_fee_categories 
+      WHERE name_en IS NOT NULL AND name_en != '' AND status = 'active'
+    `)
+    
+    // 构建映射表
+    const mapping = {}
+    for (const row of result.rows) {
+      if (row.name && row.name_en) {
+        mapping[row.name] = row.name_en
+      }
+    }
+    
+    feeNameEnCache = mapping
+    feeNameEnCacheTime = now
+    console.log(`[loadFeeNameEnFromDB] 加载了 ${Object.keys(mapping).length} 个费用名称英文映射`)
+    return mapping
+  } catch (error) {
+    console.error('[loadFeeNameEnFromDB] 加载费用名称英文映射失败:', error.message)
+    return {}
+  }
+}
+
+// 费用名称中英文映射（硬编码备用，当数据库查不到时使用）
 const FEE_NAME_MAP = {
   // 基础费用
   '堆场费': 'Terminal Handling Charge',
@@ -233,8 +278,8 @@ const FEE_NAME_MAP = {
 }
 
 // 获取费用的英文名称
-// 优先级：1. fee_name_en 字段  2. FEE_NAME_MAP 映射  3. 原名
-function getFeeNameEnglish(chineseName, feeNameEn = null) {
+// 优先级：1. fee_name_en 字段  2. service_fee_categories 表  3. FEE_NAME_MAP 映射  4. 原名
+async function getFeeNameEnglish(chineseName, feeNameEn = null) {
   // 如果已有英文名称字段，优先使用
   if (feeNameEn && feeNameEn.trim()) {
     return feeNameEn.trim()
@@ -242,12 +287,25 @@ function getFeeNameEnglish(chineseName, feeNameEn = null) {
   
   if (!chineseName) return 'Other Charges'
   
-  // 1. 尝试直接匹配映射表
+  // 1. 优先从 service_fee_categories 数据库查询
+  const dbMapping = await loadFeeNameEnFromDB()
+  if (dbMapping[chineseName]) {
+    return dbMapping[chineseName]
+  }
+  
+  // 2. 尝试数据库部分匹配
+  for (const [cn, en] of Object.entries(dbMapping)) {
+    if (chineseName.includes(cn) || (cn.includes(chineseName) && chineseName.length >= 2)) {
+      return en
+    }
+  }
+  
+  // 3. 尝试硬编码映射表直接匹配
   if (FEE_NAME_MAP[chineseName]) {
     return FEE_NAME_MAP[chineseName]
   }
   
-  // 2. 尝试双向部分匹配
+  // 4. 尝试硬编码映射表部分匹配
   for (const [cn, en] of Object.entries(FEE_NAME_MAP)) {
     // 费用名包含映射 key（如 "港杂费" 包含 "港杂"）
     if (chineseName.includes(cn)) {
@@ -259,7 +317,7 @@ function getFeeNameEnglish(chineseName, feeNameEn = null) {
     }
   }
   
-  // 3. 如果已经是英文，直接返回
+  // 5. 如果已经是英文，直接返回
   if (/^[a-zA-Z\s\/]+$/.test(chineseName)) {
     return chineseName
   }
@@ -269,7 +327,7 @@ function getFeeNameEnglish(chineseName, feeNameEn = null) {
 
 // 根据语言获取费用名称
 // language: 'en' = 英文, 'zh' = 中文
-function getFeeNameByLanguage(chineseName, feeNameEn = null, language = 'en') {
+async function getFeeNameByLanguage(chineseName, feeNameEn = null, language = 'en') {
   if (language === 'zh') {
     // 中文：优先显示中文名称
     if (chineseName && chineseName.trim()) {
@@ -286,8 +344,8 @@ function getFeeNameByLanguage(chineseName, feeNameEn = null, language = 'en') {
     }
     return '其他费用'
   } else {
-    // 英文：使用已有的英文获取逻辑
-    return getFeeNameEnglish(chineseName, feeNameEn)
+    // 英文：使用已有的英文获取逻辑（现在是异步的）
+    return await getFeeNameEnglish(chineseName, feeNameEn)
   }
 }
 
@@ -411,7 +469,7 @@ export async function generateExcel(data) {
   let currentContainerNo = ''
   let currentBillNo = ''
   
-  items.forEach(item => {
+  for (const item of items) {
     const row = worksheet.getRow(rowIndex)
     
     // 获取集装箱号
@@ -425,7 +483,7 @@ export async function generateExcel(data) {
     if (showBillNo) currentBillNo = item.billNumber
     
     // 根据语言获取费用名称
-    const feeName = getFeeNameByLanguage(
+    const feeName = await getFeeNameByLanguage(
       item.feeName || item.fee_name, 
       item.fee_name_en || item.feeNameEn, 
       language
@@ -469,7 +527,7 @@ export async function generateExcel(data) {
     row.getCell(6).numFmt = '#,##0.00'
     
     rowIndex++
-  })
+  }
   
   // 合计行
   const totalRow = worksheet.getRow(rowIndex)
