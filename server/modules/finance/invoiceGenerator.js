@@ -735,16 +735,46 @@ export async function createInvoiceWithFiles(feeIds, customerId, options = {}) {
     now
   )
   
-  // 7. 更新费用记录的发票状态
+  // 7. 更新费用记录的发票状态（支持部分开票）
   for (const feeId of feeIds) {
-    await db.prepare(`
-      UPDATE fees SET 
-        invoice_status = 'invoiced',
-        invoice_number = ?,
-        invoice_date = ?,
-        updated_at = ?
-      WHERE id = ?
-    `).run(invoiceNumber, invoiceDate, now, feeId)
+    try {
+      // 获取当前费用信息
+      const fee = await db.prepare(`SELECT amount, invoiced_amount FROM fees WHERE id = ?`).get(feeId)
+      if (!fee) {
+        console.warn(`[createInvoiceWithFiles] 费用 ${feeId} 未找到`)
+        continue
+      }
+      
+      const feeAmount = parseFloat(fee.amount) || 0
+      const currentInvoicedAmount = parseFloat(fee.invoiced_amount) || 0
+      const newInvoicedAmount = currentInvoicedAmount + feeAmount // 本次开票金额 = 费用全额
+      
+      // 🔥 只有当累计开票金额 >= 费用金额时，才标记为已完全开票
+      const newInvoiceStatus = newInvoicedAmount >= feeAmount ? 'invoiced' : 'partial_invoiced'
+      
+      await db.prepare(`
+        UPDATE fees SET 
+          invoiced_amount = ?,
+          invoice_status = ?,
+          invoice_number = CASE 
+            WHEN invoice_number IS NULL OR invoice_number = '' THEN ?
+            ELSE invoice_number || ',' || ?
+          END,
+          invoice_date = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).run(
+        newInvoicedAmount,
+        newInvoiceStatus,
+        invoiceNumber, invoiceNumber,
+        invoiceDate,
+        now,
+        feeId
+      )
+      console.log(`[createInvoiceWithFiles] 成功更新费用 ${feeId}: 累计开票 ${newInvoicedAmount}/${feeAmount}, 状态 ${newInvoiceStatus}`)
+    } catch (e) {
+      console.error(`[createInvoiceWithFiles] 更新费用 ${feeId} 开票状态失败:`, e)
+    }
   }
   
   return {
