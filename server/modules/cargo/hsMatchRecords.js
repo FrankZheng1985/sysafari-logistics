@@ -662,6 +662,124 @@ export async function checkPriceAnomaly(productName, material, unitPrice, kgPric
 }
 
 /**
+ * 当删除货物导入单据时，清理相关的匹配记录数据
+ * - 删除对应的申报历史
+ * - 重新计算匹配记录的统计数据
+ * - 如果匹配记录没有任何申报历史，则清零统计数据
+ * @param {number} importId - 要删除的导入批次ID
+ * @returns {Object} 清理结果
+ */
+export async function removeImportData(importId) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  console.log(`[清理匹配记录] 开始清理导入批次 ${importId} 的相关数据...`)
+  
+  // 1. 获取受影响的匹配记录ID
+  const affectedRecords = await db.prepare(`
+    SELECT DISTINCT match_record_id 
+    FROM hs_declaration_history 
+    WHERE import_id = ?
+  `).all(importId)
+  
+  const affectedRecordIds = (affectedRecords || []).map(r => r.match_record_id)
+  
+  if (affectedRecordIds.length === 0) {
+    console.log(`[清理匹配记录] 导入批次 ${importId} 没有关联的申报历史`)
+    return { deletedHistoryCount: 0, updatedRecordCount: 0 }
+  }
+  
+  console.log(`[清理匹配记录] 受影响的匹配记录: ${affectedRecordIds.length} 条`)
+  
+  // 2. 删除对应的申报历史
+  const deleteResult = await db.prepare(`
+    DELETE FROM hs_declaration_history WHERE import_id = ?
+  `).run(importId)
+  
+  console.log(`[清理匹配记录] 已删除 ${deleteResult.changes} 条申报历史`)
+  
+  // 3. 重新计算每个受影响的匹配记录的统计数据
+  let updatedCount = 0
+  
+  for (const recordId of affectedRecordIds) {
+    // 计算该记录剩余的统计数据
+    const stats = await db.prepare(`
+      SELECT 
+        COALESCE(SUM(declared_qty), 0) as total_qty,
+        COALESCE(SUM(declared_weight), 0) as total_weight,
+        COALESCE(SUM(declared_value), 0) as total_value,
+        MIN(unit_price) FILTER (WHERE unit_price > 0) as min_price,
+        MAX(unit_price) as max_price,
+        MIN(declared_weight / NULLIF(declared_qty, 0)) FILTER (WHERE declared_qty > 0 AND declared_weight > 0) as min_piece_weight,
+        MAX(declared_weight / NULLIF(declared_qty, 0)) FILTER (WHERE declared_qty > 0 AND declared_weight > 0) as max_piece_weight,
+        COUNT(*) as history_count
+      FROM hs_declaration_history
+      WHERE match_record_id = ?
+    `).get(recordId)
+    
+    const totalQty = parseFloat(stats.total_qty) || 0
+    const totalWeight = parseFloat(stats.total_weight) || 0
+    const totalValue = parseFloat(stats.total_value) || 0
+    const avgUnitPrice = totalQty > 0 ? totalValue / totalQty : 0
+    const avgKgPrice = totalWeight > 0 ? totalValue / totalWeight : 0
+    const avgPieceWeight = totalQty > 0 ? totalWeight / totalQty : 0
+    const minPieceWeight = parseFloat(stats.min_piece_weight) || 0
+    const maxPieceWeight = parseFloat(stats.max_piece_weight) || 0
+    const minPrice = parseFloat(stats.min_price) || 0
+    const maxPrice = parseFloat(stats.max_price) || 0
+    const historyCount = stats.history_count || 0
+    
+    // 更新匹配记录
+    await db.prepare(`
+      UPDATE hs_match_records SET
+        total_declared_qty = ?,
+        total_declared_weight = ?,
+        total_declared_value = ?,
+        avg_unit_price = ?,
+        avg_kg_price = ?,
+        avg_piece_weight = ?,
+        min_piece_weight = ?,
+        max_piece_weight = ?,
+        min_unit_price = ?,
+        max_unit_price = ?,
+        match_count = ?,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      totalQty,
+      totalWeight,
+      totalValue,
+      avgUnitPrice,
+      avgKgPrice,
+      avgPieceWeight,
+      minPieceWeight,
+      maxPieceWeight,
+      minPrice,
+      maxPrice,
+      historyCount,
+      now,
+      recordId
+    )
+    
+    updatedCount++
+    
+    if (historyCount === 0) {
+      console.log(`[清理匹配记录] 记录ID ${recordId} 已清零统计数据（无剩余申报历史）`)
+    } else {
+      console.log(`[清理匹配记录] 记录ID ${recordId} 已重新计算（剩余 ${historyCount} 条历史）`)
+    }
+  }
+  
+  console.log(`[清理匹配记录] 清理完成: 删除 ${deleteResult.changes} 条申报历史, 更新 ${updatedCount} 条匹配记录`)
+  
+  return {
+    deletedHistoryCount: deleteResult.changes,
+    updatedRecordCount: updatedCount,
+    affectedRecordIds
+  }
+}
+
+/**
  * 批量检测价格异常
  * @param {Array} items - 商品列表
  * @returns {Array} 检测结果列表
@@ -703,5 +821,6 @@ export default {
   deleteMatchRecord,
   batchSaveFromTaxCalc,
   checkPriceAnomaly,
-  batchCheckPriceAnomaly
+  batchCheckPriceAnomaly,
+  removeImportData
 }

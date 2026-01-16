@@ -1293,6 +1293,7 @@ export async function findExistingImportsByContainer(containerNo) {
 
 /**
  * 删除指定的导入批次（包括关联的货物明细）
+ * 同时清理匹配记录库中的相关数据
  * @param {Array<number>} importIds - 要删除的批次ID列表
  * @returns {Promise<number>} 删除的批次数量
  */
@@ -1301,7 +1302,18 @@ export async function deleteImportsByIds(importIds) {
   
   const db = getDatabase()
   
-  // 由于外键CASCADE设置，删除主表会自动删除明细
+  // 1. 先清理每个批次的匹配记录数据
+  try {
+    const { removeImportData } = await import('./hsMatchRecords.js')
+    for (const importId of importIds) {
+      await removeImportData(importId)
+    }
+    console.log(`[批量删除] 已清理 ${importIds.length} 个批次的匹配记录数据`)
+  } catch (error) {
+    console.error(`[批量删除] 清理匹配记录失败:`, error.message)
+  }
+  
+  // 2. 删除导入批次（由于外键CASCADE设置，删除主表会自动删除明细）
   const placeholders = importIds.map((_, i) => `$${i + 1}`).join(',')
   await db.prepare(`
     DELETE FROM cargo_imports WHERE id IN (${placeholders})
@@ -1672,15 +1684,30 @@ export async function getCargoItems(importId, params = {}) {
 
 /**
  * 删除导入批次及相关数据
+ * 同时清理匹配记录库中的相关数据
  */
 export async function deleteImportBatch(id) {
   const db = getDatabase()
   
-  // 删除货物明细（由于外键CASCADE，也可以只删除主表）
-  await db.prepare('DELETE FROM cargo_items WHERE import_id = ?').run(id)
+  console.log(`[删除导入批次] 开始删除导入批次 ${id}...`)
   
-  // 删除导入批次
+  // 1. 先清理匹配记录库中的相关数据（在删除 cargo_items 之前）
+  try {
+    const { removeImportData } = await import('./hsMatchRecords.js')
+    const cleanupResult = await removeImportData(id)
+    console.log(`[删除导入批次] 匹配记录清理完成:`, cleanupResult)
+  } catch (error) {
+    console.error(`[删除导入批次] 清理匹配记录失败:`, error.message)
+    // 继续执行删除操作，不中断流程
+  }
+  
+  // 2. 删除货物明细
+  const itemsResult = await db.prepare('DELETE FROM cargo_items WHERE import_id = ?').run(id)
+  console.log(`[删除导入批次] 已删除 ${itemsResult.changes} 条货物明细`)
+  
+  // 3. 删除导入批次
   const result = await db.prepare('DELETE FROM cargo_imports WHERE id = ?').run(id)
+  console.log(`[删除导入批次] 导入批次 ${id} 删除${result.changes > 0 ? '成功' : '失败'}`)
   
   return result.changes > 0
 }

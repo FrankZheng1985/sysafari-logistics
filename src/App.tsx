@@ -177,6 +177,10 @@ function AppRoutes() {
         <Route path="/inspection/pending" element={<InspectionDetails />} />
         <Route path="/inspection/released" element={<InspectionDetails />} />
         <Route path="/inspection/:id" element={<InspectionBillDetails />} />
+        {/* 查验概览兼容路由 */}
+        <Route path="/inspection-overview" element={<InspectionDetails />} />
+        <Route path="/inspection-overview/release" element={<InspectionDetails />} />
+        <Route path="/inspection-overview/:id" element={<InspectionBillDetails />} />
         {/* TMS运输管理 */}
         <Route path="/tms" element={<TMSDashboard />} />
         <Route path="/tms/exceptions" element={<CMRExceptionManage />} />

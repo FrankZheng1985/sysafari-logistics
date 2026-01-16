@@ -1791,24 +1791,18 @@ export default function BillDetails() {
                 case 'inspection':
                   return (
                     <ModuleWrapper key={moduleId} title="查验操作" icon={<ClipboardCheck className="w-4 h-4" />} iconColor="text-yellow-600" {...wrapperProps}>
-                      <div className="flex flex-wrap gap-2">
-                        {/* 已完成提示 */}
-                        {!canEdit && (
-                          <div className="w-full flex items-center gap-1 px-2 py-1.5 mb-2 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200">
-                            <Lock className="w-3.5 h-3.5" />
-                            <span>提单已完成，仅财务人员可修改状态</span>
-                          </div>
-                        )}
+                      <div className="flex flex-wrap gap-2 items-center">
+                        {/* 只有未查验时才显示标记查验按钮 */}
                         {canEdit && (!billDetail.inspection || billDetail.inspection === '-') && (
                           <button
                             onClick={async () => {
-                              if (!confirm('确定要将此提单标记为待查验吗？')) return
+                              if (!confirm('确定要将此提单标记为待查验吗？标记后请前往查验管理进行后续操作。')) return
                               try {
                                 const response = await updateBillInspection(String(billDetail.id), '待查验')
                                 if (response.errCode === 200) {
                                   setBillDetail({ ...billDetail, inspection: '待查验' })
                                   loadOperationLogs()
-                                  alert('已标记为待查验')
+                                  alert('已标记为待查验，请前往查验管理进行后续操作')
                                 } else {
                                   alert(`操作失败: ${response.msg}`)
                                 }
@@ -1823,78 +1817,7 @@ export default function BillDetails() {
                             标记查验
                           </button>
                         )}
-                        {canEdit && billDetail.inspection === '待查验' && (
-                          <button
-                            onClick={async () => {
-                              if (!confirm('确定要开始查验吗？')) return
-                              try {
-                                const response = await updateBillInspection(String(billDetail.id), '查验中')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, inspection: '查验中' })
-                                  loadOperationLogs()
-                                  alert('已开始查验')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
-                                }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
-                              }
-                            }}
-                            className="px-3 py-1.5 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 flex items-center gap-1"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                            开始查验
-                          </button>
-                        )}
-                        {canEdit && billDetail.inspection === '查验中' && (
-                          <button
-                            onClick={async () => {
-                              if (!confirm('确定要完成查验吗？')) return
-                              try {
-                                const response = await updateBillInspection(String(billDetail.id), '已查验')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, inspection: '已查验' })
-                                  loadOperationLogs()
-                                  alert('已完成查验')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
-                                }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
-                              }
-                            }}
-                            className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 flex items-center gap-1"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            完成查验
-                          </button>
-                        )}
-                        {canEdit && billDetail.inspection === '已查验' && (
-                          <button
-                            onClick={async () => {
-                              if (!confirm('确定要放行此提单吗？放行后将转移到TMS管理。')) return
-                              try {
-                                const response = await updateBillInspection(String(billDetail.id), '已放行')
-                                if (response.errCode === 200) {
-                                  setBillDetail({ ...billDetail, inspection: '已放行' })
-                                  loadOperationLogs()
-                                  alert('已放行')
-                                } else {
-                                  alert(`操作失败: ${response.msg}`)
-                                }
-                              } catch (error) {
-                                console.error('操作失败:', error)
-                                alert('操作失败，请稍后重试')
-                              }
-                            }}
-                            className="px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-1"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            放行
-                          </button>
-                        )}
+                        {/* 已标记查验后，只显示查看明细按钮，后续操作在查验管理完成 */}
                         {billDetail.inspection && billDetail.inspection !== '-' && (
                           <button
                             onClick={() => {
@@ -1904,8 +1827,9 @@ export default function BillDetails() {
                                 : '/inspection-overview'
                               navigate(`${path}?search=${encodeURIComponent(billDetail.billNumber)}`)
                             }}
-                            className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 flex items-center gap-1"
+                            className="px-3 py-1.5 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200 flex items-center gap-1"
                           >
+                            <ClipboardCheck className="w-3.5 h-3.5" />
                             查看查验明细
                           </button>
                         )}
