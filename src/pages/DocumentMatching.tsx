@@ -1005,6 +1005,8 @@ export default function DocumentMatching() {
                   <th className="px-3 py-2 text-left font-medium text-gray-500">匹配HS</th>
                   <th className="px-3 py-2 text-center font-medium text-gray-500">置信度</th>
                   <th className="px-3 py-2 text-left font-medium text-gray-500">来源</th>
+                  <th className="px-3 py-2 text-right font-medium text-gray-500">税率</th>
+                  <th className="px-3 py-2 text-right font-medium text-gray-500">税金</th>
                   <th className="px-3 py-2 text-right font-medium text-gray-500">货值</th>
                   <th className="px-3 py-2 text-center font-medium text-gray-500">操作</th>
                 </tr>
@@ -1012,21 +1014,21 @@ export default function DocumentMatching() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
                       加载中...
                     </td>
                   </tr>
                 ) : items.length === 0 && matchedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
                       没有待审核项目
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={13} className="px-4 py-8 text-center text-gray-400">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
                       所有商品已审核完成，请查看下方已匹配列表
                     </td>
@@ -1114,6 +1116,16 @@ export default function DocumentMatching() {
                         {getConfidenceBadge(item.matchConfidence)}
                       </td>
                       <td className="px-3 py-2 text-gray-500">{getSourceLabel(item.matchSource)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={item.dutyRate > 0 ? 'text-amber-600 font-medium' : 'text-gray-500'}>
+                          {item.dutyRate || 0}%
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={item.dutyRate > 0 ? 'text-green-600 font-medium' : 'text-gray-500'}>
+                          €{((item.totalValue || 0) * (item.dutyRate || 0) / 100).toFixed(2)}
+                        </span>
+                      </td>
                       <td className="px-3 py-2 text-right">€{item.totalValue.toFixed(2)}</td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-1">
