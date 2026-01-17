@@ -121,12 +121,34 @@ function isProductionEnvironment() {
 }
 
 /**
+ * 检查是否是主实例（PM2 cluster 模式下只让一个实例执行备份）
+ */
+function isPrimaryInstance() {
+  // PM2 cluster 模式下，NODE_APP_INSTANCE 或 pm_id 表示实例编号
+  const instanceId = process.env.NODE_APP_INSTANCE || process.env.pm_id
+  
+  // 如果没有实例 ID（非 cluster 模式），或者是实例 0，则为主实例
+  if (!instanceId || instanceId === '0' || instanceId === 0) {
+    return true
+  }
+  
+  return false
+}
+
+/**
  * 启动备份调度器
  */
 export async function startBackupScheduler() {
   // 只在生产环境启动自动备份
   if (!isProductionEnvironment()) {
     console.log('📦 非生产环境，跳过自动备份调度器')
+    return
+  }
+  
+  // PM2 cluster 模式下，只让主实例（实例0）执行备份，避免多实例同时备份导致冲突
+  if (!isPrimaryInstance()) {
+    const instanceId = process.env.NODE_APP_INSTANCE || process.env.pm_id
+    console.log(`📦 非主实例 (实例 ${instanceId})，跳过备份调度器`)
     return
   }
   
