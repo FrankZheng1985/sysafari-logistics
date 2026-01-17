@@ -1565,12 +1565,13 @@ export async function deleteCustomerTaxInfo(taxInfoId) {
  */
 export async function getSharedTaxNumbers(params = {}) {
   const db = getDatabase()
-  const { taxType, search, status = 'active', page = 1, pageSize = 50 } = params
+  const { taxType, search, status, page = 1, pageSize = 50 } = params
   
   let query = 'SELECT * FROM shared_tax_numbers WHERE 1=1'
   const queryParams = []
   
-  if (status) {
+  // 只有明确指定 status 且不是 'all' 时才过滤
+  if (status && status !== 'all') {
     query += ' AND status = ?'
     queryParams.push(status)
   }
