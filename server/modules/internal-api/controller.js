@@ -887,6 +887,340 @@ export async function getMonthlyStats(req, res) {
   }
 }
 
+// ==================== 客户数据同步接口 ====================
+
+/**
+ * 获取客户列表
+ */
+export async function getCustomers(req, res) {
+  try {
+    const { 
+      page = 1, 
+      pageSize = 100, 
+      updatedAfter,
+      status,
+      customerType,
+      customerLevel,
+      customerRegion,
+      keyword
+    } = req.query
+    
+    const db = getDatabase()
+    const offset = (page - 1) * pageSize
+    
+    // 构建查询条件
+    let whereConditions = ['1=1']
+    let params = []
+    let paramIndex = 1
+    
+    if (updatedAfter) {
+      whereConditions.push(`c.updated_at > $${paramIndex++}`)
+      params.push(updatedAfter)
+    }
+    
+    if (status) {
+      whereConditions.push(`c.status = $${paramIndex++}`)
+      params.push(status)
+    }
+    
+    if (customerType) {
+      whereConditions.push(`c.customer_type = $${paramIndex++}`)
+      params.push(customerType)
+    }
+    
+    if (customerLevel) {
+      whereConditions.push(`c.customer_level = $${paramIndex++}`)
+      params.push(customerLevel)
+    }
+    
+    if (customerRegion) {
+      whereConditions.push(`c.customer_region = $${paramIndex++}`)
+      params.push(customerRegion)
+    }
+    
+    if (keyword) {
+      whereConditions.push(`(c.customer_name ILIKE $${paramIndex} OR c.customer_code ILIKE $${paramIndex} OR c.company_name ILIKE $${paramIndex})`)
+      params.push(`%${keyword}%`)
+      paramIndex++
+    }
+    
+    const whereClause = whereConditions.join(' AND ')
+    
+    // 查询总数
+    const countQuery = `SELECT COUNT(*) as total FROM customers c WHERE ${whereClause}`
+    const countResult = await db.prepare(countQuery).get(...params)
+    const total = countResult?.total || 0
+    
+    // 查询列表
+    const listQuery = `
+      SELECT 
+        c.id,
+        c.customer_code,
+        c.customer_name,
+        c.company_name,
+        c.company_name_en,
+        c.customer_type,
+        c.customer_level,
+        c.customer_region,
+        c.country_code,
+        c.province,
+        c.city,
+        c.address,
+        c.postal_code,
+        c.contact_person,
+        c.contact_phone,
+        c.contact_email,
+        c.tax_number,
+        c.legal_person,
+        c.payment_terms,
+        c.credit_limit,
+        c.currency,
+        c.bank_name,
+        c.bank_account,
+        c.website,
+        c.industry,
+        c.source,
+        c.assigned_sales,
+        c.assigned_sales_name,
+        c.assigned_operator,
+        c.assigned_operator_name,
+        c.tags,
+        c.notes,
+        c.status,
+        c.created_at,
+        c.updated_at
+      FROM customers c
+      WHERE ${whereClause}
+      ORDER BY c.updated_at DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `
+    params.push(pageSize, offset)
+    
+    const list = await db.prepare(listQuery).all(...params)
+    
+    // 格式化数据
+    const formattedList = list.map(item => ({
+      id: item.id,
+      customerCode: item.customer_code,
+      customerName: item.customer_name,
+      companyName: item.company_name,
+      companyNameEn: item.company_name_en,
+      customerType: item.customer_type,
+      customerLevel: item.customer_level,
+      customerRegion: item.customer_region,
+      countryCode: item.country_code,
+      province: item.province,
+      city: item.city,
+      address: item.address,
+      postalCode: item.postal_code,
+      contactPerson: item.contact_person,
+      contactPhone: item.contact_phone,
+      contactEmail: item.contact_email,
+      taxNumber: item.tax_number,
+      legalPerson: item.legal_person,
+      paymentTerms: item.payment_terms,
+      creditLimit: parseFloat(item.credit_limit || 0),
+      currency: item.currency,
+      bankName: item.bank_name,
+      bankAccount: item.bank_account,
+      website: item.website,
+      industry: item.industry,
+      source: item.source,
+      assignedSales: item.assigned_sales,
+      assignedSalesName: item.assigned_sales_name,
+      assignedOperator: item.assigned_operator,
+      assignedOperatorName: item.assigned_operator_name,
+      tags: item.tags ? (typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags) : [],
+      notes: item.notes,
+      status: item.status,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at
+    }))
+    
+    res.json({
+      errCode: 0,
+      msg: 'success',
+      data: {
+        list: formattedList,
+        total,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        totalPages: Math.ceil(total / pageSize)
+      }
+    })
+  } catch (error) {
+    console.error('获取客户列表失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: '获取客户列表失败',
+      data: null
+    })
+  }
+}
+
+/**
+ * 获取客户详情
+ */
+export async function getCustomerDetail(req, res) {
+  try {
+    const { id } = req.params
+    const { includeContacts = 'false' } = req.query
+    const db = getDatabase()
+    
+    const customer = await db.prepare(`
+      SELECT 
+        c.id,
+        c.customer_code,
+        c.customer_name,
+        c.company_name,
+        c.company_name_en,
+        c.customer_type,
+        c.customer_level,
+        c.customer_region,
+        c.country_code,
+        c.province,
+        c.city,
+        c.address,
+        c.postal_code,
+        c.contact_person,
+        c.contact_phone,
+        c.contact_email,
+        c.tax_number,
+        c.legal_person,
+        c.registered_capital,
+        c.establishment_date,
+        c.business_scope,
+        c.payment_terms,
+        c.credit_limit,
+        c.currency,
+        c.bank_name,
+        c.bank_account,
+        c.website,
+        c.industry,
+        c.source,
+        c.assigned_sales,
+        c.assigned_sales_name,
+        c.assigned_operator,
+        c.assigned_operator_name,
+        c.tags,
+        c.notes,
+        c.status,
+        c.created_by,
+        c.created_by_name,
+        c.created_at,
+        c.updated_at
+      FROM customers c
+      WHERE c.id = $1
+    `).get(id)
+    
+    if (!customer) {
+      return res.status(404).json({
+        errCode: 404,
+        msg: '客户不存在',
+        data: null
+      })
+    }
+    
+    // 格式化客户数据
+    const formattedCustomer = {
+      id: customer.id,
+      customerCode: customer.customer_code,
+      customerName: customer.customer_name,
+      companyName: customer.company_name,
+      companyNameEn: customer.company_name_en,
+      customerType: customer.customer_type,
+      customerLevel: customer.customer_level,
+      customerRegion: customer.customer_region,
+      countryCode: customer.country_code,
+      province: customer.province,
+      city: customer.city,
+      address: customer.address,
+      postalCode: customer.postal_code,
+      contactPerson: customer.contact_person,
+      contactPhone: customer.contact_phone,
+      contactEmail: customer.contact_email,
+      taxNumber: customer.tax_number,
+      legalPerson: customer.legal_person,
+      registeredCapital: customer.registered_capital,
+      establishmentDate: customer.establishment_date,
+      businessScope: customer.business_scope,
+      paymentTerms: customer.payment_terms,
+      creditLimit: parseFloat(customer.credit_limit || 0),
+      currency: customer.currency,
+      bankName: customer.bank_name,
+      bankAccount: customer.bank_account,
+      website: customer.website,
+      industry: customer.industry,
+      source: customer.source,
+      assignedSales: customer.assigned_sales,
+      assignedSalesName: customer.assigned_sales_name,
+      assignedOperator: customer.assigned_operator,
+      assignedOperatorName: customer.assigned_operator_name,
+      tags: customer.tags ? (typeof customer.tags === 'string' ? JSON.parse(customer.tags) : customer.tags) : [],
+      notes: customer.notes,
+      status: customer.status,
+      createdBy: customer.created_by,
+      createdByName: customer.created_by_name,
+      createdAt: customer.created_at,
+      updatedAt: customer.updated_at
+    }
+    
+    // 如果需要联系人信息
+    if (includeContacts === 'true') {
+      const contacts = await db.prepare(`
+        SELECT 
+          id,
+          contact_name,
+          contact_type,
+          position,
+          department,
+          phone,
+          mobile,
+          email,
+          wechat,
+          is_primary,
+          notes,
+          status,
+          created_at,
+          updated_at
+        FROM customer_contacts
+        WHERE customer_id = $1 AND status = 'active'
+        ORDER BY is_primary DESC, created_at ASC
+      `).all(id)
+      
+      formattedCustomer.contacts = contacts.map(c => ({
+        id: c.id,
+        contactName: c.contact_name,
+        contactType: c.contact_type,
+        position: c.position,
+        department: c.department,
+        phone: c.phone,
+        mobile: c.mobile,
+        email: c.email,
+        wechat: c.wechat,
+        isPrimary: c.is_primary === 1,
+        notes: c.notes,
+        status: c.status,
+        createdAt: c.created_at,
+        updatedAt: c.updated_at
+      }))
+    }
+    
+    res.json({
+      errCode: 0,
+      msg: 'success',
+      data: formattedCustomer
+    })
+  } catch (error) {
+    console.error('获取客户详情失败:', error)
+    res.status(500).json({
+      errCode: 500,
+      msg: '获取客户详情失败',
+      data: null
+    })
+  }
+}
+
 // ==================== 辅助函数 ====================
 
 function formatOrder(order) {
@@ -928,6 +1262,8 @@ export default {
   getInvoiceDetail,
   getPayments,
   getPaymentDetail,
+  getCustomers,
+  getCustomerDetail,
   getStats,
   getFinancialSummary,
   getMonthlyStats

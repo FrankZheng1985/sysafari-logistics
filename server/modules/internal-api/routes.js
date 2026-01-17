@@ -44,6 +44,14 @@ router.get('/payments', controller.getPayments)
 // 获取付款详情
 router.get('/payments/:id', controller.getPaymentDetail)
 
+// ==================== 客户数据同步接口 ====================
+
+// 获取客户列表
+router.get('/customers', controller.getCustomers)
+
+// 获取客户详情
+router.get('/customers/:id', controller.getCustomerDetail)
+
 // ==================== 统计数据接口 ====================
 
 // 获取综合统计数据
