@@ -1916,9 +1916,31 @@ export async function updateSharedTaxNumber(id, data) {
 /**
  * 删除共享税号
  */
-export async function deleteSharedTaxNumber(id) {
+/**
+ * 作废共享税号（不删除，只修改状态）
+ */
+export async function voidSharedTaxNumber(id) {
   const db = getDatabase()
-  await db.prepare('DELETE FROM shared_tax_numbers WHERE id = ?').run(id)
+  await db.prepare(`
+    UPDATE shared_tax_numbers 
+    SET status = 'voided', 
+        updated_at = CURRENT_TIMESTAMP 
+    WHERE id = ?
+  `).run(id)
+  return { success: true }
+}
+
+/**
+ * 恢复已作废的共享税号
+ */
+export async function restoreSharedTaxNumber(id) {
+  const db = getDatabase()
+  await db.prepare(`
+    UPDATE shared_tax_numbers 
+    SET status = 'active', 
+        updated_at = CURRENT_TIMESTAMP 
+    WHERE id = ?
+  `).run(id)
   return { success: true }
 }
 
@@ -4662,7 +4684,8 @@ export default {
   getSharedTaxNumberById,
   createSharedTaxNumber,
   updateSharedTaxNumber,
-  deleteSharedTaxNumber,
+  voidSharedTaxNumber,
+  restoreSharedTaxNumber,
   
   // 销售机会
   getOpportunities,

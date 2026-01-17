@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { 
   Plus, Search, Edit, Trash2, Building2, CheckCircle, XCircle, 
   RefreshCw, FileText, AlertCircle, X, ChevronDown, BarChart3,
-  Ship, Plane, Train, Truck, Calendar
+  Ship, Plane, Train, Truck, Calendar, RotateCcw
 } from 'lucide-react'
 import { getApiBaseUrl, getAuthHeaders } from '../utils/api'
 
@@ -417,24 +417,45 @@ export default function SharedTaxManage() {
     setModalVisible(true)
   }
 
-  // 删除税号
-  const handleDelete = async (id: number) => {
-    if (!confirm('确定要删除这个共享税号吗？')) return
+  // 作废税号
+  const handleVoid = async (id: number) => {
+    if (!confirm('确定要作废这个共享税号吗？作废后可以恢复。')) return
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers/${id}`, {
-        method: 'DELETE'
+      const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers/${id}/void`, {
+        method: 'PUT'
       })
       const data = await response.json()
       
       if (data.errCode === 200) {
         loadTaxNumbers()
       } else {
-        alert(data.msg || '删除失败')
+        alert(data.msg || '作废失败')
       }
     } catch (error) {
-      console.error('删除失败:', error)
-      alert('删除失败')
+      console.error('作废失败:', error)
+      alert('作废失败')
+    }
+  }
+
+  // 恢复税号
+  const handleRestore = async (id: number) => {
+    if (!confirm('确定要恢复这个共享税号吗？')) return
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/shared-tax-numbers/${id}/restore`, {
+        method: 'PUT'
+      })
+      const data = await response.json()
+      
+      if (data.errCode === 200) {
+        loadTaxNumbers()
+      } else {
+        alert(data.msg || '恢复失败')
+      }
+    } catch (error) {
+      console.error('恢复失败:', error)
+      alert('恢复失败')
     }
   }
 
@@ -983,16 +1004,23 @@ export default function SharedTaxManage() {
               const eoriTax = companyTaxes.find(t => t.taxType === 'eori')
               const otherTaxes = companyTaxes.filter(t => t.taxType === 'other')
               
+              const isVoided = companyTaxes[0]?.status === 'voided'
+              
               return (
-                <div key={companyName} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                <div key={companyName} className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow ${isVoided ? 'border-red-200 bg-red-50/30 opacity-70' : 'border-gray-200'}`}>
                   {/* 公司信息头部 */}
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-gray-900">{companyName}</h3>
+                        <h3 className={`font-medium ${isVoided ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{companyName}</h3>
                         {firstTax.supplierCode && (
                           <span className="px-1.5 py-0.5 text-[10px] font-mono bg-amber-100 text-amber-700 rounded">
                             {firstTax.supplierCode}
+                          </span>
+                        )}
+                        {isVoided && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-600 rounded">
+                            已作废
                           </span>
                         )}
                       </div>
@@ -1006,18 +1034,33 @@ export default function SharedTaxManage() {
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => {
-                          // 删除该公司所有税号
-                          if (confirm(`确定删除 ${companyName} 的所有税号吗？`)) {
-                            companyTaxes.forEach(tax => handleDelete(tax.id))
-                          }
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
-                        title="删除"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isVoided ? (
+                        <button
+                          onClick={() => {
+                            // 恢复该公司所有税号
+                            if (confirm(`确定恢复 ${companyName} 的所有税号吗？`)) {
+                              companyTaxes.forEach(tax => handleRestore(tax.id))
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-gray-100 rounded"
+                          title="恢复"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            // 作废该公司所有税号
+                            if (confirm(`确定作废 ${companyName} 的所有税号吗？作废后可以恢复。`)) {
+                              companyTaxes.forEach(tax => handleVoid(tax.id))
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
+                          title="作废"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                   

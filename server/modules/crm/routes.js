@@ -317,7 +317,10 @@ router.post('/shared-tax-numbers', controller.createSharedTaxNumber)
 router.put('/shared-tax-numbers/:id', controller.updateSharedTaxNumber)
 
 // 删除共享税号
-router.delete('/shared-tax-numbers/:id', controller.deleteSharedTaxNumber)
+// 作废共享税号（不删除）
+router.put('/shared-tax-numbers/:id/void', controller.voidSharedTaxNumber)
+// 恢复已作废的共享税号
+router.put('/shared-tax-numbers/:id/restore', controller.restoreSharedTaxNumber)
 
 // ==================== 共享税号使用统计路由 ====================
 

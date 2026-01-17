@@ -1049,15 +1049,33 @@ export async function updateSharedTaxNumber(req, res) {
 /**
  * 删除共享税号
  */
-export async function deleteSharedTaxNumber(req, res) {
+/**
+ * 作废共享税号
+ */
+export async function voidSharedTaxNumber(req, res) {
   try {
     const { id } = req.params
     
-    await model.deleteSharedTaxNumber(id)
-    return success(res, null, '共享税号删除成功')
+    await model.voidSharedTaxNumber(id)
+    return success(res, null, '共享税号已作废')
   } catch (error) {
-    console.error('删除共享税号失败:', error)
-    return serverError(res, '删除共享税号失败')
+    console.error('作废共享税号失败:', error)
+    return serverError(res, '作废共享税号失败')
+  }
+}
+
+/**
+ * 恢复已作废的共享税号
+ */
+export async function restoreSharedTaxNumber(req, res) {
+  try {
+    const { id } = req.params
+    
+    await model.restoreSharedTaxNumber(id)
+    return success(res, null, '共享税号已恢复')
+  } catch (error) {
+    console.error('恢复共享税号失败:', error)
+    return serverError(res, '恢复共享税号失败')
   }
 }
 
