@@ -749,7 +749,11 @@ export default {
   // HERE API 使用量监控
   getHereApiUsageStats,
   getHereApiUsageHistory,
-  syncHereApiCallCount
+  syncHereApiCallCount,
+  
+  // 询价作废
+  voidInquiry,
+  restoreInquiry
 }
 
 /**
@@ -948,3 +952,70 @@ export async function syncHereApiCallCount(req, res) {
   }
 }
 
+/**
+ * 作废询价
+ */
+export async function voidInquiry(req, res) {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    // 验证作废原因必填
+    if (!reason || reason.trim() === '') {
+      return badRequest(res, '作废原因不能为空')
+    }
+
+    const existing = await model.getInquiryById(id)
+    if (!existing) {
+      return notFound(res, '询价不存在')
+    }
+
+    if (existing.isVoid) {
+      return badRequest(res, '询价已作废')
+    }
+
+    const voided = await model.voidInquiry(
+      id, 
+      reason.trim(), 
+      req.user?.id || 'admin',
+      req.user?.name || 'Admin'
+    )
+    
+    if (!voided) {
+      return serverError(res, '作废失败')
+    }
+
+    return success(res, null, '询价已作废')
+  } catch (error) {
+    console.error('作废询价失败:', error)
+    return serverError(res, '作废询价失败')
+  }
+}
+
+/**
+ * 恢复已作废的询价
+ */
+export async function restoreInquiry(req, res) {
+  try {
+    const { id } = req.params
+
+    const existing = await model.getInquiryById(id)
+    if (!existing) {
+      return notFound(res, '询价不存在')
+    }
+
+    if (!existing.isVoid) {
+      return badRequest(res, '询价未作废，无需恢复')
+    }
+
+    const restored = await model.restoreInquiry(id)
+    if (!restored) {
+      return serverError(res, '恢复失败')
+    }
+
+    return success(res, null, '询价已恢复')
+  } catch (error) {
+    console.error('恢复询价失败:', error)
+    return serverError(res, '恢复询价失败')
+  }
+}

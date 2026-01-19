@@ -204,6 +204,12 @@ router.put('/quotations/:id', controller.updateQuotation)
 // 删除报价
 router.delete('/quotations/:id', controller.deleteQuotation)
 
+// 作废报价
+router.put('/quotations/:id/void', controller.voidQuotation)
+
+// 恢复已作废的报价
+router.put('/quotations/:id/restore', controller.restoreQuotation)
+
 // 生成报价单PDF
 router.post('/quotations/:id/pdf', controller.generateQuotationPdf)
 

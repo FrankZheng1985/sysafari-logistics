@@ -891,7 +891,14 @@ function convertInquiryToCamelCase(row) {
     attachments,
     notes: row.notes,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    
+    // 作废相关字段
+    isVoid: row.is_void || false,
+    voidReason: row.void_reason,
+    voidTime: row.void_time,
+    voidBy: row.void_by,
+    voidByName: row.void_by_name
   }
 }
 
@@ -976,6 +983,45 @@ function convertTruckTypeToCamelCase(row) {
   }
 }
 
+/**
+ * 作废询价
+ */
+export async function voidInquiry(id, reason, voidBy, voidByName) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  const result = await db.prepare(`
+    UPDATE customer_inquiries 
+    SET is_void = TRUE,
+        void_reason = ?,
+        void_time = ?,
+        void_by = ?,
+        void_by_name = ?
+    WHERE id = ?
+  `).run(reason, now, voidBy, voidByName, id)
+  
+  return result.changes > 0
+}
+
+/**
+ * 恢复已作废的询价
+ */
+export async function restoreInquiry(id) {
+  const db = getDatabase()
+  
+  const result = await db.prepare(`
+    UPDATE customer_inquiries 
+    SET is_void = FALSE,
+        void_reason = NULL,
+        void_time = NULL,
+        void_by = NULL,
+        void_by_name = NULL
+    WHERE id = ?
+  `).run(id)
+  
+  return result.changes > 0
+}
+
 export default {
   // 常量
   INQUIRY_TYPE,
@@ -999,6 +1045,8 @@ export default {
   updateInquiryStatus,
   setInquiryQuote,
   assignInquiry,
+  voidInquiry,
+  restoreInquiry,
   
   // 待办任务
   createInquiryTask,

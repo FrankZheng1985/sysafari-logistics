@@ -1624,6 +1624,74 @@ export async function deleteQuotation(req, res) {
 }
 
 /**
+ * 作废报价
+ */
+export async function voidQuotation(req, res) {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+
+    // 验证作废原因必填
+    if (!reason || reason.trim() === '') {
+      return badRequest(res, '作废原因不能为空')
+    }
+
+    const existing = await model.getQuotationById(id)
+    if (!existing) {
+      return notFound(res, '报价不存在')
+    }
+
+    if (existing.isVoid) {
+      return badRequest(res, '报价已作废')
+    }
+
+    const voided = await model.voidQuotation(
+      id, 
+      reason.trim(), 
+      req.user?.id || 'admin',
+      req.user?.name || 'Admin'
+    )
+    
+    if (!voided) {
+      return serverError(res, '作废失败')
+    }
+
+    return success(res, null, '报价已作废')
+  } catch (error) {
+    console.error('作废报价失败:', error)
+    return serverError(res, '作废报价失败')
+  }
+}
+
+/**
+ * 恢复已作废的报价
+ */
+export async function restoreQuotation(req, res) {
+  try {
+    const { id } = req.params
+
+    const existing = await model.getQuotationById(id)
+    if (!existing) {
+      return notFound(res, '报价不存在')
+    }
+
+    if (!existing.isVoid) {
+      return badRequest(res, '报价未作废，无需恢复')
+    }
+
+    const restored = await model.restoreQuotation(id)
+    if (!restored) {
+      return serverError(res, '恢复失败')
+    }
+
+    return success(res, null, '报价已恢复')
+  } catch (error) {
+    console.error('恢复报价失败:', error)
+    return serverError(res, '恢复报价失败')
+  }
+}
+
+/**
  * 生成报价单PDF
  */
 export async function generateQuotationPdf(req, res) {

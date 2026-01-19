@@ -2801,6 +2801,48 @@ export async function deleteQuotation(id) {
 }
 
 /**
+ * 作废报价
+ */
+export async function voidQuotation(id, reason, voidBy, voidByName) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  const result = await db.prepare(`
+    UPDATE quotations 
+    SET is_void = TRUE,
+        void_reason = ?,
+        void_time = ?,
+        void_by = ?,
+        void_by_name = ?,
+        updated_at = ?
+    WHERE id = ?
+  `).run(reason, now, voidBy, voidByName, now, id)
+  
+  return result.changes > 0
+}
+
+/**
+ * 恢复已作废的报价
+ */
+export async function restoreQuotation(id) {
+  const db = getDatabase()
+  const now = new Date().toISOString()
+  
+  const result = await db.prepare(`
+    UPDATE quotations 
+    SET is_void = FALSE,
+        void_reason = NULL,
+        void_time = NULL,
+        void_by = NULL,
+        void_by_name = NULL,
+        updated_at = ?
+    WHERE id = ?
+  `).run(now, id)
+  
+  return result.changes > 0
+}
+
+/**
  * 为新客户自动创建报价单
  * @param {Object} options - 报价选项
  * @param {string} options.customerId - 客户ID
@@ -3931,7 +3973,13 @@ export function convertQuotationToCamelCase(row) {
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createTime: row.created_at,
-    updateTime: row.updated_at
+    updateTime: row.updated_at,
+    // 作废相关字段
+    isVoid: row.is_void || false,
+    voidReason: row.void_reason,
+    voidTime: row.void_time,
+    voidBy: row.void_by,
+    voidByName: row.void_by_name
   }
 }
 

@@ -71,6 +71,12 @@ router.post('/manage/inquiries/:id/assign', authenticate, controller.assignInqui
 // 开始处理询价
 router.post('/manage/inquiries/:id/start', authenticate, controller.startProcessing)
 
+// 作废询价
+router.put('/manage/inquiries/:id/void', authenticate, controller.voidInquiry)
+
+// 恢复已作废的询价
+router.put('/manage/inquiries/:id/restore', authenticate, controller.restoreInquiry)
+
 // ==================== 待办任务管理（需要认证） ====================
 
 // 获取待处理任务列表

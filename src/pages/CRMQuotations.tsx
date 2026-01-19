@@ -38,6 +38,11 @@ interface Quotation {
   notes?: string            // 备注
   inquiryId?: string        // 关联询价ID
   inquiryNumber?: string    // 关联询价编号
+  // 作废相关字段
+  isVoid?: boolean          // 是否已作废
+  voidReason?: string       // 作废原因
+  voidTime?: string         // 作废时间
+  voidByName?: string       // 作废人姓名
 }
 
 interface QuotationItem {
@@ -100,6 +105,11 @@ interface CustomerInquiry {
   priority: string
   source: string
   createdAt: string
+  // 作废相关字段
+  isVoid?: boolean
+  voidReason?: string
+  voidTime?: string
+  voidByName?: string
 }
 
 // 待办任务接口
@@ -644,20 +654,109 @@ export default function CRMQuotations() {
   }
 
   const handleDelete = async (item: Quotation) => {
-    if (!confirm(`确定要删除报价单"${item.quoteNumber}"吗？`)) return
+    // 改为作废而不是删除
+    const reason = prompt(`确定要作废报价单"${item.quoteNumber}"吗？\n\n请输入作废原因：`)
+    if (!reason || reason.trim() === '') {
+      if (reason !== null) {
+        alert('作废原因不能为空')
+      }
+      return
+    }
 
     try {
-      const response = await fetch(`${API_BASE}/api/quotations/${item.id}`, {
-        method: 'DELETE'
+      const response = await fetch(`${API_BASE}/api/quotations/${item.id}/void`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reason: reason.trim() })
       })
       const data = await response.json()
       if (data.errCode === 200) {
+        alert('报价已作废')
         loadData()
       } else {
-        alert(data.msg || '删除失败')
+        alert(data.msg || '作废失败')
       }
     } catch (error) {
-      console.error('删除失败:', error)
+      console.error('作废失败:', error)
+      alert('作废失败，请重试')
+    }
+  }
+
+  const handleRestore = async (item: Quotation) => {
+    if (!confirm(`确定要恢复报价单"${item.quoteNumber}"吗？`)) return
+
+    try {
+      const response = await fetch(`${API_BASE}/api/quotations/${item.id}/restore`, {
+        method: 'PUT'
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert('报价已恢复')
+        loadData()
+      } else {
+        alert(data.msg || '恢复失败')
+      }
+    } catch (error) {
+      console.error('恢复失败:', error)
+      alert('恢复失败，请重试')
+    }
+  }
+
+  // 作废询价
+  const handleDeleteInquiry = async (item: CustomerInquiry) => {
+    const reason = prompt(`确定要作废询价"${item.inquiryNumber}"吗？\n\n请输入作废原因：`)
+    if (!reason || reason.trim() === '') {
+      if (reason !== null) {
+        alert('作废原因不能为空')
+      }
+      return
+    }
+
+    try {
+      const token = await getAccessToken()
+      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries/${item.id}/void`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ reason: reason.trim() })
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert('询价已作废')
+        loadInquiries()
+      } else {
+        alert(data.msg || '作废失败')
+      }
+    } catch (error) {
+      console.error('作废失败:', error)
+      alert('作废失败，请重试')
+    }
+  }
+
+  // 恢复已作废的询价
+  const handleRestoreInquiry = async (item: CustomerInquiry) => {
+    if (!confirm(`确定要恢复询价"${item.inquiryNumber}"吗？`)) return
+
+    try {
+      const token = await getAccessToken()
+      const response = await fetch(`${API_BASE}/api/inquiry/manage/inquiries/${item.id}/restore`, {
+        method: 'PUT',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
+      const data = await response.json()
+      if (data.errCode === 200) {
+        alert('询价已恢复')
+        loadInquiries()
+      } else {
+        alert(data.msg || '恢复失败')
+      }
+    } catch (error) {
+      console.error('恢复失败:', error)
+      alert('恢复失败，请重试')
     }
   }
 
@@ -761,6 +860,16 @@ export default function CRMQuotations() {
       ],
       onFilter: (value, record) => record.status === value,
       render: (_value, record) => {
+        // 优先显示作废状态
+        if (record.isVoid) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+              <XCircle className="w-3 h-3" />
+              已作废
+            </span>
+          )
+        }
+        
         const info = getStatusInfo(record.status)
         const Icon = info.icon
         return (
@@ -777,52 +886,66 @@ export default function CRMQuotations() {
       width: 180,
       render: (_value, record) => (
         <div className="flex items-center gap-1">
-          {record.status === 'draft' && (
+          {/* 已作废的报价只显示恢复按钮 */}
+          {record.isVoid ? (
             <button
-              onClick={() => handleUpdateStatus(record.id, 'sent')}
-              className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+              onClick={() => handleRestore(record)}
+              className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
+              title="恢复报价"
             >
-              发送
+              恢复
             </button>
-          )}
-          {record.status === 'sent' && (
+          ) : (
             <>
-              <button
-                onClick={() => handleUpdateStatus(record.id, 'accepted')}
-                className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
+              {/* 未作废的报价显示正常操作按钮 */}
+              {record.status === 'draft' && (
+                <button
+                  onClick={() => handleUpdateStatus(record.id, 'sent')}
+                  className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                >
+                  发送
+                </button>
+              )}
+              {record.status === 'sent' && (
+                <>
+                  <button
+                    onClick={() => handleUpdateStatus(record.id, 'accepted')}
+                    className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
+                  >
+                    接受
+                  </button>
+                  <button
+                    onClick={() => handleUpdateStatus(record.id, 'rejected')}
+                    className="px-2 py-1 text-[10px] bg-red-50 text-red-600 rounded hover:bg-red-100"
+                  >
+                    拒绝
+                  </button>
+                </>
+              )}
+              <button 
+                onClick={() => handleGeneratePdf(record)}
+                disabled={generatingPdf}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-orange-600"
+                title="下载报价单PDF"
               >
-                接受
+                <Download className="w-3.5 h-3.5" />
               </button>
-              <button
-                onClick={() => handleUpdateStatus(record.id, 'rejected')}
-                className="px-2 py-1 text-[10px] bg-red-50 text-red-600 rounded hover:bg-red-100"
+              <button 
+                onClick={() => handleOpenModal(record)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500"
+                title="编辑"
               >
-                拒绝
+                <Edit className="w-3.5 h-3.5" />
+              </button>
+              <button 
+                onClick={() => handleDelete(record)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
+                title="作废"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </>
           )}
-          <button 
-            onClick={() => handleGeneratePdf(record)}
-            disabled={generatingPdf}
-            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-orange-600"
-            title="下载报价单PDF"
-          >
-            <Download className="w-3.5 h-3.5" />
-          </button>
-          <button 
-            onClick={() => handleOpenModal(record)}
-            className="p-1 hover:bg-gray-100 rounded text-gray-500"
-            title="编辑"
-          >
-            <Edit className="w-3.5 h-3.5" />
-          </button>
-          <button 
-            onClick={() => handleDelete(record)}
-            className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
-            title="删除"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       )
     }
@@ -926,6 +1049,16 @@ export default function CRMQuotations() {
       label: '状态',
       width: 80,
       render: (_value, record) => {
+        // 优先显示作废状态
+        if (record.isVoid) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+              <XCircle className="w-3 h-3" />
+              已作废
+            </span>
+          )
+        }
+        
         const info = getInquiryStatusInfo(record.status, record.isOverdue)
         return (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${info.bg} ${info.color}`}>
@@ -960,33 +1093,46 @@ export default function CRMQuotations() {
     {
       key: 'actions',
       label: '操作',
-      width: 140,
+      width: 160,
       render: (_value, record) => (
         <div className="flex items-center gap-1">
-          {record.status === 'pending' && record.assignedTo === user?.id && (
+          {/* 已作废的询价只显示恢复按钮 */}
+          {record.isVoid ? (
             <button
-              onClick={() => handleStartProcessing(record)}
-              className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100 flex items-center gap-1"
-            >
-              <Play className="w-3 h-3" />
-              开始处理
-            </button>
-          )}
-          {(record.status === 'pending' || record.status === 'processing') && (
-            <button
-              onClick={() => handleViewInquiry(record)}
+              onClick={() => handleRestoreInquiry(record)}
               className="px-2 py-1 text-[10px] bg-green-50 text-green-600 rounded hover:bg-green-100"
+              title="恢复询价"
             >
-              报价
+              恢复
             </button>
+          ) : (
+            <>
+              {/* 未作废的询价显示正常操作按钮 */}
+              {record.status === 'pending' && record.assignedTo === user?.id && (
+                <button
+                  onClick={() => handleStartProcessing(record)}
+                  className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded hover:bg-blue-100 flex items-center gap-1"
+                >
+                  <Play className="w-3 h-3" />
+                  开始处理
+                </button>
+              )}
+              <button
+                onClick={() => handleViewInquiry(record)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500"
+                title="查看详情"
+              >
+                <FileText className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => handleDeleteInquiry(record)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-red-600"
+                title="作废"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
-          <button
-            onClick={() => handleViewInquiry(record)}
-            className="p-1 hover:bg-gray-100 rounded text-gray-500"
-            title="查看详情"
-          >
-            <FileText className="w-3.5 h-3.5" />
-          </button>
         </div>
       )
     }
